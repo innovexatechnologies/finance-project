@@ -1,4 +1,5 @@
 import 'package:flutter/material.dart';
+import 'applicants_screen.dart';
 import 'post_project_screen.dart';
 
 class CompanyDashboardScreen extends StatelessWidget {
@@ -7,7 +8,7 @@ class CompanyDashboardScreen extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     // Dummy posted projects list (Baad mein Supabase se fetch hogi)
-    final List> companyProjects = [
+    final List<Map<String, dynamic>> companyProjects = [
       {
         'title': 'Flutter E-Commerce App Redesign',
         'budget': '\$500 - \$800',
@@ -87,14 +88,14 @@ class CompanyDashboardScreen extends StatelessWidget {
                             mainAxisAlignment: MainAxisAlignment.spaceBetween,
                             children: [
                               Text(
-                                project['title'],
+                                project['title']?.toString() ?? '',
                                 style: const TextStyle(
                                   fontSize: 16,
                                   fontWeight: FontWeight.bold,
                                 ),
                               ),
                               Chip(
-                                label: Text(project['status']),
+                                label: Text(project['status']?.toString() ?? ''),
                                 backgroundColor: project['status'] == 'Open'
                                     ? Colors.green.shade100
                                     : Colors.orange.shade100,
@@ -109,13 +110,13 @@ class CompanyDashboardScreen extends StatelessWidget {
                             ],
                           ),
                           const SizedBox(height: 8),
-                          Text('Budget: ${project['budget']}'),
+                          Text('Budget: ${project['budget'] ?? ''}'),
                           const SizedBox(height: 12),
                           Row(
                             mainAxisAlignment: MainAxisAlignment.spaceBetween,
                             children: [
                               Text(
-                                'Applicants: ${project['applicantsCount']}',
+                                'Applicants: ${project['applicantsCount'] ?? 0}',
                                 style: const TextStyle(
                                   fontWeight: FontWeight.w500,
                                   color: Colors.blueGrey,
@@ -123,10 +124,10 @@ class CompanyDashboardScreen extends StatelessWidget {
                               ),
                               TextButton(
                                 onPressed: () {
-                                  // Yahan applicants ki list khulegi (Accept/Hire karne ke liye)
-                                  ScaffoldMessenger.of(context).showSnackBar(
-                                    const SnackBar(
-                                      content: Text('Opening applicants list...'),
+                                  Navigator.push(
+                                    context,
+                                    MaterialPageRoute(
+                                      builder: (context) => const ApplicantsScreen(),
                                     ),
                                   );
                                 },

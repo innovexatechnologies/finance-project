@@ -6,7 +6,7 @@ class MyApplicationsScreen extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     // Dummy applications data
-    final List> myApplications = [
+    final List<Map<String, String>> myApplications = [
       {
         'title': 'Flutter E-Commerce App Redesign',
         'company': 'Innovexa Technologies',
@@ -40,12 +40,12 @@ class MyApplicationsScreen extends StatelessWidget {
             ),
             child: ListTile(
               title: Text(
-                app['title'],
+                app['title'] ?? '',
                 style: const TextStyle(fontWeight: FontWeight.bold),
               ),
-              subtitle: Text('Company: ${app['company']}'),
+              subtitle: Text('Company: ${app['company'] ?? ''}'),
               trailing: Chip(
-                label: Text(app['status']),
+                label: Text(app['status'] ?? ''),
                 backgroundColor: isAccepted ? Colors.green.shade100 : Colors.orange.shade100,
                 labelStyle: TextStyle(
                   color: isAccepted ? Colors.green.shade800 : Colors.orange.shade800,

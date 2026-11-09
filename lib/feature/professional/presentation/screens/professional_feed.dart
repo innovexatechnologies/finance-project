@@ -1,4 +1,6 @@
 import 'package:flutter/material.dart';
+import 'my_applications_screen.dart';
+import 'project_details_screen.dart';
 
 class ProfessionalFeedScreen extends StatelessWidget {
   const ProfessionalFeedScreen({super.key});
@@ -6,7 +8,7 @@ class ProfessionalFeedScreen extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     // Dummy data taaki UI ki look & feel check ho sake (Baad mein yeh Supabase se fetch hoga)
-    final List> dummyProjects = [
+    final List<Map<String, String>> dummyProjects = [
       {
         'title': 'Flutter E-Commerce App Redesign',
         'company': 'Innovexa Technologies',
@@ -35,8 +37,14 @@ class ProfessionalFeedScreen extends StatelessWidget {
         actions: [
           IconButton(
             icon: const Icon(Icons.person),
+            tooltip: 'My Applications',
             onPressed: () {
-              // Yahan developer apni profile ya applications status screen par ja sakega
+              Navigator.push(
+                context,
+                MaterialPageRoute(
+                  builder: (context) => const MyApplicationsScreen(),
+                ),
+              );
             },
           ),
         ],
@@ -52,17 +60,27 @@ class ProfessionalFeedScreen extends StatelessWidget {
             shape: RoundedRectangleBorder(
               borderRadius: BorderRadius.circular(12),
             ),
-            child: Padding(
-              padding: const EdgeInsets.all(16.0),
-              child: Column(
-                crossAxisAlignment: CrossAxisAlignment.start,
-                children: [
+            child: InkWell(
+              borderRadius: BorderRadius.circular(12),
+              onTap: () {
+                Navigator.push(
+                  context,
+                  MaterialPageRoute(
+                    builder: (context) => ProjectDetailsScreen(project: project),
+                  ),
+                );
+              },
+              child: Padding(
+                padding: const EdgeInsets.all(16.0),
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
                   // Company Name & Budget Row
                   Row(
                     mainAxisAlignment: MainAxisAlignment.spaceBetween,
                     children: [
                       Text(
-                        project['company'],
+                        project['company'] ?? '',
                         style: const TextStyle(
                           fontSize: 14,
                           fontWeight: FontWeight.bold,
@@ -76,7 +94,7 @@ class ProfessionalFeedScreen extends StatelessWidget {
                           borderRadius: BorderRadius.circular(8),
                         ),
                         child: Text(
-                          project['budget'],
+                          project['budget'] ?? '',
                           style: TextStyle(
                             color: Colors.green.shade800,
                             fontWeight: FontWeight.bold,
@@ -89,7 +107,7 @@ class ProfessionalFeedScreen extends StatelessWidget {
                   const SizedBox(height: 8),
                   // Project Title
                   Text(
-                    project['title'],
+                    project['title'] ?? '',
                     style: const TextStyle(
                       fontSize: 18,
                       fontWeight: FontWeight.bold,
@@ -99,7 +117,7 @@ class ProfessionalFeedScreen extends StatelessWidget {
                   const SizedBox(height: 8),
                   // Description
                   Text(
-                    project['description'],
+                    project['description'] ?? '',
                     style: const TextStyle(
                       fontSize: 14,
                       color: Colors.black54,
@@ -119,7 +137,7 @@ class ProfessionalFeedScreen extends StatelessWidget {
                       ),
                       onPressed: () {
                         ScaffoldMessenger.of(context).showSnackBar(
-                          SnackBar(content: Text('Applied for ${project['title']}!')),
+                          SnackBar(content: Text('Applied for ${project['title'] ?? 'Project'}!')),
                         );
                       },
                       child: const Text('Apply Now'),
@@ -128,8 +146,9 @@ class ProfessionalFeedScreen extends StatelessWidget {
                 ],
               ),
             ),
-          );
-        },
+          ),
+        );
+      },
       ),
     );
   }

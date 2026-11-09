@@ -6,7 +6,7 @@ class ApplicantsScreen extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     // Applicants ki list properly typed map ke sath
-    final List> applicants = [
+    final List<Map<String, String>> applicants = [
       {
         'name': 'Ali Khan',
         'role': 'Flutter Developer',
@@ -52,7 +52,7 @@ class ApplicantsScreen extends StatelessWidget {
                         ),
                       ),
                       const SizedBox(height: 4),
-                      Text('${applicant['role']} • ${applicant['experience']}'),
+                      Text('${applicant['role'] ?? ''} • ${applicant['experience'] ?? ''}'),
                     ],
                   ),
                   ElevatedButton(
@@ -63,7 +63,7 @@ class ApplicantsScreen extends StatelessWidget {
                     onPressed: () {
                       ScaffoldMessenger.of(context).showSnackBar(
                         SnackBar(
-                          content: Text('${applicant['name']} has been hired!'),
+                          content: Text('${applicant['name'] ?? 'Applicant'} has been hired!'),
                         ),
                       );
                     },

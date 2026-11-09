@@ -1,5 +1,5 @@
 import 'package:flutter/material.dart';
-import 'package:link_vibe/feature/auth/presentation/widgets/screens/login_screen.dart';
+import 'package:link_vibe/feature/auth/presentation/screens/login_screen.dart';
 
 
 void main() async {
