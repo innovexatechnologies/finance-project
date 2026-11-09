@@ -13,7 +13,7 @@ void main() async {
   // Supabase client initialize karein
   await Supabase.initialize(
     url: dotenv.env['SUPABASE_URL']!,
-    anonKey: dotenv.env['SUPABASE_ANON_KEY']!,
+    publishableKey: dotenv.env['SUPABASE_ANON_KEY'] ?? dotenv.env['SUPABASE_PUBLISHABLE_KEY'],
   );
 
   runApp(const MyApp());
