@@ -7,6 +7,7 @@ import 'package:link_vibe/feature/admin/presentation/screens/admin_login_screen.
 import 'package:link_vibe/feature/admin/presentation/screens/application_monitoring_screen.dart';
 import 'package:link_vibe/feature/admin/presentation/screens/company_management_screen.dart';
 import 'package:link_vibe/feature/admin/presentation/screens/project_management_screen.dart';
+import 'package:link_vibe/feature/admin/presentation/screens/reports_analytics_screen.dart';
 import 'package:link_vibe/feature/admin/presentation/screens/student_management_screen.dart';
 import 'package:link_vibe/feature/admin/presentation/widgets/admin_sidebar.dart';
 import 'package:link_vibe/feature/admin/presentation/widgets/admin_top_navbar.dart';
@@ -141,6 +142,12 @@ class _CertificateManagementScreenState
         context,
         MaterialPageRoute(
             builder: (_) => const ApplicationMonitoringScreen()),
+      );
+    } else if (routeId == 'analytics' || routeId == 'reports') {
+      Navigator.pushReplacement(
+        context,
+        MaterialPageRoute(
+            builder: (_) => const ReportsAnalyticsScreen()),
       );
     }
     // If routeId is 'audit_logs' or 'certificates', we are already on this screen.

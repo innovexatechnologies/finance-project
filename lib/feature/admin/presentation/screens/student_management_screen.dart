@@ -8,6 +8,7 @@ import 'package:link_vibe/feature/admin/presentation/screens/application_monitor
 import 'package:link_vibe/feature/admin/presentation/screens/certificate_management_screen.dart';
 import 'package:link_vibe/feature/admin/presentation/screens/company_management_screen.dart';
 import 'package:link_vibe/feature/admin/presentation/screens/project_management_screen.dart';
+import 'package:link_vibe/feature/admin/presentation/screens/reports_analytics_screen.dart';
 import 'package:link_vibe/feature/admin/presentation/widgets/admin_sidebar.dart';
 import 'package:link_vibe/feature/admin/presentation/widgets/admin_top_navbar.dart';
 import 'package:link_vibe/feature/admin/services/admin_auth_service.dart';
@@ -135,6 +136,11 @@ class _StudentManagementScreenState extends State<StudentManagementScreen> {
       Navigator.pushReplacement(
         context,
         MaterialPageRoute(builder: (_) => const CertificateManagementScreen()),
+      );
+    } else if (routeId == 'analytics' || routeId == 'reports') {
+      Navigator.pushReplacement(
+        context,
+        MaterialPageRoute(builder: (_) => const ReportsAnalyticsScreen()),
       );
     }
   }

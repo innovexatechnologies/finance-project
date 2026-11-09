@@ -74,6 +74,14 @@ class AdminSidebar extends StatelessWidget {
       title: 'Audit Logs & Vault',
       icon: Icons.history_edu_outlined,
       routeId: 'audit_logs',
+      badgeText: '7 Minted',
+    ),
+    AdminNavItem(
+      title: 'Reports & Analytics',
+      icon: Icons.insights_outlined,
+      routeId: 'analytics',
+      badgeText: 'Live BI',
+      badgeColor: AppColors.accentTeal,
     ),
     AdminNavItem(
       title: 'Platform Settings',

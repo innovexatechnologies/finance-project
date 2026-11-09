@@ -1,8 +1,8 @@
 import 'package:flutter/material.dart';
 import 'package:link_vibe/core/constants/app_colors.dart';
-import 'package:link_vibe/feature/admin/presentation/screens/application_monitoring_screen.dart';
 import 'package:link_vibe/feature/admin/presentation/screens/company_management_screen.dart';
 import 'package:link_vibe/feature/admin/presentation/screens/project_management_screen.dart';
+import 'package:link_vibe/feature/admin/presentation/screens/reports_analytics_screen.dart';
 import 'package:link_vibe/feature/admin/presentation/screens/student_management_screen.dart';
 import 'package:link_vibe/feature/admin/services/admin_dashboard_service.dart';
 import 'package:link_vibe/feature/company/models/company_verification_model.dart';
@@ -243,7 +243,7 @@ class QuickActionsBar extends StatelessWidget {
   void _openViewReportsModal(BuildContext context) {
     Navigator.push(
       context,
-      MaterialPageRoute(builder: (_) => const ApplicationMonitoringScreen()),
+      MaterialPageRoute(builder: (_) => const ReportsAnalyticsScreen()),
     );
   }
 
