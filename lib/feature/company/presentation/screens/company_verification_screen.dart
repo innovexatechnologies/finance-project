@@ -407,7 +407,7 @@ class _CompanyVerificationScreenState extends State<CompanyVerificationScreen> {
     switch (verification.status) {
       case VerificationStatus.pending:
         cardBg = AppColors.warningBg;
-        borderColor = AppColors.warning.withOpacity(0.4);
+        borderColor = AppColors.warning.withValues(alpha: 0.4);
         pillColor = AppColors.warning;
         textColor = const Color(0xFF92400E);
         icon = Icons.hourglass_top_rounded;
@@ -418,7 +418,7 @@ class _CompanyVerificationScreenState extends State<CompanyVerificationScreen> {
 
       case VerificationStatus.verified:
         cardBg = AppColors.successBg;
-        borderColor = AppColors.success.withOpacity(0.4);
+        borderColor = AppColors.success.withValues(alpha: 0.4);
         pillColor = AppColors.success;
         textColor = const Color(0xFF166534);
         icon = Icons.verified_rounded;
@@ -429,7 +429,7 @@ class _CompanyVerificationScreenState extends State<CompanyVerificationScreen> {
 
       case VerificationStatus.rejected:
         cardBg = AppColors.errorBg;
-        borderColor = AppColors.error.withOpacity(0.4);
+        borderColor = AppColors.error.withValues(alpha: 0.4);
         pillColor = AppColors.error;
         textColor = const Color(0xFF991B1B);
         icon = Icons.highlight_off_rounded;
@@ -440,7 +440,7 @@ class _CompanyVerificationScreenState extends State<CompanyVerificationScreen> {
 
       case VerificationStatus.notSubmitted:
         cardBg = AppColors.lightIceBlue;
-        borderColor = AppColors.primary.withOpacity(0.3);
+        borderColor = AppColors.primary.withValues(alpha: 0.3);
         pillColor = AppColors.primary;
         textColor = AppColors.darkNavy;
         icon = Icons.shield_outlined;
@@ -467,7 +467,7 @@ class _CompanyVerificationScreenState extends State<CompanyVerificationScreen> {
               shape: BoxShape.circle,
               boxShadow: [
                 BoxShadow(
-                  color: Colors.black.withOpacity(0.06),
+                  color: Colors.black.withValues(alpha: 0.06),
                   blurRadius: 6,
                 ),
               ],
@@ -497,7 +497,7 @@ class _CompanyVerificationScreenState extends State<CompanyVerificationScreen> {
                   statusDescription,
                   style: TextStyle(
                     fontSize: 12.5,
-                    color: textColor.withOpacity(0.9),
+                    color: textColor.withValues(alpha: 0.9),
                     height: 1.35,
                   ),
                 ),
@@ -547,7 +547,7 @@ class _CompanyVerificationScreenState extends State<CompanyVerificationScreen> {
             width: double.infinity,
             padding: const EdgeInsets.all(12),
             decoration: BoxDecoration(
-              color: AppColors.errorBg.withOpacity(0.6),
+              color: AppColors.errorBg.withValues(alpha: 0.6),
               borderRadius: BorderRadius.circular(10),
             ),
             child: Text(
@@ -701,7 +701,7 @@ class _CompanyVerificationScreenState extends State<CompanyVerificationScreen> {
                 color: AppColors.lightIceBlue,
                 borderRadius: BorderRadius.circular(12),
                 border: Border.all(
-                  color: AppColors.primary.withOpacity(0.3),
+                  color: AppColors.primary.withValues(alpha: 0.3),
                 ),
               ),
               child: Column(
@@ -847,7 +847,7 @@ class _CompanyVerificationScreenState extends State<CompanyVerificationScreen> {
 
           // Document Type Selector
           DropdownButtonFormField<String>(
-            value: _selectedEvidenceType,
+            initialValue: _selectedEvidenceType,
             decoration: InputDecoration(
               labelText: 'Evidence Document Type',
               contentPadding:
@@ -939,7 +939,7 @@ class _CompanyVerificationScreenState extends State<CompanyVerificationScreen> {
                   color: AppColors.background,
                   borderRadius: BorderRadius.circular(10),
                   border: Border.all(
-                    color: AppColors.primary.withOpacity(0.4),
+                    color: AppColors.primary.withValues(alpha: 0.4),
                     style: BorderStyle.solid,
                   ),
                 ),

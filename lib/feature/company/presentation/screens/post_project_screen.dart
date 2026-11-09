@@ -432,7 +432,7 @@ class _PostProjectScreenState extends State<PostProjectScreen> {
       decoration: BoxDecoration(
         color: AppColors.lightIceBlue,
         borderRadius: BorderRadius.circular(14),
-        border: Border.all(color: AppColors.primary.withOpacity(0.3)),
+        border: Border.all(color: AppColors.primary.withValues(alpha: 0.3)),
       ),
       child: const Row(
         crossAxisAlignment: CrossAxisAlignment.start,
@@ -539,7 +539,7 @@ class _PostProjectScreenState extends State<PostProjectScreen> {
   // 2. Project Category Dropdown
   Widget _buildCategoryDropdown() {
     return DropdownButtonFormField<String>(
-      value: _selectedCategory,
+      initialValue: _selectedCategory,
       decoration: InputDecoration(
         labelText: 'Project Category *',
         prefixIcon: const Icon(Icons.category_outlined, size: 18),

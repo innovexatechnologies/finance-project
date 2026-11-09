@@ -511,7 +511,7 @@ class _CompanyProfileScreenState extends State<CompanyProfileScreen> {
                 decoration: BoxDecoration(
                   color: AppColors.lightIceBlue,
                   borderRadius: BorderRadius.circular(12),
-                  border: Border.all(color: AppColors.primary.withOpacity(0.3)),
+                  border: Border.all(color: AppColors.primary.withValues(alpha: 0.3)),
                 ),
                 child: Row(
                   children: [
@@ -546,7 +546,7 @@ class _CompanyProfileScreenState extends State<CompanyProfileScreen> {
         border: Border.all(color: AppColors.border),
         boxShadow: [
           BoxShadow(
-            color: Colors.black.withOpacity(0.04),
+            color: Colors.black.withValues(alpha: 0.04),
             blurRadius: 10,
             offset: const Offset(0, 3),
           ),
@@ -571,7 +571,7 @@ class _CompanyProfileScreenState extends State<CompanyProfileScreen> {
                       ),
                       boxShadow: [
                         BoxShadow(
-                          color: _selectedLogoColor.withOpacity(0.3),
+                          color: _selectedLogoColor.withValues(alpha: 0.3),
                           blurRadius: 12,
                           offset: const Offset(0, 4),
                         ),
@@ -746,7 +746,7 @@ class _CompanyProfileScreenState extends State<CompanyProfileScreen> {
         ),
         disabledBorder: OutlineInputBorder(
           borderRadius: BorderRadius.circular(10),
-          borderSide: BorderSide(color: AppColors.border.withOpacity(0.5)),
+          borderSide: BorderSide(color: AppColors.border.withValues(alpha: 0.5)),
         ),
       ),
     );
@@ -755,7 +755,7 @@ class _CompanyProfileScreenState extends State<CompanyProfileScreen> {
   // Industry Dropdown
   Widget _buildIndustryDropdown() {
     return DropdownButtonFormField<String>(
-      value: _selectedIndustry,
+      initialValue: _selectedIndustry,
       decoration: InputDecoration(
         labelText: 'Industry Sector',
         prefixIcon: const Icon(

@@ -373,7 +373,7 @@ class _CompanyProjectDetailScreenState
               decoration: BoxDecoration(
                 color: AppColors.warningBg,
                 borderRadius: BorderRadius.circular(10),
-                border: Border.all(color: AppColors.warning.withOpacity(0.4)),
+                border: Border.all(color: AppColors.warning.withValues(alpha: 0.4)),
               ),
               child: const Row(
                 children: [
@@ -503,7 +503,7 @@ class _CompanyProjectDetailScreenState
         border: Border.all(color: AppColors.border),
         boxShadow: [
           BoxShadow(
-            color: Colors.black.withOpacity(0.04),
+            color: Colors.black.withValues(alpha: 0.04),
             blurRadius: 8,
             offset: const Offset(0, 3),
           ),

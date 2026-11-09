@@ -584,7 +584,7 @@ class _CompanyDashboardScreenState extends State<CompanyDashboardScreen> {
         borderRadius: BorderRadius.circular(16),
         boxShadow: [
           BoxShadow(
-            color: AppColors.darkNavy.withOpacity(0.18),
+            color: AppColors.darkNavy.withValues(alpha: 0.18),
             blurRadius: 10,
             offset: const Offset(0, 4),
           ),
@@ -655,10 +655,10 @@ class _CompanyDashboardScreenState extends State<CompanyDashboardScreen> {
                               padding: const EdgeInsets.symmetric(
                                   horizontal: 8, vertical: 3),
                               decoration: BoxDecoration(
-                                color: AppColors.accentTeal.withOpacity(0.2),
+                                color: AppColors.accentTeal.withValues(alpha: 0.2),
                                 borderRadius: BorderRadius.circular(6),
                                 border: Border.all(
-                                  color: AppColors.accentTeal.withOpacity(0.4),
+                                  color: AppColors.accentTeal.withValues(alpha: 0.4),
                                   width: 0.8,
                                 ),
                               ),
@@ -966,8 +966,8 @@ class _CompanyDashboardScreenState extends State<CompanyDashboardScreen> {
                 padding: const EdgeInsets.all(8),
                 decoration: BoxDecoration(
                   color: isPrimary
-                      ? Colors.white.withOpacity(0.2)
-                      : (iconColor ?? AppColors.primary).withOpacity(0.12),
+                      ? Colors.white.withValues(alpha: 0.2)
+                      : (iconColor ?? AppColors.primary).withValues(alpha: 0.12),
                   borderRadius: BorderRadius.circular(8),
                 ),
                 child: Icon(
@@ -1228,7 +1228,7 @@ class _CompanyDashboardScreenState extends State<CompanyDashboardScreen> {
               'Live Feed',
               style: TextStyle(
                 fontSize: 12,
-                color: AppColors.accentTeal.withOpacity(0.9),
+                color: AppColors.accentTeal.withValues(alpha: 0.9),
                 fontWeight: FontWeight.bold,
               ),
             ),
