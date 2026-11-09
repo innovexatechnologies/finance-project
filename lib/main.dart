@@ -1,7 +1,8 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_dotenv/flutter_dotenv.dart';
 import 'package:supabase_flutter/supabase_flutter.dart';
-import 'package:link_vibe/feature/auth/presentation/widgets/screens/login_screen.dart';
+import 'core/theme/app_theme.dart';
+import 'feature/splash/presentation/screens/splash_screen.dart';
 
 void main() async {
   // Flutter engine ready karna lazmi hai async initialization se pehle
@@ -13,13 +14,14 @@ void main() async {
   // Supabase client initialize karein
   await Supabase.initialize(
     url: dotenv.env['SUPABASE_URL']!,
-    publishableKey: dotenv.env['SUPABASE_ANON_KEY'] ?? dotenv.env['SUPABASE_PUBLISHABLE_KEY'],
+    publishableKey: dotenv.env['SUPABASE_ANON_KEY'] ??
+        dotenv.env['SUPABASE_PUBLISHABLE_KEY'],
   );
 
   runApp(const MyApp());
 }
 
-// Global client reference taake login_screen ya kisi bhi repo se direct queries call ho sakein
+// Global client reference taake direct queries call ho sakein
 final supabase = Supabase.instance.client;
 
 class MyApp extends StatelessWidget {
@@ -28,14 +30,10 @@ class MyApp extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     return MaterialApp(
-      title: 'LinkVibe - Professional Portal',
+      title: 'CampusConnect - Student Platform',
       debugShowCheckedModeBanner: false,
-      theme: ThemeData(
-        primarySwatch: Colors.blue,
-        scaffoldBackgroundColor: Colors.white,
-      ),
-      // App start hote hi Login screen show hogi
-      home: const LoginScreen(),
+      theme: AppTheme.lightTheme,
+      home: const SplashScreen(),
     );
   }
 }
