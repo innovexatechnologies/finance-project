@@ -121,6 +121,7 @@ class _SignupScreenState extends State<SignupScreen> {
         role: _selectedRole,
         email: email,
         name: name,
+        university: university,
         userId: authResponse.user?.id,
       );
 

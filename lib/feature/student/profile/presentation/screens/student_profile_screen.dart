@@ -29,10 +29,13 @@ class _StudentProfileScreenState extends State<StudentProfileScreen> {
     if (user != null) {
       final name = user.userMetadata?['name'];
       final email = user.email;
-      if (name != null || email != null) {
+      final university = user.userMetadata?['university'];
+      if (name != null || email != null || university != null) {
         AppDataService.instance.updateProfile({
           if (name != null && name.toString().isNotEmpty) 'name': name.toString(),
           if (email != null && email.isNotEmpty) 'email': email,
+          if (university != null && university.toString().isNotEmpty)
+            'university': university.toString(),
         });
       }
     }

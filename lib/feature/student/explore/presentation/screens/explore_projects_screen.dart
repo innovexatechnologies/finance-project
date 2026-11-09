@@ -42,7 +42,7 @@ class _ExploreProjectsScreenState extends State<ExploreProjectsScreen> {
     super.dispose();
   }
 
-  Future<void> _fetchLiveProjects() async {
+  Future<void> _fetchLiveProjects({bool showFeedback = false}) async {
     setState(() => _isLoading = true);
     try {
       final supabase = Supabase.instance.client;
@@ -80,6 +80,30 @@ class _ExploreProjectsScreenState extends State<ExploreProjectsScreen> {
     } finally {
       if (mounted) {
         setState(() => _isLoading = false);
+        if (showFeedback) {
+          final count = _getFilteredProjects().length;
+          ScaffoldMessenger.of(context).hideCurrentSnackBar();
+          ScaffoldMessenger.of(context).showSnackBar(
+            SnackBar(
+              content: Row(
+                children: [
+                  const Icon(Icons.check_circle_rounded,
+                      color: Colors.white, size: 20),
+                  const SizedBox(width: 10),
+                  Expanded(
+                    child: Text(
+                      'Projects refreshed! $count opportunities available.',
+                      style: GoogleFonts.inter(fontSize: 13),
+                    ),
+                  ),
+                ],
+              ),
+              backgroundColor: AppColors.statusOpen,
+              duration: const Duration(seconds: 2),
+              behavior: SnackBarBehavior.floating,
+            ),
+          );
+        }
       }
     }
   }
@@ -129,8 +153,20 @@ class _ExploreProjectsScreenState extends State<ExploreProjectsScreen> {
         centerTitle: false,
         actions: [
           IconButton(
-            icon: const Icon(Icons.refresh_rounded),
-            onPressed: _fetchLiveProjects,
+            tooltip: 'Refresh Projects',
+            icon: _isLoading
+                ? const SizedBox(
+                    width: 20,
+                    height: 20,
+                    child: CircularProgressIndicator(
+                      color: AppColors.primaryBlue,
+                      strokeWidth: 2,
+                    ),
+                  )
+                : const Icon(Icons.refresh_rounded),
+            onPressed: _isLoading
+                ? null
+                : () => _fetchLiveProjects(showFeedback: true),
           ),
           const SizedBox(width: 8),
         ],
@@ -142,6 +178,12 @@ class _ExploreProjectsScreenState extends State<ExploreProjectsScreen> {
 
           return Column(
             children: [
+              if (_isLoading)
+                const LinearProgressIndicator(
+                  minHeight: 3,
+                  color: AppColors.primaryBlue,
+                  backgroundColor: AppColors.lightAqua,
+                ),
               // Search & Filter Row
               Padding(
                 padding:

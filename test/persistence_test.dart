@@ -195,5 +195,118 @@ void main() {
     final newCert = AppDataService.instance.getCertificates().firstWhere((c) => c['id'] == 'CC-TEST-999');
     expect(newCert['title'], equals('AI Machine Learning Certificate'));
   });
+
+  test('Persistent Notification Preferences across app restarts', () async {
+    // Modify preferences
+    await AppDataService.instance.updateNotificationPreference('pushNotifications', false);
+    await AppDataService.instance.updateNotificationPreference('deadlineReminders', true);
+
+    expect(AppDataService.instance.getNotificationPreferences()['pushNotifications'], isFalse);
+
+    // SIMULATE APP CLOSE & REOPEN
+    await AppDataService.instance.init();
+
+    expect(AppDataService.instance.getNotificationPreferences()['pushNotifications'], isFalse);
+    expect(AppDataService.instance.getNotificationPreferences()['deadlineReminders'], isTrue);
+  });
+
+  test('Persistent Privacy Settings across app restarts', () async {
+    await AppDataService.instance.updatePrivacySetting('showPhone', true);
+    await AppDataService.instance.updatePrivacySetting('profileVisibility', false);
+
+    expect(AppDataService.instance.getPrivacySettings()['showPhone'], isTrue);
+    expect(AppDataService.instance.getPrivacySettings()['profileVisibility'], isFalse);
+
+    // SIMULATE APP CLOSE & REOPEN
+    await AppDataService.instance.init();
+
+    expect(AppDataService.instance.getPrivacySettings()['showPhone'], isTrue);
+    expect(AppDataService.instance.getPrivacySettings()['profileVisibility'], isFalse);
+  });
+
+  test('Persistent Chat & Company Messaging across app restarts', () async {
+    final convs = AppDataService.instance.getConversations();
+    expect(convs, isNotEmpty);
+    final convId = convs.first['id'] as String;
+
+    await AppDataService.instance.sendChatMessage(
+      conversationId: convId,
+      text: 'Here is my updated portfolio and deliverables link!',
+    );
+
+    final updatedConv = AppDataService.instance.getConversation(convId);
+    expect(updatedConv, isNotNull);
+    final msgs = updatedConv!['messages'] as List;
+    expect(msgs.any((m) => m['text'].toString().contains('updated portfolio')), isTrue);
+
+    // SIMULATE APP CLOSE & REOPEN
+    await AppDataService.instance.init();
+
+    final reloadedConv = AppDataService.instance.getConversation(convId);
+    expect(reloadedConv, isNotNull);
+    final reloadedMsgs = reloadedConv!['messages'] as List;
+    expect(reloadedMsgs.any((m) => m['text'].toString().contains('updated portfolio')), isTrue);
+  });
+
+  test('Notification Blue Dot Badge Logic - vanishes when all read', () async {
+    // Add an unread notification
+    await AppDataService.instance.addNotification(
+      title: 'New Project Alert',
+      subtitle: 'Google posted a new project',
+      time: 'Just now',
+      type: 'default',
+    );
+
+    expect(AppDataService.instance.unreadNotificationsCount, greaterThan(0));
+
+    // Mark single notification read
+    final notifs = AppDataService.instance.getNotifications();
+    await AppDataService.instance.markNotificationRead(notifs.first['id']);
+
+    // Mark all read
+    await AppDataService.instance.markNotificationsRead();
+    expect(AppDataService.instance.unreadNotificationsCount, equals(0));
+
+    // SIMULATE APP CLOSE & REOPEN
+    await AppDataService.instance.init();
+    expect(AppDataService.instance.unreadNotificationsCount, equals(0));
+  });
+
+  test('Signup University and Profile Info Persistence', () async {
+    await AppDataService.instance.saveAuthSession(
+      role: 'Student',
+      email: 'rabia.cs@nuces.edu.pk',
+      name: 'Rabia Tariq',
+      university: 'FAST NUCES Lahore',
+    );
+
+    expect(AppDataService.instance.getProfile()['name'], equals('Rabia Tariq'));
+    expect(AppDataService.instance.getProfile()['university'], equals('FAST NUCES Lahore'));
+    expect(AppDataService.instance.getProfile()['email'], equals('rabia.cs@nuces.edu.pk'));
+
+    // SIMULATE APP CLOSE & REOPEN
+    await AppDataService.instance.init();
+
+    expect(AppDataService.instance.getProfile()['name'], equals('Rabia Tariq'));
+    expect(AppDataService.instance.getProfile()['university'], equals('FAST NUCES Lahore'));
+    expect(AppDataService.instance.getProfile()['email'], equals('rabia.cs@nuces.edu.pk'));
+  });
+
+  test('Support Ticket Submission and Persistence', () async {
+    await AppDataService.instance.submitSupportTicket(
+      category: 'Technical Issue',
+      subject: 'Deliverable file failed to load',
+      message: 'Getting timeout when uploading 15MB file.',
+    );
+
+    expect(AppDataService.instance.getSupportTickets(), isNotEmpty);
+    expect(AppDataService.instance.getSupportTickets().first['subject'], equals('Deliverable file failed to load'));
+
+    // SIMULATE APP CLOSE & REOPEN
+    await AppDataService.instance.init();
+
+    expect(AppDataService.instance.getSupportTickets(), isNotEmpty);
+    expect(AppDataService.instance.getSupportTickets().first['subject'], equals('Deliverable file failed to load'));
+  });
 }
 

@@ -313,7 +313,7 @@ class _CompanyVerificationsScreenState
                           verificationId: item.id,
                           reviewerName: admin,
                         );
-                        if (!mounted) return;
+                        if (!mounted || !ctx.mounted) return;
                         Navigator.pop(ctx);
                         ScaffoldMessenger.of(context).showSnackBar(
                           SnackBar(
@@ -493,7 +493,7 @@ class _CompanyVerificationsScreenState
                 reviewerName: admin,
               );
 
-              if (!mounted) return;
+              if (!mounted || !ctx.mounted) return;
               Navigator.pop(ctx);
               ScaffoldMessenger.of(context).showSnackBar(
                 SnackBar(

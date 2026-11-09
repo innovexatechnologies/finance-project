@@ -5,6 +5,14 @@ import 'package:link_vibe/core/constants/app_colors.dart';
 import 'package:link_vibe/core/services/app_data_service.dart';
 import 'package:link_vibe/feature/auth/presentation/screens/login_screen.dart';
 
+import 'change_password_screen.dart';
+import 'notification_preferences_screen.dart';
+import 'privacy_settings_screen.dart';
+import 'help_center_screen.dart';
+import 'contact_support_screen.dart';
+import 'terms_conditions_screen.dart';
+import 'privacy_policy_screen.dart';
+
 class SettingsScreen extends StatelessWidget {
   const SettingsScreen({super.key});
 
@@ -47,20 +55,37 @@ class SettingsScreen extends StatelessWidget {
             Icons.lock_outline_rounded,
             'Change Password',
             () {
-              ScaffoldMessenger.of(context).showSnackBar(
-                const SnackBar(content: Text('Password reset link sent to your registered email.')),
+              Navigator.push(
+                context,
+                MaterialPageRoute(
+                  builder: (context) => const ChangePasswordScreen(),
+                ),
               );
             },
           ),
           _buildSettingsTile(
             Icons.notifications_outlined,
             'Notification Preferences',
-            () {},
+            () {
+              Navigator.push(
+                context,
+                MaterialPageRoute(
+                  builder: (context) => const NotificationPreferencesScreen(),
+                ),
+              );
+            },
           ),
           _buildSettingsTile(
             Icons.shield_outlined,
             'Privacy & Visibility Settings',
-            () {},
+            () {
+              Navigator.push(
+                context,
+                MaterialPageRoute(
+                  builder: (context) => const PrivacySettingsScreen(),
+                ),
+              );
+            },
           ),
           const SizedBox(height: 24),
 
@@ -77,22 +102,50 @@ class SettingsScreen extends StatelessWidget {
           _buildSettingsTile(
             Icons.help_outline_rounded,
             'Help Center & FAQs',
-            () {},
+            () {
+              Navigator.push(
+                context,
+                MaterialPageRoute(
+                  builder: (context) => const HelpCenterScreen(),
+                ),
+              );
+            },
           ),
           _buildSettingsTile(
             Icons.mail_outline_rounded,
             'Contact Support',
-            () {},
+            () {
+              Navigator.push(
+                context,
+                MaterialPageRoute(
+                  builder: (context) => const ContactSupportScreen(),
+                ),
+              );
+            },
           ),
           _buildSettingsTile(
             Icons.description_outlined,
             'Terms & Conditions',
-            () {},
+            () {
+              Navigator.push(
+                context,
+                MaterialPageRoute(
+                  builder: (context) => const TermsConditionsScreen(),
+                ),
+              );
+            },
           ),
           _buildSettingsTile(
             Icons.policy_outlined,
             'Privacy Policy',
-            () {},
+            () {
+              Navigator.push(
+                context,
+                MaterialPageRoute(
+                  builder: (context) => const PrivacyPolicyScreen(),
+                ),
+              );
+            },
           ),
           const SizedBox(height: 32),
 
@@ -142,8 +195,11 @@ class SettingsScreen extends StatelessWidget {
             color: AppColors.darkText,
           ),
         ),
-        trailing: const Icon(Icons.arrow_forward_ios_rounded,
-            size: 14, color: AppColors.grayText),
+        trailing: const Icon(
+          Icons.arrow_forward_ios_rounded,
+          size: 14,
+          color: AppColors.grayText,
+        ),
         onTap: onTap,
       ),
     );

@@ -451,7 +451,7 @@ class _StudentManagementScreenState extends State<StudentManagementScreen> {
                             studentId: student.id,
                             adminName: admin,
                           );
-                          if (!mounted) return;
+                          if (!mounted || !ctx.mounted) return;
                           Navigator.pop(ctx);
                           ScaffoldMessenger.of(context).showSnackBar(
                             SnackBar(
@@ -647,7 +647,7 @@ class _StudentManagementScreenState extends State<StudentManagementScreen> {
                 adminName: admin,
               );
 
-              if (!mounted) return;
+              if (!mounted || !ctx.mounted) return;
               Navigator.pop(ctx);
               ScaffoldMessenger.of(context).showSnackBar(
                 SnackBar(
@@ -719,7 +719,7 @@ class _StudentManagementScreenState extends State<StudentManagementScreen> {
                 adminName: admin,
               );
 
-              if (!mounted) return;
+              if (!mounted || !ctx.mounted) return;
               Navigator.pop(ctx);
               ScaffoldMessenger.of(context).showSnackBar(
                 SnackBar(
@@ -769,7 +769,7 @@ class _StudentManagementScreenState extends State<StudentManagementScreen> {
                 adminName: admin,
               );
 
-              if (!mounted) return;
+              if (!mounted || !ctx.mounted) return;
               Navigator.pop(ctx);
               ScaffoldMessenger.of(context).showSnackBar(
                 SnackBar(
@@ -1425,7 +1425,7 @@ class _StudentManagementScreenState extends State<StudentManagementScreen> {
             shrinkWrap: true,
             physics: const NeverScrollableScrollPhysics(),
             itemCount: pageStudents.length,
-            separatorBuilder: (_, __) => const Divider(height: 1),
+            separatorBuilder: (_, index) => const Divider(height: 1),
             itemBuilder: (context, index) {
               final student = pageStudents[index];
               final isChecked = _selectedStudentIds.contains(student.id);

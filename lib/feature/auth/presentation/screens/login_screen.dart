@@ -65,6 +65,7 @@ class _LoginScreenState extends State<LoginScreen> {
         role: role,
         email: email,
         name: authResponse.user?.userMetadata?['name']?.toString() ?? 'Ahmed Khan',
+        university: authResponse.user?.userMetadata?['university']?.toString(),
         userId: authResponse.user?.id,
       );
 

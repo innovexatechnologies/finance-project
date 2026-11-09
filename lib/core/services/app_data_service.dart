@@ -25,6 +25,23 @@ class AppDataService extends ChangeNotifier {
   List<String> _skills = [];
   List<Map<String, dynamic>> _notifications = [];
   List<Map<String, dynamic>> _certificates = [];
+  Map<String, bool> _notificationPreferences = {
+    'pushNotifications': true,
+    'emailAlerts': true,
+    'newProjectsAlert': true,
+    'applicationUpdates': true,
+    'chatMessages': true,
+    'deadlineReminders': true,
+  };
+  Map<String, bool> _privacySettings = {
+    'profileVisibility': true,
+    'showEmail': true,
+    'showPhone': false,
+    'publicPortfolio': true,
+    'allowCompanyMessages': true,
+  };
+  List<Map<String, dynamic>> _conversations = [];
+  List<Map<String, dynamic>> _supportTickets = [];
 
   // Keys
   static const _kIsLoggedIn = 'cc_is_logged_in_v1';
@@ -40,6 +57,10 @@ class AppDataService extends ChangeNotifier {
   static const _kSkills = 'cc_skills_v1';
   static const _kNotifications = 'cc_notifications_v1';
   static const _kCertificates = 'cc_certificates_v1';
+  static const _kNotificationPreferences = 'cc_notif_prefs_v1';
+  static const _kPrivacySettings = 'cc_privacy_prefs_v1';
+  static const _kChatConversations = 'cc_chat_conversations_v1';
+  static const _kSupportTickets = 'cc_support_tickets_v1';
 
   // Default seed projects matching user document and image
   static final List<Map<String, dynamic>> defaultSeedProjects = [
@@ -184,6 +205,11 @@ class AppDataService extends ChangeNotifier {
         final metaName = sbUser.userMetadata?['name']?.toString();
         if (metaName != null && metaName.isNotEmpty) {
           _userName = metaName;
+          _profile['name'] = metaName;
+        }
+        final metaUni = sbUser.userMetadata?['university']?.toString();
+        if (metaUni != null && metaUni.isNotEmpty) {
+          _profile['university'] = metaUni;
         }
       }
     } catch (_) {}
@@ -362,6 +388,130 @@ class AppDataService extends ChangeNotifier {
       }
     } else {
       _certificates = List.from(defaultSeedCertificates);
+    }
+
+    // 9. Notification Preferences
+    final notifPrefsJson = _prefs!.getString(_kNotificationPreferences);
+    if (notifPrefsJson != null) {
+      try {
+        final Map decoded = jsonDecode(notifPrefsJson);
+        _notificationPreferences =
+            decoded.map((k, v) => MapEntry(k.toString(), v == true));
+      } catch (e) {
+        debugPrint('Error loading notif prefs: $e');
+      }
+    }
+
+    // 10. Privacy Settings
+    final privacyJson = _prefs!.getString(_kPrivacySettings);
+    if (privacyJson != null) {
+      try {
+        final Map decoded = jsonDecode(privacyJson);
+        _privacySettings =
+            decoded.map((k, v) => MapEntry(k.toString(), v == true));
+      } catch (e) {
+        debugPrint('Error loading privacy settings: $e');
+      }
+    }
+
+    // 11. Chat Conversations
+    final chatJson = _prefs!.getString(_kChatConversations);
+    if (chatJson != null) {
+      try {
+        final List decoded = jsonDecode(chatJson);
+        _conversations = decoded.map((e) {
+          final m = Map<String, dynamic>.from(e);
+          if (m['messages'] is List) {
+            m['messages'] = (m['messages'] as List)
+                .map((msg) => Map<String, dynamic>.from(msg as Map))
+                .toList();
+          }
+          return m;
+        }).toList();
+      } catch (e) {
+        debugPrint('Error loading conversations: $e');
+      }
+    }
+    if (_conversations.isEmpty) {
+      _conversations = [
+        {
+          'id': 'conv_techvista',
+          'company': 'TechVista',
+          'supervisor': 'Sarah Jenkins (Project Lead)',
+          'lastMessage': 'The mockups look great! Please proceed to step 2.',
+          'time': '10:45 AM',
+          'unread': 0,
+          'messages': <Map<String, dynamic>>[
+            {
+              'id': 'msg_1',
+              'isMe': false,
+              'sender': 'Sarah Jenkins',
+              'text': 'Hello Ahmed! Welcome to the project workspace.',
+              'time': '10:30 AM',
+            },
+            {
+              'id': 'msg_2',
+              'isMe': true,
+              'sender': 'Me',
+              'text': 'Thank you! Excited to collaborate and get started.',
+              'time': '10:35 AM',
+            },
+            {
+              'id': 'msg_3',
+              'isMe': false,
+              'sender': 'Sarah Jenkins',
+              'text': 'The mockups look great! Please proceed to step 2.',
+              'time': '10:45 AM',
+            },
+          ],
+        },
+        {
+          'id': 'conv_google',
+          'company': 'Google Mentorship',
+          'supervisor': 'Dr. Arham (AI Team)',
+          'lastMessage': 'Meeting scheduled for tomorrow at 3 PM PKT.',
+          'time': 'Yesterday',
+          'unread': 0,
+          'messages': <Map<String, dynamic>>[
+            {
+              'id': 'msg_g1',
+              'isMe': false,
+              'sender': 'Dr. Arham',
+              'text': 'Meeting scheduled for tomorrow at 3 PM PKT.',
+              'time': 'Yesterday',
+            },
+          ],
+        },
+        {
+          'id': 'conv_codecraft',
+          'company': 'CodeCraft Solutions',
+          'supervisor': 'Usman Tariq',
+          'lastMessage': 'Certificate issued and uploaded to your portal.',
+          'time': 'Oct 26',
+          'unread': 0,
+          'messages': <Map<String, dynamic>>[
+            {
+              'id': 'msg_c1',
+              'isMe': false,
+              'sender': 'Usman Tariq',
+              'text': 'Certificate issued and uploaded to your portal.',
+              'time': 'Oct 26',
+            },
+          ],
+        },
+      ];
+    }
+
+    // 12. Support Tickets
+    final ticketsJson = _prefs!.getString(_kSupportTickets);
+    if (ticketsJson != null) {
+      try {
+        final List decoded = jsonDecode(ticketsJson);
+        _supportTickets =
+            decoded.map((e) => Map<String, dynamic>.from(e)).toList();
+      } catch (e) {
+        debugPrint('Error loading support tickets: $e');
+      }
     }
 
     notifyListeners();
@@ -673,6 +823,22 @@ class AppDataService extends ChangeNotifier {
     }
   }
 
+  int get unreadNotificationsCount {
+    return _notifications.where((n) => n['isRead'] != true).length;
+  }
+
+  Future<void> markNotificationRead(dynamic id) async {
+    final idx =
+        _notifications.indexWhere((n) => n['id']?.toString() == id.toString());
+    if (idx >= 0) {
+      _notifications[idx]['isRead'] = true;
+      notifyListeners();
+      if (_prefs != null) {
+        await _prefs!.setString(_kNotifications, jsonEncode(_notifications));
+      }
+    }
+  }
+
   Future<void> markNotificationsRead() async {
     for (var n in _notifications) {
       n['isRead'] = true;
@@ -681,6 +847,201 @@ class AppDataService extends ChangeNotifier {
 
     if (_prefs != null) {
       await _prefs!.setString(_kNotifications, jsonEncode(_notifications));
+    }
+  }
+
+  // ==========================================
+  // NOTIFICATION & PRIVACY PREFERENCES
+  // ==========================================
+
+  Map<String, bool> getNotificationPreferences() =>
+      Map.unmodifiable(_notificationPreferences);
+
+  Future<void> updateNotificationPreference(String key, bool value) async {
+    _notificationPreferences[key] = value;
+    notifyListeners();
+    if (_prefs != null) {
+      await _prefs!.setString(
+          _kNotificationPreferences, jsonEncode(_notificationPreferences));
+    }
+  }
+
+  Map<String, bool> getPrivacySettings() =>
+      Map.unmodifiable(_privacySettings);
+
+  Future<void> updatePrivacySetting(String key, bool value) async {
+    _privacySettings[key] = value;
+    notifyListeners();
+    if (_prefs != null) {
+      await _prefs!
+          .setString(_kPrivacySettings, jsonEncode(_privacySettings));
+    }
+  }
+
+  // ==========================================
+  // CHAT & MESSAGING
+  // ==========================================
+
+  List<Map<String, dynamic>> getConversations() =>
+      List.unmodifiable(_conversations);
+
+  Map<String, dynamic>? getConversation(String id) {
+    try {
+      return _conversations.firstWhere((c) => c['id'] == id);
+    } catch (_) {
+      return null;
+    }
+  }
+
+  Future<void> markConversationRead(String conversationId) async {
+    final conv = _conversations.firstWhere(
+      (c) => c['id'] == conversationId,
+      orElse: () => {},
+    );
+    if (conv.isNotEmpty && ((conv['unread'] as int? ?? 0) > 0)) {
+      conv['unread'] = 0;
+      notifyListeners();
+      if (_prefs != null) {
+        await _prefs!.setString(
+            _kChatConversations, jsonEncode(_conversations));
+      }
+    }
+  }
+
+  Future<void> sendChatMessage({
+    required String conversationId,
+    required String text,
+  }) async {
+    final conv = _conversations.firstWhere(
+      (c) => c['id'] == conversationId,
+      orElse: () => {},
+    );
+    if (conv.isEmpty) return;
+
+    const nowTime = 'Just now';
+    final userMsg = {
+      'id': 'msg_${DateTime.now().millisecondsSinceEpoch}',
+      'isMe': true,
+      'sender': _profile['name'] ?? (_userName.isNotEmpty ? _userName : 'Me'),
+      'text': text,
+      'time': nowTime,
+    };
+
+    final List<Map<String, dynamic>> msgs =
+        List<Map<String, dynamic>>.from(conv['messages'] as List? ?? []);
+    msgs.add(userMsg);
+    conv['messages'] = msgs;
+    conv['lastMessage'] = text;
+    conv['time'] = nowTime;
+
+    // Student in-app delivery notification
+    addNotification(
+      title: 'Message Delivered to ${conv['company']}',
+      subtitle: '${conv['supervisor']} received: "$text"',
+      time: 'Just now',
+      type: 'chat',
+    );
+
+    notifyListeners();
+
+    if (_prefs != null) {
+      await _prefs!.setString(
+          _kChatConversations, jsonEncode(_conversations));
+    }
+
+    // Try to record in Supabase
+    try {
+      final user = Supabase.instance.client.auth.currentUser;
+      await Supabase.instance.client.from('messages').insert({
+        'conversation_id': conversationId,
+        'sender_id': user?.id ?? 'guest_student',
+        'content': text,
+        'company_name': conv['company'],
+        'created_at': DateTime.now().toIso8601String(),
+      });
+    } catch (_) {}
+
+    // Simulated company supervisor reply after 1.5s
+    final supervisor = conv['supervisor']?.toString() ?? 'Supervisor';
+    final company = conv['company']?.toString() ?? 'Company';
+    final studentName = _profile['name'] ?? 'Ahmed';
+
+    Future.delayed(const Duration(milliseconds: 1400), () async {
+      final supervisorReplies = [
+        'Thanks for reaching out, $studentName! Received your message, looking into it now.',
+        'Great to hear from you, $studentName! Keep progressing on the tasks, will review shortly.',
+        'Got your note! Your submission and progress are on track.',
+        'Acknowledged. Our project engineering team has received your message.',
+      ];
+      final replyText =
+          supervisorReplies[DateTime.now().second % supervisorReplies.length];
+
+      final replyMsg = {
+        'id': 'msg_rep_${DateTime.now().millisecondsSinceEpoch}',
+        'isMe': false,
+        'sender': supervisor,
+        'text': replyText,
+        'time': 'Just now',
+      };
+
+      msgs.add(replyMsg);
+      conv['lastMessage'] = replyText;
+      conv['time'] = 'Just now';
+      conv['unread'] = (conv['unread'] as int? ?? 0) + 1;
+
+      addNotification(
+        title: 'New message from $supervisor ($company)',
+        subtitle: replyText,
+        time: 'Just now',
+        type: 'chat',
+      );
+
+      notifyListeners();
+
+      if (_prefs != null) {
+        await _prefs!.setString(
+            _kChatConversations, jsonEncode(_conversations));
+      }
+    });
+  }
+
+  // ==========================================
+  // SUPPORT TICKETS
+  // ==========================================
+
+  List<Map<String, dynamic>> getSupportTickets() =>
+      List.unmodifiable(_supportTickets);
+
+  Future<void> submitSupportTicket({
+    required String category,
+    required String subject,
+    required String message,
+  }) async {
+    final ticketId = 'CC-${DateTime.now().millisecondsSinceEpoch % 100000}';
+    final ticket = {
+      'id': ticketId,
+      'category': category,
+      'subject': subject,
+      'message': message,
+      'email': _userEmail.isNotEmpty ? _userEmail : (_profile['email'] ?? ''),
+      'createdAt': DateTime.now().toIso8601String(),
+      'status': 'Under Review',
+    };
+
+    _supportTickets.insert(0, ticket);
+
+    addNotification(
+      title: 'Support Ticket #$ticketId Submitted',
+      subtitle: 'Our support team will respond to "$subject" via email soon.',
+      time: 'Just now',
+      type: 'submitted',
+    );
+
+    notifyListeners();
+
+    if (_prefs != null) {
+      await _prefs!.setString(
+          _kSupportTickets, jsonEncode(_supportTickets));
     }
   }
 
@@ -706,6 +1067,7 @@ class AppDataService extends ChangeNotifier {
     required String role,
     String? email,
     String? name,
+    String? university,
     String? userId,
   }) async {
     _isLoggedIn = true;
@@ -719,6 +1081,9 @@ class AppDataService extends ChangeNotifier {
     }
     if (email != null && email.isNotEmpty) {
       _profile['email'] = email;
+    }
+    if (university != null && university.isNotEmpty) {
+      _profile['university'] = university;
     }
 
     notifyListeners();

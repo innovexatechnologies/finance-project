@@ -30,10 +30,13 @@ class _StudentHomeScreenState extends State<StudentHomeScreen> {
     if (user != null) {
       final name = user.userMetadata?['name'];
       final email = user.email;
-      if (name != null || email != null) {
+      final university = user.userMetadata?['university'];
+      if (name != null || email != null || university != null) {
         AppDataService.instance.updateProfile({
           if (name != null && name.toString().isNotEmpty) 'name': name.toString(),
           if (email != null && email.isNotEmpty) 'email': email,
+          if (university != null && university.toString().isNotEmpty)
+            'university': university.toString(),
         });
       }
     }
@@ -117,27 +120,50 @@ class _StudentHomeScreenState extends State<StudentHomeScreen> {
                           ),
                         ],
                       ),
-                      Container(
-                        decoration: BoxDecoration(
-                          color: AppColors.cardWhite,
-                          shape: BoxShape.circle,
-                          border: Border.all(color: AppColors.lightGray),
-                        ),
-                        child: IconButton(
-                          icon: const Icon(
-                            Icons.notifications_none_rounded,
-                            color: AppColors.deepNavy,
-                            size: 22,
-                          ),
-                          onPressed: () {
-                            Navigator.push(
-                              context,
-                              MaterialPageRoute(
-                                builder: (context) => const NotificationsScreen(),
+                      Stack(
+                        clipBehavior: Clip.none,
+                        children: [
+                          Container(
+                            decoration: BoxDecoration(
+                              color: AppColors.cardWhite,
+                              shape: BoxShape.circle,
+                              border: Border.all(color: AppColors.lightGray),
+                            ),
+                            child: IconButton(
+                              icon: const Icon(
+                                Icons.notifications_none_rounded,
+                                color: AppColors.deepNavy,
+                                size: 22,
                               ),
-                            );
-                          },
-                        ),
+                              onPressed: () {
+                                Navigator.push(
+                                  context,
+                                  MaterialPageRoute(
+                                    builder: (context) =>
+                                        const NotificationsScreen(),
+                                  ),
+                                );
+                              },
+                            ),
+                          ),
+                          if (AppDataService.instance.unreadNotificationsCount > 0)
+                            Positioned(
+                              top: 6,
+                              right: 6,
+                              child: Container(
+                                width: 10,
+                                height: 10,
+                                decoration: BoxDecoration(
+                                  color: AppColors.primaryBlue,
+                                  shape: BoxShape.circle,
+                                  border: Border.all(
+                                    color: Colors.white,
+                                    width: 1.5,
+                                  ),
+                                ),
+                              ),
+                            ),
+                        ],
                       ),
                     ],
                   ),
