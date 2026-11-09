@@ -177,6 +177,7 @@ class CompanyProjectService {
   late final ValueNotifier<List<ProjectModel>> projectsNotifier;
 
   List<ProjectModel> get allProjects => projectsNotifier.value;
+  List<ProjectModel> get projects => projectsNotifier.value;
 
   // Filter projects strictly belonging to the authenticated company
   List<ProjectModel> getProjectsForCompany(String companyId) {
