@@ -6,6 +6,7 @@ import 'package:link_vibe/feature/company/services/company_profile_service.dart'
 import 'package:link_vibe/feature/company/services/company_project_service.dart';
 import 'applicants_screen.dart';
 import 'company_profile_screen.dart';
+import 'company_projects_list_screen.dart';
 import 'company_verification_screen.dart';
 import 'post_project_screen.dart';
 
@@ -304,7 +305,12 @@ class _CompanyDashboardScreenState extends State<CompanyDashboardScreen> {
 
   // Navigation: Screen 26 (View My Projects - Filtered)
   void _navigateToProjectsView({String filter = 'All'}) {
-    _openProjectsFilteredModal(filter: filter);
+    Navigator.push(
+      context,
+      MaterialPageRoute(
+        builder: (context) => CompanyProjectsListScreen(initialFilter: filter),
+      ),
+    );
   }
 
   // Filtered Projects Modal View

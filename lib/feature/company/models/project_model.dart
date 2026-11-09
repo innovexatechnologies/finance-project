@@ -12,9 +12,9 @@ class ProjectModel {
   final String additionalInstructions;
   final String companyName;
   final String companyId;
-  final String status; // 'Open', 'In Progress', 'Completed', 'Draft'
+  final String status; // 'Draft', 'Open', 'In Progress', 'Completed', 'Closed', 'Cancelled'
   final String duration;
-  final String budget; // Optional legacy field (Strictly excluded from UI)
+  final String budget; // Strictly excluded from UI
   final int applicantsCount;
   final String? assignedStudent;
   final double progress;
@@ -42,6 +42,53 @@ class ProjectModel {
     this.progress = 0.0,
     this.createdAt = 'Just now',
   });
+
+  ProjectModel copyWith({
+    String? id,
+    String? title,
+    String? category,
+    String? description,
+    String? requirements,
+    List<String>? skillsRequired,
+    String? deliverables,
+    String? deadline,
+    String? projectType,
+    int? openings,
+    String? additionalInstructions,
+    String? companyName,
+    String? companyId,
+    String? status,
+    String? duration,
+    String? budget,
+    int? applicantsCount,
+    String? assignedStudent,
+    double? progress,
+    String? createdAt,
+  }) {
+    return ProjectModel(
+      id: id ?? this.id,
+      title: title ?? this.title,
+      category: category ?? this.category,
+      description: description ?? this.description,
+      requirements: requirements ?? this.requirements,
+      skillsRequired: skillsRequired ?? this.skillsRequired,
+      deliverables: deliverables ?? this.deliverables,
+      deadline: deadline ?? this.deadline,
+      projectType: projectType ?? this.projectType,
+      openings: openings ?? this.openings,
+      additionalInstructions:
+          additionalInstructions ?? this.additionalInstructions,
+      companyName: companyName ?? this.companyName,
+      companyId: companyId ?? this.companyId,
+      status: status ?? this.status,
+      duration: duration ?? this.duration,
+      budget: budget ?? this.budget,
+      applicantsCount: applicantsCount ?? this.applicantsCount,
+      assignedStudent: assignedStudent ?? this.assignedStudent,
+      progress: progress ?? this.progress,
+      createdAt: createdAt ?? this.createdAt,
+    );
+  }
 
   factory ProjectModel.fromJson(Map<String, dynamic> json) {
     return ProjectModel(
