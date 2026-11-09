@@ -9,6 +9,7 @@ import 'assigned_projects_screen.dart';
 import 'company_profile_screen.dart';
 import 'company_project_detail_screen.dart';
 import 'company_projects_list_screen.dart';
+import 'company_settings_screen.dart';
 import 'company_verification_screen.dart';
 import 'post_project_screen.dart';
 
@@ -194,6 +195,28 @@ class _CompanyDashboardScreenState extends State<CompanyDashboardScreen> {
       context,
       MaterialPageRoute(
         builder: (context) => CompanyProfileScreen(startInEditMode: editMode),
+      ),
+    );
+
+    // Refresh company details on dashboard
+    final activeProfile = CompanyProfileService().currentProfile;
+    setState(() {
+      _companyProfile = CompanyProfileInfo(
+        companyName: activeProfile.companyName,
+        tagline: activeProfile.industry,
+        industry: activeProfile.industry,
+        isVerified: activeProfile.isVerified,
+        unreadNotificationsCount: _companyProfile.unreadNotificationsCount,
+      );
+    });
+  }
+
+  // Navigation: Screen 32 (Company Profile & Settings)
+  Future<void> _navigateToSettings() async {
+    await Navigator.push(
+      context,
+      MaterialPageRoute(
+        builder: (context) => const CompanySettingsScreen(),
       ),
     );
 
@@ -436,6 +459,16 @@ class _CompanyDashboardScreenState extends State<CompanyDashboardScreen> {
             ),
             tooltip: 'Company Profile (Screen 23)',
             onPressed: () => _navigateToCompanyProfile(),
+          ),
+          // Company Settings (Screen 32)
+          IconButton(
+            icon: const Icon(
+              Icons.settings_outlined,
+              color: AppColors.darkNavy,
+              size: 24,
+            ),
+            tooltip: 'Settings (Screen 32)',
+            onPressed: () => _navigateToSettings(),
           ),
           const SizedBox(width: 8),
         ],
