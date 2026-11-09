@@ -138,3 +138,4 @@ class TermsConditionsScreen extends StatelessWidget {
     );
   }
 }
+

@@ -379,3 +379,4 @@ class _ContactSupportScreenState extends State<ContactSupportScreen> {
     );
   }
 }
+
