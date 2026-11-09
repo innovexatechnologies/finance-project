@@ -2,8 +2,8 @@ import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:link_vibe/feature/splash/presentation/screens/splash_screen.dart';
 import 'package:link_vibe/feature/onboarding/presentation/screens/onboarding_screen.dart';
-import 'package:link_vibe/feature/auth/presentation/widgets/screens/login_screen.dart';
-import 'package:link_vibe/feature/auth/presentation/widgets/screens/signup_screen.dart';
+import 'package:link_vibe/feature/auth/presentation/screens/login_screen.dart';
+import 'package:link_vibe/feature/auth/presentation/screens/signup_screen.dart';
 
 void main() {
   final testSizes = [

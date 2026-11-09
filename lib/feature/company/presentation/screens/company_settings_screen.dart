@@ -272,16 +272,18 @@ class _CompanySettingsScreenState extends State<CompanySettingsScreen> {
                                   newPassword: newP,
                                 );
 
-                                if (success && mounted) {
+                                if (success && mounted && ctx.mounted) {
                                   Navigator.pop(ctx);
-                                  ScaffoldMessenger.of(context).showSnackBar(
-                                    const SnackBar(
-                                      content: Text(
-                                          '✅ Corporate password changed successfully.'),
-                                      backgroundColor: AppColors.success,
-                                      behavior: SnackBarBehavior.floating,
-                                    ),
-                                  );
+                                  if (mounted) {
+                                    ScaffoldMessenger.of(context).showSnackBar(
+                                      const SnackBar(
+                                        content: Text(
+                                            '✅ Corporate password changed successfully.'),
+                                        backgroundColor: AppColors.success,
+                                        behavior: SnackBarBehavior.floating,
+                                      ),
+                                    );
+                                  }
                                 }
                               },
                         child: isSaving
@@ -809,7 +811,7 @@ class _CompanySettingsScreenState extends State<CompanySettingsScreen> {
         builder: (context, profile, _) {
           return ValueListenableBuilder<CompanySettingsModel>(
             valueListenable: _settingsService.settingsNotifier,
-            builder: (context, settings, __) {
+            builder: (context, settings, child) {
               return ListView(
                 padding: const EdgeInsets.all(16.0),
                 children: [

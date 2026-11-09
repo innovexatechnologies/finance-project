@@ -765,7 +765,7 @@ class _ApplicantDetailScreenState extends State<ApplicantDetailScreen> {
   Widget build(BuildContext context) {
     return ValueListenableBuilder<List<ApplicantModel>>(
       valueListenable: _applicantService.applicantsNotifier,
-      builder: (context, _, __) {
+      builder: (context, _, child) {
         final applicant = _getLatestApplicant();
 
         if (applicant == null) {
@@ -1650,7 +1650,7 @@ class _ApplicantDetailScreenState extends State<ApplicantDetailScreen> {
                   ),
                 ],
               ),
-              if (trailing != null) trailing,
+              ?trailing,
             ],
           ),
           const SizedBox(height: 12),

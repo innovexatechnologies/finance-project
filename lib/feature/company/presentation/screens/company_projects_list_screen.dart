@@ -63,6 +63,7 @@ class _CompanyProjectsListScreenState extends State<CompanyProjectsListScreen> {
         builder: (context) => const PostProjectScreen(),
       ),
     );
+    if (!mounted) return;
     if (result == true) {
       ScaffoldMessenger.of(context).showSnackBar(
         const SnackBar(

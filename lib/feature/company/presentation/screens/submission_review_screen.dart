@@ -331,7 +331,7 @@ class _SubmissionReviewScreenState extends State<SubmissionReviewScreen> {
 
     return ValueListenableBuilder<List<AssignmentModel>>(
       valueListenable: _assignmentService.assignmentsNotifier,
-      builder: (context, _, __) {
+      builder: (context, _, child) {
         final assignment = _getAssignment();
 
         // Guard: Verify submission exists and belongs to logged-in company

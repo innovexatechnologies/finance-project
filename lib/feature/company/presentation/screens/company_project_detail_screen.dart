@@ -114,6 +114,7 @@ class _CompanyProjectDetailScreenState
       if (proceed != true) return;
     }
 
+    if (!mounted) return;
     final result = await Navigator.push(
       context,
       MaterialPageRoute(
@@ -121,6 +122,7 @@ class _CompanyProjectDetailScreenState
       ),
     );
 
+    if (!mounted) return;
     if (result == true) {
       ScaffoldMessenger.of(context).showSnackBar(
         const SnackBar(
