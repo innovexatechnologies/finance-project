@@ -3,6 +3,7 @@ import 'package:flutter/material.dart';
 import 'package:google_fonts/google_fonts.dart';
 import 'package:link_vibe/core/constants/app_colors.dart';
 import 'package:link_vibe/core/services/app_data_service.dart';
+import 'package:link_vibe/feature/admin/presentation/screens/admin_dashboard_screen.dart';
 import 'package:link_vibe/feature/company/presentation/screens/company_dashboard.dart';
 import 'package:link_vibe/feature/onboarding/presentation/screens/onboarding_screen.dart';
 import 'package:link_vibe/feature/student/presentation/screens/student_main_nav.dart';
@@ -56,7 +57,12 @@ class _SplashScreenState extends State<SplashScreen>
   void _navigateToMain() {
     if (!mounted) return;
     final role = AppDataService.instance.userRole;
-    if (role == 'Company') {
+    if (role == 'Admin') {
+      Navigator.pushReplacement(
+        context,
+        MaterialPageRoute(builder: (context) => const AdminDashboardScreen()),
+      );
+    } else if (role == 'Company') {
       Navigator.pushReplacement(
         context,
         MaterialPageRoute(builder: (context) => const CompanyDashboardScreen()),

@@ -96,7 +96,24 @@ class _SignupScreenState extends State<SignupScreen> {
               'name': name,
               'email': email,
               'user_type': _selectedRole,
+              'university': university,
             });
+
+            if (_selectedRole == 'Company') {
+              await supabase.from('companies').upsert({
+                'user_id': authResponse.user!.id,
+                'company_name': name,
+                'email': email,
+                'industry': university.isNotEmpty ? university : 'Technology',
+              });
+            } else {
+              await supabase.from('students').upsert({
+                'user_id': authResponse.user!.id,
+                'full_name': name,
+                'email': email,
+                'university': university.isNotEmpty ? university : 'National University',
+              });
+            }
           }
         } catch (_) {}
       } catch (cloudError) {
@@ -202,9 +219,9 @@ class _SignupScreenState extends State<SignupScreen> {
                   ),
                   const SizedBox(height: 20),
 
-                  // Full Name
+                  // Full Name or Company Name
                   Text(
-                    'Full Name',
+                    _selectedRole == 'Company' ? 'Company Name' : 'Full Name',
                     style: GoogleFonts.inter(
                       fontSize: 13,
                       fontWeight: FontWeight.w600,
@@ -214,9 +231,16 @@ class _SignupScreenState extends State<SignupScreen> {
                   const SizedBox(height: 6),
                   TextField(
                     controller: _nameController,
-                    decoration: const InputDecoration(
-                      hintText: 'e.g. Ahmed Khan',
-                      prefixIcon: Icon(Icons.person_outline_rounded, size: 20),
+                    decoration: InputDecoration(
+                      hintText: _selectedRole == 'Company'
+                          ? 'e.g. Systems Limited, Arbisoft'
+                          : 'e.g. Ahmed Khan',
+                      prefixIcon: Icon(
+                        _selectedRole == 'Company'
+                            ? Icons.business_rounded
+                            : Icons.person_outline_rounded,
+                        size: 20,
+                      ),
                     ),
                   ),
                   const SizedBox(height: 14),
@@ -234,16 +258,20 @@ class _SignupScreenState extends State<SignupScreen> {
                   TextField(
                     controller: _emailController,
                     keyboardType: TextInputType.emailAddress,
-                    decoration: const InputDecoration(
-                      hintText: 'ahmed@university.edu.pk',
-                      prefixIcon: Icon(Icons.email_outlined, size: 20),
+                    decoration: InputDecoration(
+                      hintText: _selectedRole == 'Company'
+                          ? 'hr@company.com'
+                          : 'ahmed@university.edu.pk',
+                      prefixIcon: const Icon(Icons.email_outlined, size: 20),
                     ),
                   ),
                   const SizedBox(height: 14),
 
-                  // University
+                  // University or Industry
                   Text(
-                    'University / Institute',
+                    _selectedRole == 'Company'
+                        ? 'Industry / Sector'
+                        : 'University / Institute',
                     style: GoogleFonts.inter(
                       fontSize: 13,
                       fontWeight: FontWeight.w600,
@@ -253,9 +281,16 @@ class _SignupScreenState extends State<SignupScreen> {
                   const SizedBox(height: 6),
                   TextField(
                     controller: _universityController,
-                    decoration: const InputDecoration(
-                      hintText: 'e.g. FAST NUCES, NUST, etc.',
-                      prefixIcon: Icon(Icons.school_outlined, size: 20),
+                    decoration: InputDecoration(
+                      hintText: _selectedRole == 'Company'
+                          ? 'e.g. Information Technology, FinTech'
+                          : 'e.g. FAST NUCES, NUST, etc.',
+                      prefixIcon: Icon(
+                        _selectedRole == 'Company'
+                            ? Icons.domain_rounded
+                            : Icons.school_outlined,
+                        size: 20,
+                      ),
                     ),
                   ),
                   const SizedBox(height: 14),
