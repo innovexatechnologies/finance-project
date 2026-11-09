@@ -1,52 +1,73 @@
 class ProjectModel {
   final String id;
   final String title;
-  final String description;
-  final String budget;
-  final String companyName;
-  final String status; // 'Open', 'In Progress', 'Completed', 'Under Review'
   final String category;
+  final String description;
+  final String requirements;
   final List<String> skillsRequired;
-  final String duration;
+  final String deliverables;
   final String deadline;
+  final String projectType; // 'Remote', 'On-site', 'Hybrid'
+  final int openings;
+  final String additionalInstructions;
+  final String companyName;
+  final String companyId;
+  final String status; // 'Open', 'In Progress', 'Completed', 'Draft'
+  final String duration;
+  final String budget; // Optional legacy field (Strictly excluded from UI)
   final int applicantsCount;
   final String? assignedStudent;
-  final double progress; // 0.0 to 1.0
+  final double progress;
+  final String createdAt;
 
   ProjectModel({
     required this.id,
     required this.title,
+    required this.category,
     required this.description,
-    required this.budget,
-    required this.companyName,
-    required this.status,
-    this.category = 'Development',
+    this.requirements = '',
     this.skillsRequired = const [],
-    this.duration = '2-4 weeks',
-    this.deadline = 'Flexible',
+    this.deliverables = '',
+    required this.deadline,
+    this.projectType = 'Remote',
+    this.openings = 1,
+    this.additionalInstructions = '',
+    required this.companyName,
+    this.companyId = 'comp_01',
+    required this.status,
+    this.duration = '3-4 weeks',
+    this.budget = '',
     this.applicantsCount = 0,
     this.assignedStudent,
     this.progress = 0.0,
+    this.createdAt = 'Just now',
   });
 
   factory ProjectModel.fromJson(Map<String, dynamic> json) {
     return ProjectModel(
       id: json['id'] ?? '',
       title: json['title'] ?? '',
+      category: json['category'] ?? 'Mobile Dev',
       description: json['description'] ?? '',
-      budget: json['budget'] ?? '',
-      companyName: json['company_name'] ?? 'TechCorp Inc.',
-      status: json['status'] ?? 'Open',
-      category: json['category'] ?? 'Development',
+      requirements: json['requirements'] ?? '',
       skillsRequired: (json['skills_required'] as List<dynamic>?)
               ?.map((e) => e.toString())
               .toList() ??
           const [],
-      duration: json['duration'] ?? '2-4 weeks',
+      deliverables: json['deliverables'] ?? '',
       deadline: json['deadline'] ?? 'Flexible',
-      applicantsCount: json['applicants_count'] ?? 0,
+      projectType: json['project_type'] ?? 'Remote',
+      openings: (json['openings'] as num?)?.toInt() ?? 1,
+      additionalInstructions: json['additional_instructions'] ?? '',
+      companyName: json['company_name'] ?? 'TechVista Innovations',
+      companyId: json['company_id'] ?? 'comp_01',
+      status: json['status'] ?? 'Open',
+      duration: json['duration'] ?? '3-4 weeks',
+      budget: json['budget'] ?? '',
+      applicantsCount: (json['applicants_count'] as num?)?.toInt() ?? 0,
       assignedStudent: json['assigned_student'],
       progress: (json['progress'] as num?)?.toDouble() ?? 0.0,
+      createdAt: json['created_at'] ?? 'Recently',
     );
   }
 
@@ -54,17 +75,24 @@ class ProjectModel {
     return {
       'id': id,
       'title': title,
-      'description': description,
-      'budget': budget,
-      'company_name': companyName,
-      'status': status,
       'category': category,
+      'description': description,
+      'requirements': requirements,
       'skills_required': skillsRequired,
-      'duration': duration,
+      'deliverables': deliverables,
       'deadline': deadline,
+      'project_type': projectType,
+      'openings': openings,
+      'additional_instructions': additionalInstructions,
+      'company_name': companyName,
+      'company_id': companyId,
+      'status': status,
+      'duration': duration,
+      'budget': budget,
       'applicants_count': applicantsCount,
       'assigned_student': assignedStudent,
       'progress': progress,
+      'created_at': createdAt,
     };
   }
 }

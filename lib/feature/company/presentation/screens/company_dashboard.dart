@@ -3,6 +3,7 @@ import 'package:link_vibe/core/constants/app_colors.dart';
 import 'package:link_vibe/feature/company/models/company_dashboard_data.dart';
 import 'package:link_vibe/feature/company/models/project_model.dart';
 import 'package:link_vibe/feature/company/services/company_profile_service.dart';
+import 'package:link_vibe/feature/company/services/company_project_service.dart';
 import 'applicants_screen.dart';
 import 'company_profile_screen.dart';
 import 'company_verification_screen.dart';
@@ -254,21 +255,8 @@ class _CompanyDashboardScreenState extends State<CompanyDashboardScreen> {
     );
 
     if (result == true) {
-      // Create a typed ProjectModel for the newly published listing
-      final newlyAdded = ProjectModel(
-        id: 'proj_${DateTime.now().millisecondsSinceEpoch}',
-        title: 'New Campus Challenge Listing',
-        description:
-            'Exciting new student project posted to CampusConnect pool.',
-        budget: '\$500',
-        companyName: _companyProfile.companyName,
-        status: 'Open',
-        category: 'Development',
-        duration: '3 weeks',
-        applicantsCount: 0,
-        progress: 0.0,
-      );
-      _onProjectCreated(newlyAdded);
+      final latest = CompanyProjectService().allProjects.first;
+      _onProjectCreated(latest);
     }
   }
 
