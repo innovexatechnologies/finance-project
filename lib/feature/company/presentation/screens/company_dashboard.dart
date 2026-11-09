@@ -1,8 +1,5 @@
 import 'package:flutter/material.dart';
-import 'package:supabase_flutter/supabase_flutter.dart';
 import 'package:link_vibe/core/constants/app_colors.dart';
-import 'package:link_vibe/core/services/app_data_service.dart';
-import 'package:link_vibe/feature/auth/presentation/widgets/screens/login_screen.dart';
 import 'package:link_vibe/feature/company/models/company_dashboard_data.dart';
 import 'package:link_vibe/feature/company/models/project_model.dart';
 import 'package:link_vibe/feature/company/services/company_profile_service.dart';
@@ -190,17 +187,6 @@ class _CompanyDashboardScreenState extends State<CompanyDashboardScreen> {
       final latest = CompanyProjectService().allProjects.first;
       _onProjectCreated(latest);
     }
-  }
-
-  Future<void> _logout() async {
-    await AppDataService.instance.clearAuthSession();
-    await Supabase.instance.client.auth.signOut();
-    if (!mounted) return;
-    Navigator.pushAndRemoveUntil(
-      context,
-      MaterialPageRoute(builder: (context) => const LoginScreen()),
-      (route) => false,
-    );
   }
 
   // Navigation: Screen 23 (Company Profile Setup / Edit)

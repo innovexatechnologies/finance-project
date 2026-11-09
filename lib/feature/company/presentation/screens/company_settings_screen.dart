@@ -1,5 +1,6 @@
 import 'package:flutter/material.dart';
 import 'package:link_vibe/core/constants/app_colors.dart';
+import 'package:link_vibe/core/services/app_data_service.dart';
 import 'package:link_vibe/feature/auth/presentation/screens/login_screen.dart';
 import 'package:link_vibe/feature/company/models/company_profile_model.dart';
 import 'package:link_vibe/feature/company/models/company_settings_model.dart';
@@ -776,6 +777,7 @@ class _CompanySettingsScreenState extends State<CompanySettingsScreen> {
     );
 
     if (confirm == true && mounted) {
+      await AppDataService.instance.clearAuthSession();
       await _settingsService.logout();
 
       if (mounted) {
