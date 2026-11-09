@@ -1,11 +1,12 @@
 import 'package:flutter/material.dart';
 import 'package:link_vibe/core/constants/app_colors.dart';
+import 'package:link_vibe/feature/admin/presentation/screens/company_management_screen.dart';
+import 'package:link_vibe/feature/admin/presentation/screens/project_management_screen.dart';
+import 'package:link_vibe/feature/admin/presentation/screens/reports_analytics_screen.dart';
 import 'package:link_vibe/feature/admin/presentation/screens/student_management_screen.dart';
 import 'package:link_vibe/feature/admin/services/admin_dashboard_service.dart';
 import 'package:link_vibe/feature/company/models/company_verification_model.dart';
-import 'package:link_vibe/feature/company/services/company_assignment_service.dart';
 import 'package:link_vibe/feature/company/services/company_profile_service.dart';
-import 'package:link_vibe/feature/company/services/company_project_service.dart';
 import 'package:link_vibe/feature/company/services/company_verification_service.dart';
 
 /// Interactive Enterprise Quick Actions Bar
@@ -20,109 +21,9 @@ class QuickActionsBar extends StatelessWidget {
   }
 
   void _openManageCompaniesModal(BuildContext context) {
-    final company = CompanyProfileService().currentProfile;
-    final verif = CompanyVerificationService().currentVerification;
-
-    showModalBottomSheet(
-      context: context,
-      isScrollControlled: true,
-      shape: const RoundedRectangleBorder(
-        borderRadius: BorderRadius.vertical(top: Radius.circular(20)),
-      ),
-      builder: (ctx) => Container(
-        padding: const EdgeInsets.all(24),
-        child: Column(
-          mainAxisSize: MainAxisSize.min,
-          crossAxisAlignment: CrossAxisAlignment.start,
-          children: [
-            Row(
-              mainAxisAlignment: MainAxisAlignment.spaceBetween,
-              children: [
-                Row(
-                  children: [
-                    Container(
-                      padding: const EdgeInsets.all(8),
-                      decoration: BoxDecoration(
-                        color: AppColors.accentTeal.withValues(alpha: 0.12),
-                        borderRadius: BorderRadius.circular(10),
-                      ),
-                      child: const Icon(Icons.domain_rounded, color: AppColors.accentTeal, size: 22),
-                    ),
-                    const SizedBox(width: 12),
-                    const Column(
-                      crossAxisAlignment: CrossAxisAlignment.start,
-                      children: [
-                        Text(
-                          'Corporate Partner Registry',
-                          style: TextStyle(
-                            fontSize: 18,
-                            fontWeight: FontWeight.bold,
-                            color: AppColors.darkNavy,
-                          ),
-                        ),
-                        Text(
-                          'SECP-registered corporate entities',
-                          style: TextStyle(fontSize: 12, color: AppColors.textSecondary),
-                        ),
-                      ],
-                    ),
-                  ],
-                ),
-                IconButton(
-                  icon: const Icon(Icons.close_rounded),
-                  onPressed: () => Navigator.pop(ctx),
-                ),
-              ],
-            ),
-            const SizedBox(height: 16),
-            const Divider(),
-            ListTile(
-              leading: CircleAvatar(
-                backgroundColor: AppColors.darkNavy,
-                child: Text(
-                  company.logoInitial,
-                  style: const TextStyle(color: Colors.white, fontWeight: FontWeight.bold),
-                ),
-              ),
-              title: Text(company.companyName, style: const TextStyle(fontWeight: FontWeight.bold)),
-              subtitle: Text('${company.industry} • ${company.city}'),
-              trailing: Container(
-                padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 4),
-                decoration: BoxDecoration(
-                  color: verif.status == VerificationStatus.verified
-                      ? AppColors.successBg
-                      : AppColors.warningBg,
-                  borderRadius: BorderRadius.circular(6),
-                ),
-                child: Text(
-                  verif.status == VerificationStatus.verified ? 'Verified' : 'Pending SECP Review',
-                  style: TextStyle(
-                    fontSize: 11,
-                    fontWeight: FontWeight.bold,
-                    color: verif.status == VerificationStatus.verified
-                        ? const Color(0xFF166534)
-                        : const Color(0xFF92400E),
-                  ),
-                ),
-              ),
-            ),
-            const SizedBox(height: 16),
-            Container(
-              padding: const EdgeInsets.all(12),
-              decoration: BoxDecoration(
-                color: AppColors.background,
-                borderRadius: BorderRadius.circular(8),
-                border: Border.all(color: AppColors.border),
-              ),
-              child: Text(
-                'Description: ${company.description}',
-                style: const TextStyle(fontSize: 12, color: AppColors.textSecondary),
-              ),
-            ),
-            const SizedBox(height: 24),
-          ],
-        ),
-      ),
+    Navigator.push(
+      context,
+      MaterialPageRoute(builder: (_) => const CompanyManagementScreen()),
     );
   }
 
@@ -333,185 +234,16 @@ class QuickActionsBar extends StatelessWidget {
   }
 
   void _openManageProjectsModal(BuildContext context) {
-    final projects = CompanyProjectService().projects;
-
-    showModalBottomSheet(
-      context: context,
-      isScrollControlled: true,
-      shape: const RoundedRectangleBorder(
-        borderRadius: BorderRadius.vertical(top: Radius.circular(20)),
-      ),
-      builder: (ctx) => DraggableScrollableSheet(
-        initialChildSize: 0.75,
-        maxChildSize: 0.95,
-        minChildSize: 0.5,
-        expand: false,
-        builder: (_, scrollController) => Container(
-          padding: const EdgeInsets.all(24),
-          child: Column(
-            crossAxisAlignment: CrossAxisAlignment.start,
-            children: [
-              Row(
-                mainAxisAlignment: MainAxisAlignment.spaceBetween,
-                children: [
-                  Row(
-                    children: [
-                      Container(
-                        padding: const EdgeInsets.all(8),
-                        decoration: BoxDecoration(
-                          color: AppColors.primary.withValues(alpha: 0.12),
-                          borderRadius: BorderRadius.circular(10),
-                        ),
-                        child: const Icon(Icons.assignment_rounded, color: AppColors.primary, size: 22),
-                      ),
-                      const SizedBox(width: 12),
-                      const Column(
-                        crossAxisAlignment: CrossAxisAlignment.start,
-                        children: [
-                          Text(
-                            'Active Platform Sprints',
-                            style: TextStyle(
-                              fontSize: 18,
-                              fontWeight: FontWeight.bold,
-                              color: AppColors.darkNavy,
-                            ),
-                          ),
-                          Text(
-                            'Project compliance and milestone audit',
-                            style: TextStyle(fontSize: 12, color: AppColors.textSecondary),
-                          ),
-                        ],
-                      ),
-                    ],
-                  ),
-                  IconButton(
-                    icon: const Icon(Icons.close_rounded),
-                    onPressed: () => Navigator.pop(ctx),
-                  ),
-                ],
-              ),
-              const SizedBox(height: 16),
-              const Divider(),
-              Expanded(
-                child: ListView.separated(
-                  controller: scrollController,
-                  itemCount: projects.length,
-                  separatorBuilder: (_, index) => const Divider(height: 1),
-                  itemBuilder: (context, i) {
-                    final p = projects[i];
-                    return ListTile(
-                      contentPadding: const EdgeInsets.symmetric(vertical: 8, horizontal: 4),
-                      title: Text(p.title, style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 13.5)),
-                      subtitle: Text('${p.category} • ${p.companyName} • Deadline: ${p.deadline}'),
-                      trailing: Container(
-                        padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
-                        decoration: BoxDecoration(
-                          color: p.status == 'Open'
-                              ? AppColors.successBg
-                              : p.status == 'In Progress'
-                                  ? AppColors.lightIceBlue
-                                  : AppColors.warningBg,
-                          borderRadius: BorderRadius.circular(6),
-                        ),
-                        child: Text(
-                          p.status,
-                          style: const TextStyle(fontSize: 11, fontWeight: FontWeight.bold),
-                        ),
-                      ),
-                    );
-                  },
-                ),
-              ),
-            ],
-          ),
-        ),
-      ),
+    Navigator.push(
+      context,
+      MaterialPageRoute(builder: (_) => const ProjectManagementScreen()),
     );
   }
 
   void _openViewReportsModal(BuildContext context) {
-    final assignments = CompanyAssignmentService().allAssignments.where((a) => a.hasSubmission).toList();
-
-    showModalBottomSheet(
-      context: context,
-      isScrollControlled: true,
-      shape: const RoundedRectangleBorder(
-        borderRadius: BorderRadius.vertical(top: Radius.circular(20)),
-      ),
-      builder: (ctx) => Container(
-        padding: const EdgeInsets.all(24),
-        child: Column(
-          mainAxisSize: MainAxisSize.min,
-          crossAxisAlignment: CrossAxisAlignment.start,
-          children: [
-            Row(
-              mainAxisAlignment: MainAxisAlignment.spaceBetween,
-              children: [
-                Row(
-                  children: [
-                    Container(
-                      padding: const EdgeInsets.all(8),
-                      decoration: BoxDecoration(
-                        color: AppColors.accentTeal.withValues(alpha: 0.12),
-                        borderRadius: BorderRadius.circular(10),
-                      ),
-                      child: const Icon(Icons.analytics_outlined, color: AppColors.accentTeal, size: 22),
-                    ),
-                    const SizedBox(width: 12),
-                    const Column(
-                      crossAxisAlignment: CrossAxisAlignment.start,
-                      children: [
-                        Text(
-                          'Compliance & Submission Audits',
-                          style: TextStyle(
-                            fontSize: 18,
-                            fontWeight: FontWeight.bold,
-                            color: AppColors.darkNavy,
-                          ),
-                        ),
-                        Text(
-                          'Milestone deliverables awaiting review',
-                          style: TextStyle(fontSize: 12, color: AppColors.textSecondary),
-                        ),
-                      ],
-                    ),
-                  ],
-                ),
-                IconButton(
-                  icon: const Icon(Icons.close_rounded),
-                  onPressed: () => Navigator.pop(ctx),
-                ),
-              ],
-            ),
-            const SizedBox(height: 16),
-            const Divider(),
-            if (assignments.isEmpty)
-              const Padding(
-                padding: EdgeInsets.symmetric(vertical: 32),
-                child: Center(child: Text('No pending submission audits at this time.')),
-              )
-            else
-              ...assignments.map((asgn) {
-                return ListTile(
-                  title: Text(asgn.projectTitle, style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 13)),
-                  subtitle: Text('Student: ${asgn.studentName} (${asgn.studentUniversity})'),
-                  trailing: Container(
-                    padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
-                    decoration: BoxDecoration(
-                      color: AppColors.warningBg,
-                      borderRadius: BorderRadius.circular(6),
-                    ),
-                    child: Text(
-                      asgn.submissionStatus,
-                      style: const TextStyle(fontSize: 11, fontWeight: FontWeight.bold, color: Color(0xFF92400E)),
-                    ),
-                  ),
-                );
-              }),
-            const SizedBox(height: 20),
-          ],
-        ),
-      ),
+    Navigator.push(
+      context,
+      MaterialPageRoute(builder: (_) => const ReportsAnalyticsScreen()),
     );
   }
 

@@ -3,7 +3,12 @@ import 'package:link_vibe/core/constants/app_colors.dart';
 import 'package:link_vibe/feature/admin/models/admin_dashboard_model.dart';
 import 'package:link_vibe/feature/admin/models/admin_user_model.dart';
 import 'package:link_vibe/feature/admin/presentation/screens/admin_login_screen.dart';
-import 'package:link_vibe/feature/admin/presentation/screens/company_verifications_screen.dart';
+import 'package:link_vibe/feature/admin/presentation/screens/admin_settings_screen.dart';
+import 'package:link_vibe/feature/admin/presentation/screens/application_monitoring_screen.dart';
+import 'package:link_vibe/feature/admin/presentation/screens/certificate_management_screen.dart';
+import 'package:link_vibe/feature/admin/presentation/screens/company_management_screen.dart';
+import 'package:link_vibe/feature/admin/presentation/screens/project_management_screen.dart';
+import 'package:link_vibe/feature/admin/presentation/screens/reports_analytics_screen.dart';
 import 'package:link_vibe/feature/admin/presentation/screens/student_management_screen.dart';
 import 'package:link_vibe/feature/admin/presentation/widgets/admin_sidebar.dart';
 import 'package:link_vibe/feature/admin/presentation/widgets/admin_top_navbar.dart';
@@ -90,15 +95,40 @@ class _AdminDashboardScreenState extends State<AdminDashboardScreen> {
       Navigator.pop(context); // Close mobile drawer
     }
 
-    if (routeId == 'company_verifications') {
+    if (routeId == 'company_verifications' || routeId == 'company_management') {
       Navigator.push(
         context,
-        MaterialPageRoute(builder: (_) => const CompanyVerificationsScreen()),
+        MaterialPageRoute(builder: (_) => const CompanyManagementScreen()),
       );
     } else if (routeId == 'student_verifications') {
       Navigator.push(
         context,
         MaterialPageRoute(builder: (_) => const StudentManagementScreen()),
+      );
+    } else if (routeId == 'projects_audit' || routeId == 'projects') {
+      Navigator.push(
+        context,
+        MaterialPageRoute(builder: (_) => const ProjectManagementScreen()),
+      );
+    } else if (routeId == 'compliance' || routeId == 'application_monitoring') {
+      Navigator.push(
+        context,
+        MaterialPageRoute(builder: (_) => const ApplicationMonitoringScreen()),
+      );
+    } else if (routeId == 'audit_logs' || routeId == 'certificates') {
+      Navigator.push(
+        context,
+        MaterialPageRoute(builder: (_) => const CertificateManagementScreen()),
+      );
+    } else if (routeId == 'analytics' || routeId == 'reports') {
+      Navigator.push(
+        context,
+        MaterialPageRoute(builder: (_) => const ReportsAnalyticsScreen()),
+      );
+    } else if (routeId == 'settings') {
+      Navigator.push(
+        context,
+        MaterialPageRoute(builder: (_) => const AdminSettingsScreen()),
       );
     }
   }
