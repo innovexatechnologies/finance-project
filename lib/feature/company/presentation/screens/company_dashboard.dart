@@ -5,6 +5,7 @@ import 'package:link_vibe/feature/company/models/project_model.dart';
 import 'package:link_vibe/feature/company/services/company_profile_service.dart';
 import 'applicants_screen.dart';
 import 'company_profile_screen.dart';
+import 'company_verification_screen.dart';
 import 'post_project_screen.dart';
 
 class CompanyDashboardScreen extends StatefulWidget {
@@ -291,6 +292,16 @@ class _CompanyDashboardScreenState extends State<CompanyDashboardScreen> {
         unreadNotificationsCount: _companyProfile.unreadNotificationsCount,
       );
     });
+  }
+
+  // Navigation: Screen 24 (Company Verification)
+  void _navigateToVerification() {
+    Navigator.push(
+      context,
+      MaterialPageRoute(
+        builder: (context) => const CompanyVerificationScreen(),
+      ),
+    );
   }
 
   // Navigation: Screen 28 (Review Applicants)
@@ -857,35 +868,39 @@ class _CompanyDashboardScreenState extends State<CompanyDashboardScreen> {
                       const SizedBox(height: 6),
                       Row(
                         children: [
-                          Container(
-                            padding: const EdgeInsets.symmetric(
-                                horizontal: 8, vertical: 3),
-                            decoration: BoxDecoration(
-                              color: AppColors.accentTeal.withOpacity(0.2),
-                              borderRadius: BorderRadius.circular(6),
-                              border: Border.all(
-                                color: AppColors.accentTeal.withOpacity(0.4),
-                                width: 0.8,
+                          InkWell(
+                            onTap: _navigateToVerification,
+                            borderRadius: BorderRadius.circular(6),
+                            child: Container(
+                              padding: const EdgeInsets.symmetric(
+                                  horizontal: 8, vertical: 3),
+                              decoration: BoxDecoration(
+                                color: AppColors.accentTeal.withOpacity(0.2),
+                                borderRadius: BorderRadius.circular(6),
+                                border: Border.all(
+                                  color: AppColors.accentTeal.withOpacity(0.4),
+                                  width: 0.8,
+                                ),
                               ),
-                            ),
-                            child: const Row(
-                              mainAxisSize: MainAxisSize.min,
-                              children: [
-                                Icon(
-                                  Icons.verified,
-                                  color: AppColors.accentTeal,
-                                  size: 13,
-                                ),
-                                SizedBox(width: 4),
-                                Text(
-                                  'Corporate Partner',
-                                  style: TextStyle(
+                              child: const Row(
+                                mainAxisSize: MainAxisSize.min,
+                                children: [
+                                  Icon(
+                                    Icons.verified,
                                     color: AppColors.accentTeal,
-                                    fontSize: 11,
-                                    fontWeight: FontWeight.bold,
+                                    size: 13,
                                   ),
-                                ),
-                              ],
+                                  SizedBox(width: 4),
+                                  Text(
+                                    'Corporate Partner',
+                                    style: TextStyle(
+                                      color: AppColors.accentTeal,
+                                      fontSize: 11,
+                                      fontWeight: FontWeight.bold,
+                                    ),
+                                  ),
+                                ],
+                              ),
                             ),
                           ),
                         ],
