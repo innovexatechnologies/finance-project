@@ -1,4 +1,5 @@
 import 'package:flutter/material.dart';
+import 'package:link_vibe/core/constants/app_colors.dart';
 
 class ApplicantsScreen extends StatelessWidget {
   const ApplicantsScreen({super.key});
@@ -20,10 +21,12 @@ class ApplicantsScreen extends StatelessWidget {
     ];
 
     return Scaffold(
+      backgroundColor: AppColors.background,
       appBar: AppBar(
-        title: const Text('Project Applicants'),
-        backgroundColor: Colors.blueAccent,
-        foregroundColor: Colors.white,
+        title: const Text('Project Applicants (Screen 28)'),
+        backgroundColor: Colors.white,
+        foregroundColor: AppColors.darkNavy,
+        elevation: 0.5,
       ),
       body: ListView.builder(
         itemCount: applicants.length,

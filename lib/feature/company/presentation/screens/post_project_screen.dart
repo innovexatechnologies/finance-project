@@ -1,4 +1,5 @@
 import 'package:flutter/material.dart';
+import 'package:link_vibe/core/constants/app_colors.dart';
 
 class PostProjectScreen extends StatefulWidget {
   const PostProjectScreen({super.key});
@@ -26,8 +27,9 @@ class _PostProjectScreenState extends State<PostProjectScreen> {
     return Scaffold(
       appBar: AppBar(
         title: const Text('Post a New Project'),
-        backgroundColor: Colors.blueAccent,
-        foregroundColor: Colors.white,
+        backgroundColor: Colors.white,
+        foregroundColor: AppColors.darkNavy,
+        elevation: 0.5,
       ),
       body: Padding(
         padding: const EdgeInsets.all(16.0),
@@ -88,7 +90,7 @@ class _PostProjectScreenState extends State<PostProjectScreen> {
               height: 50,
               child: ElevatedButton(
                 style: ElevatedButton.styleFrom(
-                  backgroundColor: Colors.blueAccent,
+                  backgroundColor: AppColors.primary,
                   foregroundColor: Colors.white,
                   shape: RoundedRectangleBorder(
                     borderRadius: BorderRadius.circular(8),
@@ -111,7 +113,7 @@ class _PostProjectScreenState extends State<PostProjectScreen> {
                     SnackBar(content: Text('Project "$title" successfully posted!')),
                   );
 
-                  Navigator.pop(context); // Wapas dashboard par jane ke liye
+                  Navigator.pop(context, true); // Wapas dashboard par jane ke liye (signals new project created)
                 },
                 child: const Text(
                   'Publish Project',
