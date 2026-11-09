@@ -32,7 +32,7 @@ class CompanyAssignmentService {
         studentAvatarInitial: 'AK',
         progress: 0.65,
         hasSubmission: true,
-        submissionStatus: 'Submitted',
+        submissionStatus: 'Pending Review',
         latestSubmission: const StudentSubmissionModel(
           id: 'sub_01',
           title: 'Milestone 2: Modular Catalog & Checkout Architecture',
@@ -41,11 +41,28 @@ class CompanyAssignmentService {
           submittedDate: 'Yesterday at 04:30 PM',
           repositoryUrl: 'https://github.com/alikhan/ecommerce-flutter',
           liveDemoUrl: 'https://app-preview.campusconnect.edu/alikhan/ecom',
+          figmaUrl: 'https://figma.com/@alikhan/ecommerce-screens',
+          files: [
+            SubmissionFileAttachment(
+                fileName: 'Ecommerce_v1.0_Release.apk',
+                fileSize: '18.4 MB',
+                fileType: 'APK'),
+            SubmissionFileAttachment(
+                fileName: 'Milestone2_Architecture_Documentation.pdf',
+                fileSize: '3.2 MB',
+                fileType: 'PDF'),
+            SubmissionFileAttachment(
+                fileName: 'UnitTest_Coverage_Report.pdf',
+                fileSize: '1.1 MB',
+                fileType: 'PDF'),
+          ],
           attachmentFiles: [
             'Ecommerce_v1.0_Release.apk',
             'Milestone2_Architecture_Documentation.pdf',
+            'UnitTest_Coverage_Report.pdf',
           ],
-          status: 'Submitted',
+          status: 'Pending Review',
+          reviewHistory: [],
         ),
       ),
       AssignmentModel(
@@ -65,7 +82,7 @@ class CompanyAssignmentService {
         studentAvatarInitial: 'MH',
         progress: 0.40,
         hasSubmission: true,
-        submissionStatus: 'Under Review',
+        submissionStatus: 'Pending Review',
         latestSubmission: const StudentSubmissionModel(
           id: 'sub_02',
           title: 'Milestone 1: RoBERTa Fine-Tuning & FastAPI Container',
@@ -73,11 +90,22 @@ class CompanyAssignmentService {
               'Delivered tokenization scripts, fine-tuned RoBERTa model weights on conversational Roman Urdu customer feedback dataset, and initial Dockerfile.',
           submittedDate: '2 days ago',
           repositoryUrl: 'https://github.com/mustafahassan/sentiment-pipeline',
+          files: [
+            SubmissionFileAttachment(
+                fileName: 'RoBERTa_Evaluation_Metrics.pdf',
+                fileSize: '2.8 MB',
+                fileType: 'PDF'),
+            SubmissionFileAttachment(
+                fileName: 'docker-compose.yml',
+                fileSize: '4 KB',
+                fileType: 'CODE'),
+          ],
           attachmentFiles: [
             'RoBERTa_Evaluation_Metrics.pdf',
             'docker-compose.yml',
           ],
-          status: 'Under Review',
+          status: 'Pending Review',
+          reviewHistory: [],
         ),
       ),
       AssignmentModel(
@@ -106,10 +134,26 @@ class CompanyAssignmentService {
           submittedDate: '2026-11-05',
           repositoryUrl: 'https://github.com/hamzatariq-lums/ambassador-portal',
           liveDemoUrl: 'https://ambassador-portal.campusconnect.edu',
+          files: [
+            SubmissionFileAttachment(
+                fileName: 'Final_Release_Summary.pdf',
+                fileSize: '1.9 MB',
+                fileType: 'PDF'),
+          ],
           attachmentFiles: ['Final_Release_Summary.pdf'],
           status: 'Approved',
           companyFeedback:
               'Outstanding frontend delivery! Code is clean, documented, and modular.',
+          reviewHistory: [
+            SubmissionReviewRecord(
+              id: 'rev_01',
+              reviewerName: 'Danish Ali Rajpoot (TechVista)',
+              reviewDate: '2026-11-05',
+              action: 'Approved',
+              feedback:
+                  'Outstanding frontend delivery! Code is clean, documented, and modular.',
+            ),
+          ],
         ),
       ),
       AssignmentModel(
@@ -156,10 +200,19 @@ class CompanyAssignmentService {
         .toList();
   }
 
+  // Get single assignment by ID
+  AssignmentModel? getAssignmentById(String id) {
+    try {
+      return assignmentsNotifier.value.firstWhere((a) => a.id == id);
+    } catch (_) {
+      return null;
+    }
+  }
+
   // Review a student work submission (Approve, Request Revision, or Under Review)
   Future<bool> reviewSubmission({
     required String assignmentId,
-    required String newStatus, // 'Approved', 'Revision Requested', 'Under Review'
+    required String newStatus, // 'Approved', 'Revision Requested', 'Pending Review'
     String? feedback,
   }) async {
     await Future.delayed(const Duration(milliseconds: 300));
@@ -172,9 +225,26 @@ class CompanyAssignmentService {
     final currentSubmission = assignment.latestSubmission;
     if (currentSubmission == null) return false;
 
+    // Add entry to review history
+    final history = List<SubmissionReviewRecord>.from(currentSubmission.reviewHistory);
+    history.insert(
+      0,
+      SubmissionReviewRecord(
+        id: 'rev_${DateTime.now().millisecondsSinceEpoch}',
+        reviewerName: 'Danish Ali Rajpoot (TechVista)',
+        reviewDate: 'Today',
+        action: newStatus,
+        feedback: feedback ??
+            (newStatus == 'Approved'
+                ? 'Work deliverable approved.'
+                : 'Revision requested by project mentor.'),
+      ),
+    );
+
     final updatedSubmission = currentSubmission.copyWith(
       status: newStatus,
       companyFeedback: feedback ?? currentSubmission.companyFeedback,
+      reviewHistory: history,
     );
 
     // If approved, update progress
@@ -185,6 +255,8 @@ class CompanyAssignmentService {
       newProjStatus = 'Completed';
       // Also update project service
       CompanyProjectService().updateProjectStatus(assignment.projectId, 'Completed');
+    } else if (newStatus == 'Revision Requested') {
+      newProgress = (assignment.progress - 0.1).clamp(0.1, 0.9);
     }
 
     final updatedAssignment = assignment.copyWith(
@@ -218,7 +290,6 @@ class CompanyAssignmentService {
       );
 
       if (!exists) {
-        // Find matching project
         final project = CompanyProjectService().allProjects.firstWhere(
               (p) => p.id == applicant.projectId,
               orElse: () => CompanyProjectService().allProjects.first,
@@ -256,4 +327,3 @@ class CompanyAssignmentService {
     }
   }
 }
-

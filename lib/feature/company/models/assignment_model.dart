@@ -1,13 +1,80 @@
+class SubmissionFileAttachment {
+  final String fileName;
+  final String fileSize;
+  final String fileType; // 'APK', 'PDF', 'ZIP', 'CODE'
+
+  const SubmissionFileAttachment({
+    required this.fileName,
+    this.fileSize = '2.4 MB',
+    this.fileType = 'PDF',
+  });
+
+  factory SubmissionFileAttachment.fromJson(Map<String, dynamic> json) {
+    return SubmissionFileAttachment(
+      fileName: json['file_name'] ?? '',
+      fileSize: json['file_size'] ?? '2.4 MB',
+      fileType: json['file_type'] ?? 'PDF',
+    );
+  }
+
+  Map<String, dynamic> toJson() {
+    return {
+      'file_name': fileName,
+      'file_size': fileSize,
+      'file_type': fileType,
+    };
+  }
+}
+
+class SubmissionReviewRecord {
+  final String id;
+  final String reviewerName;
+  final String reviewDate;
+  final String action; // 'Approved', 'Revision Requested'
+  final String feedback;
+
+  const SubmissionReviewRecord({
+    required this.id,
+    required this.reviewerName,
+    required this.reviewDate,
+    required this.action,
+    required this.feedback,
+  });
+
+  factory SubmissionReviewRecord.fromJson(Map<String, dynamic> json) {
+    return SubmissionReviewRecord(
+      id: json['id'] ?? '',
+      reviewerName: json['reviewer_name'] ?? 'Company Reviewer',
+      reviewDate: json['review_date'] ?? 'Recently',
+      action: json['action'] ?? 'Approved',
+      feedback: json['feedback'] ?? '',
+    );
+  }
+
+  Map<String, dynamic> toJson() {
+    return {
+      'id': id,
+      'reviewer_name': reviewerName,
+      'review_date': reviewDate,
+      'action': action,
+      'feedback': feedback,
+    };
+  }
+}
+
 class StudentSubmissionModel {
   final String id;
   final String title;
-  final String notes;
+  final String notes; // Submission Description
   final String submittedDate;
   final String repositoryUrl;
   final String? liveDemoUrl;
-  final List<String> attachmentFiles;
-  final String status; // 'Submitted', 'Under Review', 'Approved', 'Revision Requested'
+  final String? figmaUrl;
+  final List<SubmissionFileAttachment> files;
+  final List<String> attachmentFiles; // Backwards compatibility
+  final String status; // 'Pending Review', 'Approved', 'Revision Requested'
   final String? companyFeedback;
+  final List<SubmissionReviewRecord> reviewHistory;
 
   const StudentSubmissionModel({
     required this.id,
@@ -16,9 +83,12 @@ class StudentSubmissionModel {
     required this.submittedDate,
     required this.repositoryUrl,
     this.liveDemoUrl,
+    this.figmaUrl,
+    this.files = const [],
     this.attachmentFiles = const [],
-    this.status = 'Submitted',
+    this.status = 'Pending Review',
     this.companyFeedback,
+    this.reviewHistory = const [],
   });
 
   StudentSubmissionModel copyWith({
@@ -28,9 +98,12 @@ class StudentSubmissionModel {
     String? submittedDate,
     String? repositoryUrl,
     String? liveDemoUrl,
+    String? figmaUrl,
+    List<SubmissionFileAttachment>? files,
     List<String>? attachmentFiles,
     String? status,
     String? companyFeedback,
+    List<SubmissionReviewRecord>? reviewHistory,
   }) {
     return StudentSubmissionModel(
       id: id ?? this.id,
@@ -39,13 +112,27 @@ class StudentSubmissionModel {
       submittedDate: submittedDate ?? this.submittedDate,
       repositoryUrl: repositoryUrl ?? this.repositoryUrl,
       liveDemoUrl: liveDemoUrl ?? this.liveDemoUrl,
+      figmaUrl: figmaUrl ?? this.figmaUrl,
+      files: files ?? this.files,
       attachmentFiles: attachmentFiles ?? this.attachmentFiles,
       status: status ?? this.status,
       companyFeedback: companyFeedback ?? this.companyFeedback,
+      reviewHistory: reviewHistory ?? this.reviewHistory,
     );
   }
 
   factory StudentSubmissionModel.fromJson(Map<String, dynamic> json) {
+    final rawFiles = (json['files'] as List<dynamic>?)
+            ?.map((e) =>
+                SubmissionFileAttachment.fromJson(e as Map<String, dynamic>))
+            .toList() ??
+        const [];
+
+    final rawAttachments = (json['attachment_files'] as List<dynamic>?)
+            ?.map((e) => e.toString())
+            .toList() ??
+        rawFiles.map((f) => f.fileName).toList();
+
     return StudentSubmissionModel(
       id: json['id'] ?? '',
       title: json['title'] ?? '',
@@ -53,12 +140,16 @@ class StudentSubmissionModel {
       submittedDate: json['submitted_date'] ?? 'Recently',
       repositoryUrl: json['repository_url'] ?? '',
       liveDemoUrl: json['live_demo_url'],
-      attachmentFiles: (json['attachment_files'] as List<dynamic>?)
-              ?.map((e) => e.toString())
+      figmaUrl: json['figma_url'],
+      files: rawFiles,
+      attachmentFiles: rawAttachments,
+      status: json['status'] ?? 'Pending Review',
+      companyFeedback: json['company_feedback'],
+      reviewHistory: (json['review_history'] as List<dynamic>?)
+              ?.map((e) =>
+                  SubmissionReviewRecord.fromJson(e as Map<String, dynamic>))
               .toList() ??
           const [],
-      status: json['status'] ?? 'Submitted',
-      companyFeedback: json['company_feedback'],
     );
   }
 
@@ -70,9 +161,12 @@ class StudentSubmissionModel {
       'submitted_date': submittedDate,
       'repository_url': repositoryUrl,
       'live_demo_url': liveDemoUrl,
+      'figma_url': figmaUrl,
+      'files': files.map((f) => f.toJson()).toList(),
       'attachment_files': attachmentFiles,
       'status': status,
       'company_feedback': companyFeedback,
+      'review_history': reviewHistory.map((r) => r.toJson()).toList(),
     };
   }
 }
@@ -95,7 +189,7 @@ class AssignmentModel {
   final String? studentProfileImage;
   final double progress; // 0.0 to 1.0
   final bool hasSubmission;
-  final String submissionStatus; // 'Submitted', 'Under Review', 'Approved', 'Revision Requested', 'Pending Submission'
+  final String submissionStatus; // 'Pending Review', 'Approved', 'Revision Requested', 'Pending Submission'
   final StudentSubmissionModel? latestSubmission;
 
   const AssignmentModel({
@@ -215,4 +309,3 @@ class AssignmentModel {
     };
   }
 }
-
