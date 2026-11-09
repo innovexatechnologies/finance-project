@@ -7,7 +7,7 @@ class CompanyDashboardScreen extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     // Dummy posted projects list (Baad mein Supabase se fetch hogi)
-    final List> companyProjects = [
+    final List<Map<String, dynamic>> companyProjects = [
       {
         'title': 'Flutter E-Commerce App Redesign',
         'budget': '\$500 - \$800',

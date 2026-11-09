@@ -79,7 +79,7 @@ class _LoginScreenState extends State<LoginScreen> {
 
                 // Role Selector (Company vs Professional)
                 DropdownButtonFormField<String>(
-                  value: _selectedRole,
+                  initialValue: _selectedRole,
                   decoration: InputDecoration(
                     labelText: 'Login As',
                     border: OutlineInputBorder(

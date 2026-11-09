@@ -6,7 +6,7 @@ class ApplicantsScreen extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     // Applicants ki list properly typed map ke sath
-    final List> applicants = [
+    final List<Map<String, dynamic>> applicants = [
       {
         'name': 'Ali Khan',
         'role': 'Flutter Developer',

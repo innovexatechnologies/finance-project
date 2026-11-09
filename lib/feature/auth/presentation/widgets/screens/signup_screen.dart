@@ -73,7 +73,7 @@ class _SignupScreenState extends State<SignupScreen> {
                 const SizedBox(height: 16),
 
                 DropdownButtonFormField<String>(
-                  value: _selectedRole,
+                  initialValue: _selectedRole,
                   decoration: InputDecoration(
                     labelText: 'Register As',
                     border: OutlineInputBorder(

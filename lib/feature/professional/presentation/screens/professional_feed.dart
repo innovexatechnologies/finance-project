@@ -6,7 +6,7 @@ class ProfessionalFeedScreen extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     // Dummy data taaki UI ki look & feel check ho sake (Baad mein yeh Supabase se fetch hoga)
-    final List> dummyProjects = [
+    final List<Map<String, dynamic>> dummyProjects = [
       {
         'title': 'Flutter E-Commerce App Redesign',
         'company': 'Innovexa Technologies',

@@ -6,7 +6,7 @@ class MyApplicationsScreen extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     // Dummy applications data
-    final List> myApplications = [
+    final List<Map<String, dynamic>> myApplications = [
       {
         'title': 'Flutter E-Commerce App Redesign',
         'company': 'Innovexa Technologies',
