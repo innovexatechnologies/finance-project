@@ -2,12 +2,14 @@ import 'package:flutter/material.dart';
 import 'package:google_fonts/google_fonts.dart';
 import 'package:supabase_flutter/supabase_flutter.dart';
 import 'package:link_vibe/core/constants/app_colors.dart';
+import 'package:link_vibe/core/services/app_data_service.dart';
 import 'package:link_vibe/feature/auth/presentation/widgets/screens/login_screen.dart';
 
 class SettingsScreen extends StatelessWidget {
   const SettingsScreen({super.key});
 
   Future<void> _logout(BuildContext context) async {
+    await AppDataService.instance.clearAuthSession();
     await Supabase.instance.client.auth.signOut();
     if (!context.mounted) return;
     Navigator.pushAndRemoveUntil(

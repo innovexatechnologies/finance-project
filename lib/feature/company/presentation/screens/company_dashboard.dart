@@ -93,6 +93,7 @@ class _CompanyDashboardScreenState extends State<CompanyDashboardScreen> {
   }
 
   Future<void> _logout() async {
+    await AppDataService.instance.clearAuthSession();
     await Supabase.instance.client.auth.signOut();
     if (!mounted) return;
     Navigator.pushAndRemoveUntil(

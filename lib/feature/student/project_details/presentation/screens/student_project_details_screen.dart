@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 import 'package:google_fonts/google_fonts.dart';
 import 'package:link_vibe/core/constants/app_colors.dart';
 import 'package:link_vibe/core/services/app_data_service.dart';
+import 'package:link_vibe/core/services/share_service.dart';
 import 'package:link_vibe/feature/student/apply/presentation/screens/apply_project_screen.dart';
 
 class StudentProjectDetailsScreen extends StatelessWidget {
@@ -53,6 +54,26 @@ class StudentProjectDetailsScreen extends StatelessWidget {
                   onPressed: () => Navigator.pop(context),
                 ),
                 actions: [
+                  IconButton(
+                    icon: Container(
+                      padding: const EdgeInsets.all(6),
+                      decoration: const BoxDecoration(
+                        color: Colors.black38,
+                        shape: BoxShape.circle,
+                      ),
+                      child: const Icon(
+                        Icons.share_outlined,
+                        color: Colors.white,
+                        size: 20,
+                      ),
+                    ),
+                    onPressed: () {
+                      ShareService.shareProject(
+                        context: context,
+                        project: project,
+                      );
+                    },
+                  ),
                   IconButton(
                     icon: Container(
                       padding: const EdgeInsets.all(6),

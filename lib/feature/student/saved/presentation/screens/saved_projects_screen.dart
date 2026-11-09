@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 import 'package:google_fonts/google_fonts.dart';
 import 'package:link_vibe/core/constants/app_colors.dart';
 import 'package:link_vibe/core/services/app_data_service.dart';
+import 'package:link_vibe/core/services/share_service.dart';
 import 'package:link_vibe/feature/student/project_details/presentation/screens/student_project_details_screen.dart';
 
 class SavedProjectsScreen extends StatelessWidget {
@@ -132,21 +133,39 @@ class SavedProjectsScreen extends StatelessWidget {
                       ),
                     ),
                   ),
-                  trailing: IconButton(
-                    icon: const Icon(
-                      Icons.bookmark_remove_rounded,
-                      color: Colors.redAccent,
-                      size: 22,
-                    ),
-                    onPressed: () {
-                      AppDataService.instance.removeSavedProject(id);
-                      ScaffoldMessenger.of(context).showSnackBar(
-                        const SnackBar(
-                          content: Text('Removed from saved projects'),
-                          duration: Duration(seconds: 1),
+                  trailing: Row(
+                    mainAxisSize: MainAxisSize.min,
+                    children: [
+                      IconButton(
+                        icon: const Icon(
+                          Icons.share_outlined,
+                          color: AppColors.grayText,
+                          size: 20,
                         ),
-                      );
-                    },
+                        onPressed: () {
+                          ShareService.shareProject(
+                            context: context,
+                            project: project,
+                          );
+                        },
+                      ),
+                      IconButton(
+                        icon: const Icon(
+                          Icons.bookmark_remove_rounded,
+                          color: Colors.redAccent,
+                          size: 22,
+                        ),
+                        onPressed: () {
+                          AppDataService.instance.removeSavedProject(id);
+                          ScaffoldMessenger.of(context).showSnackBar(
+                            const SnackBar(
+                              content: Text('Removed from saved projects'),
+                              duration: Duration(seconds: 1),
+                            ),
+                          );
+                        },
+                      ),
+                    ],
                   ),
                 ),
               );
