@@ -13,6 +13,13 @@ Future<String> saveAndDownloadFile({
   html.AnchorElement(href: url)
     ..setAttribute('download', fileName)
     ..click();
-  html.Url.revokeObjectUrl(url);
+
+  // Keep URL valid for 1 minute so browser completes file download
+  Future.delayed(const Duration(minutes: 1), () {
+    try {
+      html.Url.revokeObjectUrl(url);
+    } catch (_) {}
+  });
+
   return fileName;
 }

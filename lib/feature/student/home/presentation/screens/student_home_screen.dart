@@ -22,7 +22,9 @@ class _StudentHomeScreenState extends State<StudentHomeScreen> {
   @override
   void initState() {
     super.initState();
-    _syncUserWithProfile();
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      if (mounted) _syncUserWithProfile();
+    });
   }
 
   void _syncUserWithProfile() {

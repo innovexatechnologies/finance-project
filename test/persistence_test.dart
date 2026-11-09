@@ -308,5 +308,36 @@ void main() {
     expect(AppDataService.instance.getSupportTickets(), isNotEmpty);
     expect(AppDataService.instance.getSupportTickets().first['subject'], equals('Deliverable file failed to load'));
   });
+
+  test('Notification Deletion (Single & Bulk) Persistence', () async {
+    await AppDataService.instance.addNotification(
+      title: 'Delete Test 1',
+      subtitle: 'To be deleted',
+      time: 'Just now',
+      type: 'default',
+    );
+    await AppDataService.instance.addNotification(
+      title: 'Delete Test 2',
+      subtitle: 'To be deleted',
+      time: 'Just now',
+      type: 'default',
+    );
+
+    final notifs = AppDataService.instance.getNotifications();
+    final firstId = notifs.first['id'];
+    await AppDataService.instance.deleteNotification(firstId);
+
+    expect(AppDataService.instance.getNotifications().any((n) => n['id'] == firstId), isFalse);
+
+    // Bulk deletion
+    final remainingIds = AppDataService.instance.getNotifications().map((n) => n['id']).toList();
+    await AppDataService.instance.deleteNotifications(remainingIds);
+
+    expect(AppDataService.instance.getNotifications(), isEmpty);
+
+    // SIMULATE APP CLOSE & REOPEN
+    await AppDataService.instance.init();
+    expect(AppDataService.instance.getNotifications(), isEmpty);
+  });
 }
 

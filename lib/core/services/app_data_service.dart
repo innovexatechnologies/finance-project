@@ -1,5 +1,6 @@
 import 'dart:convert';
-import 'package:flutter/foundation.dart';
+import 'package:flutter/scheduler.dart';
+import 'package:flutter/widgets.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 import 'package:supabase_flutter/supabase_flutter.dart';
 
@@ -7,6 +8,21 @@ import 'package:supabase_flutter/supabase_flutter.dart';
 class AppDataService extends ChangeNotifier {
   AppDataService._internal();
   static final AppDataService instance = AppDataService._internal();
+
+  void _safeNotifyListeners() {
+    try {
+      final binding = WidgetsBinding.instance;
+      if (binding.schedulerPhase != SchedulerPhase.idle) {
+        binding.addPostFrameCallback((_) {
+          notifyListeners();
+        });
+      } else {
+        notifyListeners();
+      }
+    } catch (_) {
+      notifyListeners();
+    }
+  }
 
   SharedPreferences? _prefs;
 
@@ -25,7 +41,7 @@ class AppDataService extends ChangeNotifier {
   List<String> _skills = [];
   List<Map<String, dynamic>> _notifications = [];
   List<Map<String, dynamic>> _certificates = [];
-  Map<String, bool> _notificationPreferences = {
+  final Map<String, bool> _notificationPreferences = {
     'pushNotifications': true,
     'emailAlerts': true,
     'newProjectsAlert': true,
@@ -33,7 +49,7 @@ class AppDataService extends ChangeNotifier {
     'chatMessages': true,
     'deadlineReminders': true,
   };
-  Map<String, bool> _privacySettings = {
+  final Map<String, bool> _privacySettings = {
     'profileVisibility': true,
     'showEmail': true,
     'showPhone': false,
@@ -395,8 +411,10 @@ class AppDataService extends ChangeNotifier {
     if (notifPrefsJson != null) {
       try {
         final Map decoded = jsonDecode(notifPrefsJson);
-        _notificationPreferences =
-            decoded.map((k, v) => MapEntry(k.toString(), v == true));
+        for (var entry in decoded.entries) {
+          _notificationPreferences[entry.key.toString()] =
+              (entry.value == true);
+        }
       } catch (e) {
         debugPrint('Error loading notif prefs: $e');
       }
@@ -407,8 +425,9 @@ class AppDataService extends ChangeNotifier {
     if (privacyJson != null) {
       try {
         final Map decoded = jsonDecode(privacyJson);
-        _privacySettings =
-            decoded.map((k, v) => MapEntry(k.toString(), v == true));
+        for (var entry in decoded.entries) {
+          _privacySettings[entry.key.toString()] = (entry.value == true);
+        }
       } catch (e) {
         debugPrint('Error loading privacy settings: $e');
       }
@@ -751,8 +770,17 @@ class AppDataService extends ChangeNotifier {
   Map<String, dynamic> getProfile() => Map.unmodifiable(_profile);
 
   Future<void> updateProfile(Map<String, dynamic> updatedFields) async {
-    _profile.addAll(updatedFields);
-    notifyListeners();
+    bool hasChanged = false;
+    updatedFields.forEach((key, val) {
+      if (_profile[key] != val) {
+        _profile[key] = val;
+        hasChanged = true;
+      }
+    });
+
+    if (!hasChanged) return;
+
+    _safeNotifyListeners();
 
     if (_prefs != null) {
       await _prefs!.setString(_kProfile, jsonEncode(_profile));
@@ -816,7 +844,7 @@ class AppDataService extends ChangeNotifier {
       'isRead': false,
     });
 
-    notifyListeners();
+    _safeNotifyListeners();
 
     if (_prefs != null) {
       await _prefs!.setString(_kNotifications, jsonEncode(_notifications));
@@ -832,7 +860,7 @@ class AppDataService extends ChangeNotifier {
         _notifications.indexWhere((n) => n['id']?.toString() == id.toString());
     if (idx >= 0) {
       _notifications[idx]['isRead'] = true;
-      notifyListeners();
+      _safeNotifyListeners();
       if (_prefs != null) {
         await _prefs!.setString(_kNotifications, jsonEncode(_notifications));
       }
@@ -843,7 +871,36 @@ class AppDataService extends ChangeNotifier {
     for (var n in _notifications) {
       n['isRead'] = true;
     }
-    notifyListeners();
+    _safeNotifyListeners();
+
+    if (_prefs != null) {
+      await _prefs!.setString(_kNotifications, jsonEncode(_notifications));
+    }
+  }
+
+  Future<void> deleteNotification(dynamic id) async {
+    _notifications
+        .removeWhere((n) => n['id']?.toString() == id.toString());
+    _safeNotifyListeners();
+
+    if (_prefs != null) {
+      await _prefs!.setString(_kNotifications, jsonEncode(_notifications));
+    }
+  }
+
+  Future<void> deleteNotifications(List<dynamic> ids) async {
+    final strIds = ids.map((e) => e.toString()).toSet();
+    _notifications.removeWhere((n) => strIds.contains(n['id']?.toString()));
+    _safeNotifyListeners();
+
+    if (_prefs != null) {
+      await _prefs!.setString(_kNotifications, jsonEncode(_notifications));
+    }
+  }
+
+  Future<void> clearAllNotifications() async {
+    _notifications.clear();
+    _safeNotifyListeners();
 
     if (_prefs != null) {
       await _prefs!.setString(_kNotifications, jsonEncode(_notifications));

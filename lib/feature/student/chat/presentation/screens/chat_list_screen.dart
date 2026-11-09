@@ -197,6 +197,9 @@ class _ChatDetailScreenState extends State<_ChatDetailScreen> {
   void initState() {
     super.initState();
     AppDataService.instance.markConversationRead(widget.conversationId);
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      _scrollToBottom();
+    });
   }
 
   @override
@@ -250,8 +253,6 @@ class _ChatDetailScreenState extends State<_ChatDetailScreen> {
         final supervisor = conv['supervisor']?.toString() ?? 'Supervisor';
         final rawMessages = conv['messages'] as List? ?? [];
         final messages = rawMessages.map((e) => Map<String, dynamic>.from(e as Map)).toList();
-
-        _scrollToBottom();
 
         return Scaffold(
           backgroundColor: AppColors.background,

@@ -42,9 +42,21 @@ class _ExploreProjectsScreenState extends State<ExploreProjectsScreen> {
     super.dispose();
   }
 
-  Future<void> _fetchLiveProjects({bool showFeedback = false}) async {
-    setState(() => _isLoading = true);
+  Future<void> _fetchLiveProjects(
+      {bool showFeedback = false, bool resetFilters = false}) async {
+    setState(() {
+      _isLoading = true;
+      if (resetFilters) {
+        _searchController.clear();
+        _selectedCategory = 'All';
+      }
+    });
+
     try {
+      if (showFeedback) {
+        await Future.delayed(const Duration(milliseconds: 600));
+      }
+
       final supabase = Supabase.instance.client;
       final response = await supabase
           .from('projects')
@@ -92,7 +104,7 @@ class _ExploreProjectsScreenState extends State<ExploreProjectsScreen> {
                   const SizedBox(width: 10),
                   Expanded(
                     child: Text(
-                      'Projects refreshed! $count opportunities available.',
+                      'Projects refreshed! $count open opportunities available.',
                       style: GoogleFonts.inter(fontSize: 13),
                     ),
                   ),
@@ -166,7 +178,8 @@ class _ExploreProjectsScreenState extends State<ExploreProjectsScreen> {
                 : const Icon(Icons.refresh_rounded),
             onPressed: _isLoading
                 ? null
-                : () => _fetchLiveProjects(showFeedback: true),
+                : () =>
+                    _fetchLiveProjects(showFeedback: true, resetFilters: true),
           ),
           const SizedBox(width: 8),
         ],

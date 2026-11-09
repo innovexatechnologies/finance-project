@@ -21,7 +21,9 @@ class _StudentProfileScreenState extends State<StudentProfileScreen> {
   @override
   void initState() {
     super.initState();
-    _syncSupabaseUser();
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      if (mounted) _syncSupabaseUser();
+    });
   }
 
   void _syncSupabaseUser() {
