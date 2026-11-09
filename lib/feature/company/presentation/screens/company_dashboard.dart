@@ -2,7 +2,9 @@ import 'package:flutter/material.dart';
 import 'package:link_vibe/core/constants/app_colors.dart';
 import 'package:link_vibe/feature/company/models/company_dashboard_data.dart';
 import 'package:link_vibe/feature/company/models/project_model.dart';
+import 'package:link_vibe/feature/company/services/company_profile_service.dart';
 import 'applicants_screen.dart';
+import 'company_profile_screen.dart';
 import 'post_project_screen.dart';
 
 class CompanyDashboardScreen extends StatefulWidget {
@@ -53,7 +55,16 @@ class _CompanyDashboardScreenState extends State<CompanyDashboardScreen> {
     });
 
     try {
-      await Future.delayed(const Duration(milliseconds: 400));
+      await Future.delayed(const Duration(milliseconds: 300));
+
+      final activeProfile = CompanyProfileService().currentProfile;
+      _companyProfile = CompanyProfileInfo(
+        companyName: activeProfile.companyName,
+        tagline: activeProfile.industry,
+        industry: activeProfile.industry,
+        isVerified: activeProfile.isVerified,
+        unreadNotificationsCount: _companyProfile.unreadNotificationsCount,
+      );
 
       _projects = [
         ProjectModel(
@@ -258,6 +269,28 @@ class _CompanyDashboardScreenState extends State<CompanyDashboardScreen> {
       );
       _onProjectCreated(newlyAdded);
     }
+  }
+
+  // Navigation: Screen 23 (Company Profile Setup / Edit)
+  Future<void> _navigateToCompanyProfile({bool editMode = false}) async {
+    await Navigator.push(
+      context,
+      MaterialPageRoute(
+        builder: (context) => CompanyProfileScreen(startInEditMode: editMode),
+      ),
+    );
+
+    // Refresh company details on dashboard
+    final activeProfile = CompanyProfileService().currentProfile;
+    setState(() {
+      _companyProfile = CompanyProfileInfo(
+        companyName: activeProfile.companyName,
+        tagline: activeProfile.industry,
+        industry: activeProfile.industry,
+        isVerified: activeProfile.isVerified,
+        unreadNotificationsCount: _companyProfile.unreadNotificationsCount,
+      );
+    });
   }
 
   // Navigation: Screen 28 (Review Applicants)
@@ -636,6 +669,16 @@ class _CompanyDashboardScreenState extends State<CompanyDashboardScreen> {
                 ),
             ],
           ),
+          // Company Profile Setup / Edit Icon (Screen 23)
+          IconButton(
+            icon: const Icon(
+              Icons.account_circle_outlined,
+              color: AppColors.darkNavy,
+              size: 24,
+            ),
+            tooltip: 'Company Profile (Screen 23)',
+            onPressed: () => _navigateToCompanyProfile(),
+          ),
           const SizedBox(width: 8),
         ],
       ),
@@ -738,7 +781,6 @@ class _CompanyDashboardScreenState extends State<CompanyDashboardScreen> {
   // 1. Welcome Card
   Widget _buildWelcomeCard() {
     return Container(
-      padding: const EdgeInsets.all(18.0),
       decoration: BoxDecoration(
         gradient: const LinearGradient(
           colors: [
@@ -757,92 +799,115 @@ class _CompanyDashboardScreenState extends State<CompanyDashboardScreen> {
           ),
         ],
       ),
-      child: Row(
-        crossAxisAlignment: CrossAxisAlignment.start,
-        children: [
-          // Company Logo / Profile Image
-          Container(
-            width: 52,
-            height: 52,
-            decoration: BoxDecoration(
-              color: Colors.white,
-              borderRadius: BorderRadius.circular(12),
-              border: Border.all(color: Colors.white, width: 2),
-            ),
-            child: Center(
-              child: Text(
-                _companyProfile.companyName.substring(0, 2).toUpperCase(),
-                style: const TextStyle(
-                  color: AppColors.primary,
-                  fontSize: 18,
-                  fontWeight: FontWeight.bold,
-                ),
-              ),
-            ),
-          ),
-          const SizedBox(width: 14),
-
-          // Welcome and Info
-          Expanded(
-            child: Column(
+      child: Material(
+        color: Colors.transparent,
+        child: InkWell(
+          borderRadius: BorderRadius.circular(16),
+          onTap: () => _navigateToCompanyProfile(editMode: false),
+          child: Padding(
+            padding: const EdgeInsets.all(18.0),
+            child: Row(
               crossAxisAlignment: CrossAxisAlignment.start,
               children: [
-                const Text(
-                  'Welcome back, 👋',
-                  style: TextStyle(
-                    color: Colors.white70,
-                    fontSize: 13,
-                  ),
-                ),
-                const SizedBox(height: 2),
-                Text(
-                  _companyProfile.companyName,
-                  style: const TextStyle(
+                // Company Logo / Profile Image
+                Container(
+                  width: 52,
+                  height: 52,
+                  decoration: BoxDecoration(
                     color: Colors.white,
-                    fontSize: 18,
-                    fontWeight: FontWeight.bold,
+                    borderRadius: BorderRadius.circular(12),
+                    border: Border.all(color: Colors.white, width: 2),
+                  ),
+                  child: Center(
+                    child: Text(
+                      _companyProfile.companyName.length >= 2
+                          ? _companyProfile.companyName.substring(0, 2).toUpperCase()
+                          : 'CO',
+                      style: const TextStyle(
+                        color: AppColors.primary,
+                        fontSize: 18,
+                        fontWeight: FontWeight.bold,
+                      ),
+                    ),
                   ),
                 ),
-                const SizedBox(height: 6),
-                Row(
-                  children: [
-                    Container(
-                      padding: const EdgeInsets.symmetric(
-                          horizontal: 8, vertical: 3),
-                      decoration: BoxDecoration(
-                        color: AppColors.accentTeal.withOpacity(0.2),
-                        borderRadius: BorderRadius.circular(6),
-                        border: Border.all(
-                          color: AppColors.accentTeal.withOpacity(0.4),
-                          width: 0.8,
+                const SizedBox(width: 14),
+
+                // Welcome and Info
+                Expanded(
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      const Text(
+                        'Welcome back, 👋',
+                        style: TextStyle(
+                          color: Colors.white70,
+                          fontSize: 13,
                         ),
                       ),
-                      child: const Row(
-                        mainAxisSize: MainAxisSize.min,
+                      const SizedBox(height: 2),
+                      Text(
+                        _companyProfile.companyName,
+                        style: const TextStyle(
+                          color: Colors.white,
+                          fontSize: 18,
+                          fontWeight: FontWeight.bold,
+                        ),
+                      ),
+                      const SizedBox(height: 6),
+                      Row(
                         children: [
-                          Icon(
-                            Icons.verified,
-                            color: AppColors.accentTeal,
-                            size: 13,
-                          ),
-                          SizedBox(width: 4),
-                          Text(
-                            'Corporate Partner',
-                            style: TextStyle(
-                              color: AppColors.accentTeal,
-                              fontSize: 11,
-                              fontWeight: FontWeight.bold,
+                          Container(
+                            padding: const EdgeInsets.symmetric(
+                                horizontal: 8, vertical: 3),
+                            decoration: BoxDecoration(
+                              color: AppColors.accentTeal.withOpacity(0.2),
+                              borderRadius: BorderRadius.circular(6),
+                              border: Border.all(
+                                color: AppColors.accentTeal.withOpacity(0.4),
+                                width: 0.8,
+                              ),
+                            ),
+                            child: const Row(
+                              mainAxisSize: MainAxisSize.min,
+                              children: [
+                                Icon(
+                                  Icons.verified,
+                                  color: AppColors.accentTeal,
+                                  size: 13,
+                                ),
+                                SizedBox(width: 4),
+                                Text(
+                                  'Corporate Partner',
+                                  style: TextStyle(
+                                    color: AppColors.accentTeal,
+                                    fontSize: 11,
+                                    fontWeight: FontWeight.bold,
+                                  ),
+                                ),
+                              ],
                             ),
                           ),
                         ],
                       ),
-                    ),
-                  ],
+                    ],
+                  ),
+                ),
+
+                // Edit Profile Button (Screen 23 Shortcut)
+                IconButton(
+                  icon: const Icon(
+                    Icons.edit_note_rounded,
+                    color: Colors.white70,
+                    size: 22,
+                  ),
+                  tooltip: 'Edit Company Profile (Screen 23)',
+                  onPressed: () => _navigateToCompanyProfile(editMode: true),
                 ),
               ],
             ),
           ),
-        ],
+        ),
       ),
     );
   }
