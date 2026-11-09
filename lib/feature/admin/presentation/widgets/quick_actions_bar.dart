@@ -76,7 +76,7 @@ class QuickActionsBar extends StatelessWidget {
                 child: ListView.separated(
                   controller: scrollController,
                   itemCount: applicants.length,
-                  separatorBuilder: (_, __) => const Divider(height: 1),
+                  separatorBuilder: (_, index) => const Divider(height: 1),
                   itemBuilder: (context, i) {
                     final student = applicants[i];
                     return ListTile(
@@ -501,7 +501,7 @@ class QuickActionsBar extends StatelessWidget {
                 child: ListView.separated(
                   controller: scrollController,
                   itemCount: projects.length,
-                  separatorBuilder: (_, __) => const Divider(height: 1),
+                  separatorBuilder: (_, index) => const Divider(height: 1),
                   itemBuilder: (context, i) {
                     final p = projects[i];
                     return ListTile(

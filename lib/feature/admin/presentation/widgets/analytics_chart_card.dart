@@ -420,7 +420,7 @@ class _AnalyticsChartCardState extends State<AnalyticsChartCard> {
                     ),
                   ),
                   Text(
-                    '${entry.value} (${percent}%)',
+                    '${entry.value} ($percent%)',
                     style: const TextStyle(
                       fontSize: 12,
                       fontWeight: FontWeight.bold,

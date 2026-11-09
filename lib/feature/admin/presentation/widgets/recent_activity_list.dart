@@ -150,7 +150,7 @@ class _RecentActivityListState extends State<RecentActivityList> {
               shrinkWrap: true,
               physics: const NeverScrollableScrollPhysics(),
               itemCount: filteredActivities.length,
-              separatorBuilder: (_, __) => const Divider(height: 1),
+              separatorBuilder: (_, index) => const Divider(height: 1),
               itemBuilder: (context, index) {
                 final item = filteredActivities[index];
                 return _buildActivityTile(item);

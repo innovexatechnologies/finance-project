@@ -369,7 +369,7 @@ class _LoginScreenState extends State<LoginScreen> {
                   SizedBox(
                     width: double.infinity,
                     height: 46,
-                    child: OutlinedButton.icon(
+                    child: OutlinedButton(
                       style: OutlinedButton.styleFrom(
                         foregroundColor: AppColors.deepNavy,
                         side: const BorderSide(color: AppColors.teal, width: 1.2),
@@ -379,15 +379,25 @@ class _LoginScreenState extends State<LoginScreen> {
                         backgroundColor: AppColors.lightAqua.withValues(alpha: 0.3),
                       ),
                       onPressed: _enterAsStudentGuest,
-                      icon: const Icon(Icons.rocket_launch_rounded,
-                          size: 18, color: AppColors.primaryBlue),
-                      label: Text(
-                        'Explore Student Panel Directly',
-                        style: GoogleFonts.poppins(
-                          fontSize: 13,
-                          fontWeight: FontWeight.w600,
-                          color: AppColors.deepNavy,
-                        ),
+                      child: Row(
+                        mainAxisAlignment: MainAxisAlignment.center,
+                        mainAxisSize: MainAxisSize.min,
+                        children: [
+                          const Icon(Icons.rocket_launch_rounded, size: 18, color: AppColors.primaryBlue),
+                          const SizedBox(width: 8),
+                          Flexible(
+                            child: Text(
+                              'Explore Student Panel Directly',
+                              maxLines: 1,
+                              overflow: TextOverflow.ellipsis,
+                              style: GoogleFonts.poppins(
+                                fontSize: 13,
+                                fontWeight: FontWeight.w600,
+                                color: AppColors.deepNavy,
+                              ),
+                            ),
+                          ),
+                        ],
                       ),
                     ),
                   ),
@@ -395,15 +405,25 @@ class _LoginScreenState extends State<LoginScreen> {
 
                   // Quick fill helper
                   Center(
-                    child: TextButton.icon(
+                    child: TextButton(
                       onPressed: _fillDemoStudent,
-                      icon: const Icon(Icons.touch_app_rounded, size: 16, color: AppColors.grayText),
-                      label: Text(
-                        'Fill Demo Student Credentials',
-                        style: GoogleFonts.inter(
-                          fontSize: 12,
-                          color: AppColors.grayText,
-                        ),
+                      child: Row(
+                        mainAxisSize: MainAxisSize.min,
+                        children: [
+                          const Icon(Icons.touch_app_rounded, size: 16, color: AppColors.grayText),
+                          const SizedBox(width: 6),
+                          Flexible(
+                            child: Text(
+                              'Fill Demo Student Credentials',
+                              maxLines: 1,
+                              overflow: TextOverflow.ellipsis,
+                              style: GoogleFonts.inter(
+                                fontSize: 12,
+                                color: AppColors.grayText,
+                              ),
+                            ),
+                          ),
+                        ],
                       ),
                     ),
                   ),
@@ -469,12 +489,16 @@ class _LoginScreenState extends State<LoginScreen> {
                           children: [
                             Icon(Icons.shield_outlined, size: 14, color: AppColors.textSecondary),
                             SizedBox(width: 6),
-                            Text(
-                              'CampusConnect Admin Console 🔐',
-                              style: TextStyle(
-                                fontSize: 12,
-                                fontWeight: FontWeight.w600,
-                                color: AppColors.textSecondary,
+                            Flexible(
+                              child: Text(
+                                'CampusConnect Admin Console 🔐',
+                                maxLines: 1,
+                                overflow: TextOverflow.ellipsis,
+                                style: TextStyle(
+                                  fontSize: 12,
+                                  fontWeight: FontWeight.w600,
+                                  color: AppColors.textSecondary,
+                                ),
                               ),
                             ),
                           ],
