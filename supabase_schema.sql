@@ -2,8 +2,8 @@
 -- CAMPUSCONNECT / LINKVIBE — RESILIENT SUPABASE DATABASE & STORAGE SCHEMA
 -- ============================================================================
 -- Designed to run smoothly whether tables already exist or are brand new.
--- Safely creates tables, adds missing columns (ALTER TABLE ADD COLUMN IF NOT EXISTS),
--- sets up triggers, public storage buckets, and permissive RLS policies.
+-- Safely removes legacy check constraints, adds missing columns, sets up triggers,
+-- public storage buckets, and permissive RLS policies.
 -- ============================================================================
 
 -- ----------------------------------------------------------------------------
@@ -39,6 +39,14 @@ ALTER TABLE public.profiles ADD COLUMN IF NOT EXISTS avatar_url TEXT;
 ALTER TABLE public.profiles ADD COLUMN IF NOT EXISTS created_at TIMESTAMPTZ DEFAULT timezone('utc'::text, now());
 ALTER TABLE public.profiles ADD COLUMN IF NOT EXISTS updated_at TIMESTAMPTZ DEFAULT timezone('utc'::text, now());
 
+-- Drop old restrictive check constraint that only allowed ('student', 'company')
+ALTER TABLE public.profiles DROP CONSTRAINT IF EXISTS profiles_user_type_check;
+ALTER TABLE public.profiles DROP CONSTRAINT IF EXISTS profiles_role_check;
+
+-- Add updated check constraint allowing Student, Company, and Admin (case-insensitive)
+ALTER TABLE public.profiles ADD CONSTRAINT profiles_user_type_check 
+  CHECK (lower(user_type) IN ('student', 'company', 'admin'));
+
 -- ----------------------------------------------------------------------------
 -- 3. COMPANIES TABLE
 -- ----------------------------------------------------------------------------
@@ -68,6 +76,8 @@ ALTER TABLE public.companies ADD COLUMN IF NOT EXISTS logo_url TEXT;
 ALTER TABLE public.companies ADD COLUMN IF NOT EXISTS verification_status TEXT DEFAULT 'verified';
 ALTER TABLE public.companies ADD COLUMN IF NOT EXISTS created_at TIMESTAMPTZ DEFAULT timezone('utc'::text, now());
 ALTER TABLE public.companies ADD COLUMN IF NOT EXISTS updated_at TIMESTAMPTZ DEFAULT timezone('utc'::text, now());
+
+ALTER TABLE public.companies DROP CONSTRAINT IF EXISTS companies_verification_status_check;
 
 -- ----------------------------------------------------------------------------
 -- 4. STUDENTS TABLE
@@ -121,7 +131,6 @@ CREATE TABLE IF NOT EXISTS public.projects (
   updated_at TIMESTAMPTZ DEFAULT timezone('utc'::text, now()) NOT NULL
 );
 
--- Crucial: Ensure posted_by and all columns exist regardless of old table definition
 ALTER TABLE public.projects ADD COLUMN IF NOT EXISTS company_id UUID;
 ALTER TABLE public.projects ADD COLUMN IF NOT EXISTS posted_by UUID REFERENCES auth.users(id) ON DELETE CASCADE;
 ALTER TABLE public.projects ADD COLUMN IF NOT EXISTS user_id UUID REFERENCES auth.users(id) ON DELETE CASCADE;
@@ -138,7 +147,8 @@ ALTER TABLE public.projects ADD COLUMN IF NOT EXISTS attachment_url TEXT;
 ALTER TABLE public.projects ADD COLUMN IF NOT EXISTS created_at TIMESTAMPTZ DEFAULT timezone('utc'::text, now());
 ALTER TABLE public.projects ADD COLUMN IF NOT EXISTS updated_at TIMESTAMPTZ DEFAULT timezone('utc'::text, now());
 
--- Synchronize user_id and posted_by for compatibility with both schemas
+ALTER TABLE public.projects DROP CONSTRAINT IF EXISTS projects_status_check;
+
 UPDATE public.projects SET posted_by = user_id WHERE posted_by IS NULL AND user_id IS NOT NULL;
 UPDATE public.projects SET user_id = posted_by WHERE user_id IS NULL AND posted_by IS NOT NULL;
 
@@ -175,6 +185,8 @@ ALTER TABLE public.applications ADD COLUMN IF NOT EXISTS submission_notes TEXT;
 ALTER TABLE public.applications ADD COLUMN IF NOT EXISTS status TEXT DEFAULT 'Pending';
 ALTER TABLE public.applications ADD COLUMN IF NOT EXISTS submitted_at TIMESTAMPTZ DEFAULT timezone('utc'::text, now());
 ALTER TABLE public.applications ADD COLUMN IF NOT EXISTS updated_at TIMESTAMPTZ DEFAULT timezone('utc'::text, now());
+
+ALTER TABLE public.applications DROP CONSTRAINT IF EXISTS applications_status_check;
 
 UPDATE public.applications SET student_id = user_id WHERE student_id IS NULL AND user_id IS NOT NULL;
 UPDATE public.applications SET user_id = student_id WHERE user_id IS NULL AND student_id IS NOT NULL;
@@ -271,11 +283,11 @@ BEGIN
       university = EXCLUDED.university,
       updated_at = timezone('utc'::text, now());
 
-  IF role_val = 'Company' THEN
+  IF lower(role_val) = 'company' THEN
     INSERT INTO public.companies (user_id, company_name, email, industry)
     VALUES (new.id, name_val, new.email, uni_val)
     ON CONFLICT (user_id) DO NOTHING;
-  ELSIF role_val = 'Student' THEN
+  ELSIF lower(role_val) = 'student' THEN
     INSERT INTO public.students (user_id, full_name, email, university)
     VALUES (new.id, name_val, new.email, uni_val)
     ON CONFLICT (user_id) DO NOTHING;
@@ -340,7 +352,6 @@ ALTER TABLE public.certificates ENABLE ROW LEVEL SECURITY;
 ALTER TABLE public.messages ENABLE ROW LEVEL SECURITY;
 ALTER TABLE public.notifications ENABLE ROW LEVEL SECURITY;
 
--- Drop all existing policies to ensure clean idempotent run
 DROP POLICY IF EXISTS "Profiles Public View" ON public.profiles;
 DROP POLICY IF EXISTS "Profiles Self Insert" ON public.profiles;
 DROP POLICY IF EXISTS "Profiles Self Update" ON public.profiles;
@@ -357,25 +368,20 @@ DROP POLICY IF EXISTS "Certificates Authenticated Manage" ON public.certificates
 DROP POLICY IF EXISTS "Messages Participant Access" ON public.messages;
 DROP POLICY IF EXISTS "Notifications User Access" ON public.notifications;
 
--- Profiles: Anyone can view, logged in users update their own
 CREATE POLICY "Profiles Public View" ON public.profiles FOR SELECT USING (true);
 CREATE POLICY "Profiles Self Insert" ON public.profiles FOR INSERT TO authenticated WITH CHECK (auth.uid() = id);
 CREATE POLICY "Profiles Self Update" ON public.profiles FOR UPDATE TO authenticated USING (auth.uid() = id);
 
--- Companies: Public view, company user manages own record
 CREATE POLICY "Companies Public View" ON public.companies FOR SELECT USING (true);
 CREATE POLICY "Companies Self Manage" ON public.companies FOR ALL TO authenticated USING (auth.uid() = user_id);
 
--- Students: Public view, student manages own record
 CREATE POLICY "Students Public View" ON public.students FOR SELECT USING (true);
 CREATE POLICY "Students Self Manage" ON public.students FOR ALL TO authenticated USING (auth.uid() = user_id);
 
--- Projects: Public view, company manages (matching posted_by OR user_id)
 CREATE POLICY "Projects Public View" ON public.projects FOR SELECT USING (true);
 CREATE POLICY "Projects Company Manage" ON public.projects FOR ALL TO authenticated
   USING (auth.uid() = posted_by OR auth.uid() = user_id);
 
--- Applications: Student manages own application, Company reviews
 CREATE POLICY "Applications Student Manage" ON public.applications FOR ALL TO authenticated
   USING (auth.uid() = student_id OR auth.uid() = user_id);
 
@@ -386,20 +392,17 @@ CREATE POLICY "Applications Company View" ON public.applications FOR SELECT TO a
     AND (public.projects.posted_by = auth.uid() OR public.projects.user_id = auth.uid())
   ));
 
--- Certificates: Public can view & verify
 CREATE POLICY "Certificates Public View" ON public.certificates FOR SELECT USING (true);
 CREATE POLICY "Certificates Authenticated Manage" ON public.certificates FOR ALL TO authenticated USING (true);
 
--- Messages: Senders and receivers
 CREATE POLICY "Messages Participant Access" ON public.messages FOR ALL TO authenticated
   USING (auth.uid() = sender_id OR auth.uid() = receiver_id);
 
--- Notifications: User has access to own notifications
 CREATE POLICY "Notifications User Access" ON public.notifications FOR ALL TO authenticated
   USING (auth.uid() = user_id);
 
 -- ----------------------------------------------------------------------------
--- 14. DEFAULT ADMIN SETUP SCRIPT
+-- 14. DEFAULT ADMIN SETUP
 -- ----------------------------------------------------------------------------
 DO $$
 DECLARE
