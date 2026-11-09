@@ -235,3 +235,4 @@ class CertificatePdfService {
     return pdf.save();
   }
 }
+
