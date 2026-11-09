@@ -144,7 +144,25 @@ class CertificatesScreen extends StatelessWidget {
                       label: const Text('Share'),
                     ),
                   ),
-                  const SizedBox(width: 10),
+                  const SizedBox(width: 8),
+                  Expanded(
+                    child: ElevatedButton.icon(
+                      style: ElevatedButton.styleFrom(
+                        backgroundColor: AppColors.teal,
+                        foregroundColor: Colors.white,
+                      ),
+                      onPressed: () {
+                        Navigator.pop(dialogCtx);
+                        DownloadService.openCertificateDirectly(
+                          context: context,
+                          certificate: cert,
+                        );
+                      },
+                      icon: const Icon(Icons.picture_as_pdf_rounded, size: 16),
+                      label: const Text('Open'),
+                    ),
+                  ),
+                  const SizedBox(width: 8),
                   Expanded(
                     child: ElevatedButton.icon(
                       style: ElevatedButton.styleFrom(
@@ -320,18 +338,20 @@ class CertificatesScreen extends StatelessWidget {
                         ),
                         const SizedBox(height: 16),
 
-                        // Download and Share buttons
-                        Row(
-                          mainAxisAlignment: MainAxisAlignment.center,
+                        // Download, Open and Share buttons
+                        Wrap(
+                          spacing: 8,
+                          runSpacing: 8,
+                          alignment: WrapAlignment.center,
                           children: [
                             ElevatedButton.icon(
                               style: ElevatedButton.styleFrom(
                                 backgroundColor: AppColors.primaryBlue,
                                 foregroundColor: Colors.white,
                                 padding: const EdgeInsets.symmetric(
-                                    horizontal: 20, vertical: 10),
+                                    horizontal: 14, vertical: 8),
                                 shape: RoundedRectangleBorder(
-                                  borderRadius: BorderRadius.circular(20),
+                                  borderRadius: BorderRadius.circular(18),
                                 ),
                               ),
                               onPressed: () {
@@ -340,19 +360,40 @@ class CertificatesScreen extends StatelessWidget {
                                   certificate: cert,
                                 );
                               },
-                              icon: const Icon(Icons.download_rounded, size: 16),
-                              label: const Text('Download'),
+                              icon: const Icon(Icons.download_rounded, size: 15),
+                              label: const Text('Download PDF',
+                                  style: TextStyle(fontSize: 12)),
                             ),
-                            const SizedBox(width: 12),
+                            ElevatedButton.icon(
+                              style: ElevatedButton.styleFrom(
+                                backgroundColor: AppColors.teal,
+                                foregroundColor: Colors.white,
+                                padding: const EdgeInsets.symmetric(
+                                    horizontal: 14, vertical: 8),
+                                shape: RoundedRectangleBorder(
+                                  borderRadius: BorderRadius.circular(18),
+                                ),
+                              ),
+                              onPressed: () {
+                                DownloadService.openCertificateDirectly(
+                                  context: context,
+                                  certificate: cert,
+                                );
+                              },
+                              icon: const Icon(Icons.picture_as_pdf_rounded,
+                                  size: 15),
+                              label: const Text('Open PDF',
+                                  style: TextStyle(fontSize: 12)),
+                            ),
                             OutlinedButton.icon(
                               style: OutlinedButton.styleFrom(
                                 foregroundColor: AppColors.deepNavy,
                                 side: const BorderSide(
                                     color: AppColors.lightGray),
                                 padding: const EdgeInsets.symmetric(
-                                    horizontal: 16, vertical: 10),
+                                    horizontal: 12, vertical: 8),
                                 shape: RoundedRectangleBorder(
-                                  borderRadius: BorderRadius.circular(20),
+                                  borderRadius: BorderRadius.circular(18),
                                 ),
                               ),
                               onPressed: () {
@@ -361,8 +402,9 @@ class CertificatesScreen extends StatelessWidget {
                                   certificate: cert,
                                 );
                               },
-                              icon: const Icon(Icons.share_outlined, size: 16),
-                              label: const Text('Share'),
+                              icon: const Icon(Icons.share_outlined, size: 15),
+                              label: const Text('Share',
+                                  style: TextStyle(fontSize: 12)),
                             ),
                           ],
                         ),

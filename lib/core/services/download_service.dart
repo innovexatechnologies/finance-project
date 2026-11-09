@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 import 'package:google_fonts/google_fonts.dart';
 import 'package:link_vibe/core/constants/app_colors.dart';
 import 'package:link_vibe/core/services/app_data_service.dart';
+import 'package:link_vibe/core/services/certificate_pdf_service.dart';
 import 'download/download_stub.dart'
     if (dart.library.html) 'download/download_web.dart';
 
@@ -20,56 +21,44 @@ class DownloadService {
           certificate['id'] ?? 'CC-${DateTime.now().millisecondsSinceEpoch}';
       final date = certificate['date'] ?? 'March 2026';
       final studentName =
-          AppDataService.instance.getProfile()['name'] ?? 'Ahmed Khan';
+          (AppDataService.instance.userName.isNotEmpty
+              ? AppDataService.instance.userName
+              : (AppDataService.instance.getProfile()['name'] ?? 'Ahmed Khan'))
+                  .toString();
 
-      final certContent = '''
-========================================================================
-                      CAMPUSCONNECT CERTIFICATE OF COMPLETION
-========================================================================
-
-This is to certify that:
-
-                        ${studentName.toUpperCase()}
-
-has successfully completed the verified corporate project:
-
-                "${project.toUpperCase()}"
-
-Project Details:
-------------------------------------------------------------------------
-• Certificate Title : $title
-• Issuing Authority : $issuer
-• Student Name      : $studentName
-• Verification ID   : $certId
-• Issue Date        : $date
-
-------------------------------------------------------------------------
-Verified by CampusConnect Platform (Learn • Work • Grow)
-Empowering Students with Real-World Corporate Experience.
-========================================================================
-''';
+      // 1. Generate real PDF binary bytes
+      final pdfBytes = await CertificatePdfService.generateCertificatePdf(
+        studentName: studentName,
+        projectTitle: project,
+        certificateTitle: title,
+        issuer: issuer,
+        certId: certId,
+        issueDate: date,
+      );
 
       final safeName =
-          'Certificate_${studentName.replaceAll(' ', '_')}_$certId.txt';
+          'Certificate_${studentName.replaceAll(' ', '_')}_$certId.pdf';
+
+      // 2. Save and trigger download
       final filePath = await saveAndDownloadFile(
         fileName: safeName,
-        content: certContent,
-        mimeType: 'text/plain;charset=utf-8',
+        bytes: pdfBytes,
+        mimeType: 'application/pdf',
       );
 
       if (!context.mounted) return;
 
-      // 1. Show interactive SnackBar with Open button
+      // 3. Show interactive SnackBar with OPEN button
       ScaffoldMessenger.of(context).showSnackBar(
         SnackBar(
           content: Row(
             children: [
-              const Icon(Icons.download_done_rounded,
+              const Icon(Icons.picture_as_pdf_rounded,
                   color: Colors.white, size: 20),
               const SizedBox(width: 10),
               Expanded(
                 child: Text(
-                  'Downloaded: $safeName',
+                  'Downloaded PDF: $safeName',
                   style: const TextStyle(fontWeight: FontWeight.w500),
                 ),
               ),
@@ -78,22 +67,22 @@ Empowering Students with Real-World Corporate Experience.
           action: SnackBarAction(
             label: 'OPEN',
             textColor: Colors.amberAccent,
-            onPressed: () {
+            onPressed: () async {
               try {
-                openDownloadedFile(
+                await openDownloadedFile(
                   fileName: safeName,
-                  content: certContent,
                   filePath: filePath,
+                  bytes: pdfBytes,
+                  mimeType: 'application/pdf',
                 );
               } catch (_) {}
-              openFileViewer(context, safeName, filePath, certContent);
             },
           ),
           backgroundColor: AppColors.statusOpen,
           behavior: SnackBarBehavior.floating,
           shape:
               RoundedRectangleBorder(borderRadius: BorderRadius.circular(10)),
-          duration: const Duration(seconds: 4),
+          duration: const Duration(seconds: 5),
         ),
       );
     } catch (e) {
@@ -101,6 +90,58 @@ Empowering Students with Real-World Corporate Experience.
       ScaffoldMessenger.of(context).showSnackBar(
         SnackBar(
           content: Text('Download failed: $e'),
+          backgroundColor: Colors.red,
+        ),
+      );
+    }
+  }
+
+  static Future<void> openCertificateDirectly({
+    required BuildContext context,
+    required Map<String, dynamic> certificate,
+  }) async {
+    try {
+      final title = certificate['title'] ?? 'Project Completion Certificate';
+      final project = certificate['project'] ?? 'Corporate Project';
+      final issuer = certificate['issuer'] ?? 'CampusConnect & Partner';
+      final certId =
+          certificate['id'] ?? 'CC-${DateTime.now().millisecondsSinceEpoch}';
+      final date = certificate['date'] ?? 'March 2026';
+      final studentName =
+          (AppDataService.instance.userName.isNotEmpty
+              ? AppDataService.instance.userName
+              : (AppDataService.instance.getProfile()['name'] ?? 'Ahmed Khan'))
+                  .toString();
+
+      final pdfBytes = await CertificatePdfService.generateCertificatePdf(
+        studentName: studentName,
+        projectTitle: project,
+        certificateTitle: title,
+        issuer: issuer,
+        certId: certId,
+        issueDate: date,
+      );
+
+      final safeName =
+          'Certificate_${studentName.replaceAll(' ', '_')}_$certId.pdf';
+
+      final filePath = await saveAndDownloadFile(
+        fileName: safeName,
+        bytes: pdfBytes,
+        mimeType: 'application/pdf',
+      );
+
+      await openDownloadedFile(
+        fileName: safeName,
+        filePath: filePath,
+        bytes: pdfBytes,
+        mimeType: 'application/pdf',
+      );
+    } catch (e) {
+      if (!context.mounted) return;
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(
+          content: Text('Could not open certificate: $e'),
           backgroundColor: Colors.red,
         ),
       );
@@ -129,7 +170,7 @@ Empowering Students with Real-World Corporate Experience.
                   color: AppColors.primaryBlue.withValues(alpha: 0.1),
                   shape: BoxShape.circle,
                 ),
-                child: const Icon(Icons.description_rounded,
+                child: const Icon(Icons.picture_as_pdf_rounded,
                     color: AppColors.primaryBlue, size: 22),
               ),
               const SizedBox(width: 10),
@@ -138,7 +179,7 @@ Empowering Students with Real-World Corporate Experience.
                   crossAxisAlignment: CrossAxisAlignment.start,
                   children: [
                     Text(
-                      'Certificate File',
+                      'Certificate Document',
                       style: GoogleFonts.poppins(
                         fontSize: 15,
                         fontWeight: FontWeight.bold,
@@ -189,18 +230,19 @@ Empowering Students with Real-World Corporate Experience.
                 backgroundColor: AppColors.primaryBlue,
                 foregroundColor: Colors.white,
               ),
-              onPressed: () {
+              onPressed: () async {
+                Navigator.of(ctx).pop();
                 try {
-                  openDownloadedFile(
+                  await openDownloadedFile(
                     fileName: fileName,
-                    content: content,
                     filePath: filePath,
+                    content: content,
+                    mimeType: 'application/pdf',
                   );
                 } catch (_) {}
-                Navigator.of(ctx).pop();
               },
               icon: const Icon(Icons.open_in_new_rounded, size: 16),
-              label: const Text('Open File'),
+              label: const Text('Open in PDF App'),
             ),
           ],
         ),
