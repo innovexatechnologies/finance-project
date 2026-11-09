@@ -55,7 +55,9 @@ class _ExploreProjectsScreenState extends State<ExploreProjectsScreen> {
         loaded.add({
           'id': item['id']?.toString() ?? '',
           'title': item['title'] ?? 'Untitled Project',
-          'company': item['company_name'] ?? 'Company',
+          'company': (item['company_name']?.toString().isNotEmpty == true)
+              ? item['company_name']
+              : 'Company',
           'category': 'Development',
           'duration': '3-5 days',
           'workMode': 'Remote',
@@ -73,7 +75,7 @@ class _ExploreProjectsScreenState extends State<ExploreProjectsScreen> {
         });
       }
     } catch (_) {
-      // Fallback to local
+      // Fallback to local storage
     } finally {
       if (mounted) {
         setState(() => _isLoading = false);
@@ -279,6 +281,10 @@ class _ExploreProjectsScreenState extends State<ExploreProjectsScreen> {
                                   AppDataService.instance.isProjectSaved(id);
                               final skills = (project['skills'] as List?) ??
                                   ['Research', 'Analysis'];
+                              final companyStr =
+                                  (project['company']?.toString().isNotEmpty == true)
+                                      ? project['company'].toString()
+                                      : 'Company';
 
                               return Card(
                                 margin: const EdgeInsets.only(bottom: 14),
@@ -319,8 +325,7 @@ class _ExploreProjectsScreenState extends State<ExploreProjectsScreen> {
                                               ),
                                               child: Center(
                                                 child: Text(
-                                                  (project['company'] ??
-                                                      'C')[0].toUpperCase(),
+                                                  companyStr[0].toUpperCase(),
                                                   style: GoogleFonts.poppins(
                                                     fontSize: 18,
                                                     fontWeight: FontWeight.bold,
@@ -345,8 +350,7 @@ class _ExploreProjectsScreenState extends State<ExploreProjectsScreen> {
                                                     ),
                                                   ),
                                                   Text(
-                                                    project['company'] ??
-                                                        'Company',
+                                                    companyStr,
                                                     style: GoogleFonts.inter(
                                                       fontSize: 12,
                                                       color: AppColors.grayText,
@@ -456,48 +460,70 @@ class _ExploreProjectsScreenState extends State<ExploreProjectsScreen> {
                                         ),
                                         const SizedBox(height: 12),
 
-                                        // Details Row: Duration, Remote, Stipend
-                                        Row(
+                                        // Details: Duration, Remote, Stipend (using Wrap to prevent overflow on all devices)
+                                        Wrap(
+                                          spacing: 14,
+                                          runSpacing: 6,
+                                          crossAxisAlignment:
+                                              WrapCrossAlignment.center,
                                           children: [
-                                            const Icon(Icons.schedule_rounded,
-                                                size: 14,
-                                                color: AppColors.grayText),
-                                            const SizedBox(width: 4),
-                                            Text(
-                                              project['duration'] ?? '3-5 days',
-                                              style: GoogleFonts.inter(
-                                                fontSize: 12,
-                                                color: AppColors.grayText,
-                                              ),
-                                            ),
-                                            const SizedBox(width: 14),
-                                            const Icon(Icons.public_rounded,
-                                                size: 14,
-                                                color: AppColors.grayText),
-                                            const SizedBox(width: 4),
-                                            Text(
-                                              project['workMode'] ?? 'Remote',
-                                              style: GoogleFonts.inter(
-                                                fontSize: 12,
-                                                color: AppColors.grayText,
-                                              ),
-                                            ),
-                                            if (project['stipend'] != null) ...[
-                                              const SizedBox(width: 14),
-                                              const Icon(
-                                                  Icons.monetization_on_outlined,
-                                                  size: 14,
-                                                  color: AppColors.grayText),
-                                              const SizedBox(width: 4),
-                                              Text(
-                                                project['stipend'].toString(),
-                                                style: GoogleFonts.inter(
-                                                  fontSize: 12,
-                                                  fontWeight: FontWeight.w600,
-                                                  color: AppColors.deepNavy,
+                                            Row(
+                                              mainAxisSize: MainAxisSize.min,
+                                              children: [
+                                                const Icon(
+                                                    Icons.schedule_rounded,
+                                                    size: 14,
+                                                    color: AppColors.grayText),
+                                                const SizedBox(width: 4),
+                                                Text(
+                                                  project['duration'] ??
+                                                      '3-5 days',
+                                                  style: GoogleFonts.inter(
+                                                    fontSize: 12,
+                                                    color: AppColors.grayText,
+                                                  ),
                                                 ),
+                                              ],
+                                            ),
+                                            Row(
+                                              mainAxisSize: MainAxisSize.min,
+                                              children: [
+                                                const Icon(Icons.public_rounded,
+                                                    size: 14,
+                                                    color: AppColors.grayText),
+                                                const SizedBox(width: 4),
+                                                Text(
+                                                  project['workMode'] ??
+                                                      'Remote',
+                                                  style: GoogleFonts.inter(
+                                                    fontSize: 12,
+                                                    color: AppColors.grayText,
+                                                  ),
+                                                ),
+                                              ],
+                                            ),
+                                            if (project['stipend'] != null)
+                                              Row(
+                                                mainAxisSize: MainAxisSize.min,
+                                                children: [
+                                                  const Icon(
+                                                      Icons.payments_outlined,
+                                                      size: 14,
+                                                      color:
+                                                          AppColors.statusOpen),
+                                                  const SizedBox(width: 4),
+                                                  Text(
+                                                    project['stipend']
+                                                        .toString(),
+                                                    style: GoogleFonts.inter(
+                                                      fontSize: 12,
+                                                      fontWeight:
+                                                          FontWeight.w600,
+                                                      color: AppColors.deepNavy,
+                                                    ),
+                                                  ),
+                                                ],
                                               ),
-                                            ],
                                           ],
                                         ),
                                       ],

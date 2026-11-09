@@ -141,3 +141,4 @@ void main() {
     expect(AppDataService.instance.getProfile()['bio'], contains('Senior Software Engineering Student'));
   });
 }
+
