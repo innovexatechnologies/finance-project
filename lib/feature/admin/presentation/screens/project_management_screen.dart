@@ -7,6 +7,7 @@ import 'package:link_vibe/feature/admin/presentation/screens/admin_login_screen.
 import 'package:link_vibe/feature/admin/presentation/screens/application_monitoring_screen.dart';
 import 'package:link_vibe/feature/admin/presentation/screens/certificate_management_screen.dart';
 import 'package:link_vibe/feature/admin/presentation/screens/reports_analytics_screen.dart';
+import 'package:link_vibe/feature/admin/presentation/screens/admin_settings_screen.dart';
 import 'package:link_vibe/feature/admin/presentation/screens/company_management_screen.dart';
 import 'package:link_vibe/feature/admin/presentation/screens/student_management_screen.dart';
 import 'package:link_vibe/feature/admin/presentation/widgets/admin_sidebar.dart';
@@ -155,6 +156,11 @@ class _ProjectManagementScreenState extends State<ProjectManagementScreen> {
       Navigator.pushReplacement(
         context,
         MaterialPageRoute(builder: (_) => const ReportsAnalyticsScreen()),
+      );
+    } else if (routeId == 'settings') {
+      Navigator.pushReplacement(
+        context,
+        MaterialPageRoute(builder: (_) => const AdminSettingsScreen()),
       );
     }
     // If routeId is 'projects_audit', we are already on this screen.

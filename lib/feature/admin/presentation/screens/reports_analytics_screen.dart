@@ -9,6 +9,7 @@ import 'package:link_vibe/feature/admin/presentation/screens/certificate_managem
 import 'package:link_vibe/feature/admin/presentation/screens/company_management_screen.dart';
 import 'package:link_vibe/feature/admin/presentation/screens/project_management_screen.dart';
 import 'package:link_vibe/feature/admin/presentation/screens/student_management_screen.dart';
+import 'package:link_vibe/feature/admin/presentation/screens/admin_settings_screen.dart';
 import 'package:link_vibe/feature/admin/presentation/widgets/admin_sidebar.dart';
 import 'package:link_vibe/feature/admin/presentation/widgets/admin_top_navbar.dart';
 import 'package:link_vibe/feature/admin/presentation/widgets/bi_bar_chart.dart';
@@ -92,6 +93,11 @@ class _ReportsAnalyticsScreenState extends State<ReportsAnalyticsScreen>
       Navigator.pushReplacement(
         context,
         MaterialPageRoute(builder: (_) => const CertificateManagementScreen()),
+      );
+    } else if (routeId == 'settings') {
+      Navigator.pushReplacement(
+        context,
+        MaterialPageRoute(builder: (_) => const AdminSettingsScreen()),
       );
     }
     // If routeId is 'analytics', we are already on this screen.
