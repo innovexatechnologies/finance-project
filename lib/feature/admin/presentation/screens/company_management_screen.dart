@@ -694,8 +694,8 @@ class _CompanyManagementScreenState extends State<CompanyManagementScreen> {
                             companyId: company.id,
                             adminName: admin,
                           );
+                          if (ctx.mounted) Navigator.pop(ctx);
                           if (!mounted) return;
-                          Navigator.pop(ctx);
                           ScaffoldMessenger.of(context).showSnackBar(
                             SnackBar(
                               content: Text('SECP verification approved for ${company.companyName}!'),
@@ -1027,8 +1027,8 @@ class _CompanyManagementScreenState extends State<CompanyManagementScreen> {
                 adminName: admin,
               );
 
+              if (ctx.mounted) Navigator.pop(ctx);
               if (!mounted) return;
-              Navigator.pop(ctx);
               ScaffoldMessenger.of(context).showSnackBar(
                 SnackBar(
                   content: Text('SECP verification rejected for ${company.companyName}. Reason recorded.'),
@@ -1106,8 +1106,8 @@ class _CompanyManagementScreenState extends State<CompanyManagementScreen> {
                 adminName: admin,
               );
 
+              if (ctx.mounted) Navigator.pop(ctx);
               if (!mounted) return;
-              Navigator.pop(ctx);
               ScaffoldMessenger.of(context).showSnackBar(
                 SnackBar(
                   content: Text('Additional document request dispatched to ${company.companyName}.'),
@@ -1185,8 +1185,8 @@ class _CompanyManagementScreenState extends State<CompanyManagementScreen> {
                 adminName: admin,
               );
 
+              if (ctx.mounted) Navigator.pop(ctx);
               if (!mounted) return;
-              Navigator.pop(ctx);
               ScaffoldMessenger.of(context).showSnackBar(
                 SnackBar(
                   content: Text('${company.companyName} corporate account has been suspended.'),
@@ -1242,8 +1242,8 @@ class _CompanyManagementScreenState extends State<CompanyManagementScreen> {
                 adminName: admin,
               );
 
+              if (ctx.mounted) Navigator.pop(ctx);
               if (!mounted) return;
-              Navigator.pop(ctx);
               ScaffoldMessenger.of(context).showSnackBar(
                 SnackBar(
                   content: Text('${company.companyName} account has been reactivated.'),
@@ -1903,7 +1903,7 @@ class _CompanyManagementScreenState extends State<CompanyManagementScreen> {
             shrinkWrap: true,
             physics: const NeverScrollableScrollPhysics(),
             itemCount: pageCompanies.length,
-            separatorBuilder: (_, __) => const Divider(height: 1),
+            separatorBuilder: (_, index) => const Divider(height: 1),
             itemBuilder: (context, index) {
               final company = pageCompanies[index];
               final isVerified =

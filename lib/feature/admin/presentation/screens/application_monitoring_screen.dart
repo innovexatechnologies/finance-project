@@ -880,8 +880,8 @@ class _ApplicationMonitoringScreenState
                 initialNote: note,
               );
 
+              if (ctx.mounted) Navigator.pop(ctx);
               if (!mounted) return;
-              Navigator.pop(ctx);
               ScaffoldMessenger.of(context).showSnackBar(
                 SnackBar(
                   content: Text('${app.id} marked under active investigation.'),
@@ -955,8 +955,8 @@ class _ApplicationMonitoringScreenState
                 note: note,
               );
 
+              if (ctx.mounted) Navigator.pop(ctx);
               if (!mounted) return;
-              Navigator.pop(ctx);
               ScaffoldMessenger.of(context).showSnackBar(
                 const SnackBar(
                   content: Text('Investigation note securely logged into audit vault.'),
@@ -1030,8 +1030,8 @@ class _ApplicationMonitoringScreenState
                 reason: reason,
               );
 
+              if (ctx.mounted) Navigator.pop(ctx);
               if (!mounted) return;
-              Navigator.pop(ctx);
               ScaffoldMessenger.of(context).showSnackBar(
                 const SnackBar(
                   content: Text('Report dismissed and student standing cleared.'),
@@ -1054,7 +1054,7 @@ class _ApplicationMonitoringScreenState
     showDialog(
       context: context,
       builder: (ctx) => StatefulBuilder(
-        builder: (context, setDialogState) => AlertDialog(
+        builder: (dialogContext, setDialogState) => AlertDialog(
           shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
           title: Row(
             children: [
@@ -1133,8 +1133,8 @@ class _ApplicationMonitoringScreenState
                   revokeApplication: revokeApplication,
                 );
 
+                if (ctx.mounted) Navigator.pop(ctx);
                 if (!mounted) return;
-                Navigator.pop(ctx);
                 ScaffoldMessenger.of(context).showSnackBar(
                   SnackBar(
                     content: Text(
@@ -1821,7 +1821,7 @@ class _ApplicationMonitoringScreenState
             shrinkWrap: true,
             physics: const NeverScrollableScrollPhysics(),
             itemCount: pageApplications.length,
-            separatorBuilder: (_, __) => const Divider(height: 1),
+            separatorBuilder: (_, index) => const Divider(height: 1),
             itemBuilder: (context, index) {
               final app = pageApplications[index];
 

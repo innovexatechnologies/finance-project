@@ -561,8 +561,8 @@ class _ProjectManagementScreenState extends State<ProjectManagementScreen> {
                             projectId: project.id,
                             moderatorName: admin,
                           );
+                          if (ctx.mounted) Navigator.pop(ctx);
                           if (!mounted) return;
-                          Navigator.pop(ctx);
                           ScaffoldMessenger.of(context).showSnackBar(
                             SnackBar(
                               content: Text('"${project.title}" has been published for students!'),
@@ -639,8 +639,8 @@ class _ProjectManagementScreenState extends State<ProjectManagementScreen> {
                             projectId: project.id,
                             moderatorName: admin,
                           );
+                          if (ctx.mounted) Navigator.pop(ctx);
                           if (!mounted) return;
-                          Navigator.pop(ctx);
                           ScaffoldMessenger.of(context).showSnackBar(
                             SnackBar(
                               content: Text('"${project.title}" listing has been restored.'),
@@ -723,8 +723,8 @@ class _ProjectManagementScreenState extends State<ProjectManagementScreen> {
                 moderatorName: admin,
               );
 
+              if (ctx.mounted) Navigator.pop(ctx);
               if (!mounted) return;
-              Navigator.pop(ctx);
               ScaffoldMessenger.of(context).showSnackBar(
                 SnackBar(
                   content: Text('Project rejected. Reason logged in audit vault.'),
@@ -802,8 +802,8 @@ class _ProjectManagementScreenState extends State<ProjectManagementScreen> {
                 moderatorName: admin,
               );
 
+              if (ctx.mounted) Navigator.pop(ctx);
               if (!mounted) return;
-              Navigator.pop(ctx);
               ScaffoldMessenger.of(context).showSnackBar(
                 SnackBar(
                   content: Text('Project de-listed and archived for retention compliance.'),
@@ -881,8 +881,8 @@ class _ProjectManagementScreenState extends State<ProjectManagementScreen> {
                 moderatorName: admin,
               );
 
+              if (ctx.mounted) Navigator.pop(ctx);
               if (!mounted) return;
-              Navigator.pop(ctx);
               ScaffoldMessenger.of(context).showSnackBar(
                 SnackBar(
                   content: Text('Project unpublished from public discovery.'),
@@ -938,8 +938,8 @@ class _ProjectManagementScreenState extends State<ProjectManagementScreen> {
                 moderatorName: admin,
               );
 
+              if (ctx.mounted) Navigator.pop(ctx);
               if (!mounted) return;
-              Navigator.pop(ctx);
               ScaffoldMessenger.of(context).showSnackBar(
                 SnackBar(
                   content: Text('Project closed successfully.'),
@@ -1698,7 +1698,7 @@ class _ProjectManagementScreenState extends State<ProjectManagementScreen> {
             shrinkWrap: true,
             physics: const NeverScrollableScrollPhysics(),
             itemCount: pageProjects.length,
-            separatorBuilder: (_, __) => const Divider(height: 1),
+            separatorBuilder: (_, index) => const Divider(height: 1),
             itemBuilder: (context, index) {
               final project = pageProjects[index];
               final isChecked = _selectedProjectIds.contains(project.id);

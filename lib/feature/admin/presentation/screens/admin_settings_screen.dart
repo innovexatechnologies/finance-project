@@ -354,7 +354,7 @@ class _AdminSettingsScreenState extends State<AdminSettingsScreen>
                 shrinkWrap: true,
                 physics: const NeverScrollableScrollPhysics(),
                 itemCount: filtered.length,
-                separatorBuilder: (_, __) => const SizedBox(height: 12),
+                separatorBuilder: (_, index) => const SizedBox(height: 12),
                 itemBuilder: (context, i) {
                   final cat = filtered[i];
                   return Container(
@@ -957,7 +957,7 @@ class _AdminSettingsScreenState extends State<AdminSettingsScreen>
                 shrinkWrap: true,
                 physics: const NeverScrollableScrollPhysics(),
                 itemCount: filtered.length,
-                separatorBuilder: (_, __) => const SizedBox(height: 14),
+                separatorBuilder: (_, index) => const SizedBox(height: 14),
                 itemBuilder: (context, i) {
                   final cmp = filtered[i];
                   Color severityColor;
@@ -1094,7 +1094,7 @@ class _AdminSettingsScreenState extends State<AdminSettingsScreen>
                 shrinkWrap: true,
                 physics: const NeverScrollableScrollPhysics(),
                 itemCount: policies.length,
-                separatorBuilder: (_, __) => const SizedBox(height: 16),
+                separatorBuilder: (_, index) => const SizedBox(height: 16),
                 itemBuilder: (context, i) {
                   final pol = policies[i];
                   return Container(
@@ -1368,7 +1368,7 @@ class _AdminSettingsScreenState extends State<AdminSettingsScreen>
                 shrinkWrap: true,
                 physics: const NeverScrollableScrollPhysics(),
                 itemCount: filtered.length,
-                separatorBuilder: (_, __) => const SizedBox(height: 10),
+                separatorBuilder: (_, index) => const SizedBox(height: 10),
                 itemBuilder: (context, i) {
                   final log = filtered[i];
                   return Container(
@@ -1663,7 +1663,7 @@ class _AdminSettingsScreenState extends State<AdminSettingsScreen>
                 shrinkWrap: true,
                 physics: const NeverScrollableScrollPhysics(),
                 itemCount: sessions.length,
-                separatorBuilder: (_, __) => const Divider(color: AppColors.border),
+                separatorBuilder: (_, index) => const Divider(color: AppColors.border),
                 itemBuilder: (context, i) {
                   final s = sessions[i];
                   return Row(

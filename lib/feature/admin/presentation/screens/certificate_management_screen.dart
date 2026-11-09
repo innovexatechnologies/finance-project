@@ -775,8 +775,8 @@ class _CertificateManagementScreenState
                 adminName: admin,
               );
 
+              if (ctx.mounted) Navigator.pop(ctx);
               if (!mounted) return;
-              Navigator.pop(ctx);
               ScaffoldMessenger.of(context).showSnackBar(
                 SnackBar(
                   content: Text('${cert.id} revoked. Audit ledger updated.'),
@@ -851,8 +851,8 @@ class _CertificateManagementScreenState
                 adminName: admin,
               );
 
+              if (ctx.mounted) Navigator.pop(ctx);
               if (!mounted) return;
-              Navigator.pop(ctx);
               ScaffoldMessenger.of(context).showSnackBar(
                 SnackBar(
                   content: Text('${cert.id} placed under verification review hold.'),
@@ -927,8 +927,8 @@ class _CertificateManagementScreenState
                 adminName: admin,
               );
 
+              if (ctx.mounted) Navigator.pop(ctx);
               if (!mounted) return;
-              Navigator.pop(ctx);
               ScaffoldMessenger.of(context).showSnackBar(
                 SnackBar(
                   content: Text('${cert.id} successfully reinstated to Valid status.'),
@@ -1597,7 +1597,7 @@ class _CertificateManagementScreenState
             shrinkWrap: true,
             physics: const NeverScrollableScrollPhysics(),
             itemCount: pageCertificates.length,
-            separatorBuilder: (_, __) => const Divider(height: 1),
+            separatorBuilder: (_, index) => const Divider(height: 1),
             itemBuilder: (context, index) {
               final cert = pageCertificates[index];
 

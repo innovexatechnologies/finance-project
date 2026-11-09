@@ -428,7 +428,7 @@ class _ReportsAnalyticsScreenState extends State<ReportsAnalyticsScreen>
             ),
             _buildKpiCard(
               title: 'Platform Health',
-              value: '${engagement.engagementIndex.toStringAsFixed(1)}',
+              value: engagement.engagementIndex.toStringAsFixed(1),
               delta: 'Optimal Index',
               isPositiveDelta: true,
               subtitle: 'Zero Critical Flags',
@@ -935,7 +935,7 @@ class _ReportsAnalyticsScreenState extends State<ReportsAnalyticsScreen>
             shrinkWrap: true,
             physics: const NeverScrollableScrollPhysics(),
             itemCount: skills.length,
-            separatorBuilder: (_, __) => const Divider(height: 12, color: AppColors.border),
+            separatorBuilder: (_, index) => const Divider(height: 12, color: AppColors.border),
             itemBuilder: (context, i) {
               final s = skills[i];
               return Row(
