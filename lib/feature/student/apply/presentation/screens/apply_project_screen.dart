@@ -13,6 +13,7 @@ class ApplyProjectScreen extends StatefulWidget {
 }
 
 class _ApplyProjectScreenState extends State<ApplyProjectScreen> {
+  final _formKey = GlobalKey<FormState>();
   final _coverMessageController = TextEditingController();
   final _skillsController = TextEditingController();
   final _availabilityController =
@@ -20,6 +21,7 @@ class _ApplyProjectScreenState extends State<ApplyProjectScreen> {
   final _portfolioController = TextEditingController();
 
   bool _isSubmitting = false;
+  bool _autoValidate = false;
 
   @override
   void dispose() {
@@ -30,14 +32,47 @@ class _ApplyProjectScreenState extends State<ApplyProjectScreen> {
     super.dispose();
   }
 
+  bool _isValidUrl(String? text) {
+    if (text == null) return false;
+    final val = text.trim();
+    if (val.isEmpty || val.contains(' ')) return false;
+
+    String normalized = val;
+    if (!normalized.startsWith('http://') && !normalized.startsWith('https://')) {
+      normalized = 'https://$normalized';
+    }
+
+    final uri = Uri.tryParse(normalized);
+    if (uri == null || uri.host.isEmpty || !uri.host.contains('.')) {
+      return false;
+    }
+
+    final parts = uri.host.split('.');
+    final tld = parts.last;
+    if (tld.length < 2 || !RegExp(r'^[a-zA-Z]+$').hasMatch(tld)) {
+      return false;
+    }
+
+    return true;
+  }
+
   Future<void> _submitApplication() async {
-    final cover = _coverMessageController.text.trim();
-    if (cover.isEmpty) {
+    setState(() => _autoValidate = true);
+
+    if (!_formKey.currentState!.validate()) {
       ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(content: Text('Please write a brief cover message')),
+        const SnackBar(
+          content: Text(
+            'Please fill all required fields correctly according to specifications.',
+          ),
+          backgroundColor: Colors.redAccent,
+          duration: Duration(seconds: 3),
+        ),
       );
       return;
     }
+
+    final cover = _coverMessageController.text.trim();
 
     setState(() {
       _isSubmitting = true;
@@ -218,79 +253,128 @@ class _ApplyProjectScreenState extends State<ApplyProjectScreen> {
             ),
             const SizedBox(height: 16),
 
-            // Cover Message
-            Text(
-              'Cover Message *',
-              style: GoogleFonts.inter(
-                fontSize: 13,
-                fontWeight: FontWeight.w600,
-                color: AppColors.darkText,
-              ),
-            ),
-            const SizedBox(height: 6),
-            TextField(
-              controller: _coverMessageController,
-              maxLines: 4,
-              decoration: const InputDecoration(
-                hintText:
-                    'Introduce yourself, mention why you are interested in this project and why you are a great fit...',
-              ),
-            ),
-            const SizedBox(height: 16),
+            Form(
+              key: _formKey,
+              autovalidateMode: _autoValidate
+                  ? AutovalidateMode.onUserInteraction
+                  : AutovalidateMode.disabled,
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  // Cover Message
+                  Text(
+                    'Cover Message *',
+                    style: GoogleFonts.inter(
+                      fontSize: 13,
+                      fontWeight: FontWeight.w600,
+                      color: AppColors.darkText,
+                    ),
+                  ),
+                  const SizedBox(height: 6),
+                  TextFormField(
+                    controller: _coverMessageController,
+                    maxLines: 4,
+                    decoration: const InputDecoration(
+                      hintText:
+                          'Introduce yourself, mention why you are interested in this project and why you are a great fit...',
+                    ),
+                    validator: (value) {
+                      final v = value?.trim() ?? '';
+                      if (v.isEmpty) {
+                        return 'Cover message is required';
+                      }
+                      if (v.length < 20) {
+                        return 'Cover message must be at least 20 characters (currently ${v.length})';
+                      }
+                      return null;
+                    },
+                  ),
+                  const SizedBox(height: 16),
 
-            // Relevant Skills
-            Text(
-              'Relevant Skills & Experience',
-              style: GoogleFonts.inter(
-                fontSize: 13,
-                fontWeight: FontWeight.w600,
-                color: AppColors.darkText,
-              ),
-            ),
-            const SizedBox(height: 6),
-            TextField(
-              controller: _skillsController,
-              decoration: const InputDecoration(
-                hintText: 'e.g. Flutter, Dart, REST API, Git',
-                prefixIcon: Icon(Icons.code_rounded, size: 20),
-              ),
-            ),
-            const SizedBox(height: 16),
+                  // Relevant Skills
+                  Text(
+                    'Relevant Skills & Experience *',
+                    style: GoogleFonts.inter(
+                      fontSize: 13,
+                      fontWeight: FontWeight.w600,
+                      color: AppColors.darkText,
+                    ),
+                  ),
+                  const SizedBox(height: 6),
+                  TextFormField(
+                    controller: _skillsController,
+                    decoration: const InputDecoration(
+                      hintText: 'e.g. Flutter, Dart, REST API, Git',
+                      prefixIcon: Icon(Icons.code_rounded, size: 20),
+                    ),
+                    validator: (value) {
+                      final v = value?.trim() ?? '';
+                      if (v.isEmpty) {
+                        return 'Please specify your relevant skills (required)';
+                      }
+                      if (v.length < 2) {
+                        return 'Please enter valid skill names';
+                      }
+                      return null;
+                    },
+                  ),
+                  const SizedBox(height: 16),
 
-            // Availability
-            Text(
-              'Weekly Availability',
-              style: GoogleFonts.inter(
-                fontSize: 13,
-                fontWeight: FontWeight.w600,
-                color: AppColors.darkText,
-              ),
-            ),
-            const SizedBox(height: 6),
-            TextField(
-              controller: _availabilityController,
-              decoration: const InputDecoration(
-                hintText: 'e.g. 10-15 hrs/week (Flexible)',
-                prefixIcon: Icon(Icons.access_time_rounded, size: 20),
-              ),
-            ),
-            const SizedBox(height: 16),
+                  // Availability
+                  Text(
+                    'Weekly Availability *',
+                    style: GoogleFonts.inter(
+                      fontSize: 13,
+                      fontWeight: FontWeight.w600,
+                      color: AppColors.darkText,
+                    ),
+                  ),
+                  const SizedBox(height: 6),
+                  TextFormField(
+                    controller: _availabilityController,
+                    decoration: const InputDecoration(
+                      hintText: 'e.g. 10-15 hrs/week (Flexible)',
+                      prefixIcon: Icon(Icons.access_time_rounded, size: 20),
+                    ),
+                    validator: (value) {
+                      final v = value?.trim() ?? '';
+                      if (v.isEmpty) {
+                        return 'Please enter your weekly availability';
+                      }
+                      return null;
+                    },
+                  ),
+                  const SizedBox(height: 16),
 
-            // Portfolio / GitHub Link
-            Text(
-              'Portfolio / GitHub Link (Optional)',
-              style: GoogleFonts.inter(
-                fontSize: 13,
-                fontWeight: FontWeight.w600,
-                color: AppColors.darkText,
-              ),
-            ),
-            const SizedBox(height: 6),
-            TextField(
-              controller: _portfolioController,
-              decoration: const InputDecoration(
-                hintText: 'https://github.com/your-username',
-                prefixIcon: Icon(Icons.link_rounded, size: 20),
+                  // Portfolio / GitHub Link
+                  Text(
+                    'Portfolio / GitHub Profile Link *',
+                    style: GoogleFonts.inter(
+                      fontSize: 13,
+                      fontWeight: FontWeight.w600,
+                      color: AppColors.darkText,
+                    ),
+                  ),
+                  const SizedBox(height: 6),
+                  TextFormField(
+                    controller: _portfolioController,
+                    keyboardType: TextInputType.url,
+                    decoration: const InputDecoration(
+                      hintText: 'https://github.com/your-username',
+                      prefixIcon: Icon(Icons.link_rounded, size: 20),
+                    ),
+                    validator: (value) {
+                      final v = value?.trim() ?? '';
+                      if (v.isEmpty) {
+                        return 'Portfolio / GitHub link is required';
+                      }
+                      if (!_isValidUrl(v)) {
+                        return 'Please enter a valid URL link (e.g. https://github.com/username or https://...)';
+                      }
+                      return null;
+                    },
+                  ),
+                ],
               ),
             ),
             const SizedBox(height: 24),

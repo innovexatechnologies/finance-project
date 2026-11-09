@@ -93,6 +93,8 @@ class _StudentProfileScreenState extends State<StudentProfileScreen> {
     final profile = AppDataService.instance.getProfile();
     final nameCtrl = TextEditingController(text: profile['name']);
     final uniCtrl = TextEditingController(text: profile['university']);
+    final phoneCtrl = TextEditingController(
+        text: profile['phone'] ?? '+92 300 1234567');
     final bioCtrl = TextEditingController(text: profile['bio']);
 
     showDialog(
@@ -119,6 +121,10 @@ class _StudentProfileScreenState extends State<StudentProfileScreen> {
               const SizedBox(height: 4),
               TextField(controller: uniCtrl),
               const SizedBox(height: 12),
+              Text('Contact Phone', style: GoogleFonts.inter(fontWeight: FontWeight.w600, fontSize: 12)),
+              const SizedBox(height: 4),
+              TextField(controller: phoneCtrl, keyboardType: TextInputType.phone),
+              const SizedBox(height: 12),
               Text('Professional Bio', style: GoogleFonts.inter(fontWeight: FontWeight.w600, fontSize: 12)),
               const SizedBox(height: 4),
               TextField(controller: bioCtrl, maxLines: 3),
@@ -135,6 +141,7 @@ class _StudentProfileScreenState extends State<StudentProfileScreen> {
               AppDataService.instance.updateProfile({
                 'name': nameCtrl.text.trim(),
                 'university': uniCtrl.text.trim(),
+                'phone': phoneCtrl.text.trim(),
                 'bio': bioCtrl.text.trim(),
               });
               Navigator.pop(context);
@@ -159,6 +166,11 @@ class _StudentProfileScreenState extends State<StudentProfileScreen> {
       builder: (context, _) {
         final profile = AppDataService.instance.getProfile();
         final skills = AppDataService.instance.getSkills();
+        final privacy = AppDataService.instance.getPrivacySettings();
+        final showEmail = privacy['showEmail'] ?? true;
+        final showPhone = privacy['showPhone'] ?? false;
+        final publicPortfolio = privacy['publicPortfolio'] ?? true;
+        final profileVisibility = privacy['profileVisibility'] ?? true;
 
         final name = profile['name'] ?? 'Ahmed Khan';
         final email = profile['email'] ?? 'ahmed.khan@student.edu.pk';
@@ -192,6 +204,40 @@ class _StudentProfileScreenState extends State<StudentProfileScreen> {
             padding: const EdgeInsets.all(20.0),
             child: Column(
               children: [
+                // Profile Visibility Warning Banner (if toggled Private)
+                if (!profileVisibility) ...[
+                  Container(
+                    width: double.infinity,
+                    padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 11),
+                    decoration: BoxDecoration(
+                      color: const Color(0xFFFEF3C7),
+                      borderRadius: BorderRadius.circular(12),
+                      border: Border.all(color: const Color(0xFFFDE68A)),
+                    ),
+                    child: Row(
+                      children: [
+                        const Icon(
+                          Icons.visibility_off_rounded,
+                          size: 20,
+                          color: Color(0xFFB45309),
+                        ),
+                        const SizedBox(width: 10),
+                        Expanded(
+                          child: Text(
+                            'Profile Visibility is Private: Your profile is hidden from partner company directory searches.',
+                            style: GoogleFonts.inter(
+                              fontSize: 12,
+                              fontWeight: FontWeight.w500,
+                              color: const Color(0xFF92400E),
+                            ),
+                          ),
+                        ),
+                      ],
+                    ),
+                  ),
+                  const SizedBox(height: 16),
+                ],
+
                 // Profile Avatar & Edit Button
                 Center(
                   child: Stack(
@@ -263,13 +309,34 @@ class _StudentProfileScreenState extends State<StudentProfileScreen> {
                   ),
                 ),
                 const SizedBox(height: 4),
-                Text(
-                  email,
-                  style: GoogleFonts.inter(
-                    fontSize: 12,
-                    color: AppColors.primaryBlue,
+                if (showEmail)
+                  Text(
+                    email,
+                    style: GoogleFonts.inter(
+                      fontSize: 12,
+                      color: AppColors.primaryBlue,
+                    ),
+                  )
+                else
+                  Row(
+                    mainAxisSize: MainAxisSize.min,
+                    children: [
+                      const Icon(
+                        Icons.visibility_off_outlined,
+                        size: 13,
+                        color: AppColors.grayText,
+                      ),
+                      const SizedBox(width: 4),
+                      Text(
+                        'Email hidden (Privacy Settings)',
+                        style: GoogleFonts.inter(
+                          fontSize: 12,
+                          fontStyle: FontStyle.italic,
+                          color: AppColors.grayText,
+                        ),
+                      ),
+                    ],
                   ),
-                ),
                 const SizedBox(height: 20),
 
                 // 3 Statistics Cards Row
@@ -328,6 +395,11 @@ class _StudentProfileScreenState extends State<StudentProfileScreen> {
                       const SizedBox(height: 8),
                       _buildInfoRow(Icons.location_on_outlined, 'Location',
                           profile['location'] ?? 'Lahore, Pakistan'),
+                      if (showPhone) ...[
+                        const SizedBox(height: 8),
+                        _buildInfoRow(Icons.phone_outlined, 'Phone',
+                            profile['phone'] ?? '+92 300 1234567'),
+                      ],
                       const SizedBox(height: 12),
                       const Divider(color: AppColors.lightGray, height: 1),
                       const SizedBox(height: 12),
@@ -368,13 +440,38 @@ class _StudentProfileScreenState extends State<StudentProfileScreen> {
                       Row(
                         mainAxisAlignment: MainAxisAlignment.spaceBetween,
                         children: [
-                          Text(
-                            'Skills & Expertise',
-                            style: GoogleFonts.poppins(
-                              fontSize: 14,
-                              fontWeight: FontWeight.bold,
-                              color: AppColors.deepNavy,
-                            ),
+                          Row(
+                            children: [
+                              Text(
+                                'Skills & Expertise',
+                                style: GoogleFonts.poppins(
+                                  fontSize: 14,
+                                  fontWeight: FontWeight.bold,
+                                  color: AppColors.deepNavy,
+                                ),
+                              ),
+                              const SizedBox(width: 8),
+                              Container(
+                                padding: const EdgeInsets.symmetric(
+                                    horizontal: 7, vertical: 2),
+                                decoration: BoxDecoration(
+                                  color: publicPortfolio
+                                      ? AppColors.lightAqua
+                                      : Colors.grey.shade200,
+                                  borderRadius: BorderRadius.circular(6),
+                                ),
+                                child: Text(
+                                  publicPortfolio ? 'Public' : 'Private',
+                                  style: GoogleFonts.inter(
+                                    fontSize: 10,
+                                    fontWeight: FontWeight.w600,
+                                    color: publicPortfolio
+                                        ? AppColors.teal
+                                        : Colors.grey.shade700,
+                                  ),
+                                ),
+                              ),
+                            ],
                           ),
                           IconButton(
                             constraints: const BoxConstraints(),

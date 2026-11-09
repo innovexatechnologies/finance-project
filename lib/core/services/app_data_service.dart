@@ -418,6 +418,15 @@ class AppDataService extends ChangeNotifier {
       } catch (e) {
         debugPrint('Error loading notif prefs: $e');
       }
+    } else {
+      _notificationPreferences.addAll({
+        'pushNotifications': true,
+        'emailAlerts': true,
+        'newProjectsAlert': true,
+        'applicationUpdates': true,
+        'chatMessages': true,
+        'deadlineReminders': true,
+      });
     }
 
     // 10. Privacy Settings
@@ -431,6 +440,14 @@ class AppDataService extends ChangeNotifier {
       } catch (e) {
         debugPrint('Error loading privacy settings: $e');
       }
+    } else {
+      _privacySettings.addAll({
+        'profileVisibility': true,
+        'showEmail': true,
+        'showPhone': false,
+        'publicPortfolio': true,
+        'allowCompanyMessages': true,
+      });
     }
 
     // 11. Chat Conversations
@@ -835,6 +852,33 @@ class AppDataService extends ChangeNotifier {
     required String time,
     required String type,
   }) async {
+    // Check notification preferences set by the user
+    if (_notificationPreferences['pushNotifications'] == false) {
+      return;
+    }
+
+    if (type == 'chat' && _notificationPreferences['chatMessages'] == false) {
+      return;
+    }
+
+    if ((type == 'submitted' ||
+            type == 'shortlisted' ||
+            type == 'assigned' ||
+            type == 'approved') &&
+        _notificationPreferences['applicationUpdates'] == false) {
+      return;
+    }
+
+    if (type == 'recommendation' &&
+        _notificationPreferences['newProjectsAlert'] == false) {
+      return;
+    }
+
+    if (type == 'deadline' &&
+        _notificationPreferences['deadlineReminders'] == false) {
+      return;
+    }
+
     _notifications.insert(0, {
       'id': 'notif_${DateTime.now().millisecondsSinceEpoch}',
       'title': title,

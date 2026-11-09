@@ -339,5 +339,99 @@ void main() {
     await AppDataService.instance.init();
     expect(AppDataService.instance.getNotifications(), isEmpty);
   });
+
+  test('Notification Preferences Gating for Chat Messages', () async {
+    // 1. With chatMessages == true (default)
+    await AppDataService.instance.updateNotificationPreference('chatMessages', true);
+    await AppDataService.instance.clearAllNotifications();
+
+    await AppDataService.instance.addNotification(
+      title: 'Company Message',
+      subtitle: 'Message from supervisor',
+      time: 'Just now',
+      type: 'chat',
+    );
+    expect(AppDataService.instance.unreadNotificationsCount, equals(1));
+
+    // 2. With chatMessages == false
+    await AppDataService.instance.updateNotificationPreference('chatMessages', false);
+    await AppDataService.instance.clearAllNotifications();
+
+    await AppDataService.instance.addNotification(
+      title: 'Company Message 2',
+      subtitle: 'Another message',
+      time: 'Just now',
+      type: 'chat',
+    );
+    expect(AppDataService.instance.unreadNotificationsCount, equals(0));
+
+    // Restart and verify preference persisted
+    await AppDataService.instance.init();
+    expect(AppDataService.instance.getNotificationPreferences()['chatMessages'], isFalse);
+  });
+
+  test('Privacy Settings Persistence (showEmail, showPhone, profileVisibility)', () async {
+    await AppDataService.instance.updatePrivacySetting('showEmail', false);
+    await AppDataService.instance.updatePrivacySetting('showPhone', true);
+    await AppDataService.instance.updatePrivacySetting('profileVisibility', false);
+    await AppDataService.instance.updatePrivacySetting('publicPortfolio', false);
+
+    expect(AppDataService.instance.getPrivacySettings()['showEmail'], isFalse);
+    expect(AppDataService.instance.getPrivacySettings()['showPhone'], isTrue);
+    expect(AppDataService.instance.getPrivacySettings()['profileVisibility'], isFalse);
+    expect(AppDataService.instance.getPrivacySettings()['publicPortfolio'], isFalse);
+
+    // SIMULATE APP CLOSE & REOPEN
+    await AppDataService.instance.init();
+
+    expect(AppDataService.instance.getPrivacySettings()['showEmail'], isFalse);
+    expect(AppDataService.instance.getPrivacySettings()['showPhone'], isTrue);
+    expect(AppDataService.instance.getPrivacySettings()['profileVisibility'], isFalse);
+    expect(AppDataService.instance.getPrivacySettings()['publicPortfolio'], isFalse);
+  });
+
+  test('URL Validation for Apply Project & Submit Work Forms', () {
+    bool isValidUrl(String? text) {
+      if (text == null) return false;
+      final val = text.trim();
+      if (val.isEmpty || val.contains(' ')) return false;
+
+      String normalized = val;
+      if (!normalized.startsWith('http://') && !normalized.startsWith('https://')) {
+        normalized = 'https://$normalized';
+      }
+
+      final uri = Uri.tryParse(normalized);
+      if (uri == null || uri.host.isEmpty || !uri.host.contains('.')) {
+        return false;
+      }
+
+      final parts = uri.host.split('.');
+      final tld = parts.last;
+      if (tld.length < 2 || !RegExp(r'^[a-zA-Z]+$').hasMatch(tld)) {
+        return false;
+      }
+
+      return true;
+    }
+
+    // Invalid values (plain text, missing domain, spaces, incomplete)
+    expect(isValidUrl(null), isFalse);
+    expect(isValidUrl(''), isFalse);
+    expect(isValidUrl('   '), isFalse);
+    expect(isValidUrl('my link'), isFalse);
+    expect(isValidUrl('portfolio link text'), isFalse);
+    expect(isValidUrl('some_random_word'), isFalse);
+    expect(isValidUrl('github'), isFalse);
+    expect(isValidUrl('http://invalid'), isFalse);
+    expect(isValidUrl('test.123'), isFalse);
+
+    // Valid URLs
+    expect(isValidUrl('https://github.com/student/link_vibe'), isTrue);
+    expect(isValidUrl('http://myportfolio.pk'), isTrue);
+    expect(isValidUrl('github.com/student/repo'), isTrue);
+    expect(isValidUrl('www.figma.com/file/12345/design'), isTrue);
+    expect(isValidUrl('https://drive.google.com/drive/folders/xyz'), isTrue);
+  });
 }
 

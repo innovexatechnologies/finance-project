@@ -13,9 +13,11 @@ class SubmitWorkScreen extends StatefulWidget {
 }
 
 class _SubmitWorkScreenState extends State<SubmitWorkScreen> {
+  final _formKey = GlobalKey<FormState>();
   final _responseController = TextEditingController();
   final _linkController = TextEditingController();
   bool _isSubmitting = false;
+  bool _autoValidate = false;
   String _selectedFileName = 'project_report_final.pdf';
 
   @override
@@ -32,7 +34,7 @@ class _SubmitWorkScreenState extends State<SubmitWorkScreen> {
     if (existing != null) {
       _responseController.text = existing['summary'] ?? '';
       _linkController.text = existing['workLink'] ?? '';
-      if (existing['fileName'] != null) {
+      if (existing['fileName'] != null && existing['fileName'].toString().isNotEmpty) {
         _selectedFileName = existing['fileName'];
       }
     }
@@ -45,10 +47,129 @@ class _SubmitWorkScreenState extends State<SubmitWorkScreen> {
     super.dispose();
   }
 
+  bool _isValidUrl(String? text) {
+    if (text == null) return false;
+    final val = text.trim();
+    if (val.isEmpty || val.contains(' ')) return false;
+
+    String normalized = val;
+    if (!normalized.startsWith('http://') && !normalized.startsWith('https://')) {
+      normalized = 'https://$normalized';
+    }
+
+    final uri = Uri.tryParse(normalized);
+    if (uri == null || uri.host.isEmpty || !uri.host.contains('.')) {
+      return false;
+    }
+
+    final parts = uri.host.split('.');
+    final tld = parts.last;
+    if (tld.length < 2 || !RegExp(r'^[a-zA-Z]+$').hasMatch(tld)) {
+      return false;
+    }
+
+    return true;
+  }
+
+  void _showFileAttachmentSheet() {
+    final customNameCtrl = TextEditingController();
+    showModalBottomSheet(
+      context: context,
+      shape: const RoundedRectangleBorder(
+        borderRadius: BorderRadius.vertical(top: Radius.circular(20)),
+      ),
+      builder: (ctx) {
+        return Padding(
+          padding: const EdgeInsets.all(20.0),
+          child: Column(
+            mainAxisSize: MainAxisSize.min,
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              Text(
+                'Select Deliverable File',
+                style: GoogleFonts.poppins(
+                  fontSize: 16,
+                  fontWeight: FontWeight.bold,
+                  color: AppColors.deepNavy,
+                ),
+              ),
+              const SizedBox(height: 14),
+              ListTile(
+                contentPadding: EdgeInsets.zero,
+                leading: const Icon(Icons.picture_as_pdf_rounded, color: Colors.red),
+                title: const Text('Final_Project_Report.pdf'),
+                subtitle: const Text('2.4 MB • PDF Document'),
+                onTap: () {
+                  setState(() => _selectedFileName = 'Final_Project_Report.pdf');
+                  Navigator.pop(ctx);
+                },
+              ),
+              ListTile(
+                contentPadding: EdgeInsets.zero,
+                leading: const Icon(Icons.folder_zip_rounded, color: Colors.amber),
+                title: const Text('Source_Code_Archive.zip'),
+                subtitle: const Text('14.2 MB • ZIP Archive'),
+                onTap: () {
+                  setState(() => _selectedFileName = 'Source_Code_Archive.zip');
+                  Navigator.pop(ctx);
+                },
+              ),
+              ListTile(
+                contentPadding: EdgeInsets.zero,
+                leading: const Icon(Icons.draw_rounded, color: Colors.deepPurple),
+                title: const Text('UI_UX_Design_Prototypes.fig'),
+                subtitle: const Text('8.1 MB • Figma Deliverable'),
+                onTap: () {
+                  setState(() => _selectedFileName = 'UI_UX_Design_Prototypes.fig');
+                  Navigator.pop(ctx);
+                },
+              ),
+              const SizedBox(height: 10),
+              TextField(
+                controller: customNameCtrl,
+                decoration: InputDecoration(
+                  hintText: 'Or enter custom file name (e.g. results.docx)',
+                  suffixIcon: IconButton(
+                    icon: const Icon(Icons.check, color: AppColors.primaryBlue),
+                    onPressed: () {
+                      final val = customNameCtrl.text.trim();
+                      if (val.isNotEmpty) {
+                        setState(() => _selectedFileName = val);
+                        Navigator.pop(ctx);
+                      }
+                    },
+                  ),
+                ),
+              ),
+            ],
+          ),
+        );
+      },
+    );
+  }
+
   Future<void> _submitWork() async {
-    if (_responseController.text.trim().isEmpty) {
+    setState(() => _autoValidate = true);
+
+    if (!_formKey.currentState!.validate()) {
       ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(content: Text('Please enter your submission summary')),
+        const SnackBar(
+          content: Text(
+            'Please fill all submission fields correctly (valid URL and descriptive summary required).',
+          ),
+          backgroundColor: Colors.redAccent,
+          duration: Duration(seconds: 3),
+        ),
+      );
+      return;
+    }
+
+    if (_selectedFileName.trim().isEmpty) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(
+          content: Text('Please attach your deliverable file before submitting.'),
+          backgroundColor: Colors.redAccent,
+        ),
       );
       return;
     }
@@ -256,48 +377,80 @@ class _SubmitWorkScreenState extends State<SubmitWorkScreen> {
               const SizedBox(height: 16),
             ],
 
-            // Submission Notes
-            Text(
-              'Summary & Notes *',
-              style: GoogleFonts.inter(
-                fontSize: 13,
-                fontWeight: FontWeight.w600,
-                color: AppColors.darkText,
-              ),
-            ),
-            const SizedBox(height: 6),
-            TextField(
-              controller: _responseController,
-              maxLines: 5,
-              decoration: const InputDecoration(
-                hintText:
-                    'Explain what you completed, results obtained, methodology used, and any important notes...',
-              ),
-            ),
-            const SizedBox(height: 20),
+            Form(
+              key: _formKey,
+              autovalidateMode: _autoValidate
+                  ? AutovalidateMode.onUserInteraction
+                  : AutovalidateMode.disabled,
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  // Submission Notes
+                  Text(
+                    'Summary & Notes *',
+                    style: GoogleFonts.inter(
+                      fontSize: 13,
+                      fontWeight: FontWeight.w600,
+                      color: AppColors.darkText,
+                    ),
+                  ),
+                  const SizedBox(height: 6),
+                  TextFormField(
+                    controller: _responseController,
+                    maxLines: 5,
+                    decoration: const InputDecoration(
+                      hintText:
+                          'Explain what you completed, results obtained, methodology used, and any important notes...',
+                    ),
+                    validator: (value) {
+                      final v = value?.trim() ?? '';
+                      if (v.isEmpty) {
+                        return 'Work summary is required';
+                      }
+                      if (v.length < 20) {
+                        return 'Please provide more details (minimum 20 characters, currently ${v.length})';
+                      }
+                      return null;
+                    },
+                  ),
+                  const SizedBox(height: 20),
 
-            // Live Demo / GitHub Repo Link
-            Text(
-              'Project URL / GitHub Repository Link',
-              style: GoogleFonts.inter(
-                fontSize: 13,
-                fontWeight: FontWeight.w600,
-                color: AppColors.darkText,
-              ),
-            ),
-            const SizedBox(height: 6),
-            TextField(
-              controller: _linkController,
-              decoration: const InputDecoration(
-                hintText: 'https://github.com/username/project-repo',
-                prefixIcon: Icon(Icons.link_rounded, size: 20),
+                  // Live Demo / GitHub Repo Link
+                  Text(
+                    'Project URL / GitHub Repository Link *',
+                    style: GoogleFonts.inter(
+                      fontSize: 13,
+                      fontWeight: FontWeight.w600,
+                      color: AppColors.darkText,
+                    ),
+                  ),
+                  const SizedBox(height: 6),
+                  TextFormField(
+                    controller: _linkController,
+                    keyboardType: TextInputType.url,
+                    decoration: const InputDecoration(
+                      hintText: 'https://github.com/username/project-repo',
+                      prefixIcon: Icon(Icons.link_rounded, size: 20),
+                    ),
+                    validator: (value) {
+                      final v = value?.trim() ?? '';
+                      if (v.isEmpty) {
+                        return 'Project / repository link is required';
+                      }
+                      if (!_isValidUrl(v)) {
+                        return 'Please enter a valid URL link (e.g. https://github.com/username/repo or https://...)';
+                      }
+                      return null;
+                    },
+                  ),
+                ],
               ),
             ),
             const SizedBox(height: 20),
 
             // File Upload Section
             Text(
-              'Deliverable File (PDF, ZIP, DOCX)',
+              'Deliverable File (PDF, ZIP, DOCX) *',
               style: GoogleFonts.inter(
                 fontSize: 13,
                 fontWeight: FontWeight.w600,
@@ -336,37 +489,35 @@ class _SubmitWorkScreenState extends State<SubmitWorkScreen> {
                       crossAxisAlignment: CrossAxisAlignment.start,
                       children: [
                         Text(
-                          _selectedFileName,
+                          _selectedFileName.isNotEmpty
+                              ? _selectedFileName
+                              : 'No file selected',
                           style: GoogleFonts.poppins(
                             fontSize: 13,
                             fontWeight: FontWeight.w600,
-                            color: AppColors.deepNavy,
+                            color: _selectedFileName.isNotEmpty
+                                ? AppColors.deepNavy
+                                : Colors.redAccent,
                           ),
                         ),
                         Text(
-                          '2.4 MB • Ready to attach',
+                          _selectedFileName.isNotEmpty
+                              ? 'Deliverable attached • Ready for evaluation'
+                              : 'Please attach a deliverable file',
                           style: GoogleFonts.inter(
                             fontSize: 11,
-                            color: AppColors.grayText,
+                            color: _selectedFileName.isNotEmpty
+                                ? AppColors.grayText
+                                : Colors.redAccent,
                           ),
                         ),
                       ],
                     ),
                   ),
-                  TextButton(
-                    onPressed: () {
-                      setState(() {
-                        _selectedFileName =
-                            'updated_deliverable_${DateTime.now().minute}.pdf';
-                      });
-                      ScaffoldMessenger.of(context).showSnackBar(
-                        const SnackBar(
-                          content: Text('Attached deliverable file updated.'),
-                          duration: Duration(seconds: 1),
-                        ),
-                      );
-                    },
-                    child: const Text('Change'),
+                  TextButton.icon(
+                    onPressed: _showFileAttachmentSheet,
+                    icon: const Icon(Icons.attach_file_rounded, size: 16),
+                    label: const Text('Change'),
                   ),
                 ],
               ),
