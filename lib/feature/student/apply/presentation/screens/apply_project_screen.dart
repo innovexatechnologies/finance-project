@@ -1,7 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:google_fonts/google_fonts.dart';
-import 'package:supabase_flutter/supabase_flutter.dart';
 import 'package:link_vibe/core/constants/app_colors.dart';
+import 'package:link_vibe/core/services/app_data_service.dart';
 
 class ApplyProjectScreen extends StatefulWidget {
   final Map<String, dynamic> project;
@@ -15,7 +15,8 @@ class ApplyProjectScreen extends StatefulWidget {
 class _ApplyProjectScreenState extends State<ApplyProjectScreen> {
   final _coverMessageController = TextEditingController();
   final _skillsController = TextEditingController();
-  final _availabilityController = TextEditingController(text: '10-15 hrs/week (Flexible)');
+  final _availabilityController =
+      TextEditingController(text: '10-15 hrs/week (Flexible)');
   final _portfolioController = TextEditingController();
 
   bool _isSubmitting = false;
@@ -43,24 +44,13 @@ class _ApplyProjectScreenState extends State<ApplyProjectScreen> {
     });
 
     try {
-      final supabase = Supabase.instance.client;
-      final user = supabase.auth.currentUser;
-
-      final projectId = widget.project['id'];
-      final applicantId = user?.id ?? 'guest_student';
-      final studentName = user?.userMetadata?['name'] ?? 'Ahmed Khan';
-
-      if (projectId != null) {
-        await supabase.from('applications').insert({
-          'project_id': projectId,
-          'applicant_id': applicantId,
-          'name': studentName,
-          'role': _skillsController.text.trim().isNotEmpty
-              ? _skillsController.text.trim()
-              : 'Student Applicant',
-          'status': 'Pending',
-        });
-      }
+      await AppDataService.instance.addApplication(
+        project: widget.project,
+        coverMessage: cover,
+        skills: _skillsController.text.trim(),
+        availability: _availabilityController.text.trim(),
+        portfolioLink: _portfolioController.text.trim(),
+      );
 
       if (!mounted) return;
 
@@ -69,7 +59,8 @@ class _ApplyProjectScreenState extends State<ApplyProjectScreen> {
         context: context,
         barrierDismissible: false,
         builder: (context) => AlertDialog(
-          shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(20)),
+          shape:
+              RoundedRectangleBorder(borderRadius: BorderRadius.circular(20)),
           content: Column(
             mainAxisSize: MainAxisSize.min,
             children: [
@@ -96,14 +87,15 @@ class _ApplyProjectScreenState extends State<ApplyProjectScreen> {
               ),
               const SizedBox(height: 8),
               Text(
-                'Your application has been received by ${widget.project['company'] ?? 'the company'}. You can track its progress in My Applications.',
+                'Your application has been received by ${widget.project['company'] ?? 'the company'} and saved persistently. You can track its progress in My Applications.',
                 textAlign: TextAlign.center,
                 style: GoogleFonts.inter(
                   fontSize: 13,
                   color: AppColors.grayText,
+                  height: 1.4,
                 ),
               ),
-              const SizedBox(height: 20),
+              const SizedBox(height: 24),
               SizedBox(
                 width: double.infinity,
                 child: ElevatedButton(
@@ -115,10 +107,10 @@ class _ApplyProjectScreenState extends State<ApplyProjectScreen> {
                     ),
                   ),
                   onPressed: () {
-                    Navigator.pop(context); // Close dialog
-                    Navigator.pop(context, true); // Close apply screen
+                    Navigator.pop(context); // close dialog
+                    Navigator.pop(context); // back to details/explore
                   },
-                  child: const Text('Back to Project'),
+                  child: const Text('Done'),
                 ),
               ),
             ],
@@ -129,22 +121,22 @@ class _ApplyProjectScreenState extends State<ApplyProjectScreen> {
       if (!mounted) return;
       ScaffoldMessenger.of(context).showSnackBar(
         SnackBar(
-          content: Text('Application notice: $e'),
-          backgroundColor: Colors.blueGrey,
+          content: Text('Error submitting application: $e'),
+          backgroundColor: Colors.red,
         ),
       );
-      Navigator.pop(context, true);
     } finally {
       if (mounted) {
-        setState(() {
-          _isSubmitting = false;
-        });
+        setState(() => _isSubmitting = false);
       }
     }
   }
 
   @override
   Widget build(BuildContext context) {
+    final title = widget.project['title'] ?? 'Project';
+    final company = widget.project['company'] ?? 'Company';
+
     return Scaffold(
       backgroundColor: AppColors.background,
       appBar: AppBar(
@@ -159,7 +151,7 @@ class _ApplyProjectScreenState extends State<ApplyProjectScreen> {
         child: Column(
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
-            // Project Preview Card
+            // Project Summary Banner
             Container(
               padding: const EdgeInsets.all(16),
               decoration: BoxDecoration(
@@ -170,41 +162,40 @@ class _ApplyProjectScreenState extends State<ApplyProjectScreen> {
               child: Row(
                 children: [
                   Container(
-                    width: 48,
-                    height: 48,
+                    width: 44,
+                    height: 44,
                     decoration: BoxDecoration(
                       color: AppColors.lightAqua,
                       borderRadius: BorderRadius.circular(12),
                     ),
                     child: Center(
                       child: Text(
-                        (widget.project['company'] ?? 'C')[0].toUpperCase(),
+                        company[0].toUpperCase(),
                         style: GoogleFonts.poppins(
                           fontWeight: FontWeight.bold,
-                          fontSize: 20,
+                          fontSize: 18,
                           color: AppColors.primaryBlue,
                         ),
                       ),
                     ),
                   ),
-                  const SizedBox(width: 14),
+                  const SizedBox(width: 12),
                   Expanded(
                     child: Column(
                       crossAxisAlignment: CrossAxisAlignment.start,
                       children: [
                         Text(
-                          widget.project['title'] ?? 'Project Title',
+                          title,
                           style: GoogleFonts.poppins(
+                            fontSize: 14,
                             fontWeight: FontWeight.bold,
-                            fontSize: 15,
                             color: AppColors.deepNavy,
                           ),
                         ),
-                        const SizedBox(height: 4),
                         Text(
-                          widget.project['company'] ?? 'Company',
+                          company,
                           style: GoogleFonts.inter(
-                            fontSize: 13,
+                            fontSize: 12,
                             color: AppColors.grayText,
                           ),
                         ),
@@ -242,14 +233,14 @@ class _ApplyProjectScreenState extends State<ApplyProjectScreen> {
               maxLines: 4,
               decoration: const InputDecoration(
                 hintText:
-                    'Explain why you are the best fit for this project and your relevant past experience...',
+                    'Introduce yourself, mention why you are interested in this project and why you are a great fit...',
               ),
             ),
             const SizedBox(height: 16),
 
             // Relevant Skills
             Text(
-              'Relevant Skills',
+              'Relevant Skills & Experience',
               style: GoogleFonts.inter(
                 fontSize: 13,
                 fontWeight: FontWeight.w600,
@@ -260,14 +251,15 @@ class _ApplyProjectScreenState extends State<ApplyProjectScreen> {
             TextField(
               controller: _skillsController,
               decoration: const InputDecoration(
-                hintText: 'e.g. Flutter, Dart, UI/UX, REST APIs',
+                hintText: 'e.g. Flutter, Dart, REST API, Git',
+                prefixIcon: Icon(Icons.code_rounded, size: 20),
               ),
             ),
             const SizedBox(height: 16),
 
             // Availability
             Text(
-              'Availability (Hours/Week)',
+              'Weekly Availability',
               style: GoogleFonts.inter(
                 fontSize: 13,
                 fontWeight: FontWeight.w600,
@@ -278,7 +270,8 @@ class _ApplyProjectScreenState extends State<ApplyProjectScreen> {
             TextField(
               controller: _availabilityController,
               decoration: const InputDecoration(
-                hintText: 'e.g. 10-15 hrs/week, Immediate start',
+                hintText: 'e.g. 10-15 hrs/week (Flexible)',
+                prefixIcon: Icon(Icons.access_time_rounded, size: 20),
               ),
             ),
             const SizedBox(height: 16),
@@ -296,16 +289,16 @@ class _ApplyProjectScreenState extends State<ApplyProjectScreen> {
             TextField(
               controller: _portfolioController,
               decoration: const InputDecoration(
-                hintText: 'https://github.com/yourprofile',
+                hintText: 'https://github.com/your-username',
                 prefixIcon: Icon(Icons.link_rounded, size: 20),
               ),
             ),
-            const SizedBox(height: 32),
+            const SizedBox(height: 24),
 
             // Submit Button
             SizedBox(
               width: double.infinity,
-              height: 52,
+              height: 50,
               child: ElevatedButton(
                 style: ElevatedButton.styleFrom(
                   backgroundColor: AppColors.primaryBlue,
@@ -324,19 +317,12 @@ class _ApplyProjectScreenState extends State<ApplyProjectScreen> {
                           strokeWidth: 2,
                         ),
                       )
-                    : Row(
-                        mainAxisAlignment: MainAxisAlignment.center,
-                        children: [
-                          Text(
-                            'Submit Application',
-                            style: GoogleFonts.poppins(
-                              fontSize: 15,
-                              fontWeight: FontWeight.bold,
-                            ),
-                          ),
-                          const SizedBox(width: 8),
-                          const Icon(Icons.send_rounded, size: 16),
-                        ],
+                    : Text(
+                        'Submit Application',
+                        style: GoogleFonts.poppins(
+                          fontSize: 15,
+                          fontWeight: FontWeight.bold,
+                        ),
                       ),
               ),
             ),

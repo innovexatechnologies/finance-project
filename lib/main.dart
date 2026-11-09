@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_dotenv/flutter_dotenv.dart';
 import 'package:supabase_flutter/supabase_flutter.dart';
+import 'core/services/app_data_service.dart';
 import 'core/theme/app_theme.dart';
 import 'feature/splash/presentation/screens/splash_screen.dart';
 
@@ -17,6 +18,9 @@ void main() async {
     publishableKey: dotenv.env['SUPABASE_ANON_KEY'] ??
         dotenv.env['SUPABASE_PUBLISHABLE_KEY'],
   );
+
+  // Persistent storage service initialize karein
+  await AppDataService.instance.init();
 
   runApp(const MyApp());
 }

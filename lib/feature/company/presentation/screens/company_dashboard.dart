@@ -1,5 +1,6 @@
 import 'package:flutter/material.dart';
 import 'package:supabase_flutter/supabase_flutter.dart';
+import 'package:link_vibe/core/services/app_data_service.dart';
 import 'package:link_vibe/feature/auth/presentation/widgets/screens/login_screen.dart';
 import 'applicants_screen.dart';
 import 'post_project_screen.dart';
@@ -59,13 +60,28 @@ class _CompanyDashboardScreenState extends State<CompanyDashboardScreen> {
         });
       }
 
+      final local = AppDataService.instance.getAllProjects().map((p) => {
+        'id': p['id'],
+        'title': p['title'] ?? 'Untitled Project',
+        'budget': p['stipend'] ?? p['budget'] ?? 'N/A',
+        'applicantsCount': 1,
+        'status': p['status'] ?? 'Open',
+      }).toList();
+
       setState(() {
-        _companyProjects = loaded.isNotEmpty ? loaded : _defaultProjects;
+        _companyProjects = loaded.isNotEmpty ? loaded : (local.isNotEmpty ? local : _defaultProjects);
       });
     } catch (_) {
       // Fallback agar table create na hui ho
+      final local = AppDataService.instance.getAllProjects().map((p) => {
+        'id': p['id'],
+        'title': p['title'] ?? 'Untitled Project',
+        'budget': p['stipend'] ?? p['budget'] ?? 'N/A',
+        'applicantsCount': 1,
+        'status': p['status'] ?? 'Open',
+      }).toList();
       setState(() {
-        _companyProjects = _defaultProjects;
+        _companyProjects = local.isNotEmpty ? local : _defaultProjects;
       });
     } finally {
       if (mounted) {

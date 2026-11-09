@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:google_fonts/google_fonts.dart';
 import 'package:link_vibe/core/constants/app_colors.dart';
+import 'package:link_vibe/core/services/app_data_service.dart';
 
 class SubmitWorkScreen extends StatefulWidget {
   final Map<String, dynamic> project;
@@ -18,13 +19,33 @@ class _SubmitWorkScreenState extends State<SubmitWorkScreen> {
   String _selectedFileName = 'project_report_final.pdf';
 
   @override
+  void initState() {
+    super.initState();
+    _loadPreviousSubmission();
+  }
+
+  void _loadPreviousSubmission() {
+    final projectId = widget.project['id']?.toString() ??
+        widget.project['projectId']?.toString() ??
+        '';
+    final existing = AppDataService.instance.getSubmission(projectId);
+    if (existing != null) {
+      _responseController.text = existing['summary'] ?? '';
+      _linkController.text = existing['workLink'] ?? '';
+      if (existing['fileName'] != null) {
+        _selectedFileName = existing['fileName'];
+      }
+    }
+  }
+
+  @override
   void dispose() {
     _responseController.dispose();
     _linkController.dispose();
     super.dispose();
   }
 
-  void _submitWork() {
+  Future<void> _submitWork() async {
     if (_responseController.text.trim().isEmpty) {
       ScaffoldMessenger.of(context).showSnackBar(
         const SnackBar(content: Text('Please enter your submission summary')),
@@ -34,12 +55,27 @@ class _SubmitWorkScreenState extends State<SubmitWorkScreen> {
 
     setState(() => _isSubmitting = true);
 
-    Future.delayed(const Duration(milliseconds: 1000), () {
+    try {
+      final projectId = widget.project['id']?.toString() ??
+          widget.project['projectId']?.toString() ??
+          'proj_${DateTime.now().millisecondsSinceEpoch}';
+      final projectTitle = widget.project['title'] ?? 'Assigned Project';
+      final company = widget.project['company'] ?? 'Company';
+
+      await AppDataService.instance.submitWork(
+        projectId: projectId,
+        projectTitle: projectTitle,
+        company: company,
+        summary: _responseController.text.trim(),
+        workLink: _linkController.text.trim(),
+        fileName: _selectedFileName,
+      );
+
       if (!mounted) return;
-      setState(() => _isSubmitting = false);
 
       showDialog(
         context: context,
+        barrierDismissible: false,
         builder: (context) => AlertDialog(
           shape:
               RoundedRectangleBorder(borderRadius: BorderRadius.circular(20)),
@@ -69,14 +105,15 @@ class _SubmitWorkScreenState extends State<SubmitWorkScreen> {
               ),
               const SizedBox(height: 8),
               Text(
-                'Your submission has been sent to ${widget.project['company']} for review. Status is now "Under Review".',
+                'Your work has been securely stored and sent to $company for review. You will receive feedback once evaluated.',
                 textAlign: TextAlign.center,
                 style: GoogleFonts.inter(
                   fontSize: 13,
                   color: AppColors.grayText,
+                  height: 1.4,
                 ),
               ),
-              const SizedBox(height: 20),
+              const SizedBox(height: 24),
               SizedBox(
                 width: double.infinity,
                 child: ElevatedButton(
@@ -88,8 +125,8 @@ class _SubmitWorkScreenState extends State<SubmitWorkScreen> {
                     ),
                   ),
                   onPressed: () {
-                    Navigator.pop(context); // Close dialog
-                    Navigator.pop(context, true); // Close screen
+                    Navigator.pop(context); // dialog
+                    Navigator.pop(context); // screen
                   },
                   child: const Text('Back to My Projects'),
                 ),
@@ -98,15 +135,31 @@ class _SubmitWorkScreenState extends State<SubmitWorkScreen> {
           ),
         ),
       );
-    });
+    } catch (e) {
+      if (!mounted) return;
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(content: Text('Error: $e'), backgroundColor: Colors.red),
+      );
+    } finally {
+      if (mounted) {
+        setState(() => _isSubmitting = false);
+      }
+    }
   }
 
   @override
   Widget build(BuildContext context) {
+    final title = widget.project['title'] ?? 'Project Submission';
+    final company = widget.project['company'] ?? 'TechVista';
+    final projectId = widget.project['id']?.toString() ??
+        widget.project['projectId']?.toString() ??
+        '';
+    final existingSubmission = AppDataService.instance.getSubmission(projectId);
+
     return Scaffold(
       backgroundColor: AppColors.background,
       appBar: AppBar(
-        title: const Text('Project Workspace'),
+        title: const Text('Submit Project Work'),
         leading: IconButton(
           icon: const Icon(Icons.arrow_back_ios_new_rounded, size: 20),
           onPressed: () => Navigator.pop(context),
@@ -117,7 +170,7 @@ class _SubmitWorkScreenState extends State<SubmitWorkScreen> {
         child: Column(
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
-            // Assignment Header Card
+            // Project Brief Box
             Container(
               padding: const EdgeInsets.all(16),
               decoration: BoxDecoration(
@@ -131,45 +184,41 @@ class _SubmitWorkScreenState extends State<SubmitWorkScreen> {
                   Row(
                     mainAxisAlignment: MainAxisAlignment.spaceBetween,
                     children: [
-                      Container(
-                        padding: const EdgeInsets.symmetric(
-                            horizontal: 10, vertical: 4),
-                        decoration: BoxDecoration(
-                          color: AppColors.teal.withValues(alpha: 0.12),
-                          borderRadius: BorderRadius.circular(8),
-                        ),
+                      Expanded(
                         child: Text(
-                          'In Progress',
-                          style: GoogleFonts.inter(
-                            fontSize: 12,
+                          title,
+                          style: GoogleFonts.poppins(
+                            fontSize: 15,
                             fontWeight: FontWeight.bold,
                             color: AppColors.deepNavy,
                           ),
                         ),
                       ),
-                      Text(
-                        'Due: Nov 15, 2026',
-                        style: GoogleFonts.inter(
-                          fontSize: 12,
-                          color: AppColors.grayText,
+                      Container(
+                        padding: const EdgeInsets.symmetric(
+                            horizontal: 8, vertical: 3),
+                        decoration: BoxDecoration(
+                          color: AppColors.lightAqua,
+                          borderRadius: BorderRadius.circular(6),
+                        ),
+                        child: Text(
+                          existingSubmission != null
+                              ? 'Submitted'
+                              : 'Due Nov 15',
+                          style: GoogleFonts.inter(
+                            fontSize: 11,
+                            fontWeight: FontWeight.bold,
+                            color: AppColors.primaryBlue,
+                          ),
                         ),
                       ),
                     ],
                   ),
-                  const SizedBox(height: 10),
-                  Text(
-                    widget.project['title'] ?? 'Assigned Project',
-                    style: GoogleFonts.poppins(
-                      fontSize: 16,
-                      fontWeight: FontWeight.bold,
-                      color: AppColors.deepNavy,
-                    ),
-                  ),
                   const SizedBox(height: 4),
                   Text(
-                    'Company: ${widget.project['company'] ?? 'TechVista'}',
+                    'Client: $company',
                     style: GoogleFonts.inter(
-                      fontSize: 13,
+                      fontSize: 12,
                       color: AppColors.grayText,
                     ),
                   ),
@@ -178,38 +227,38 @@ class _SubmitWorkScreenState extends State<SubmitWorkScreen> {
             ),
             const SizedBox(height: 24),
 
-            // Instructions Box
-            Text(
-              'Required Deliverables & Instructions',
-              style: GoogleFonts.poppins(
-                fontSize: 15,
-                fontWeight: FontWeight.bold,
-                color: AppColors.deepNavy,
-              ),
-            ),
-            const SizedBox(height: 8),
-            Container(
-              width: double.infinity,
-              padding: const EdgeInsets.all(14),
-              decoration: BoxDecoration(
-                color: AppColors.lightAqua.withValues(alpha: 0.5),
-                borderRadius: BorderRadius.circular(12),
-                border: Border.all(color: AppColors.teal.withValues(alpha: 0.2)),
-              ),
-              child: Text(
-                '1. Attach comprehensive project analysis document or presentation.\n2. Provide repository link or live demo URL.\n3. Add release notes detailing completed milestones.',
-                style: GoogleFonts.inter(
-                  fontSize: 13,
-                  color: AppColors.deepNavy,
-                  height: 1.5,
+            if (existingSubmission != null) ...[
+              Container(
+                padding: const EdgeInsets.all(12),
+                decoration: BoxDecoration(
+                  color: AppColors.teal.withValues(alpha: 0.1),
+                  borderRadius: BorderRadius.circular(12),
+                  border: Border.all(
+                      color: AppColors.teal.withValues(alpha: 0.3)),
+                ),
+                child: Row(
+                  children: [
+                    const Icon(Icons.check_circle_outline_rounded,
+                        color: AppColors.teal, size: 20),
+                    const SizedBox(width: 8),
+                    Expanded(
+                      child: Text(
+                        'Previous submission stored (${existingSubmission['submittedAt']}). You can edit and re-submit below.',
+                        style: GoogleFonts.inter(
+                          fontSize: 12,
+                          color: AppColors.deepNavy,
+                        ),
+                      ),
+                    ),
+                  ],
                 ),
               ),
-            ),
-            const SizedBox(height: 20),
+              const SizedBox(height: 16),
+            ],
 
-            // Text Response Field
+            // Submission Notes
             Text(
-              'Submission Summary & Notes *',
+              'Summary & Notes *',
               style: GoogleFonts.inter(
                 fontSize: 13,
                 fontWeight: FontWeight.w600,
@@ -219,17 +268,17 @@ class _SubmitWorkScreenState extends State<SubmitWorkScreen> {
             const SizedBox(height: 6),
             TextField(
               controller: _responseController,
-              maxLines: 4,
+              maxLines: 5,
               decoration: const InputDecoration(
                 hintText:
-                    'Describe the deliverables, testing methodologies, and key outcomes completed...',
+                    'Explain what you completed, results obtained, methodology used, and any important notes...',
               ),
             ),
-            const SizedBox(height: 16),
+            const SizedBox(height: 20),
 
-            // Live Demo / GitHub Link
+            // Live Demo / GitHub Repo Link
             Text(
-              'Live Demo / GitHub Repository URL',
+              'Project URL / GitHub Repository Link',
               style: GoogleFonts.inter(
                 fontSize: 13,
                 fontWeight: FontWeight.w600,
@@ -240,7 +289,7 @@ class _SubmitWorkScreenState extends State<SubmitWorkScreen> {
             TextField(
               controller: _linkController,
               decoration: const InputDecoration(
-                hintText: 'https://github.com/student/project-submission',
+                hintText: 'https://github.com/username/project-repo',
                 prefixIcon: Icon(Icons.link_rounded, size: 20),
               ),
             ),
@@ -248,7 +297,7 @@ class _SubmitWorkScreenState extends State<SubmitWorkScreen> {
 
             // File Upload Section
             Text(
-              'Deliverables File Upload',
+              'Deliverable File (PDF, ZIP, DOCX)',
               style: GoogleFonts.inter(
                 fontSize: 13,
                 fontWeight: FontWeight.w600,
@@ -256,14 +305,15 @@ class _SubmitWorkScreenState extends State<SubmitWorkScreen> {
               ),
             ),
             const SizedBox(height: 8),
+
             Container(
               padding: const EdgeInsets.all(16),
               decoration: BoxDecoration(
                 color: AppColors.cardWhite,
-                borderRadius: BorderRadius.circular(14),
+                borderRadius: BorderRadius.circular(16),
                 border: Border.all(
-                  color: AppColors.primaryBlue.withValues(alpha: 0.4),
-                  style: BorderStyle.solid,
+                  color: AppColors.teal.withValues(alpha: 0.5),
+                  width: 1.2,
                 ),
               ),
               child: Row(
@@ -275,8 +325,8 @@ class _SubmitWorkScreenState extends State<SubmitWorkScreen> {
                       borderRadius: BorderRadius.circular(10),
                     ),
                     child: const Icon(
-                      Icons.picture_as_pdf_rounded,
-                      color: Colors.redAccent,
+                      Icons.description_rounded,
+                      color: AppColors.primaryBlue,
                       size: 24,
                     ),
                   ),
@@ -287,14 +337,14 @@ class _SubmitWorkScreenState extends State<SubmitWorkScreen> {
                       children: [
                         Text(
                           _selectedFileName,
-                          style: GoogleFonts.inter(
+                          style: GoogleFonts.poppins(
                             fontSize: 13,
-                            fontWeight: FontWeight.bold,
+                            fontWeight: FontWeight.w600,
                             color: AppColors.deepNavy,
                           ),
                         ),
                         Text(
-                          '2.4 MB • PDF Document',
+                          '2.4 MB • Ready to attach',
                           style: GoogleFonts.inter(
                             fontSize: 11,
                             color: AppColors.grayText,
@@ -303,27 +353,30 @@ class _SubmitWorkScreenState extends State<SubmitWorkScreen> {
                       ],
                     ),
                   ),
-                  TextButton.icon(
+                  TextButton(
                     onPressed: () {
                       setState(() {
-                        _selectedFileName = 'project_report_v2_updated.pdf';
+                        _selectedFileName =
+                            'updated_deliverable_${DateTime.now().minute}.pdf';
                       });
                       ScaffoldMessenger.of(context).showSnackBar(
-                        const SnackBar(content: Text('File updated to project_report_v2_updated.pdf')),
+                        const SnackBar(
+                          content: Text('Attached deliverable file updated.'),
+                          duration: Duration(seconds: 1),
+                        ),
                       );
                     },
-                    icon: const Icon(Icons.upload_file_rounded, size: 16),
-                    label: const Text('Change'),
+                    child: const Text('Change'),
                   ),
                 ],
               ),
             ),
             const SizedBox(height: 32),
 
-            // Submit Work Button
+            // Submit Button
             SizedBox(
               width: double.infinity,
-              height: 52,
+              height: 50,
               child: ElevatedButton(
                 style: ElevatedButton.styleFrom(
                   backgroundColor: AppColors.primaryBlue,
@@ -342,19 +395,14 @@ class _SubmitWorkScreenState extends State<SubmitWorkScreen> {
                           strokeWidth: 2,
                         ),
                       )
-                    : Row(
-                        mainAxisAlignment: MainAxisAlignment.center,
-                        children: [
-                          Text(
-                            'Submit Work for Review',
-                            style: GoogleFonts.poppins(
-                              fontSize: 15,
-                              fontWeight: FontWeight.bold,
-                            ),
-                          ),
-                          const SizedBox(width: 8),
-                          const Icon(Icons.arrow_forward_rounded, size: 16),
-                        ],
+                    : Text(
+                        existingSubmission != null
+                            ? 'Update & Resubmit Work'
+                            : 'Submit Work',
+                        style: GoogleFonts.poppins(
+                          fontSize: 15,
+                          fontWeight: FontWeight.bold,
+                        ),
                       ),
               ),
             ),

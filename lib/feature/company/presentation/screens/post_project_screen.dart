@@ -1,5 +1,6 @@
 import 'package:flutter/material.dart';
 import 'package:supabase_flutter/supabase_flutter.dart';
+import 'package:link_vibe/core/services/app_data_service.dart';
 
 class PostProjectScreen extends StatefulWidget {
   const PostProjectScreen({super.key});
@@ -44,14 +45,30 @@ class _PostProjectScreenState extends State<PostProjectScreen> {
       final user = supabase.auth.currentUser;
       final companyName = user?.userMetadata?['name'] ?? 'Company';
 
-      await supabase.from('projects').insert({
+      // 1. Persistent local storage me save karein
+      await AppDataService.instance.addProject({
         'title': title,
         'description': description,
-        'budget': budget,
-        'company_name': companyName,
+        'stipend': budget,
+        'company': companyName,
+        'category': 'Development',
+        'duration': '3-5 days',
+        'workMode': 'Remote',
         'status': 'Open',
-        'user_id': user?.id,
+        'skills': ['Flutter', 'Problem Solving'],
       });
+
+      // 2. Supabase table me save karein
+      try {
+        await supabase.from('projects').insert({
+          'title': title,
+          'description': description,
+          'budget': budget,
+          'company_name': companyName,
+          'status': 'Open',
+          'user_id': user?.id,
+        });
+      } catch (_) {}
 
       if (!mounted) return;
 

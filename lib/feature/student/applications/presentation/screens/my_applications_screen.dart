@@ -1,7 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:google_fonts/google_fonts.dart';
-import 'package:supabase_flutter/supabase_flutter.dart';
 import 'package:link_vibe/core/constants/app_colors.dart';
+import 'package:link_vibe/core/services/app_data_service.dart';
 
 class MyApplicationsScreen extends StatefulWidget {
   const MyApplicationsScreen({super.key});
@@ -20,323 +20,309 @@ class _MyApplicationsScreenState extends State<MyApplicationsScreen> {
     'Rejected',
   ];
 
-  final List<Map<String, dynamic>> _dummyApplications = [
-    {
-      'title': 'Flutter E-Commerce App Redesign',
-      'company': 'Innovexa Technologies',
-      'status': 'Pending',
-      'appliedDate': 'Nov 08, 2026',
-      'timelineStep': 1,
-    },
-    {
-      'title': 'Market Research on AI Tools',
-      'company': 'Google',
-      'status': 'Shortlisted',
-      'appliedDate': 'Nov 06, 2026',
-      'timelineStep': 2,
-    },
-    {
-      'title': 'Barcode Scanning Mobile Utility',
-      'company': 'CodeCraft Solutions',
-      'status': 'Accepted',
-      'appliedDate': 'Nov 02, 2026',
-      'timelineStep': 3,
-    },
-    {
-      'title': 'UI/UX Design for Web App',
-      'company': 'Microsoft',
-      'status': 'Rejected',
-      'appliedDate': 'Oct 28, 2026',
-      'timelineStep': 1,
-    },
-  ];
-
-  List<Map<String, dynamic>> _liveApplications = [];
-  bool _isLoading = false;
-
-  @override
-  void initState() {
-    super.initState();
-    _fetchApplications();
-  }
-
-  Future<void> _fetchApplications() async {
-    setState(() => _isLoading = true);
-    try {
-      final supabase = Supabase.instance.client;
-      final user = supabase.auth.currentUser;
-      if (user != null) {
-        final response = await supabase
-            .from('applications')
-            .select('*, projects(*)')
-            .eq('applicant_id', user.id)
-            .order('created_at', ascending: false);
-
-        final List<Map<String, dynamic>> loaded = [];
-        for (var item in response) {
-          final project = item['projects'] as Map<String, dynamic>?;
-          loaded.add({
-            'title': project?['title'] ?? 'Applied Project',
-            'company': project?['company_name'] ?? 'Company',
-            'status': item['status'] ?? 'Pending',
-            'appliedDate': 'Today',
-            'timelineStep': item['status'] == 'Accepted' ? 3 : 1,
-          });
-        }
-
-        if (mounted) {
-          setState(() {
-            _liveApplications = loaded;
-          });
-        }
-      }
-    } catch (_) {
-      // Fallback
-    } finally {
-      if (mounted) {
-        setState(() => _isLoading = false);
-      }
-    }
-  }
-
-  List<Map<String, dynamic>> get _filteredApplications {
-    final list = [..._liveApplications, ..._dummyApplications];
-    if (_selectedFilter == 'All') return list;
-    return list
-        .where((app) =>
-            app['status']?.toString().toLowerCase() ==
-            _selectedFilter.toLowerCase())
-        .toList();
-  }
-
-  Color _getStatusColor(String status) {
-    switch (status.toLowerCase()) {
-      case 'accepted':
-        return AppColors.statusOpen;
-      case 'shortlisted':
-        return AppColors.teal;
-      case 'rejected':
-        return AppColors.statusClosed;
-      default:
-        return AppColors.statusPending;
-    }
-  }
-
   @override
   Widget build(BuildContext context) {
     return Scaffold(
       backgroundColor: AppColors.background,
       appBar: AppBar(
         title: const Text('My Applications'),
-        actions: [
-          IconButton(
-            icon: const Icon(Icons.refresh_rounded),
-            onPressed: _fetchApplications,
-          ),
-          const SizedBox(width: 8),
-        ],
+        leading: IconButton(
+          icon: const Icon(Icons.arrow_back_ios_new_rounded, size: 20),
+          onPressed: () => Navigator.pop(context),
+        ),
       ),
-      body: Column(
-        children: [
-          // Filter Chips Row
-          SizedBox(
-            height: 48,
-            child: ListView.builder(
-              scrollDirection: Axis.horizontal,
-              padding:
-                  const EdgeInsets.symmetric(horizontal: 16.0, vertical: 6.0),
-              itemCount: _filters.length,
-              itemBuilder: (context, index) {
-                final filter = _filters[index];
-                final isSelected = filter == _selectedFilter;
-                return Padding(
-                  padding: const EdgeInsets.only(right: 8.0),
-                  child: FilterChip(
-                    label: Text(filter),
-                    selected: isSelected,
-                    onSelected: (_) {
-                      setState(() {
-                        _selectedFilter = filter;
-                      });
-                    },
-                    selectedColor: AppColors.primaryBlue,
-                    backgroundColor: AppColors.cardWhite,
-                    labelStyle: GoogleFonts.inter(
-                      fontSize: 12,
-                      fontWeight:
-                          isSelected ? FontWeight.bold : FontWeight.w500,
-                      color: isSelected ? Colors.white : AppColors.darkText,
-                    ),
-                    shape: RoundedRectangleBorder(
-                      borderRadius: BorderRadius.circular(16),
-                      side: BorderSide(
-                        color: isSelected
-                            ? AppColors.primaryBlue
-                            : AppColors.lightGray,
-                      ),
-                    ),
-                    showCheckmark: false,
-                  ),
-                );
-              },
-            ),
-          ),
-          const SizedBox(height: 8),
+      body: ListenableBuilder(
+        listenable: AppDataService.instance,
+        builder: (context, _) {
+          final allApps = AppDataService.instance.getApplications();
 
-          // Applications List
-          Expanded(
-            child: _isLoading
-                ? const Center(child: CircularProgressIndicator())
-                : _filteredApplications.isEmpty
+          final filteredApps = allApps.where((app) {
+            if (_selectedFilter == 'All') return true;
+            return app['status']?.toString().toLowerCase() ==
+                _selectedFilter.toLowerCase();
+          }).toList();
+
+          return Column(
+            children: [
+              // Filter Chips Horizontal Row
+              SizedBox(
+                height: 52,
+                child: ListView.builder(
+                  scrollDirection: Axis.horizontal,
+                  padding:
+                      const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
+                  itemCount: _filters.length,
+                  itemBuilder: (context, index) {
+                    final filter = _filters[index];
+                    final isSelected = _selectedFilter == filter;
+                    return Padding(
+                      padding: const EdgeInsets.only(right: 8.0),
+                      child: ChoiceChip(
+                        label: Text(filter),
+                        selected: isSelected,
+                        onSelected: (selected) {
+                          if (selected) {
+                            setState(() {
+                              _selectedFilter = filter;
+                            });
+                          }
+                        },
+                        selectedColor: AppColors.primaryBlue,
+                        backgroundColor: AppColors.cardWhite,
+                        labelStyle: GoogleFonts.inter(
+                          fontSize: 12,
+                          fontWeight:
+                              isSelected ? FontWeight.bold : FontWeight.w500,
+                          color: isSelected ? Colors.white : AppColors.darkText,
+                        ),
+                        shape: RoundedRectangleBorder(
+                          borderRadius: BorderRadius.circular(20),
+                          side: BorderSide(
+                            color: isSelected
+                                ? AppColors.primaryBlue
+                                : AppColors.lightGray,
+                          ),
+                        ),
+                        showCheckmark: false,
+                      ),
+                    );
+                  },
+                ),
+              ),
+
+              // Applications List
+              Expanded(
+                child: filteredApps.isEmpty
                     ? Center(
-                        child: Text(
-                          'No applications found',
-                          style: GoogleFonts.inter(color: AppColors.grayText),
+                        child: Column(
+                          mainAxisAlignment: MainAxisAlignment.center,
+                          children: [
+                            const Icon(Icons.assignment_late_outlined,
+                                size: 52, color: AppColors.grayText),
+                            const SizedBox(height: 12),
+                            Text(
+                              'No applications found',
+                              style: GoogleFonts.poppins(
+                                fontSize: 16,
+                                fontWeight: FontWeight.bold,
+                                color: AppColors.deepNavy,
+                              ),
+                            ),
+                            const SizedBox(height: 4),
+                            Text(
+                              _selectedFilter == 'All'
+                                  ? 'Apply for available opportunities from Explore'
+                                  : 'No applications under $_selectedFilter status',
+                              style: GoogleFonts.inter(
+                                fontSize: 12,
+                                color: AppColors.grayText,
+                              ),
+                            ),
+                          ],
                         ),
                       )
                     : ListView.builder(
                         padding: const EdgeInsets.all(16.0),
-                        itemCount: _filteredApplications.length,
+                        itemCount: filteredApps.length,
                         itemBuilder: (context, index) {
-                          final app = _filteredApplications[index];
+                          final app = filteredApps[index];
                           final status = app['status'] ?? 'Pending';
-                          final statusColor = _getStatusColor(status);
+                          final timelineStep =
+                              (app['timelineStep'] as int?) ?? 1;
 
                           return Card(
                             margin: const EdgeInsets.only(bottom: 14),
                             shape: RoundedRectangleBorder(
                               borderRadius: BorderRadius.circular(16),
-                              side: const BorderSide(
-                                  color: AppColors.lightGray, width: 0.8),
+                              side:
+                                  const BorderSide(color: AppColors.lightGray),
                             ),
                             child: Padding(
                               padding: const EdgeInsets.all(16.0),
                               child: Column(
                                 crossAxisAlignment: CrossAxisAlignment.start,
                                 children: [
+                                  // Header Row: Company, Title, Status
+                                  Row(
+                                    children: [
+                                      Container(
+                                        width: 44,
+                                        height: 44,
+                                        decoration: BoxDecoration(
+                                          color: AppColors.lightAqua,
+                                          borderRadius:
+                                              BorderRadius.circular(12),
+                                        ),
+                                        child: Center(
+                                          child: Text(
+                                            (app['company'] ?? 'C')[0]
+                                                .toUpperCase(),
+                                            style: GoogleFonts.poppins(
+                                              fontSize: 18,
+                                              fontWeight: FontWeight.bold,
+                                              color: AppColors.primaryBlue,
+                                            ),
+                                          ),
+                                        ),
+                                      ),
+                                      const SizedBox(width: 12),
+                                      Expanded(
+                                        child: Column(
+                                          crossAxisAlignment:
+                                              CrossAxisAlignment.start,
+                                          children: [
+                                            Text(
+                                              app['title'] ?? 'Title',
+                                              style: GoogleFonts.poppins(
+                                                fontSize: 14,
+                                                fontWeight: FontWeight.bold,
+                                                color: AppColors.deepNavy,
+                                              ),
+                                            ),
+                                            Text(
+                                              app['company'] ?? 'Company',
+                                              style: GoogleFonts.inter(
+                                                fontSize: 12,
+                                                color: AppColors.grayText,
+                                              ),
+                                            ),
+                                          ],
+                                        ),
+                                      ),
+                                      _buildStatusBadge(status),
+                                    ],
+                                  ),
+                                  const SizedBox(height: 14),
+
+                                  // Submission Date & Info
                                   Row(
                                     mainAxisAlignment:
                                         MainAxisAlignment.spaceBetween,
                                     children: [
-                                      Expanded(
-                                        child: Text(
-                                          app['title'] ?? 'Project',
-                                          style: GoogleFonts.poppins(
-                                            fontSize: 15,
-                                            fontWeight: FontWeight.bold,
-                                            color: AppColors.deepNavy,
-                                          ),
+                                      Text(
+                                        'Applied on: ${app['appliedDate'] ?? 'Nov 2026'}',
+                                        style: GoogleFonts.inter(
+                                          fontSize: 11,
+                                          color: AppColors.grayText,
                                         ),
                                       ),
-                                      Container(
-                                        padding: const EdgeInsets.symmetric(
-                                            horizontal: 10, vertical: 4),
-                                        decoration: BoxDecoration(
-                                          color: statusColor
-                                              .withValues(alpha: 0.12),
-                                          borderRadius:
-                                              BorderRadius.circular(8),
-                                        ),
-                                        child: Text(
-                                          status,
-                                          style: GoogleFonts.inter(
-                                            fontSize: 12,
-                                            fontWeight: FontWeight.bold,
-                                            color: statusColor,
-                                          ),
+                                      Text(
+                                        'Stage $timelineStep of 3',
+                                        style: GoogleFonts.inter(
+                                          fontSize: 11,
+                                          fontWeight: FontWeight.w600,
+                                          color: AppColors.primaryBlue,
                                         ),
                                       ),
                                     ],
                                   ),
-                                  const SizedBox(height: 6),
-                                  Text(
-                                    'Company: ${app['company']}',
-                                    style: GoogleFonts.inter(
-                                      fontSize: 13,
-                                      color: AppColors.grayText,
-                                    ),
-                                  ),
-                                  const SizedBox(height: 4),
-                                  Text(
-                                    'Applied on: ${app['appliedDate']}',
-                                    style: GoogleFonts.inter(
-                                      fontSize: 12,
-                                      color: AppColors.grayText,
-                                    ),
-                                  ),
-                                  const Divider(height: 24),
+                                  const SizedBox(height: 12),
 
-                                  // Timeline Progress Step Indicator
-                                  Row(
-                                    children: [
-                                      _buildTimelineStep(
-                                          'Submitted', true, true),
-                                      _buildTimelineDivider(
-                                          app['timelineStep'] >= 2),
-                                      _buildTimelineStep(
-                                        'Review',
-                                        app['timelineStep'] >= 2,
-                                        app['timelineStep'] >= 2,
-                                      ),
-                                      _buildTimelineDivider(
-                                          app['timelineStep'] >= 3),
-                                      _buildTimelineStep(
-                                        'Decision',
-                                        app['timelineStep'] >= 3,
-                                        app['timelineStep'] >= 3,
-                                      ),
-                                    ],
-                                  ),
+                                  // Timeline Progress Indicator
+                                  _buildTimelineBar(timelineStep, status),
                                 ],
                               ),
                             ),
                           );
                         },
                       ),
-          ),
-        ],
+              ),
+            ],
+          );
+        },
       ),
     );
   }
 
-  Widget _buildTimelineStep(String label, bool isDone, bool isActive) {
+  Widget _buildStatusBadge(String status) {
+    Color bg = AppColors.lightAqua;
+    Color fg = AppColors.primaryBlue;
+
+    if (status == 'Accepted' || status == 'Completed') {
+      bg = AppColors.statusOpen.withValues(alpha: 0.12);
+      fg = AppColors.statusOpen;
+    } else if (status == 'Rejected') {
+      bg = const Color(0xFFFEE2E2);
+      fg = const Color(0xFFDC2626);
+    } else if (status == 'Shortlisted' || status == 'In Progress') {
+      bg = const Color(0xFFFEF3C7);
+      fg = const Color(0xFFD97706);
+    }
+
+    return Container(
+      padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 4),
+      decoration: BoxDecoration(
+        color: bg,
+        borderRadius: BorderRadius.circular(8),
+      ),
+      child: Text(
+        status,
+        style: GoogleFonts.inter(
+          fontSize: 11,
+          fontWeight: FontWeight.bold,
+          color: fg,
+        ),
+      ),
+    );
+  }
+
+  Widget _buildTimelineBar(int step, String status) {
+    final isRejected = status == 'Rejected';
+
+    return Row(
+      children: [
+        _buildTimelineStep('Submitted', step >= 1, isRejected && step == 1),
+        Expanded(
+          child: Container(
+            height: 3,
+            color: step >= 2 ? AppColors.primaryBlue : AppColors.lightGray,
+          ),
+        ),
+        _buildTimelineStep(
+            'Review', step >= 2, isRejected && step == 2),
+        Expanded(
+          child: Container(
+            height: 3,
+            color: step >= 3 ? AppColors.primaryBlue : AppColors.lightGray,
+          ),
+        ),
+        _buildTimelineStep(
+            isRejected ? 'Rejected' : 'Accepted',
+            step >= 3,
+            isRejected),
+      ],
+    );
+  }
+
+  Widget _buildTimelineStep(String label, bool isDone, bool isAlert) {
+    Color dotColor = AppColors.lightGray;
+    if (isAlert) {
+      dotColor = Colors.redAccent;
+    } else if (isDone) {
+      dotColor = AppColors.primaryBlue;
+    }
+
     return Column(
       children: [
         Container(
-          width: 20,
-          height: 20,
+          width: 14,
+          height: 14,
           decoration: BoxDecoration(
-            color: isDone ? AppColors.primaryBlue : AppColors.cardWhite,
+            color: dotColor,
             shape: BoxShape.circle,
-            border: Border.all(
-              color: isDone ? AppColors.primaryBlue : AppColors.lightGray,
-              width: 2,
-            ),
+            border: Border.all(color: Colors.white, width: 2),
           ),
-          child: isDone
-              ? const Icon(Icons.check, size: 12, color: Colors.white)
-              : null,
         ),
         const SizedBox(height: 4),
         Text(
           label,
           style: GoogleFonts.inter(
             fontSize: 10,
-            fontWeight: isActive ? FontWeight.bold : FontWeight.w500,
-            color: isActive ? AppColors.deepNavy : AppColors.grayText,
+            fontWeight: isDone ? FontWeight.bold : FontWeight.normal,
+            color: isDone ? AppColors.deepNavy : AppColors.grayText,
           ),
         ),
       ],
-    );
-  }
-
-  Widget _buildTimelineDivider(bool isDone) {
-    return Expanded(
-      child: Container(
-        height: 2,
-        margin: const EdgeInsets.only(bottom: 14),
-        color: isDone ? AppColors.primaryBlue : AppColors.lightGray,
-      ),
     );
   }
 }

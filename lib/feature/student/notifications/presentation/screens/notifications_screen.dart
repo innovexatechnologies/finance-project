@@ -1,55 +1,13 @@
 import 'package:flutter/material.dart';
 import 'package:google_fonts/google_fonts.dart';
 import 'package:link_vibe/core/constants/app_colors.dart';
+import 'package:link_vibe/core/services/app_data_service.dart';
 
 class NotificationsScreen extends StatelessWidget {
   const NotificationsScreen({super.key});
 
   @override
   Widget build(BuildContext context) {
-    final List<Map<String, dynamic>> notifications = [
-      {
-        'title': 'Your project is approved!',
-        'subtitle': 'Barcode Scanning Mobile Utility final review passed.',
-        'time': '2h ago',
-        'icon': Icons.check_circle_rounded,
-        'color': AppColors.statusOpen,
-        'isUnread': true,
-      },
-      {
-        'title': 'New project available:',
-        'subtitle': 'UI Design for Web App published by Microsoft.',
-        'time': '3h ago',
-        'icon': Icons.campaign_rounded,
-        'color': const Color(0xFFEF4444),
-        'isUnread': true,
-      },
-      {
-        'title': 'You earned 500 points!',
-        'subtitle': 'Milestone bonus for on-time submission.',
-        'time': '1d ago',
-        'icon': Icons.stars_rounded,
-        'color': const Color(0xFFF59E0B),
-        'isUnread': false,
-      },
-      {
-        'title': 'Your profile is verified',
-        'subtitle': 'Academic identity confirmed with University portal.',
-        'time': '2d ago',
-        'icon': Icons.verified_user_rounded,
-        'color': AppColors.teal,
-        'isUnread': false,
-      },
-      {
-        'title': 'Application Shortlisted',
-        'subtitle': 'Google shortlisted your Market Research application.',
-        'time': '3d ago',
-        'icon': Icons.thumb_up_alt_rounded,
-        'color': AppColors.primaryBlue,
-        'isUnread': false,
-      },
-    ];
-
     return Scaffold(
       backgroundColor: AppColors.background,
       appBar: AppBar(
@@ -61,8 +19,10 @@ class NotificationsScreen extends StatelessWidget {
         actions: [
           TextButton(
             onPressed: () {
+              AppDataService.instance.markNotificationsRead();
               ScaffoldMessenger.of(context).showSnackBar(
-                const SnackBar(content: Text('All notifications marked as read')),
+                const SnackBar(
+                    content: Text('All notifications marked as read')),
               );
             },
             child: Text(
@@ -77,63 +37,132 @@ class NotificationsScreen extends StatelessWidget {
           const SizedBox(width: 8),
         ],
       ),
-      body: ListView.separated(
-        padding: const EdgeInsets.symmetric(horizontal: 16.0, vertical: 12.0),
-        itemCount: notifications.length,
-        separatorBuilder: (_, _) => const SizedBox(height: 8),
-        itemBuilder: (context, index) {
-          final item = notifications[index];
-          final color = item['color'] as Color;
-          final isUnread = item['isUnread'] as bool;
+      body: ListenableBuilder(
+        listenable: AppDataService.instance,
+        builder: (context, _) {
+          final notifications = AppDataService.instance.getNotifications();
 
-          return Card(
-            elevation: isUnread ? 1 : 0,
-            shape: RoundedRectangleBorder(
-              borderRadius: BorderRadius.circular(14),
-              side: BorderSide(
-                color: isUnread
-                    ? AppColors.primaryBlue.withValues(alpha: 0.3)
-                    : AppColors.lightGray,
+          if (notifications.isEmpty) {
+            return Center(
+              child: Column(
+                mainAxisAlignment: MainAxisAlignment.center,
+                children: [
+                  const Icon(Icons.notifications_off_outlined,
+                      size: 52, color: AppColors.grayText),
+                  const SizedBox(height: 12),
+                  Text(
+                    'No notifications',
+                    style: GoogleFonts.poppins(
+                      fontSize: 16,
+                      fontWeight: FontWeight.bold,
+                      color: AppColors.deepNavy,
+                    ),
+                  ),
+                ],
               ),
-            ),
-            child: ListTile(
-              contentPadding:
-                  const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
-              leading: Container(
-                width: 44,
-                height: 44,
-                decoration: BoxDecoration(
-                  color: color.withValues(alpha: 0.12),
-                  shape: BoxShape.circle,
-                ),
-                child: Icon(item['icon'] as IconData, color: color, size: 22),
-              ),
-              title: Text(
-                item['title'],
-                style: GoogleFonts.poppins(
-                  fontSize: 14,
-                  fontWeight: isUnread ? FontWeight.bold : FontWeight.w600,
-                  color: AppColors.deepNavy,
-                ),
-              ),
-              subtitle: Padding(
-                padding: const EdgeInsets.only(top: 4.0),
-                child: Text(
-                  item['subtitle'],
-                  style: GoogleFonts.inter(
-                    fontSize: 12,
-                    color: AppColors.grayText,
+            );
+          }
+
+          return ListView.separated(
+            padding:
+                const EdgeInsets.symmetric(horizontal: 16.0, vertical: 12.0),
+            itemCount: notifications.length,
+            separatorBuilder: (_, _) => const SizedBox(height: 8),
+            itemBuilder: (context, index) {
+              final item = notifications[index];
+              final isUnread = !(item['isRead'] as bool? ?? false);
+              final type = item['type']?.toString() ?? 'default';
+
+              Color color = AppColors.primaryBlue;
+              IconData icon = Icons.notifications_rounded;
+
+              if (type == 'shortlisted') {
+                color = const Color(0xFFD97706);
+                icon = Icons.thumb_up_alt_rounded;
+              } else if (type == 'assigned') {
+                color = const Color(0xFF7C3AED);
+                icon = Icons.assignment_ind_rounded;
+              } else if (type == 'approved' || type == 'submitted') {
+                color = AppColors.statusOpen;
+                icon = Icons.check_circle_rounded;
+              } else if (type == 'certificate') {
+                color = AppColors.teal;
+                icon = Icons.military_tech_rounded;
+              }
+
+              return Card(
+                elevation: isUnread ? 1 : 0,
+                shape: RoundedRectangleBorder(
+                  borderRadius: BorderRadius.circular(14),
+                  side: BorderSide(
+                    color: isUnread
+                        ? AppColors.primaryBlue.withValues(alpha: 0.3)
+                        : AppColors.lightGray,
                   ),
                 ),
-              ),
-              trailing: Text(
-                item['time'],
-                style: GoogleFonts.inter(
-                  fontSize: 11,
-                  color: AppColors.grayText,
+                color: isUnread ? Colors.white : AppColors.cardWhite,
+                child: Padding(
+                  padding: const EdgeInsets.all(14.0),
+                  child: Row(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      Container(
+                        padding: const EdgeInsets.all(8),
+                        decoration: BoxDecoration(
+                          color: color.withValues(alpha: 0.12),
+                          shape: BoxShape.circle,
+                        ),
+                        child: Icon(icon, color: color, size: 20),
+                      ),
+                      const SizedBox(width: 12),
+                      Expanded(
+                        child: Column(
+                          crossAxisAlignment: CrossAxisAlignment.start,
+                          children: [
+                            Text(
+                              item['title'] ?? 'Notification',
+                              style: GoogleFonts.poppins(
+                                fontSize: 13,
+                                fontWeight: isUnread
+                                    ? FontWeight.bold
+                                    : FontWeight.w600,
+                                color: AppColors.deepNavy,
+                              ),
+                            ),
+                            const SizedBox(height: 2),
+                            Text(
+                              item['subtitle'] ?? '',
+                              style: GoogleFonts.inter(
+                                fontSize: 12,
+                                color: AppColors.grayText,
+                              ),
+                            ),
+                            const SizedBox(height: 6),
+                            Text(
+                              item['time'] ?? 'Recent',
+                              style: GoogleFonts.inter(
+                                fontSize: 10,
+                                color: AppColors.grayText,
+                              ),
+                            ),
+                          ],
+                        ),
+                      ),
+                      if (isUnread)
+                        Container(
+                          width: 8,
+                          height: 8,
+                          margin: const EdgeInsets.only(top: 6),
+                          decoration: const BoxDecoration(
+                            color: AppColors.primaryBlue,
+                            shape: BoxShape.circle,
+                          ),
+                        ),
+                    ],
+                  ),
                 ),
-              ),
-            ),
+              );
+            },
           );
         },
       ),

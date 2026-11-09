@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:google_fonts/google_fonts.dart';
 import 'package:link_vibe/core/constants/app_colors.dart';
+import 'package:link_vibe/core/services/app_data_service.dart';
 import 'package:link_vibe/feature/student/submissions/presentation/screens/submit_work_screen.dart';
 import 'package:link_vibe/feature/student/feedback/presentation/screens/feedback_screen.dart';
 import 'package:link_vibe/feature/student/project_details/presentation/screens/student_project_details_screen.dart';
@@ -16,41 +17,6 @@ class _MyProjectsScreenState extends State<MyProjectsScreen>
     with SingleTickerProviderStateMixin {
   late TabController _tabController;
 
-  final List<Map<String, dynamic>> _activeProjects = [
-    {
-      'title': 'Flutter App Mobile UI Development',
-      'company': 'TechVista',
-      'assignedDate': 'Nov 04, 2026',
-      'dueDate': 'Nov 15, 2026',
-      'status': 'In Progress',
-      'description':
-          'Build responsive student dashboard widgets and integrate user state.',
-      'skills': ['Flutter', 'Figma', 'UI/UX'],
-    },
-    {
-      'title': 'Market Research on AI Tools',
-      'company': 'Google',
-      'assignedDate': 'Oct 28, 2026',
-      'dueDate': 'Nov 18, 2026',
-      'status': 'Revision Requested',
-      'description':
-          'Analyze competitive AI frameworks and evaluate enterprise impact.',
-      'skills': ['Research', 'Analysis'],
-    },
-  ];
-
-  final List<Map<String, dynamic>> _completedProjects = [
-    {
-      'title': 'Barcode Scanning Mobile Utility',
-      'company': 'CodeCraft Solutions',
-      'assignedDate': 'Oct 10, 2026',
-      'dueDate': 'Oct 25, 2026',
-      'status': 'Completed',
-      'description': 'Developed high-performance camera barcode reader module.',
-      'skills': ['Dart', 'Flutter'],
-    },
-  ];
-
   @override
   void initState() {
     super.initState();
@@ -63,221 +29,321 @@ class _MyProjectsScreenState extends State<MyProjectsScreen>
     super.dispose();
   }
 
-  Color _getStatusColor(String status) {
-    switch (status.toLowerCase()) {
-      case 'completed':
-        return AppColors.statusOpen;
-      case 'revision requested':
-        return const Color(0xFFD97706);
-      case 'under review':
-        return AppColors.teal;
-      default:
-        return AppColors.primaryBlue;
-    }
-  }
-
   @override
   Widget build(BuildContext context) {
-    return Scaffold(
-      backgroundColor: AppColors.background,
-      appBar: AppBar(
-        title: const Text('My Projects'),
-        centerTitle: false,
-        bottom: TabBar(
-          controller: _tabController,
-          labelColor: AppColors.primaryBlue,
-          unselectedLabelColor: AppColors.grayText,
-          indicatorColor: AppColors.primaryBlue,
-          indicatorWeight: 3,
-          labelStyle: GoogleFonts.poppins(
-            fontWeight: FontWeight.bold,
-            fontSize: 14,
+    return ListenableBuilder(
+      listenable: AppDataService.instance,
+      builder: (context, _) {
+        final allApps = AppDataService.instance.getApplications();
+
+        // Separate into active and completed
+        final activeList = allApps
+            .where((a) =>
+                a['status'] == 'In Progress' ||
+                a['status'] == 'Under Review' ||
+                a['status'] == 'Revision Requested' ||
+                a['status'] == 'Accepted' ||
+                a['status'] == 'Shortlisted')
+            .toList();
+
+        final completedList =
+            allApps.where((a) => a['status'] == 'Completed').toList();
+
+        return Scaffold(
+          backgroundColor: AppColors.background,
+          appBar: AppBar(
+            title: const Text('My Projects'),
+            centerTitle: false,
+            bottom: TabBar(
+              controller: _tabController,
+              labelColor: AppColors.primaryBlue,
+              unselectedLabelColor: AppColors.grayText,
+              indicatorColor: AppColors.primaryBlue,
+              labelStyle: GoogleFonts.poppins(
+                fontWeight: FontWeight.bold,
+                fontSize: 14,
+              ),
+              tabs: [
+                Tab(text: 'Active (${activeList.length})'),
+                Tab(text: 'Completed (${completedList.length})'),
+              ],
+            ),
           ),
-          unselectedLabelStyle: GoogleFonts.inter(
-            fontWeight: FontWeight.w500,
-            fontSize: 14,
+          body: TabBarView(
+            controller: _tabController,
+            children: [
+              // Active Projects Tab
+              activeList.isEmpty
+                  ? _buildEmptyState(
+                      'No Active Projects',
+                      'Apply for projects and get assigned to start working!',
+                    )
+                  : ListView.builder(
+                      padding: const EdgeInsets.all(16.0),
+                      itemCount: activeList.length,
+                      itemBuilder: (context, index) {
+                        return _buildProjectItem(activeList[index], false);
+                      },
+                    ),
+
+              // Completed Projects Tab
+              completedList.isEmpty
+                  ? _buildEmptyState(
+                      'No Completed Projects Yet',
+                      'Projects you finish and get approved will appear here along with your certificates.',
+                    )
+                  : ListView.builder(
+                      padding: const EdgeInsets.all(16.0),
+                      itemCount: completedList.length,
+                      itemBuilder: (context, index) {
+                        return _buildProjectItem(completedList[index], true);
+                      },
+                    ),
+            ],
           ),
-          tabs: const [
-            Tab(text: 'Active Projects'),
-            Tab(text: 'Completed'),
+        );
+      },
+    );
+  }
+
+  Widget _buildEmptyState(String title, String message) {
+    return Center(
+      child: Padding(
+        padding: const EdgeInsets.all(32.0),
+        child: Column(
+          mainAxisAlignment: MainAxisAlignment.center,
+          children: [
+            const Icon(Icons.folder_shared_outlined,
+                size: 54, color: AppColors.grayText),
+            const SizedBox(height: 14),
+            Text(
+              title,
+              style: GoogleFonts.poppins(
+                fontSize: 16,
+                fontWeight: FontWeight.bold,
+                color: AppColors.deepNavy,
+              ),
+            ),
+            const SizedBox(height: 6),
+            Text(
+              message,
+              textAlign: TextAlign.center,
+              style: GoogleFonts.inter(
+                fontSize: 13,
+                color: AppColors.grayText,
+              ),
+            ),
           ],
         ),
-      ),
-      body: TabBarView(
-        controller: _tabController,
-        children: [
-          // Active Projects List
-          _buildProjectsList(_activeProjects, isActive: true),
-          // Completed Projects List
-          _buildProjectsList(_completedProjects, isActive: false),
-        ],
       ),
     );
   }
 
-  Widget _buildProjectsList(
-    List<Map<String, dynamic>> list, {
-    required bool isActive,
-  }) {
-    if (list.isEmpty) {
-      return Center(
-        child: Text(
-          'No projects in this category',
-          style: GoogleFonts.inter(color: AppColors.grayText),
-        ),
-      );
-    }
+  Widget _buildProjectItem(Map<String, dynamic> project, bool isCompleted) {
+    final status = project['status'] ?? 'In Progress';
+    final pId = project['projectId']?.toString() ??
+        project['id']?.toString() ??
+        '';
+    final hasSubmission = AppDataService.instance.getSubmission(pId) != null;
 
-    return ListView.builder(
-      padding: const EdgeInsets.all(16.0),
-      itemCount: list.length,
-      itemBuilder: (context, index) {
-        final project = list[index];
-        final status = project['status'] ?? 'Active';
-        final statusColor = _getStatusColor(status);
-        final isRevision = status == 'Revision Requested';
-
-        return Card(
-          margin: const EdgeInsets.only(bottom: 14),
-          shape: RoundedRectangleBorder(
-            borderRadius: BorderRadius.circular(16),
-            side: const BorderSide(color: AppColors.lightGray, width: 0.8),
-          ),
-          child: Padding(
-            padding: const EdgeInsets.all(16.0),
-            child: Column(
-              crossAxisAlignment: CrossAxisAlignment.start,
+    return Card(
+      margin: const EdgeInsets.only(bottom: 14),
+      shape: RoundedRectangleBorder(
+        borderRadius: BorderRadius.circular(16),
+        side: const BorderSide(color: AppColors.lightGray),
+      ),
+      child: Padding(
+        padding: const EdgeInsets.all(16.0),
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            // Top Row
+            Row(
               children: [
-                // Title and Status
-                Row(
-                  mainAxisAlignment: MainAxisAlignment.spaceBetween,
-                  children: [
-                    Expanded(
-                      child: Text(
-                        project['title'] ?? 'Project Title',
+                Container(
+                  width: 44,
+                  height: 44,
+                  decoration: BoxDecoration(
+                    color: AppColors.lightAqua,
+                    borderRadius: BorderRadius.circular(12),
+                  ),
+                  child: Center(
+                    child: Text(
+                      (project['company'] ?? 'C')[0].toUpperCase(),
+                      style: GoogleFonts.poppins(
+                        fontSize: 18,
+                        fontWeight: FontWeight.bold,
+                        color: AppColors.primaryBlue,
+                      ),
+                    ),
+                  ),
+                ),
+                const SizedBox(width: 12),
+                Expanded(
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      Text(
+                        project['title'] ?? 'Title',
                         style: GoogleFonts.poppins(
                           fontSize: 15,
                           fontWeight: FontWeight.bold,
                           color: AppColors.deepNavy,
                         ),
                       ),
-                    ),
-                    Container(
-                      padding: const EdgeInsets.symmetric(
-                          horizontal: 10, vertical: 4),
-                      decoration: BoxDecoration(
-                        color: statusColor.withValues(alpha: 0.12),
-                        borderRadius: BorderRadius.circular(8),
-                      ),
-                      child: Text(
-                        status,
+                      Text(
+                        project['company'] ?? 'Company',
                         style: GoogleFonts.inter(
-                          fontSize: 11,
-                          fontWeight: FontWeight.bold,
-                          color: statusColor,
+                          fontSize: 12,
+                          color: AppColors.grayText,
                         ),
                       ),
-                    ),
-                  ],
+                    ],
+                  ),
                 ),
-                const SizedBox(height: 6),
+                _buildStatusBadge(status),
+              ],
+            ),
+            const SizedBox(height: 14),
+
+            // Due Date & Metadata
+            Row(
+              children: [
+                const Icon(Icons.calendar_today_outlined,
+                    size: 13, color: AppColors.grayText),
+                const SizedBox(width: 4),
                 Text(
-                  'Company: ${project['company']}',
+                  'Assigned: ${project['appliedDate'] ?? 'Nov 2026'}',
                   style: GoogleFonts.inter(
-                    fontSize: 13,
+                    fontSize: 11,
                     color: AppColors.grayText,
                   ),
                 ),
-                const SizedBox(height: 10),
-
-                // Assigned & Due Date Row
-                Row(
-                  mainAxisAlignment: MainAxisAlignment.spaceBetween,
-                  children: [
-                    Text(
-                      'Assigned: ${project['assignedDate']}',
-                      style: GoogleFonts.inter(
-                        fontSize: 12,
-                        color: AppColors.grayText,
-                      ),
+                const Spacer(),
+                if (hasSubmission) ...[
+                  const Icon(Icons.check_circle_rounded,
+                      size: 13, color: AppColors.statusOpen),
+                  const SizedBox(width: 4),
+                  Text(
+                    'Work Uploaded',
+                    style: GoogleFonts.inter(
+                      fontSize: 11,
+                      fontWeight: FontWeight.w600,
+                      color: AppColors.statusOpen,
                     ),
-                    Text(
-                      'Due: ${project['dueDate']}',
-                      style: GoogleFonts.inter(
-                        fontSize: 12,
-                        fontWeight: FontWeight.w600,
-                        color: AppColors.deepNavy,
-                      ),
-                    ),
-                  ],
-                ),
-                const Divider(height: 24),
+                  ),
+                ],
+              ],
+            ),
+            const SizedBox(height: 16),
 
-                // Action Buttons Row
-                Row(
-                  children: [
-                    Expanded(
-                      child: OutlinedButton(
-                        style: OutlinedButton.styleFrom(
-                          side: const BorderSide(color: AppColors.lightGray),
-                          shape: RoundedRectangleBorder(
-                            borderRadius: BorderRadius.circular(10),
-                          ),
+            // Action Buttons Row
+            Row(
+              children: [
+                Expanded(
+                  child: OutlinedButton(
+                    style: OutlinedButton.styleFrom(
+                      foregroundColor: AppColors.deepNavy,
+                      side: const BorderSide(color: AppColors.lightGray),
+                      shape: RoundedRectangleBorder(
+                        borderRadius: BorderRadius.circular(10),
+                      ),
+                      padding: const EdgeInsets.symmetric(vertical: 10),
+                    ),
+                    onPressed: () {
+                      Navigator.push(
+                        context,
+                        MaterialPageRoute(
+                          builder: (context) =>
+                              StudentProjectDetailsScreen(project: project),
                         ),
-                        onPressed: () {
+                      );
+                    },
+                    child: const Text('Details'),
+                  ),
+                ),
+                const SizedBox(width: 8),
+                if (!isCompleted) ...[
+                  Expanded(
+                    child: ElevatedButton(
+                      style: ElevatedButton.styleFrom(
+                        backgroundColor: AppColors.primaryBlue,
+                        foregroundColor: Colors.white,
+                        shape: RoundedRectangleBorder(
+                          borderRadius: BorderRadius.circular(10),
+                        ),
+                        padding: const EdgeInsets.symmetric(vertical: 10),
+                      ),
+                      onPressed: () {
+                        if (status == 'Revision Requested') {
                           Navigator.push(
                             context,
                             MaterialPageRoute(
                               builder: (context) =>
-                                  StudentProjectDetailsScreen(project: project),
+                                  FeedbackScreen(project: project),
                             ),
                           );
-                        },
-                        child: const Text('Instructions'),
-                      ),
-                    ),
-                    const SizedBox(width: 10),
-                    if (isActive)
-                      Expanded(
-                        child: ElevatedButton(
-                          style: ElevatedButton.styleFrom(
-                            backgroundColor: isRevision
-                                ? const Color(0xFFD97706)
-                                : AppColors.primaryBlue,
-                            foregroundColor: Colors.white,
-                            shape: RoundedRectangleBorder(
-                              borderRadius: BorderRadius.circular(10),
+                        } else {
+                          Navigator.push(
+                            context,
+                            MaterialPageRoute(
+                              builder: (context) =>
+                                  SubmitWorkScreen(project: project),
                             ),
-                          ),
-                          onPressed: () {
-                            if (isRevision) {
-                              Navigator.push(
-                                context,
-                                MaterialPageRoute(
-                                  builder: (context) =>
-                                      FeedbackScreen(project: project),
-                                ),
-                              );
-                            } else {
-                              Navigator.push(
-                                context,
-                                MaterialPageRoute(
-                                  builder: (context) =>
-                                      SubmitWorkScreen(project: project),
-                                ),
-                              );
-                            }
-                          },
-                          child: Text(isRevision ? 'Feedback' : 'Submit Work'),
+                          );
+                        }
+                      },
+                      child: Text(
+                        status == 'Revision Requested'
+                            ? 'Feedback'
+                            : hasSubmission
+                                ? 'Update Work'
+                                : 'Submit Work',
+                        style: GoogleFonts.poppins(
+                          fontSize: 12,
+                          fontWeight: FontWeight.w600,
                         ),
                       ),
-                  ],
-                ),
+                    ),
+                  ),
+                ],
               ],
             ),
-          ),
-        );
-      },
+          ],
+        ),
+      ),
+    );
+  }
+
+  Widget _buildStatusBadge(String status) {
+    Color bg = AppColors.lightAqua;
+    Color fg = AppColors.primaryBlue;
+
+    if (status == 'Completed' || status == 'Accepted') {
+      bg = AppColors.statusOpen.withValues(alpha: 0.12);
+      fg = AppColors.statusOpen;
+    } else if (status == 'Revision Requested') {
+      bg = const Color(0xFFFEE2E2);
+      fg = const Color(0xFFDC2626);
+    } else if (status == 'Under Review' || status == 'Shortlisted') {
+      bg = const Color(0xFFFEF3C7);
+      fg = const Color(0xFFD97706);
+    }
+
+    return Container(
+      padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 3),
+      decoration: BoxDecoration(
+        color: bg,
+        borderRadius: BorderRadius.circular(6),
+      ),
+      child: Text(
+        status,
+        style: GoogleFonts.inter(
+          fontSize: 11,
+          fontWeight: FontWeight.bold,
+          color: fg,
+        ),
+      ),
     );
   }
 }
