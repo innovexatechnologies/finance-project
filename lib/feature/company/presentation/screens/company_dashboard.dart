@@ -5,6 +5,7 @@ import 'package:link_vibe/feature/company/models/project_model.dart';
 import 'package:link_vibe/feature/company/services/company_profile_service.dart';
 import 'package:link_vibe/feature/company/services/company_project_service.dart';
 import 'applicants_screen.dart';
+import 'assigned_projects_screen.dart';
 import 'company_profile_screen.dart';
 import 'company_project_detail_screen.dart';
 import 'company_projects_list_screen.dart';
@@ -225,6 +226,16 @@ class _CompanyDashboardScreenState extends State<CompanyDashboardScreen> {
       context,
       MaterialPageRoute(
         builder: (context) => const ApplicantsScreen(),
+      ),
+    );
+  }
+
+  // Navigation: Screen 30 (View Assigned Projects & Selected Students)
+  void _navigateToAssignedProjects() {
+    Navigator.push(
+      context,
+      MaterialPageRoute(
+        builder: (context) => const AssignedProjectsScreen(),
       ),
     );
   }
@@ -882,7 +893,7 @@ class _CompanyDashboardScreenState extends State<CompanyDashboardScreen> {
                 color: Colors.white,
                 textColor: AppColors.darkNavy,
                 iconColor: AppColors.accentTeal,
-                onTap: () => _navigateToProjectsView(filter: 'Active'),
+                onTap: _navigateToAssignedProjects,
               ),
             ),
           ],

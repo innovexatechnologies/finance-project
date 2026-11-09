@@ -4,15 +4,20 @@ import 'package:link_vibe/feature/company/models/project_model.dart';
 import 'package:link_vibe/feature/company/services/company_profile_service.dart';
 import 'package:link_vibe/feature/company/services/company_project_service.dart';
 import 'applicants_screen.dart';
+import 'assigned_projects_screen.dart';
 import 'post_project_screen.dart';
 
 class CompanyProjectDetailScreen extends StatefulWidget {
-  final ProjectModel project;
+  final ProjectModel? project;
+  final String? projectId;
+  final ProjectModel? initialProject;
 
   const CompanyProjectDetailScreen({
     super.key,
-    required this.project,
-  });
+    this.project,
+    this.projectId,
+    this.initialProject,
+  }) : assert(project != null || projectId != null || initialProject != null);
 
   @override
   State<CompanyProjectDetailScreen> createState() =>
@@ -30,7 +35,16 @@ class _CompanyProjectDetailScreenState
   @override
   void initState() {
     super.initState();
-    _project = widget.project;
+    if (widget.project != null) {
+      _project = widget.project!;
+    } else if (widget.initialProject != null) {
+      _project = widget.initialProject!;
+    } else {
+      _project = _projectService.allProjects.firstWhere(
+        (p) => p.id == widget.projectId,
+        orElse: () => _projectService.allProjects.first,
+      );
+    }
     _verifyCompanyOwnership();
   }
 
@@ -57,126 +71,13 @@ class _CompanyProjectDetailScreenState
 
   // Navigate to Screen 30 (View Selected / Assigned Students)
   void _navigateToAssignedStudents() {
-    showModalBottomSheet(
-      context: context,
-      shape: const RoundedRectangleBorder(
-        borderRadius: BorderRadius.vertical(top: Radius.circular(20)),
+    Navigator.push(
+      context,
+      MaterialPageRoute(
+        builder: (context) => AssignedProjectsScreen(
+          filterProjectId: _project.id,
+        ),
       ),
-      builder: (ctx) {
-        final hasAssigned = _project.assignedStudent != null;
-
-        return Padding(
-          padding: const EdgeInsets.all(20.0),
-          child: Column(
-            mainAxisSize: MainAxisSize.min,
-            crossAxisAlignment: CrossAxisAlignment.start,
-            children: [
-              Row(
-                mainAxisAlignment: MainAxisAlignment.spaceBetween,
-                children: [
-                  const Text(
-                    'Assigned Students (Screen 30)',
-                    style: TextStyle(
-                      fontSize: 18,
-                      fontWeight: FontWeight.bold,
-                      color: AppColors.darkNavy,
-                    ),
-                  ),
-                  IconButton(
-                    icon: const Icon(Icons.close),
-                    onPressed: () => Navigator.pop(ctx),
-                  ),
-                ],
-              ),
-              const SizedBox(height: 12),
-              if (hasAssigned) ...[
-                ListTile(
-                  contentPadding: EdgeInsets.zero,
-                  leading: const CircleAvatar(
-                    backgroundColor: AppColors.lightIceBlue,
-                    child: Icon(Icons.school, color: AppColors.primary),
-                  ),
-                  title: Text(
-                    _project.assignedStudent!,
-                    style: const TextStyle(
-                      fontWeight: FontWeight.bold,
-                      color: AppColors.darkNavy,
-                    ),
-                  ),
-                  subtitle: Text(
-                    'Active on Milestones • Progress: ${(_project.progress * 100).toInt()}%',
-                    style: const TextStyle(fontSize: 12),
-                  ),
-                  trailing: Container(
-                    padding:
-                        const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
-                    decoration: BoxDecoration(
-                      color: AppColors.successBg,
-                      borderRadius: BorderRadius.circular(6),
-                    ),
-                    child: const Text(
-                      'Hired',
-                      style: TextStyle(
-                        color: AppColors.success,
-                        fontWeight: FontWeight.bold,
-                        fontSize: 11,
-                      ),
-                    ),
-                  ),
-                ),
-                const SizedBox(height: 8),
-                const Text(
-                  'Milestones & deliverables submitted by this student are tracked under Screen 28 & Screen 30.',
-                  style:
-                      TextStyle(fontSize: 12, color: AppColors.textSecondary),
-                ),
-              ] else ...[
-                Container(
-                  padding: const EdgeInsets.all(16),
-                  decoration: BoxDecoration(
-                    color: const Color(0xFFF1F5F9),
-                    borderRadius: BorderRadius.circular(10),
-                  ),
-                  child: const Row(
-                    children: [
-                      Icon(Icons.person_search_outlined,
-                          color: AppColors.textSecondary),
-                      SizedBox(width: 12),
-                      Expanded(
-                        child: Text(
-                          'No students assigned yet. Review received applications to shortlist and hire campus candidates.',
-                          style: TextStyle(
-                              fontSize: 12.5, color: AppColors.textPrimary),
-                        ),
-                      ),
-                    ],
-                  ),
-                ),
-                const SizedBox(height: 14),
-                SizedBox(
-                  width: double.infinity,
-                  child: ElevatedButton.icon(
-                    style: ElevatedButton.styleFrom(
-                      backgroundColor: AppColors.primary,
-                      foregroundColor: Colors.white,
-                      shape: RoundedRectangleBorder(
-                        borderRadius: BorderRadius.circular(8),
-                      ),
-                    ),
-                    onPressed: () {
-                      Navigator.pop(ctx);
-                      _navigateToApplicants();
-                    },
-                    icon: const Icon(Icons.people),
-                    label: Text(
-                        'Review Applications (${_project.applicantsCount})'),
-                  ),
-                ),
-              ],
-            ],
-          ),
-        );
-      },
     );
   }
 
