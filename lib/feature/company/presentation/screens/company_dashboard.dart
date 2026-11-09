@@ -6,6 +6,7 @@ import 'package:link_vibe/feature/company/services/company_profile_service.dart'
 import 'package:link_vibe/feature/company/services/company_project_service.dart';
 import 'applicants_screen.dart';
 import 'company_profile_screen.dart';
+import 'company_project_detail_screen.dart';
 import 'company_projects_list_screen.dart';
 import 'company_verification_screen.dart';
 import 'post_project_screen.dart';
@@ -1280,11 +1281,21 @@ class _CompanyDashboardScreenState extends State<CompanyDashboardScreen> {
         borderRadius: BorderRadius.circular(14),
         side: const BorderSide(color: AppColors.border, width: 0.8),
       ),
-      child: Padding(
-        padding: const EdgeInsets.all(16.0),
-        child: Column(
-          crossAxisAlignment: CrossAxisAlignment.start,
-          children: [
+      child: InkWell(
+        borderRadius: BorderRadius.circular(14),
+        onTap: () {
+          Navigator.push(
+            context,
+            MaterialPageRoute(
+              builder: (context) => CompanyProjectDetailScreen(project: project),
+            ),
+          );
+        },
+        child: Padding(
+          padding: const EdgeInsets.all(16.0),
+          child: Column(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
             Row(
               mainAxisAlignment: MainAxisAlignment.spaceBetween,
               children: [
@@ -1408,8 +1419,9 @@ class _CompanyDashboardScreenState extends State<CompanyDashboardScreen> {
           ],
         ),
       ),
-    );
-  }
+    ),
+  );
+}
 
   // 5. Recent Activity Section
   Widget _buildRecentActivitySection() {
