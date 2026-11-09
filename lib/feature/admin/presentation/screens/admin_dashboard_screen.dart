@@ -1,11 +1,20 @@
 import 'package:flutter/material.dart';
 import 'package:link_vibe/core/constants/app_colors.dart';
+import 'package:link_vibe/feature/admin/models/admin_dashboard_model.dart';
 import 'package:link_vibe/feature/admin/models/admin_user_model.dart';
 import 'package:link_vibe/feature/admin/presentation/screens/admin_login_screen.dart';
+import 'package:link_vibe/feature/admin/presentation/widgets/admin_sidebar.dart';
+import 'package:link_vibe/feature/admin/presentation/widgets/admin_top_navbar.dart';
+import 'package:link_vibe/feature/admin/presentation/widgets/analytics_chart_card.dart';
+import 'package:link_vibe/feature/admin/presentation/widgets/quick_actions_bar.dart';
+import 'package:link_vibe/feature/admin/presentation/widgets/recent_activity_list.dart';
+import 'package:link_vibe/feature/admin/presentation/widgets/stat_metric_card.dart';
 import 'package:link_vibe/feature/admin/services/admin_auth_service.dart';
+import 'package:link_vibe/feature/admin/services/admin_dashboard_service.dart';
 
-/// Enterprise Admin Dashboard Shell
-/// Serves as the authenticated landing gateway for the CampusConnect Admin Console.
+/// Enterprise Admin Dashboard Screen for CampusConnect
+/// Features responsive layout, 7 live metric cards, interactive analytics charts,
+/// functional quick action drawers, real-time activity feed, and date-range filtering.
 class AdminDashboardScreen extends StatefulWidget {
   const AdminDashboardScreen({super.key});
 
@@ -15,9 +24,22 @@ class AdminDashboardScreen extends StatefulWidget {
 
 class _AdminDashboardScreenState extends State<AdminDashboardScreen> {
   final AdminAuthService _authService = AdminAuthService();
+  final AdminDashboardService _dashboardService = AdminDashboardService();
+  final GlobalKey<ScaffoldState> _scaffoldKey = GlobalKey<ScaffoldState>();
 
-  Future<void> _handleLogout() async {
-    final shouldLogout = await showDialog<bool>(
+  String _activeRouteId = 'dashboard';
+  bool _isSidebarCollapsed = false;
+  String _searchQuery = '';
+
+  final List<String> _dateRanges = [
+    'Today',
+    'Last 7 Days',
+    'Last 30 Days',
+    'All Time',
+  ];
+
+  Future<void> _handleSignOut() async {
+    final confirmed = await showDialog<bool>(
       context: context,
       builder: (ctx) => AlertDialog(
         shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
@@ -25,11 +47,11 @@ class _AdminDashboardScreenState extends State<AdminDashboardScreen> {
           children: [
             Icon(Icons.logout_rounded, color: AppColors.error),
             SizedBox(width: 10),
-            Text('Sign Out Admin Console'),
+            Text('Sign Out Console'),
           ],
         ),
         content: const Text(
-          'Are you sure you want to end your active administrative session? You will be redirected to the secure login gateway.',
+          'Are you sure you want to conclude this active administrative session? Session credentials will be invalidated securely.',
           style: TextStyle(color: AppColors.textSecondary, fontSize: 13.5),
         ),
         actions: [
@@ -49,7 +71,7 @@ class _AdminDashboardScreenState extends State<AdminDashboardScreen> {
       ),
     );
 
-    if (shouldLogout == true && mounted) {
+    if (confirmed == true && mounted) {
       await _authService.logout();
       if (!mounted) return;
       Navigator.pushAndRemoveUntil(
@@ -60,313 +82,454 @@ class _AdminDashboardScreenState extends State<AdminDashboardScreen> {
     }
   }
 
+  void _onRouteSelected(String routeId) {
+    setState(() => _activeRouteId = routeId);
+    if (_scaffoldKey.currentState?.isDrawerOpen ?? false) {
+      Navigator.pop(context); // Close mobile drawer
+    }
+  }
+
   @override
   Widget build(BuildContext context) {
-    return ValueListenableBuilder<AdminUserModel?>(
-      valueListenable: _authService.currentAdminNotifier,
-      builder: (context, admin, _) {
-        final adminUser = admin ??
-            const AdminUserModel(
-              id: 'adm_guest',
-              fullName: 'Enterprise Administrator',
-              email: 'admin@campusconnect.edu.pk',
-              role: 'SUPER_ADMIN',
-              roleDisplayName: 'Executive Super Administrator',
-              department: 'CampusConnect Governance Council',
-              avatarInitial: 'AD',
-              permissions: ['all'],
-              lastLoginAt: 'Just now',
-            );
+    return LayoutBuilder(
+      builder: (context, constraints) {
+        final isDesktop = constraints.maxWidth >= 960;
 
         return Scaffold(
+          key: _scaffoldKey,
           backgroundColor: AppColors.background,
-          appBar: AppBar(
-            backgroundColor: AppColors.darkNavy,
-            elevation: 1,
-            title: Row(
-              children: [
-                Container(
-                  padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 5),
-                  decoration: BoxDecoration(
-                    color: AppColors.primary,
-                    borderRadius: BorderRadius.circular(8),
-                  ),
-                  child: const Text(
-                    'CAMPUSCONNECT',
-                    style: TextStyle(
-                      color: Colors.white,
-                      fontSize: 12,
-                      fontWeight: FontWeight.w900,
-                      letterSpacing: 1.1,
-                    ),
-                  ),
-                ),
-                const SizedBox(width: 12),
-                const Text(
-                  'Enterprise Admin Console',
-                  style: TextStyle(
-                    color: Colors.white,
-                    fontSize: 16,
-                    fontWeight: FontWeight.bold,
-                  ),
-                ),
-              ],
-            ),
-            actions: [
-              // Admin Profile Tag
-              Padding(
-                padding: const EdgeInsets.symmetric(vertical: 8),
-                child: Container(
-                  padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 4),
-                  decoration: BoxDecoration(
-                    color: Colors.white.withValues(alpha: 0.1),
-                    borderRadius: BorderRadius.circular(20),
-                    border: Border.all(color: Colors.white.withValues(alpha: 0.15)),
-                  ),
-                  child: Row(
-                    children: [
-                      CircleAvatar(
-                        radius: 14,
-                        backgroundColor: AppColors.accentTeal,
-                        child: Text(
-                          adminUser.avatarInitial,
-                          style: const TextStyle(
-                            color: Colors.white,
-                            fontSize: 11,
-                            fontWeight: FontWeight.bold,
-                          ),
-                        ),
-                      ),
-                      const SizedBox(width: 8),
-                      Text(
-                        adminUser.fullName,
-                        style: const TextStyle(
-                          color: Colors.white,
-                          fontSize: 12.5,
-                          fontWeight: FontWeight.w600,
-                        ),
-                      ),
-                    ],
-                  ),
-                ),
-              ),
-              const SizedBox(width: 8),
 
-              // Sign Out Button
-              IconButton(
-                icon: const Icon(Icons.logout_rounded, color: Colors.white70),
-                tooltip: 'Sign Out Session',
-                onPressed: _handleLogout,
-              ),
-              const SizedBox(width: 8),
-            ],
-          ),
-          body: SingleChildScrollView(
-            padding: const EdgeInsets.all(24),
-            child: Column(
-              crossAxisAlignment: CrossAxisAlignment.start,
-              children: [
-                // Welcome Banner
-                Container(
-                  width: double.infinity,
-                  padding: const EdgeInsets.all(24),
-                  decoration: BoxDecoration(
-                    gradient: const LinearGradient(
-                      colors: [AppColors.darkNavy, Color(0xFF1E3A8A)],
-                      begin: Alignment.topLeft,
-                      end: Alignment.bottomRight,
-                    ),
-                    borderRadius: BorderRadius.circular(16),
-                    boxShadow: [
-                      BoxShadow(
-                        color: AppColors.darkNavy.withValues(alpha: 0.2),
-                        blurRadius: 16,
-                        offset: const Offset(0, 6),
-                      ),
-                    ],
-                  ),
-                  child: Row(
-                    children: [
-                      Expanded(
-                        child: Column(
-                          crossAxisAlignment: CrossAxisAlignment.start,
-                          children: [
-                            Container(
-                              padding: const EdgeInsets.symmetric(
-                                horizontal: 10,
-                                vertical: 4,
-                              ),
-                              decoration: BoxDecoration(
-                                color: AppColors.accentTeal.withValues(alpha: 0.2),
-                                borderRadius: BorderRadius.circular(6),
-                                border: Border.all(
-                                  color: AppColors.accentTeal.withValues(alpha: 0.4),
-                                ),
-                              ),
-                              child: Text(
-                                adminUser.roleDisplayName.toUpperCase(),
-                                style: const TextStyle(
-                                  color: AppColors.accentTeal,
-                                  fontSize: 11,
-                                  fontWeight: FontWeight.bold,
-                                  letterSpacing: 0.8,
-                                ),
-                              ),
-                            ),
-                            const SizedBox(height: 12),
-                            Text(
-                              'Welcome back, ${adminUser.fullName}',
-                              style: const TextStyle(
-                                color: Colors.white,
-                                fontSize: 22,
-                                fontWeight: FontWeight.bold,
-                              ),
-                            ),
-                            const SizedBox(height: 6),
-                            Text(
-                              'Department: ${adminUser.department}  •  Active Session: Verified TLS Protected',
-                              style: const TextStyle(
-                                color: Colors.white70,
-                                fontSize: 13,
-                              ),
-                            ),
-                          ],
-                        ),
-                      ),
-                      const SizedBox(width: 16),
-                      Container(
-                        padding: const EdgeInsets.all(16),
-                        decoration: BoxDecoration(
-                          color: Colors.white.withValues(alpha: 0.1),
-                          shape: BoxShape.circle,
-                        ),
-                        child: const Icon(
-                          Icons.security_rounded,
-                          color: AppColors.accentTeal,
-                          size: 40,
-                        ),
-                      ),
-                    ],
+          // Drawer for Mobile / Tablet view
+          drawer: isDesktop
+              ? null
+              : Drawer(
+                  child: AdminSidebar(
+                    activeRouteId: _activeRouteId,
+                    onRouteSelected: _onRouteSelected,
+                    onSignOut: _handleSignOut,
+                    isCollapsed: false,
                   ),
                 ),
-                const SizedBox(height: 24),
 
-                // Platform Overview Cards Placeholder
-                const Text(
-                  'Governance Quick Status',
-                  style: TextStyle(
-                    fontSize: 16,
-                    fontWeight: FontWeight.bold,
-                    color: AppColors.darkNavy,
-                  ),
+          body: Row(
+            children: [
+              // Persistent Sidebar on Desktop
+              if (isDesktop)
+                AdminSidebar(
+                  activeRouteId: _activeRouteId,
+                  onRouteSelected: _onRouteSelected,
+                  onSignOut: _handleSignOut,
+                  isCollapsed: _isSidebarCollapsed,
+                  onToggleCollapse: () {
+                    setState(() => _isSidebarCollapsed = !_isSidebarCollapsed);
+                  },
                 ),
-                const SizedBox(height: 12),
-                Row(
+
+              // Main Dashboard Area
+              Expanded(
+                child: Column(
                   children: [
-                    _buildMetricCard(
-                      title: 'Company Verifications',
-                      value: '1 Pending',
-                      subtitle: 'TechVista Innovations under review',
-                      icon: Icons.domain_verification_rounded,
-                      color: AppColors.warning,
-                      bgColor: AppColors.warningBg,
+                    // Top Navigation Bar
+                    AdminTopNavbar(
+                      pageTitle: 'Platform Overview',
+                      breadcrumb: 'Governance',
+                      onOpenDrawer: () => _scaffoldKey.currentState?.openDrawer(),
+                      onSignOut: _handleSignOut,
+                      onSearch: (query) {
+                        setState(() => _searchQuery = query);
+                      },
                     ),
-                    const SizedBox(width: 16),
-                    _buildMetricCard(
-                      title: 'University Verifications',
-                      value: '12 Active',
-                      subtitle: 'FAST, NUST, GIKI, UET linked',
-                      icon: Icons.school_rounded,
-                      color: AppColors.primary,
-                      bgColor: AppColors.lightIceBlue,
-                    ),
-                    const SizedBox(width: 16),
-                    _buildMetricCard(
-                      title: 'Projects Audited',
-                      value: '7 Sprints',
-                      subtitle: 'Zero compliance breaches',
-                      icon: Icons.fact_check_rounded,
-                      color: AppColors.success,
-                      bgColor: AppColors.successBg,
+
+                    // Scrollable Dashboard Body
+                    Expanded(
+                      child: ValueListenableBuilder<bool>(
+                        valueListenable: _dashboardService.isLoadingNotifier,
+                        builder: (context, isLoading, _) {
+                          return ValueListenableBuilder<PlatformStatsModel>(
+                            valueListenable: _dashboardService.statsNotifier,
+                            builder: (context, stats, _) {
+                              return ValueListenableBuilder<List<AdminActivityItem>>(
+                                valueListenable: _dashboardService.activitiesNotifier,
+                                builder: (context, activities, _) {
+                                  if (isLoading) {
+                                    return _buildLoadingSkeleton();
+                                  }
+
+                                  final displayActivities = _searchQuery.isEmpty
+                                      ? activities
+                                      : activities
+                                          .where((act) =>
+                                              act.title
+                                                  .toLowerCase()
+                                                  .contains(_searchQuery.toLowerCase()) ||
+                                              act.description
+                                                  .toLowerCase()
+                                                  .contains(_searchQuery.toLowerCase()) ||
+                                              act.actorName
+                                                  .toLowerCase()
+                                                  .contains(_searchQuery.toLowerCase()))
+                                          .toList();
+
+                                  return SingleChildScrollView(
+                                    padding: const EdgeInsets.symmetric(
+                                      horizontal: 24,
+                                      vertical: 24,
+                                    ),
+                                    child: Column(
+                                      crossAxisAlignment: CrossAxisAlignment.start,
+                                      children: [
+                                        // 1. Welcome Hero Banner & Date Range Filter
+                                        _buildHeroHeaderSection(),
+                                        const SizedBox(height: 24),
+
+                                        // 2. 7 Statistics Cards
+                                        _buildStatisticsCardsGrid(stats),
+                                        const SizedBox(height: 24),
+
+                                        // 3. Quick Actions Bar
+                                        const QuickActionsBar(),
+                                        const SizedBox(height: 24),
+
+                                        // 4. Analytics Visualizer & Category Distribution
+                                        AnalyticsChartCard(stats: stats),
+                                        const SizedBox(height: 24),
+
+                                        // 5. Recent Platform Activity Stream
+                                        RecentActivityList(activities: displayActivities),
+                                        const SizedBox(height: 36),
+
+                                        // 6. Security Audit Footnote
+                                        _buildAuditFootnote(),
+                                      ],
+                                    ),
+                                  );
+                                },
+                              );
+                            },
+                          );
+                        },
+                      ),
                     ),
                   ],
                 ),
-              ],
-            ),
+              ),
+            ],
           ),
         );
       },
     );
   }
 
-  Widget _buildMetricCard({
-    required String title,
-    required String value,
-    required String subtitle,
-    required IconData icon,
-    required Color color,
-    required Color bgColor,
-  }) {
-    return Expanded(
-      child: Container(
-        padding: const EdgeInsets.all(18),
-        decoration: BoxDecoration(
-          color: Colors.white,
-          borderRadius: BorderRadius.circular(14),
-          border: Border.all(color: AppColors.border),
-          boxShadow: [
-            BoxShadow(
-              color: Colors.black.withValues(alpha: 0.04),
-              blurRadius: 8,
-              offset: const Offset(0, 3),
-            ),
-          ],
+  // 1. Welcome Hero Header & Date Range Filter
+  Widget _buildHeroHeaderSection() {
+    final admin = _authService.currentAdmin ??
+        const AdminUserModel(
+          id: 'adm_root',
+          fullName: 'Dr. Tariq Mahmood',
+          email: 'admin@campusconnect.edu.pk',
+          role: 'SUPER_ADMIN',
+          roleDisplayName: 'Super Administrator',
+          department: 'Executive Governance Council',
+          avatarInitial: 'TM',
+          permissions: ['all'],
+          lastLoginAt: 'Just now',
+        );
+
+    return Container(
+      width: double.infinity,
+      padding: const EdgeInsets.all(24),
+      decoration: BoxDecoration(
+        gradient: const LinearGradient(
+          colors: [AppColors.darkNavy, Color(0xFF1E3A8A)],
+          begin: Alignment.topLeft,
+          end: Alignment.bottomRight,
         ),
-        child: Column(
-          crossAxisAlignment: CrossAxisAlignment.start,
-          children: [
-            Row(
-              mainAxisAlignment: MainAxisAlignment.spaceBetween,
-              children: [
-                Text(
-                  title,
-                  style: const TextStyle(
-                    fontSize: 12.5,
-                    color: AppColors.textSecondary,
-                    fontWeight: FontWeight.w600,
-                  ),
+        borderRadius: BorderRadius.circular(16),
+        boxShadow: [
+          BoxShadow(
+            color: AppColors.darkNavy.withValues(alpha: 0.18),
+            blurRadius: 14,
+            offset: const Offset(0, 5),
+          ),
+        ],
+      ),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Row(
+            mainAxisAlignment: MainAxisAlignment.spaceBetween,
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              Expanded(
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    Container(
+                      padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 4),
+                      decoration: BoxDecoration(
+                        color: AppColors.accentTeal.withValues(alpha: 0.2),
+                        borderRadius: BorderRadius.circular(6),
+                        border: Border.all(color: AppColors.accentTeal.withValues(alpha: 0.4)),
+                      ),
+                      child: Text(
+                        admin.roleDisplayName.toUpperCase(),
+                        style: const TextStyle(
+                          color: AppColors.accentTeal,
+                          fontSize: 10.5,
+                          fontWeight: FontWeight.bold,
+                          letterSpacing: 0.8,
+                        ),
+                      ),
+                    ),
+                    const SizedBox(height: 12),
+                    Text(
+                      'Welcome to CampusConnect Governance, ${admin.fullName}',
+                      style: const TextStyle(
+                        color: Colors.white,
+                        fontSize: 22,
+                        fontWeight: FontWeight.w800,
+                        letterSpacing: -0.3,
+                      ),
+                    ),
+                    const SizedBox(height: 6),
+                    const Text(
+                      'Complete administrative visibility over registered universities, corporate SECP verifications, and student project sprints.',
+                      style: TextStyle(color: Color(0xFFCBD5E1), fontSize: 13, height: 1.4),
+                    ),
+                  ],
                 ),
-                Container(
-                  padding: const EdgeInsets.all(8),
+              ),
+              const SizedBox(width: 16),
+              Container(
+                padding: const EdgeInsets.all(12),
+                decoration: BoxDecoration(
+                  color: Colors.white.withValues(alpha: 0.1),
+                  shape: BoxShape.circle,
+                ),
+                child: const Icon(Icons.shield_rounded, color: AppColors.accentTeal, size: 36),
+              ),
+            ],
+          ),
+          const SizedBox(height: 20),
+          const Divider(color: Colors.white12),
+          const SizedBox(height: 12),
+
+          // Date Range Selector
+          Row(
+            mainAxisAlignment: MainAxisAlignment.spaceBetween,
+            children: [
+              const Row(
+                children: [
+                  Icon(Icons.calendar_today_rounded, size: 14, color: AppColors.accentTeal),
+                  SizedBox(width: 6),
+                  Text(
+                    'Audit Timeframe:',
+                    style: TextStyle(color: Colors.white70, fontSize: 12, fontWeight: FontWeight.w600),
+                  ),
+                ],
+              ),
+              ValueListenableBuilder<String>(
+                valueListenable: _dashboardService.selectedDateRangeNotifier,
+                builder: (context, activeRange, _) {
+                  return Wrap(
+                    spacing: 8,
+                    children: _dateRanges.map((range) {
+                      final isSelected = activeRange == range;
+                      return InkWell(
+                        onTap: () => _dashboardService.changeDateRange(range),
+                        borderRadius: BorderRadius.circular(6),
+                        child: Container(
+                          padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 5),
+                          decoration: BoxDecoration(
+                            color: isSelected ? Colors.white : Colors.white.withValues(alpha: 0.1),
+                            borderRadius: BorderRadius.circular(6),
+                          ),
+                          child: Text(
+                            range,
+                            style: TextStyle(
+                              color: isSelected ? AppColors.darkNavy : Colors.white,
+                              fontSize: 11,
+                              fontWeight: isSelected ? FontWeight.bold : FontWeight.normal,
+                            ),
+                          ),
+                        ),
+                      );
+                    }).toList(),
+                  );
+                },
+              ),
+            ],
+          ),
+        ],
+      ),
+    );
+  }
+
+  // 2. 7 Statistics Cards Grid
+  Widget _buildStatisticsCardsGrid(PlatformStatsModel stats) {
+    return LayoutBuilder(
+      builder: (context, constraints) {
+        final double width = constraints.maxWidth;
+        // Responsive columns: 4 on large desktop, 2 on tablet, 1 on mobile
+        int crossAxisCount = 4;
+        if (width < 600) {
+          crossAxisCount = 1;
+        } else if (width < 1000) {
+          crossAxisCount = 2;
+        }
+
+        final cards = [
+          StatMetricCard(
+            title: 'Total Students',
+            value: '${stats.totalStudents}',
+            subtitle: 'Verified university students',
+            icon: Icons.school_rounded,
+            iconColor: AppColors.primary,
+            iconBgColor: AppColors.lightIceBlue,
+            trendText: '+${stats.studentGrowth}%',
+            isPositiveTrend: true,
+          ),
+          StatMetricCard(
+            title: 'Total Companies',
+            value: '${stats.totalCompanies}',
+            subtitle: 'Registered corporate sponsors',
+            icon: Icons.domain_rounded,
+            iconColor: AppColors.accentTeal,
+            iconBgColor: AppColors.accentTeal.withValues(alpha: 0.12),
+            trendText: '+${stats.companyGrowth}%',
+            isPositiveTrend: true,
+          ),
+          StatMetricCard(
+            title: 'Pending Verifications',
+            value: '${stats.pendingVerifications}',
+            subtitle: 'SECP & student reviews awaiting',
+            icon: Icons.domain_verification_rounded,
+            iconColor: AppColors.warning,
+            iconBgColor: AppColors.warningBg,
+            trendText: stats.pendingVerifications > 0 ? 'Action Req' : 'Clear',
+            isPositiveTrend: stats.pendingVerifications == 0,
+          ),
+          StatMetricCard(
+            title: 'Total Projects',
+            value: '${stats.totalProjects}',
+            subtitle: 'All created collaboration sprints',
+            icon: Icons.assignment_outlined,
+            iconColor: const Color(0xFF6366F1), // Indigo
+            iconBgColor: const Color(0xFF6366F1).withValues(alpha: 0.12),
+            trendText: '+${stats.projectGrowth}%',
+            isPositiveTrend: true,
+          ),
+          StatMetricCard(
+            title: 'Active Projects',
+            value: '${stats.activeProjects}',
+            subtitle: 'Open & in-progress sprints',
+            icon: Icons.pending_actions_rounded,
+            iconColor: AppColors.primary,
+            iconBgColor: AppColors.lightIceBlue,
+            trendText: 'Live',
+            isPositiveTrend: true,
+          ),
+          StatMetricCard(
+            title: 'Completed Projects',
+            value: '${stats.completedProjects}',
+            subtitle: 'Successfully delivered sprints',
+            icon: Icons.verified_rounded,
+            iconColor: AppColors.success,
+            iconBgColor: AppColors.successBg,
+            trendText: '${stats.completionRate}% Rate',
+            isPositiveTrend: true,
+          ),
+          StatMetricCard(
+            title: 'Pending Reports',
+            value: '${stats.pendingReports}',
+            subtitle: 'Milestone deliverables to audit',
+            icon: Icons.analytics_outlined,
+            iconColor: const Color(0xFFEC4899), // Pink
+            iconBgColor: const Color(0xFFEC4899).withValues(alpha: 0.12),
+            trendText: 'Audit Queue',
+            isPositiveTrend: stats.pendingReports < 5,
+          ),
+        ];
+
+        return GridView.builder(
+          shrinkWrap: true,
+          physics: const NeverScrollableScrollPhysics(),
+          itemCount: cards.length,
+          gridDelegate: SliverGridDelegateWithFixedCrossAxisCount(
+            crossAxisCount: crossAxisCount,
+            crossAxisSpacing: 16,
+            mainAxisSpacing: 16,
+            childAspectRatio: crossAxisCount == 1 ? 2.8 : 1.65,
+          ),
+          itemBuilder: (context, index) => cards[index],
+        );
+      },
+    );
+  }
+
+  // Loading skeleton placeholder during date filter transitions
+  Widget _buildLoadingSkeleton() {
+    return Padding(
+      padding: const EdgeInsets.all(24),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Container(
+            height: 140,
+            decoration: BoxDecoration(
+              color: Colors.white,
+              borderRadius: BorderRadius.circular(16),
+            ),
+          ),
+          const SizedBox(height: 24),
+          Row(
+            children: List.generate(
+              4,
+              (index) => Expanded(
+                child: Container(
+                  height: 120,
+                  margin: EdgeInsets.only(right: index == 3 ? 0 : 16),
                   decoration: BoxDecoration(
-                    color: bgColor,
-                    borderRadius: BorderRadius.circular(8),
+                    color: Colors.white,
+                    borderRadius: BorderRadius.circular(16),
                   ),
-                  child: Icon(icon, color: color, size: 20),
                 ),
-              ],
-            ),
-            const SizedBox(height: 12),
-            Text(
-              value,
-              style: const TextStyle(
-                fontSize: 20,
-                fontWeight: FontWeight.bold,
-                color: AppColors.darkNavy,
               ),
             ),
-            const SizedBox(height: 4),
-            Text(
-              subtitle,
-              style: const TextStyle(
-                fontSize: 11.5,
-                color: AppColors.textMuted,
+          ),
+        ],
+      ),
+    );
+  }
+
+  // Security audit footnote
+  Widget _buildAuditFootnote() {
+    return Container(
+      padding: const EdgeInsets.all(16),
+      decoration: BoxDecoration(
+        color: Colors.white,
+        borderRadius: BorderRadius.circular(12),
+        border: Border.all(color: AppColors.border),
+      ),
+      child: const Row(
+        mainAxisAlignment: MainAxisAlignment.spaceBetween,
+        children: [
+          Row(
+            children: [
+              Icon(Icons.lock_clock_outlined, size: 16, color: AppColors.textSecondary),
+              SizedBox(width: 8),
+              Text(
+                'CampusConnect Administration & Governance Console • Strictly Non-Financial Academic Realm',
+                style: TextStyle(fontSize: 11.5, color: AppColors.textSecondary),
               ),
-            ),
-          ],
-        ),
+            ],
+          ),
+          Text(
+            'Cryptographic Audit Hash: FIPS-180-4 Verified',
+            style: TextStyle(fontSize: 11, color: AppColors.textMuted, fontWeight: FontWeight.bold),
+          ),
+        ],
       ),
     );
   }
 }
-
