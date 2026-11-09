@@ -3,6 +3,8 @@ import 'package:link_vibe/core/constants/app_colors.dart';
 import 'package:link_vibe/feature/admin/models/admin_dashboard_model.dart';
 import 'package:link_vibe/feature/admin/models/admin_user_model.dart';
 import 'package:link_vibe/feature/admin/presentation/screens/admin_login_screen.dart';
+import 'package:link_vibe/feature/admin/presentation/screens/company_verifications_screen.dart';
+import 'package:link_vibe/feature/admin/presentation/screens/student_management_screen.dart';
 import 'package:link_vibe/feature/admin/presentation/widgets/admin_sidebar.dart';
 import 'package:link_vibe/feature/admin/presentation/widgets/admin_top_navbar.dart';
 import 'package:link_vibe/feature/admin/presentation/widgets/analytics_chart_card.dart';
@@ -86,6 +88,18 @@ class _AdminDashboardScreenState extends State<AdminDashboardScreen> {
     setState(() => _activeRouteId = routeId);
     if (_scaffoldKey.currentState?.isDrawerOpen ?? false) {
       Navigator.pop(context); // Close mobile drawer
+    }
+
+    if (routeId == 'company_verifications') {
+      Navigator.push(
+        context,
+        MaterialPageRoute(builder: (_) => const CompanyVerificationsScreen()),
+      );
+    } else if (routeId == 'student_verifications') {
+      Navigator.push(
+        context,
+        MaterialPageRoute(builder: (_) => const StudentManagementScreen()),
+      );
     }
   }
 
