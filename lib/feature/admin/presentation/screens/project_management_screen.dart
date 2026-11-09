@@ -5,6 +5,7 @@ import 'package:link_vibe/feature/admin/models/admin_project_model.dart';
 import 'package:link_vibe/feature/admin/presentation/screens/admin_dashboard_screen.dart';
 import 'package:link_vibe/feature/admin/presentation/screens/admin_login_screen.dart';
 import 'package:link_vibe/feature/admin/presentation/screens/application_monitoring_screen.dart';
+import 'package:link_vibe/feature/admin/presentation/screens/certificate_management_screen.dart';
 import 'package:link_vibe/feature/admin/presentation/screens/company_management_screen.dart';
 import 'package:link_vibe/feature/admin/presentation/screens/student_management_screen.dart';
 import 'package:link_vibe/feature/admin/presentation/widgets/admin_sidebar.dart';
@@ -143,6 +144,11 @@ class _ProjectManagementScreenState extends State<ProjectManagementScreen> {
       Navigator.pushReplacement(
         context,
         MaterialPageRoute(builder: (_) => const ApplicationMonitoringScreen()),
+      );
+    } else if (routeId == 'audit_logs' || routeId == 'certificates') {
+      Navigator.pushReplacement(
+        context,
+        MaterialPageRoute(builder: (_) => const CertificateManagementScreen()),
       );
     }
     // If routeId is 'projects_audit', we are already on this screen.

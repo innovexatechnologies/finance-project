@@ -4,6 +4,7 @@ import 'package:link_vibe/feature/admin/models/admin_dashboard_model.dart';
 import 'package:link_vibe/feature/admin/models/admin_user_model.dart';
 import 'package:link_vibe/feature/admin/presentation/screens/admin_login_screen.dart';
 import 'package:link_vibe/feature/admin/presentation/screens/application_monitoring_screen.dart';
+import 'package:link_vibe/feature/admin/presentation/screens/certificate_management_screen.dart';
 import 'package:link_vibe/feature/admin/presentation/screens/company_management_screen.dart';
 import 'package:link_vibe/feature/admin/presentation/screens/project_management_screen.dart';
 import 'package:link_vibe/feature/admin/presentation/screens/student_management_screen.dart';
@@ -111,6 +112,11 @@ class _AdminDashboardScreenState extends State<AdminDashboardScreen> {
       Navigator.push(
         context,
         MaterialPageRoute(builder: (_) => const ApplicationMonitoringScreen()),
+      );
+    } else if (routeId == 'audit_logs' || routeId == 'certificates') {
+      Navigator.push(
+        context,
+        MaterialPageRoute(builder: (_) => const CertificateManagementScreen()),
       );
     }
   }
