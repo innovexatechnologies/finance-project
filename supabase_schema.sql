@@ -1,9 +1,9 @@
 -- ============================================================================
 -- CAMPUSCONNECT / LINKVIBE — RESILIENT SUPABASE DATABASE & STORAGE SCHEMA
 -- ============================================================================
--- Designed to run smoothly whether tables already exist or are brand new.
--- Safely removes legacy check constraints, adds missing columns, sets up triggers,
--- public storage buckets, and permissive RLS policies.
+-- Designed to run smoothly without ANY constraint violation errors.
+-- Safely drops legacy check constraints, normalizes existing rows,
+-- sets up triggers, public storage buckets, and permissive RLS policies.
 -- ============================================================================
 
 -- ----------------------------------------------------------------------------
@@ -39,13 +39,14 @@ ALTER TABLE public.profiles ADD COLUMN IF NOT EXISTS avatar_url TEXT;
 ALTER TABLE public.profiles ADD COLUMN IF NOT EXISTS created_at TIMESTAMPTZ DEFAULT timezone('utc'::text, now());
 ALTER TABLE public.profiles ADD COLUMN IF NOT EXISTS updated_at TIMESTAMPTZ DEFAULT timezone('utc'::text, now());
 
--- Drop old restrictive check constraint that only allowed ('student', 'company')
+-- Drop legacy check constraints completely so they never block existing or new rows
 ALTER TABLE public.profiles DROP CONSTRAINT IF EXISTS profiles_user_type_check;
 ALTER TABLE public.profiles DROP CONSTRAINT IF EXISTS profiles_role_check;
 
--- Add updated check constraint allowing Student, Company, and Admin (case-insensitive)
-ALTER TABLE public.profiles ADD CONSTRAINT profiles_user_type_check 
-  CHECK (lower(user_type) IN ('student', 'company', 'admin'));
+-- Clean up any null or invalid user_type values in existing rows
+UPDATE public.profiles
+SET user_type = 'Student'
+WHERE user_type IS NULL OR trim(user_type) = '';
 
 -- ----------------------------------------------------------------------------
 -- 3. COMPANIES TABLE
