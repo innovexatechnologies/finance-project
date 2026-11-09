@@ -5,6 +5,7 @@ import 'package:link_vibe/feature/admin/models/admin_student_model.dart';
 import 'package:link_vibe/feature/admin/presentation/screens/admin_dashboard_screen.dart';
 import 'package:link_vibe/feature/admin/presentation/screens/admin_login_screen.dart';
 import 'package:link_vibe/feature/admin/presentation/screens/company_management_screen.dart';
+import 'package:link_vibe/feature/admin/presentation/screens/project_management_screen.dart';
 import 'package:link_vibe/feature/admin/presentation/widgets/admin_sidebar.dart';
 import 'package:link_vibe/feature/admin/presentation/widgets/admin_top_navbar.dart';
 import 'package:link_vibe/feature/admin/services/admin_auth_service.dart';
@@ -117,6 +118,11 @@ class _StudentManagementScreenState extends State<StudentManagementScreen> {
       Navigator.pushReplacement(
         context,
         MaterialPageRoute(builder: (_) => const CompanyManagementScreen()),
+      );
+    } else if (routeId == 'projects_audit' || routeId == 'projects') {
+      Navigator.pushReplacement(
+        context,
+        MaterialPageRoute(builder: (_) => const ProjectManagementScreen()),
       );
     }
   }
