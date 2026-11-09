@@ -6,6 +6,7 @@ import 'package:link_vibe/feature/admin/presentation/screens/admin_dashboard_scr
 import 'package:link_vibe/feature/admin/presentation/screens/admin_login_screen.dart';
 import 'package:link_vibe/feature/admin/presentation/screens/student_management_screen.dart';
 import 'package:link_vibe/feature/admin/presentation/screens/project_management_screen.dart';
+import 'package:link_vibe/feature/admin/presentation/screens/application_monitoring_screen.dart';
 import 'package:link_vibe/feature/admin/presentation/widgets/admin_sidebar.dart';
 import 'package:link_vibe/feature/admin/presentation/widgets/admin_top_navbar.dart';
 import 'package:link_vibe/feature/admin/services/admin_auth_service.dart';
@@ -127,6 +128,11 @@ class _CompanyManagementScreenState extends State<CompanyManagementScreen> {
       Navigator.pushReplacement(
         context,
         MaterialPageRoute(builder: (_) => const ProjectManagementScreen()),
+      );
+    } else if (routeId == 'compliance' || routeId == 'application_monitoring') {
+      Navigator.pushReplacement(
+        context,
+        MaterialPageRoute(builder: (_) => const ApplicationMonitoringScreen()),
       );
     }
     // If routeId is 'company_verifications' or 'company_management', we are already on this screen.

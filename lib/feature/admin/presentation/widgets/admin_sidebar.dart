@@ -64,9 +64,11 @@ class AdminSidebar extends StatelessWidget {
       badgeColor: AppColors.primary,
     ),
     AdminNavItem(
-      title: 'Governance & Compliance',
-      icon: Icons.verified_user_outlined,
+      title: 'Application Monitoring',
+      icon: Icons.shield_outlined,
       routeId: 'compliance',
+      badgeText: '2 Flags',
+      badgeColor: AppColors.error,
     ),
     AdminNavItem(
       title: 'Audit Logs & Vault',
