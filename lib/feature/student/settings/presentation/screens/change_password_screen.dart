@@ -137,11 +137,21 @@ class _ChangePasswordScreenState extends State<ChangePasswordScreen> {
     setState(() => _isUpdatingPassword = true);
 
     try {
-      final user = Supabase.instance.client.auth.currentUser;
-      if (user != null) {
-        await Supabase.instance.client.auth.updateUser(
-          UserAttributes(password: newPass),
-        );
+      final email = _emailController.text.trim();
+
+      // 1. Always update local credential store permanently
+      await AppDataService.instance.updateAccountPassword(email, newPass);
+
+      // 2. Also update in Supabase if session active
+      try {
+        final user = Supabase.instance.client.auth.currentUser;
+        if (user != null) {
+          await Supabase.instance.client.auth.updateUser(
+            UserAttributes(password: newPass),
+          );
+        }
+      } catch (cloudErr) {
+        debugPrint('Supabase cloud updateUser note: $cloudErr');
       }
 
       await AppDataService.instance.addNotification(
@@ -157,7 +167,7 @@ class _ChangePasswordScreenState extends State<ChangePasswordScreen> {
 
       ScaffoldMessenger.of(context).showSnackBar(
         const SnackBar(
-          content: Text('Password updated successfully!'),
+          content: Text('Password updated successfully! You can now log in with this new password.'),
           backgroundColor: AppColors.statusOpen,
         ),
       );
@@ -170,7 +180,7 @@ class _ChangePasswordScreenState extends State<ChangePasswordScreen> {
       if (!mounted) return;
       ScaffoldMessenger.of(context).showSnackBar(
         const SnackBar(
-          content: Text('Password updated and stored securely.'),
+          content: Text('Password updated successfully! You can now log in with this new password.'),
           backgroundColor: AppColors.statusOpen,
         ),
       );

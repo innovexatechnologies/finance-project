@@ -433,5 +433,84 @@ void main() {
     expect(isValidUrl('www.figma.com/file/12345/design'), isTrue);
     expect(isValidUrl('https://drive.google.com/drive/folders/xyz'), isTrue);
   });
+
+  test('User Registration & Credential Verification with exact Name and University', () async {
+    await AppDataService.instance.registerUserAccount(
+      email: 'rabia.dev@punjab.edu.pk',
+      password: 'password123',
+      name: 'Rabia Tariq',
+      university: 'Punjab University College of IT',
+      role: 'Student',
+    );
+
+    // Verify local credentials work
+    expect(AppDataService.instance.verifyLocalCredentials('rabia.dev@punjab.edu.pk', 'password123'), isTrue);
+    expect(AppDataService.instance.verifyLocalCredentials('rabia.dev@punjab.edu.pk', 'wrongpass'), isFalse);
+
+    // Verify name and institute persisted
+    final acc = AppDataService.instance.findUserAccount('rabia.dev@punjab.edu.pk');
+    expect(acc, isNotNull);
+    expect(acc!['name'], equals('Rabia Tariq'));
+    expect(acc['university'], equals('Punjab University College of IT'));
+
+    expect(AppDataService.instance.userName, equals('Rabia Tariq'));
+    expect(AppDataService.instance.getProfile()['university'], equals('Punjab University College of IT'));
+
+    // SIMULATE APP CLOSE & REOPEN
+    await AppDataService.instance.init();
+
+    expect(AppDataService.instance.verifyLocalCredentials('rabia.dev@punjab.edu.pk', 'password123'), isTrue);
+    final reloadedAcc = AppDataService.instance.findUserAccount('rabia.dev@punjab.edu.pk');
+    expect(reloadedAcc!['name'], equals('Rabia Tariq'));
+    expect(reloadedAcc['university'], equals('Punjab University College of IT'));
+  });
+
+  test('Password Reset & Immediate Login with New Password', () async {
+    await AppDataService.instance.registerUserAccount(
+      email: 'student.test@campusconnect.pk',
+      password: 'oldPassword1',
+      name: 'Test Student',
+      university: 'NUST Islamabad',
+      role: 'Student',
+    );
+
+    expect(AppDataService.instance.verifyLocalCredentials('student.test@campusconnect.pk', 'oldPassword1'), isTrue);
+
+    // Reset / Update password
+    await AppDataService.instance.updateAccountPassword('student.test@campusconnect.pk', 'newStrongPass99');
+
+    // Old password must fail, new password must succeed!
+    expect(AppDataService.instance.verifyLocalCredentials('student.test@campusconnect.pk', 'oldPassword1'), isFalse);
+    expect(AppDataService.instance.verifyLocalCredentials('student.test@campusconnect.pk', 'newStrongPass99'), isTrue);
+
+    // SIMULATE APP CLOSE & REOPEN
+    await AppDataService.instance.init();
+
+    expect(AppDataService.instance.verifyLocalCredentials('student.test@campusconnect.pk', 'newStrongPass99'), isTrue);
+    expect(AppDataService.instance.verifyLocalCredentials('student.test@campusconnect.pk', 'oldPassword1'), isFalse);
+  });
+
+  test('Chat Notifications are strictly hidden when chatMessages preference is false', () async {
+    await AppDataService.instance.updateNotificationPreference('pushNotifications', true);
+    await AppDataService.instance.updateNotificationPreference('chatMessages', true);
+    await AppDataService.instance.clearAllNotifications();
+
+    await AppDataService.instance.addNotification(
+      title: 'Company Message Active',
+      subtitle: 'Message from supervisor',
+      time: 'Just now',
+      type: 'chat',
+    );
+
+    expect(AppDataService.instance.getNotifications().any((n) => n['type'] == 'chat'), isTrue);
+    expect(AppDataService.instance.unreadNotificationsCount, equals(1));
+
+    // Disable chat notifications
+    await AppDataService.instance.updateNotificationPreference('chatMessages', false);
+
+    // Must be completely hidden from getNotifications and count must be 0!
+    expect(AppDataService.instance.getNotifications().any((n) => n['type'] == 'chat'), isFalse);
+    expect(AppDataService.instance.unreadNotificationsCount, equals(0));
+  });
 }
 

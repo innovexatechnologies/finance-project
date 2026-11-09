@@ -19,7 +19,7 @@ class CertificatesScreen extends StatelessWidget {
 
     showDialog(
       context: context,
-      builder: (context) => Dialog(
+      builder: (dialogCtx) => Dialog(
         shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(20)),
         child: Container(
           constraints: const BoxConstraints(maxWidth: 440),
@@ -134,7 +134,7 @@ class CertificatesScreen extends StatelessWidget {
                   Expanded(
                     child: OutlinedButton.icon(
                       onPressed: () {
-                        Navigator.pop(context);
+                        Navigator.pop(dialogCtx);
                         ShareService.shareCertificate(
                           context: context,
                           certificate: cert,
@@ -152,7 +152,7 @@ class CertificatesScreen extends StatelessWidget {
                         foregroundColor: Colors.white,
                       ),
                       onPressed: () {
-                        Navigator.pop(context);
+                        Navigator.pop(dialogCtx);
                         DownloadService.downloadCertificate(
                           context: context,
                           certificate: cert,

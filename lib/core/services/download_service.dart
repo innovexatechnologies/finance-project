@@ -79,6 +79,13 @@ Empowering Students with Real-World Corporate Experience.
             label: 'OPEN',
             textColor: Colors.amberAccent,
             onPressed: () {
+              try {
+                openDownloadedFile(
+                  fileName: safeName,
+                  content: certContent,
+                  filePath: filePath,
+                );
+              } catch (_) {}
               openFileViewer(context, safeName, filePath, certContent);
             },
           ),
@@ -89,9 +96,6 @@ Empowering Students with Real-World Corporate Experience.
           duration: const Duration(seconds: 4),
         ),
       );
-
-      // 2. Open File Viewer Dialog
-      openFileViewer(context, safeName, filePath, certContent);
     } catch (e) {
       if (!context.mounted) return;
       ScaffoldMessenger.of(context).showSnackBar(
@@ -109,93 +113,100 @@ Empowering Students with Real-World Corporate Experience.
     String filePath,
     String content,
   ) {
-    showDialog(
-      context: context,
-      builder: (ctx) => AlertDialog(
-        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(18)),
-        title: Row(
-          children: [
-            Container(
-              padding: const EdgeInsets.all(8),
-              decoration: BoxDecoration(
-                color: AppColors.primaryBlue.withValues(alpha: 0.1),
-                shape: BoxShape.circle,
+    if (!context.mounted) return;
+    try {
+      showDialog(
+        context: context,
+        useRootNavigator: true,
+        builder: (ctx) => AlertDialog(
+          shape:
+              RoundedRectangleBorder(borderRadius: BorderRadius.circular(18)),
+          title: Row(
+            children: [
+              Container(
+                padding: const EdgeInsets.all(8),
+                decoration: BoxDecoration(
+                  color: AppColors.primaryBlue.withValues(alpha: 0.1),
+                  shape: BoxShape.circle,
+                ),
+                child: const Icon(Icons.description_rounded,
+                    color: AppColors.primaryBlue, size: 22),
               ),
-              child: const Icon(Icons.description_rounded,
-                  color: AppColors.primaryBlue, size: 22),
+              const SizedBox(width: 10),
+              Expanded(
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    Text(
+                      'Certificate File',
+                      style: GoogleFonts.poppins(
+                        fontSize: 15,
+                        fontWeight: FontWeight.bold,
+                        color: AppColors.deepNavy,
+                      ),
+                    ),
+                    Text(
+                      fileName,
+                      maxLines: 1,
+                      overflow: TextOverflow.ellipsis,
+                      style: GoogleFonts.inter(
+                        fontSize: 11,
+                        color: AppColors.grayText,
+                      ),
+                    ),
+                  ],
+                ),
+              ),
+            ],
+          ),
+          content: Container(
+            width: double.maxFinite,
+            constraints: const BoxConstraints(maxHeight: 280),
+            padding: const EdgeInsets.all(12),
+            decoration: BoxDecoration(
+              color: AppColors.cardWhite,
+              borderRadius: BorderRadius.circular(12),
+              border: Border.all(color: AppColors.lightGray),
             ),
-            const SizedBox(width: 10),
-            Expanded(
-              child: Column(
-                crossAxisAlignment: CrossAxisAlignment.start,
-                children: [
-                  Text(
-                    'Certificate File Opened',
-                    style: GoogleFonts.poppins(
-                      fontSize: 15,
-                      fontWeight: FontWeight.bold,
-                      color: AppColors.deepNavy,
-                    ),
-                  ),
-                  Text(
-                    fileName,
-                    maxLines: 1,
-                    overflow: TextOverflow.ellipsis,
-                    style: GoogleFonts.inter(
-                      fontSize: 11,
-                      color: AppColors.grayText,
-                    ),
-                  ),
-                ],
+            child: SingleChildScrollView(
+              child: SelectableText(
+                content,
+                style: GoogleFonts.robotoMono(
+                  fontSize: 11,
+                  color: AppColors.darkText,
+                  height: 1.4,
+                ),
               ),
+            ),
+          ),
+          actions: [
+            TextButton(
+              onPressed: () => Navigator.of(ctx).pop(),
+              child: const Text('Close'),
+            ),
+            ElevatedButton.icon(
+              style: ElevatedButton.styleFrom(
+                backgroundColor: AppColors.primaryBlue,
+                foregroundColor: Colors.white,
+              ),
+              onPressed: () {
+                try {
+                  openDownloadedFile(
+                    fileName: fileName,
+                    content: content,
+                    filePath: filePath,
+                  );
+                } catch (_) {}
+                Navigator.of(ctx).pop();
+              },
+              icon: const Icon(Icons.open_in_new_rounded, size: 16),
+              label: const Text('Open File'),
             ),
           ],
         ),
-        content: Container(
-          width: double.maxFinite,
-          constraints: const BoxConstraints(maxHeight: 280),
-          padding: const EdgeInsets.all(12),
-          decoration: BoxDecoration(
-            color: AppColors.cardWhite,
-            borderRadius: BorderRadius.circular(12),
-            border: Border.all(color: AppColors.lightGray),
-          ),
-          child: SingleChildScrollView(
-            child: SelectableText(
-              content,
-              style: GoogleFonts.robotoMono(
-                fontSize: 11,
-                color: AppColors.darkText,
-                height: 1.4,
-              ),
-            ),
-          ),
-        ),
-        actions: [
-          TextButton(
-            onPressed: () => Navigator.pop(ctx),
-            child: const Text('Close'),
-          ),
-          ElevatedButton.icon(
-            style: ElevatedButton.styleFrom(
-              backgroundColor: AppColors.primaryBlue,
-              foregroundColor: Colors.white,
-            ),
-            onPressed: () {
-              Navigator.pop(ctx);
-              ScaffoldMessenger.of(context).showSnackBar(
-                const SnackBar(
-                  content: Text('Certificate file verified and saved to device.'),
-                  backgroundColor: AppColors.statusOpen,
-                  duration: Duration(seconds: 2),
-                ),
-              );
-            },
-            icon: const Icon(Icons.check_rounded, size: 16),
-            label: const Text('Done'),
-          ),
-        ],
-      ),
-    );
+      );
+    } catch (e) {
+      debugPrint('Error showing file viewer dialog: $e');
+    }
   }
 }

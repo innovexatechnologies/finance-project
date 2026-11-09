@@ -23,3 +23,18 @@ Future<String> saveAndDownloadFile({
 
   return fileName;
 }
+
+void openDownloadedFile({
+  required String fileName,
+  required String content,
+  required String filePath,
+}) {
+  try {
+    final bytes = utf8.encode(content);
+    final blob = html.Blob([bytes], 'text/plain;charset=utf-8');
+    final url = html.Url.createObjectUrlFromBlob(blob);
+    html.window.open(url, '_blank');
+  } catch (e) {
+    // Fallback gracefully
+  }
+}

@@ -46,6 +46,50 @@ class _LoginScreenState extends State<LoginScreen> {
     });
 
     try {
+      // 1. Check registered local credentials first
+      final isLocalValid =
+          AppDataService.instance.verifyLocalCredentials(email, password);
+      if (isLocalValid) {
+        final acc = AppDataService.instance.findUserAccount(email);
+        final role = acc?['role'] ?? _selectedRole;
+        final name = acc?['name'] ?? 'Student';
+        final university = acc?['university'];
+
+        await AppDataService.instance.saveAuthSession(
+          role: role,
+          email: email,
+          name: name,
+          university: university,
+        );
+
+        if (!mounted) return;
+
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(
+            content: Text('Welcome back, $name!'),
+            backgroundColor: Colors.green,
+          ),
+        );
+
+        if (role == 'Company') {
+          Navigator.pushReplacement(
+            context,
+            MaterialPageRoute(
+              builder: (context) => const CompanyDashboardScreen(),
+            ),
+          );
+        } else {
+          Navigator.pushReplacement(
+            context,
+            MaterialPageRoute(
+              builder: (context) => const StudentMainNav(),
+            ),
+          );
+        }
+        return;
+      }
+
+      // 2. Try Supabase cloud authentication
       final supabase = Supabase.instance.client;
       final authResponse = await supabase.auth.signInWithPassword(
         email: email,
@@ -60,20 +104,26 @@ class _LoginScreenState extends State<LoginScreen> {
         role = metaRole.toString();
       }
 
-      // Persist auth session locally so app reopens directly to main screen
+      final existingAcc = AppDataService.instance.findUserAccount(email);
+      final resolvedName = existingAcc?['name'] ??
+          authResponse.user?.userMetadata?['name']?.toString() ??
+          'Student';
+      final resolvedUni = existingAcc?['university'] ??
+          authResponse.user?.userMetadata?['university']?.toString();
+
       await AppDataService.instance.saveAuthSession(
         role: role,
         email: email,
-        name: authResponse.user?.userMetadata?['name']?.toString() ?? 'Ahmed Khan',
-        university: authResponse.user?.userMetadata?['university']?.toString(),
+        name: resolvedName,
+        university: resolvedUni,
         userId: authResponse.user?.id,
       );
 
       if (!mounted) return;
 
       ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(
-          content: Text('Welcome back to CampusConnect!'),
+        SnackBar(
+          content: Text('Welcome back, $resolvedName!'),
           backgroundColor: Colors.green,
         ),
       );
@@ -122,35 +172,6 @@ class _LoginScreenState extends State<LoginScreen> {
         });
       }
     }
-  }
-
-  void _fillDemoStudent() {
-    setState(() {
-      _emailController.text = 'rabia32pk@gmail.com';
-      _passwordController.text = '123456';
-      _selectedRole = 'Student';
-    });
-    ScaffoldMessenger.of(context).showSnackBar(
-      const SnackBar(
-        content: Text('Demo student credentials filled! Click Log In.'),
-        duration: Duration(seconds: 2),
-      ),
-    );
-  }
-
-  Future<void> _enterAsStudentGuest() async {
-    await AppDataService.instance.saveAuthSession(
-      role: 'Student',
-      email: 'rabia32pk@gmail.com',
-      name: 'Ahmed Khan',
-    );
-    if (!mounted) return;
-    Navigator.pushReplacement(
-      context,
-      MaterialPageRoute(
-        builder: (context) => const StudentMainNav(),
-      ),
-    );
   }
 
   @override
@@ -364,72 +385,7 @@ class _LoginScreenState extends State<LoginScreen> {
                             ),
                     ),
                   ),
-                  const SizedBox(height: 12),
-
-                  // Quick Demo Student Button (Zero Friction)
-                  SizedBox(
-                    width: double.infinity,
-                    height: 46,
-                    child: OutlinedButton(
-                      style: OutlinedButton.styleFrom(
-                        foregroundColor: AppColors.deepNavy,
-                        side: const BorderSide(color: AppColors.teal, width: 1.2),
-                        shape: RoundedRectangleBorder(
-                          borderRadius: BorderRadius.circular(14),
-                        ),
-                        backgroundColor: AppColors.lightAqua.withValues(alpha: 0.3),
-                      ),
-                      onPressed: _enterAsStudentGuest,
-                      child: Row(
-                        mainAxisAlignment: MainAxisAlignment.center,
-                        mainAxisSize: MainAxisSize.min,
-                        children: [
-                          const Icon(Icons.rocket_launch_rounded, size: 18, color: AppColors.primaryBlue),
-                          const SizedBox(width: 8),
-                          Flexible(
-                            child: Text(
-                              'Explore Student Panel Directly',
-                              maxLines: 1,
-                              overflow: TextOverflow.ellipsis,
-                              style: GoogleFonts.poppins(
-                                fontSize: 13,
-                                fontWeight: FontWeight.w600,
-                                color: AppColors.deepNavy,
-                              ),
-                            ),
-                          ),
-                        ],
-                      ),
-                    ),
-                  ),
-                  const SizedBox(height: 16),
-
-                  // Quick fill helper
-                  Center(
-                    child: TextButton(
-                      onPressed: _fillDemoStudent,
-                      child: Row(
-                        mainAxisSize: MainAxisSize.min,
-                        children: [
-                          const Icon(Icons.touch_app_rounded, size: 16, color: AppColors.grayText),
-                          const SizedBox(width: 6),
-                          Flexible(
-                            child: Text(
-                              'Fill Demo Student Credentials',
-                              maxLines: 1,
-                              overflow: TextOverflow.ellipsis,
-                              style: GoogleFonts.inter(
-                                fontSize: 12,
-                                color: AppColors.grayText,
-                              ),
-                            ),
-                          ),
-                        ],
-                      ),
-                    ),
-                  ),
-
-                  const SizedBox(height: 8),
+                  const SizedBox(height: 20),
 
                   // Sign Up Link (using Wrap to prevent horizontal overflow on any device)
                   Center(

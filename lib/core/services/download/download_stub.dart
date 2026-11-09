@@ -25,3 +25,15 @@ Future<String> saveAndDownloadFile({
 
   return file.path;
 }
+
+void openDownloadedFile({
+  required String fileName,
+  required String content,
+  required String filePath,
+}) {
+  try {
+    if (!kIsWeb && Platform.isWindows) {
+      Process.run('notepad.exe', [filePath]);
+    }
+  } catch (_) {}
+}

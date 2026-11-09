@@ -33,14 +33,17 @@ class _StudentHomeScreenState extends State<StudentHomeScreen> {
       final name = user.userMetadata?['name'];
       final email = user.email;
       final university = user.userMetadata?['university'];
-      if (name != null || email != null || university != null) {
-        AppDataService.instance.updateProfile({
-          if (name != null && name.toString().isNotEmpty) 'name': name.toString(),
-          if (email != null && email.isNotEmpty) 'email': email,
-          if (university != null && university.toString().isNotEmpty)
-            'university': university.toString(),
-        });
-      }
+      final currentProfile = AppDataService.instance.getProfile();
+      final currentName = currentProfile['name']?.toString() ?? '';
+      final isGeneric = currentName.isEmpty || currentName == 'Ahmed Khan';
+
+      AppDataService.instance.updateProfile({
+        if (name != null && name.toString().isNotEmpty && isGeneric)
+          'name': name.toString(),
+        if (email != null && email.isNotEmpty) 'email': email,
+        if (university != null && university.toString().isNotEmpty)
+          'university': university.toString(),
+      });
     }
   }
 
@@ -50,7 +53,13 @@ class _StudentHomeScreenState extends State<StudentHomeScreen> {
       listenable: AppDataService.instance,
       builder: (context, _) {
         final profile = AppDataService.instance.getProfile();
-        final studentName = profile['name'] ?? 'Ahmed Khan';
+        final studentName = (profile['name'] != null &&
+                profile['name'].toString().isNotEmpty &&
+                profile['name'].toString() != 'Ahmed Khan')
+            ? profile['name'].toString()
+            : (AppDataService.instance.userName.isNotEmpty
+                ? AppDataService.instance.userName
+                : (profile['name'] ?? 'Student'));
         final recommendedProjects =
             AppDataService.instance.getAllProjects().take(4).toList();
 

@@ -32,14 +32,17 @@ class _StudentProfileScreenState extends State<StudentProfileScreen> {
       final name = user.userMetadata?['name'];
       final email = user.email;
       final university = user.userMetadata?['university'];
-      if (name != null || email != null || university != null) {
-        AppDataService.instance.updateProfile({
-          if (name != null && name.toString().isNotEmpty) 'name': name.toString(),
-          if (email != null && email.isNotEmpty) 'email': email,
-          if (university != null && university.toString().isNotEmpty)
-            'university': university.toString(),
-        });
-      }
+      final currentProfile = AppDataService.instance.getProfile();
+      final currentName = currentProfile['name']?.toString() ?? '';
+      final isGeneric = currentName.isEmpty || currentName == 'Ahmed Khan';
+
+      AppDataService.instance.updateProfile({
+        if (name != null && name.toString().isNotEmpty && isGeneric)
+          'name': name.toString(),
+        if (email != null && email.isNotEmpty) 'email': email,
+        if (university != null && university.toString().isNotEmpty)
+          'university': university.toString(),
+      });
     }
   }
 
@@ -172,9 +175,22 @@ class _StudentProfileScreenState extends State<StudentProfileScreen> {
         final publicPortfolio = privacy['publicPortfolio'] ?? true;
         final profileVisibility = privacy['profileVisibility'] ?? true;
 
-        final name = profile['name'] ?? 'Ahmed Khan';
-        final email = profile['email'] ?? 'ahmed.khan@student.edu.pk';
-        final university = profile['university'] ?? 'National University';
+        final name = (profile['name'] != null &&
+                profile['name'].toString().isNotEmpty &&
+                profile['name'].toString() != 'Ahmed Khan')
+            ? profile['name'].toString()
+            : (AppDataService.instance.userName.isNotEmpty
+                ? AppDataService.instance.userName
+                : (profile['name'] ?? 'Student'));
+        final email = (profile['email'] != null && profile['email'].toString().isNotEmpty)
+            ? profile['email'].toString()
+            : (AppDataService.instance.userEmail.isNotEmpty
+                ? AppDataService.instance.userEmail
+                : 'student@campusconnect.edu.pk');
+        final university = (profile['university'] != null &&
+                profile['university'].toString().isNotEmpty)
+            ? profile['university'].toString()
+            : 'National University';
         final degree = profile['degree'] ?? 'BS Computer Science';
         final bio = profile['bio'] ?? 'Student passionate about real-world projects.';
 
