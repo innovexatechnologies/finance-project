@@ -21,13 +21,13 @@ class _SplashScreenState extends State<SplashScreen>
     super.initState();
     _animController = AnimationController(
       vsync: this,
-      duration: const Duration(milliseconds: 1200),
+      duration: const Duration(milliseconds: 1000),
     );
     _fadeAnimation = CurvedAnimation(
       parent: _animController,
       curve: Curves.easeIn,
     );
-    _scaleAnimation = Tween<double>(begin: 0.8, end: 1.0).animate(
+    _scaleAnimation = Tween<double>(begin: 0.85, end: 1.0).animate(
       CurvedAnimation(parent: _animController, curve: Curves.easeOutBack),
     );
     _animController.forward();
@@ -64,195 +64,217 @@ class _SplashScreenState extends State<SplashScreen>
           ),
         ),
         child: SafeArea(
-          child: FadeTransition(
-            opacity: _fadeAnimation,
-            child: Column(
-              children: [
-                const Spacer(flex: 2),
+          child: LayoutBuilder(
+            builder: (context, constraints) {
+              final isSmall = constraints.maxHeight < 620;
+              final verticalSpacing = isSmall ? 16.0 : 28.0;
 
-                // Animated Logo and Title
-                ScaleTransition(
-                  scale: _scaleAnimation,
-                  child: Column(
-                    children: [
-                      // Graduation Cap with Star Icon Container
-                      Container(
-                        width: 90,
-                        height: 90,
-                        decoration: BoxDecoration(
-                          shape: BoxShape.circle,
-                          color: Colors.white.withValues(alpha: 0.12),
-                          border: Border.all(
-                            color: Colors.white.withValues(alpha: 0.25),
-                            width: 1.5,
-                          ),
-                          boxShadow: [
-                            BoxShadow(
-                              color: AppColors.teal.withValues(alpha: 0.3),
-                              blurRadius: 24,
-                              spreadRadius: 4,
-                            ),
-                          ],
-                        ),
-                        child: Stack(
-                          alignment: Alignment.center,
+              return Center(
+                child: SingleChildScrollView(
+                  physics: const BouncingScrollPhysics(),
+                  padding: const EdgeInsets.symmetric(
+                    horizontal: 24.0,
+                    vertical: 20.0,
+                  ),
+                  child: ConstrainedBox(
+                    constraints: BoxConstraints(
+                      maxWidth: 480,
+                      minHeight: (constraints.maxHeight - 40).clamp(0.0, double.infinity),
+                    ),
+                    child: IntrinsicHeight(
+                      child: FadeTransition(
+                        opacity: _fadeAnimation,
+                        child: Column(
+                          mainAxisAlignment: MainAxisAlignment.spaceBetween,
                           children: [
-                            const Icon(
-                              Icons.school_rounded,
-                              size: 48,
-                              color: Colors.white,
+                            // Top Spacing anchor
+                            const SizedBox(height: 8),
+
+                            // Brand Icon & Title
+                            ScaleTransition(
+                              scale: _scaleAnimation,
+                              child: Column(
+                                mainAxisSize: MainAxisSize.min,
+                                children: [
+                                  // Graduation Cap with Star Icon Container
+                                  Container(
+                                    width: isSmall ? 68 : 80,
+                                    height: isSmall ? 68 : 80,
+                                    decoration: BoxDecoration(
+                                      shape: BoxShape.circle,
+                                      color: Colors.white.withValues(alpha: 0.12),
+                                      border: Border.all(
+                                        color: Colors.white.withValues(alpha: 0.25),
+                                        width: 1.5,
+                                      ),
+                                      boxShadow: [
+                                        BoxShadow(
+                                          color: AppColors.teal.withValues(alpha: 0.3),
+                                          blurRadius: 20,
+                                          spreadRadius: 3,
+                                        ),
+                                      ],
+                                    ),
+                                    child: Stack(
+                                      alignment: Alignment.center,
+                                      children: [
+                                        Icon(
+                                          Icons.school_rounded,
+                                          size: isSmall ? 36 : 42,
+                                          color: Colors.white,
+                                        ),
+                                        Positioned(
+                                          top: isSmall ? 14 : 18,
+                                          right: isSmall ? 14 : 18,
+                                          child: Container(
+                                            width: 8,
+                                            height: 8,
+                                            decoration: const BoxDecoration(
+                                              color: Color(0xFFFBBF24),
+                                              shape: BoxShape.circle,
+                                            ),
+                                          ),
+                                        ),
+                                      ],
+                                    ),
+                                  ),
+                                  SizedBox(height: isSmall ? 12 : 16),
+
+                                  // Brand Name
+                                  RichText(
+                                    text: TextSpan(
+                                      children: [
+                                        TextSpan(
+                                          text: 'Campus',
+                                          style: GoogleFonts.poppins(
+                                            fontSize: isSmall ? 26 : 30,
+                                            fontWeight: FontWeight.bold,
+                                            color: Colors.white,
+                                            letterSpacing: 0.5,
+                                          ),
+                                        ),
+                                        TextSpan(
+                                          text: 'Connect',
+                                          style: GoogleFonts.poppins(
+                                            fontSize: isSmall ? 26 : 30,
+                                            fontWeight: FontWeight.bold,
+                                            color: AppColors.teal,
+                                            letterSpacing: 0.5,
+                                          ),
+                                        ),
+                                      ],
+                                    ),
+                                  ),
+                                  const SizedBox(height: 4),
+
+                                  // Tagline
+                                  Text(
+                                    'Learn • Work • Grow',
+                                    style: GoogleFonts.inter(
+                                      fontSize: 13,
+                                      fontWeight: FontWeight.w500,
+                                      color: AppColors.lightAqua.withValues(alpha: 0.85),
+                                      letterSpacing: 2.0,
+                                    ),
+                                  ),
+                                ],
+                              ),
                             ),
-                            Positioned(
-                              top: 20,
-                              right: 20,
-                              child: Container(
-                                width: 10,
-                                height: 10,
-                                decoration: const BoxDecoration(
-                                  color: Color(0xFFFBBF24),
-                                  shape: BoxShape.circle,
+
+                            SizedBox(height: verticalSpacing),
+
+                            // Campus Graphic & Heading Banner
+                            Container(
+                              width: double.infinity,
+                              padding: EdgeInsets.symmetric(
+                                horizontal: 20,
+                                vertical: isSmall ? 14 : 18,
+                              ),
+                              decoration: BoxDecoration(
+                                color: Colors.white.withValues(alpha: 0.08),
+                                borderRadius: BorderRadius.circular(18),
+                                border: Border.all(
+                                  color: Colors.white.withValues(alpha: 0.12),
+                                ),
+                              ),
+                              child: Column(
+                                mainAxisSize: MainAxisSize.min,
+                                children: [
+                                  Icon(
+                                    Icons.apartment_rounded,
+                                    size: isSmall ? 38 : 46,
+                                    color: AppColors.teal,
+                                  ),
+                                  const SizedBox(height: 10),
+                                  Text(
+                                    'Build Your Future',
+                                    textAlign: TextAlign.center,
+                                    style: GoogleFonts.poppins(
+                                      fontSize: isSmall ? 16 : 18,
+                                      fontWeight: FontWeight.bold,
+                                      color: Colors.white,
+                                    ),
+                                  ),
+                                  const SizedBox(height: 4),
+                                  Text(
+                                    'With Real-World Experience',
+                                    textAlign: TextAlign.center,
+                                    style: GoogleFonts.inter(
+                                      fontSize: 12,
+                                      color: Colors.white70,
+                                    ),
+                                  ),
+                                ],
+                              ),
+                            ),
+
+                            SizedBox(height: verticalSpacing),
+
+                            // "Get Started ->" Button matching Image 1
+                            SizedBox(
+                              width: double.infinity,
+                              height: 50,
+                              child: ElevatedButton(
+                                style: ElevatedButton.styleFrom(
+                                  backgroundColor: Colors.white,
+                                  foregroundColor: AppColors.deepNavy,
+                                  elevation: 4,
+                                  shape: RoundedRectangleBorder(
+                                    borderRadius: BorderRadius.circular(25),
+                                  ),
+                                ),
+                                onPressed: _navigateToOnboarding,
+                                child: Row(
+                                  mainAxisAlignment: MainAxisAlignment.center,
+                                  children: [
+                                    Text(
+                                      'Get Started',
+                                      style: GoogleFonts.poppins(
+                                        fontSize: 15,
+                                        fontWeight: FontWeight.bold,
+                                        color: AppColors.deepNavy,
+                                      ),
+                                    ),
+                                    const SizedBox(width: 8),
+                                    const Icon(
+                                      Icons.arrow_forward_rounded,
+                                      size: 18,
+                                      color: AppColors.deepNavy,
+                                    ),
+                                  ],
                                 ),
                               ),
                             ),
+
+                            const SizedBox(height: 8),
                           ],
                         ),
-                      ),
-                      const SizedBox(height: 20),
-
-                      // Brand Name
-                      RichText(
-                        text: TextSpan(
-                          children: [
-                            TextSpan(
-                              text: 'Campus',
-                              style: GoogleFonts.poppins(
-                                fontSize: 32,
-                                fontWeight: FontWeight.bold,
-                                color: Colors.white,
-                                letterSpacing: 0.5,
-                              ),
-                            ),
-                            TextSpan(
-                              text: 'Connect',
-                              style: GoogleFonts.poppins(
-                                fontSize: 32,
-                                fontWeight: FontWeight.bold,
-                                color: AppColors.teal,
-                                letterSpacing: 0.5,
-                              ),
-                            ),
-                          ],
-                        ),
-                      ),
-                      const SizedBox(height: 6),
-
-                      // Tagline
-                      Text(
-                        'Learn • Work • Grow',
-                        style: GoogleFonts.inter(
-                          fontSize: 14,
-                          fontWeight: FontWeight.w500,
-                          color: AppColors.lightAqua.withValues(alpha: 0.85),
-                          letterSpacing: 2.0,
-                        ),
-                      ),
-                    ],
-                  ),
-                ),
-
-                const Spacer(flex: 2),
-
-                // Campus Graphic & Heading Banner
-                Padding(
-                  padding: const EdgeInsets.symmetric(horizontal: 32.0),
-                  child: Column(
-                    children: [
-                      Container(
-                        padding: const EdgeInsets.all(20),
-                        decoration: BoxDecoration(
-                          color: Colors.white.withValues(alpha: 0.08),
-                          borderRadius: BorderRadius.circular(20),
-                          border: Border.all(
-                            color: Colors.white.withValues(alpha: 0.12),
-                          ),
-                        ),
-                        child: Column(
-                          children: [
-                            const Icon(
-                              Icons.apartment_rounded,
-                              size: 54,
-                              color: AppColors.teal,
-                            ),
-                            const SizedBox(height: 12),
-                            Text(
-                              'Build Your Future',
-                              textAlign: TextAlign.center,
-                              style: GoogleFonts.poppins(
-                                fontSize: 20,
-                                fontWeight: FontWeight.bold,
-                                color: Colors.white,
-                              ),
-                            ),
-                            const SizedBox(height: 6),
-                            Text(
-                              'With Real-World Experience',
-                              textAlign: TextAlign.center,
-                              style: GoogleFonts.inter(
-                                fontSize: 13,
-                                color: Colors.white70,
-                              ),
-                            ),
-                          ],
-                        ),
-                      ),
-                    ],
-                  ),
-                ),
-
-                const Spacer(flex: 2),
-
-                // "Get Started ->" Button matching Image 1
-                Padding(
-                  padding: const EdgeInsets.symmetric(horizontal: 24.0, vertical: 16.0),
-                  child: SizedBox(
-                    width: double.infinity,
-                    height: 54,
-                    child: ElevatedButton(
-                      style: ElevatedButton.styleFrom(
-                        backgroundColor: Colors.white,
-                        foregroundColor: AppColors.deepNavy,
-                        elevation: 4,
-                        shape: RoundedRectangleBorder(
-                          borderRadius: BorderRadius.circular(28),
-                        ),
-                      ),
-                      onPressed: _navigateToOnboarding,
-                      child: Row(
-                        mainAxisAlignment: MainAxisAlignment.center,
-                        children: [
-                          Text(
-                            'Get Started',
-                            style: GoogleFonts.poppins(
-                              fontSize: 16,
-                              fontWeight: FontWeight.bold,
-                              color: AppColors.deepNavy,
-                            ),
-                          ),
-                          const SizedBox(width: 8),
-                          const Icon(
-                            Icons.arrow_forward_rounded,
-                            size: 18,
-                            color: AppColors.deepNavy,
-                          ),
-                        ],
                       ),
                     ),
                   ),
                 ),
-
-                const SizedBox(height: 12),
-              ],
-            ),
+              );
+            },
           ),
         ),
       ),

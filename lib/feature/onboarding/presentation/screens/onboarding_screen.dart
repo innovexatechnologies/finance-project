@@ -71,199 +71,226 @@ class _OnboardingScreenState extends State<OnboardingScreen> {
         ],
       ),
       body: SafeArea(
-        child: Column(
-          children: [
-            Expanded(
-              child: PageView.builder(
-                controller: _pageController,
-                itemCount: _onboardingData.length,
-                onPageChanged: (index) {
-                  setState(() {
-                    _currentPage = index;
-                  });
-                },
-                itemBuilder: (context, index) {
-                  final item = _onboardingData[index];
-                  return Padding(
-                    padding: const EdgeInsets.symmetric(horizontal: 24.0),
-                    child: Column(
-                      mainAxisAlignment: MainAxisAlignment.center,
-                      children: [
-                        // Illustration Container
-                        Container(
-                          width: 140,
-                          height: 140,
-                          decoration: BoxDecoration(
-                            color: AppColors.lightAqua,
-                            shape: BoxShape.circle,
-                            border: Border.all(
-                              color: AppColors.teal.withValues(alpha: 0.3),
-                              width: 2,
-                            ),
-                          ),
-                          child: Icon(
-                            item['icon'] as IconData,
-                            size: 64,
-                            color: AppColors.primaryBlue,
-                          ),
+        child: PageView.builder(
+          controller: _pageController,
+          itemCount: _onboardingData.length,
+          onPageChanged: (index) {
+            setState(() {
+              _currentPage = index;
+            });
+          },
+          itemBuilder: (context, index) {
+            final item = _onboardingData[index];
+            return Center(
+              child: SingleChildScrollView(
+                physics: const BouncingScrollPhysics(),
+                padding: const EdgeInsets.symmetric(
+                  horizontal: 24.0,
+                  vertical: 12.0,
+                ),
+                child: Column(
+                  mainAxisSize: MainAxisSize.min,
+                  mainAxisAlignment: MainAxisAlignment.center,
+                  children: [
+                    // Illustration Circle
+                    Container(
+                      width: 90,
+                      height: 90,
+                      decoration: BoxDecoration(
+                        color: AppColors.lightAqua,
+                        shape: BoxShape.circle,
+                        border: Border.all(
+                          color: AppColors.teal.withValues(alpha: 0.35),
+                          width: 2,
                         ),
-                        const SizedBox(height: 32),
-
-                        // Badge
-                        Container(
-                          padding: const EdgeInsets.symmetric(
-                              horizontal: 14, vertical: 6),
-                          decoration: BoxDecoration(
-                            color: AppColors.teal.withValues(alpha: 0.12),
-                            borderRadius: BorderRadius.circular(20),
+                        boxShadow: [
+                          BoxShadow(
+                            color: AppColors.teal.withValues(alpha: 0.15),
+                            blurRadius: 16,
+                            offset: const Offset(0, 4),
                           ),
-                          child: Text(
-                            item['badge'] as String,
-                            style: GoogleFonts.poppins(
-                              fontSize: 12,
-                              fontWeight: FontWeight.bold,
-                              color: AppColors.deepNavy,
-                            ),
-                          ),
-                        ),
-                        const SizedBox(height: 16),
-
-                        // Title
-                        Text(
-                          item['title'] as String,
-                          textAlign: TextAlign.center,
-                          style: GoogleFonts.poppins(
-                            fontSize: 24,
-                            fontWeight: FontWeight.bold,
-                            color: AppColors.deepNavy,
-                            height: 1.3,
-                          ),
-                        ),
-                        const SizedBox(height: 12),
-
-                        // Subtitle
-                        Text(
-                          item['subtitle'] as String,
-                          textAlign: TextAlign.center,
-                          style: GoogleFonts.inter(
-                            fontSize: 14,
-                            color: AppColors.grayText,
-                            height: 1.5,
-                          ),
-                        ),
-                        const SizedBox(height: 24),
-
-                        // Features List Cards
-                        Column(
-                          children: (item['features'] as List<String>)
-                              .map(
-                                (feat) => Padding(
-                                  padding: const EdgeInsets.only(bottom: 8.0),
-                                  child: Row(
-                                    children: [
-                                      Container(
-                                        padding: const EdgeInsets.all(4),
-                                        decoration: BoxDecoration(
-                                          color: AppColors.teal.withValues(alpha: 0.15),
-                                          shape: BoxShape.circle,
-                                        ),
-                                        child: const Icon(
-                                          Icons.check,
-                                          size: 14,
-                                          color: AppColors.teal,
-                                        ),
-                                      ),
-                                      const SizedBox(width: 10),
-                                      Expanded(
-                                        child: Text(
-                                          feat,
-                                          style: GoogleFonts.inter(
-                                            fontSize: 13,
-                                            fontWeight: FontWeight.w500,
-                                            color: AppColors.darkText,
-                                          ),
-                                        ),
-                                      ),
-                                    ],
-                                  ),
-                                ),
-                              )
-                              .toList(),
-                        ),
-                      ],
-                    ),
-                  );
-                },
-              ),
-            ),
-
-            // Bottom Navigation & Indicator Row
-            Padding(
-              padding: const EdgeInsets.symmetric(horizontal: 24.0, vertical: 24.0),
-              child: Row(
-                mainAxisAlignment: MainAxisAlignment.spaceBetween,
-                children: [
-                  // Dots Indicator
-                  Row(
-                    children: List.generate(
-                      _onboardingData.length,
-                      (index) => AnimatedContainer(
-                        duration: const Duration(milliseconds: 300),
-                        margin: const EdgeInsets.only(right: 6),
-                        width: _currentPage == index ? 24 : 8,
-                        height: 8,
-                        decoration: BoxDecoration(
-                          color: _currentPage == index
-                              ? AppColors.primaryBlue
-                              : AppColors.lightGray,
-                          borderRadius: BorderRadius.circular(4),
-                        ),
+                        ],
+                      ),
+                      child: Icon(
+                        item['icon'] as IconData,
+                        size: 44,
+                        color: AppColors.primaryBlue,
                       ),
                     ),
-                  ),
+                    const SizedBox(height: 18),
 
-                  // Next / Get Started Button
-                  ElevatedButton(
-                    style: ElevatedButton.styleFrom(
-                      backgroundColor: AppColors.primaryBlue,
-                      foregroundColor: Colors.white,
-                      shape: RoundedRectangleBorder(
-                        borderRadius: BorderRadius.circular(24),
-                      ),
+                    // Badge
+                    Container(
                       padding: const EdgeInsets.symmetric(
-                          horizontal: 24, vertical: 12),
-                    ),
-                    onPressed: () {
-                      if (_currentPage < _onboardingData.length - 1) {
-                        _pageController.nextPage(
-                          duration: const Duration(milliseconds: 350),
-                          curve: Curves.easeInOut,
-                        );
-                      } else {
-                        _finishOnboarding();
-                      }
-                    },
-                    child: Row(
-                      mainAxisSize: MainAxisSize.min,
-                      children: [
-                        Text(
-                          _currentPage == _onboardingData.length - 1
-                              ? 'Get Started'
-                              : 'Next',
-                          style: GoogleFonts.poppins(
-                            fontWeight: FontWeight.w600,
-                            fontSize: 14,
-                          ),
+                        horizontal: 14,
+                        vertical: 5,
+                      ),
+                      decoration: BoxDecoration(
+                        color: AppColors.teal.withValues(alpha: 0.12),
+                        borderRadius: BorderRadius.circular(20),
+                      ),
+                      child: Text(
+                        item['badge'] as String,
+                        style: GoogleFonts.poppins(
+                          fontSize: 12,
+                          fontWeight: FontWeight.bold,
+                          color: AppColors.deepNavy,
                         ),
-                        const SizedBox(width: 6),
-                        const Icon(Icons.arrow_forward_rounded, size: 16),
-                      ],
+                      ),
+                    ),
+                    const SizedBox(height: 12),
+
+                    // Title
+                    Text(
+                      item['title'] as String,
+                      textAlign: TextAlign.center,
+                      style: GoogleFonts.poppins(
+                        fontSize: 22,
+                        fontWeight: FontWeight.bold,
+                        color: AppColors.deepNavy,
+                        height: 1.25,
+                      ),
+                    ),
+                    const SizedBox(height: 10),
+
+                    // Subtitle
+                    Text(
+                      item['subtitle'] as String,
+                      textAlign: TextAlign.center,
+                      style: GoogleFonts.inter(
+                        fontSize: 13,
+                        color: AppColors.grayText,
+                        height: 1.45,
+                      ),
+                    ),
+                    const SizedBox(height: 20),
+
+                    // Features List Cards
+                    Container(
+                      padding: const EdgeInsets.all(16),
+                      decoration: BoxDecoration(
+                        color: AppColors.cardWhite,
+                        borderRadius: BorderRadius.circular(16),
+                        border: Border.all(color: AppColors.lightGray),
+                        boxShadow: [
+                          BoxShadow(
+                            color: AppColors.deepNavy.withValues(alpha: 0.03),
+                            blurRadius: 10,
+                            offset: const Offset(0, 2),
+                          ),
+                        ],
+                      ),
+                      child: Column(
+                        children: (item['features'] as List<String>)
+                            .map(
+                              (feat) => Padding(
+                                padding:
+                                    const EdgeInsets.symmetric(vertical: 6.0),
+                                child: Row(
+                                  children: [
+                                    Container(
+                                      padding: const EdgeInsets.all(4),
+                                      decoration: BoxDecoration(
+                                        color: AppColors.teal
+                                            .withValues(alpha: 0.15),
+                                        shape: BoxShape.circle,
+                                      ),
+                                      child: const Icon(
+                                        Icons.check,
+                                        size: 13,
+                                        color: AppColors.teal,
+                                      ),
+                                    ),
+                                    const SizedBox(width: 10),
+                                    Expanded(
+                                      child: Text(
+                                        feat,
+                                        style: GoogleFonts.inter(
+                                          fontSize: 13,
+                                          fontWeight: FontWeight.w500,
+                                          color: AppColors.darkText,
+                                        ),
+                                      ),
+                                    ),
+                                  ],
+                                ),
+                              ),
+                            )
+                            .toList(),
+                      ),
+                    ),
+                  ],
+                ),
+              ),
+            );
+          },
+        ),
+      ),
+      bottomNavigationBar: SafeArea(
+        child: Padding(
+          padding: const EdgeInsets.symmetric(horizontal: 24.0, vertical: 12.0),
+          child: Row(
+            mainAxisAlignment: MainAxisAlignment.spaceBetween,
+            children: [
+              // Dots Indicator
+              Row(
+                children: List.generate(
+                  _onboardingData.length,
+                  (index) => AnimatedContainer(
+                    duration: const Duration(milliseconds: 300),
+                    margin: const EdgeInsets.only(right: 6),
+                    width: _currentPage == index ? 24 : 8,
+                    height: 8,
+                    decoration: BoxDecoration(
+                      color: _currentPage == index
+                          ? AppColors.primaryBlue
+                          : AppColors.lightGray,
+                      borderRadius: BorderRadius.circular(4),
                     ),
                   ),
-                ],
+                ),
               ),
-            ),
-          ],
+
+              // Next / Get Started Button
+              ElevatedButton(
+                style: ElevatedButton.styleFrom(
+                  backgroundColor: AppColors.primaryBlue,
+                  foregroundColor: Colors.white,
+                  shape: RoundedRectangleBorder(
+                    borderRadius: BorderRadius.circular(24),
+                  ),
+                  padding:
+                      const EdgeInsets.symmetric(horizontal: 22, vertical: 11),
+                ),
+                onPressed: () {
+                  if (_currentPage < _onboardingData.length - 1) {
+                    _pageController.nextPage(
+                      duration: const Duration(milliseconds: 350),
+                      curve: Curves.easeInOut,
+                    );
+                  } else {
+                    _finishOnboarding();
+                  }
+                },
+                child: Row(
+                  mainAxisSize: MainAxisSize.min,
+                  children: [
+                    Text(
+                      _currentPage == _onboardingData.length - 1
+                          ? 'Get Started'
+                          : 'Next',
+                      style: GoogleFonts.poppins(
+                        fontWeight: FontWeight.w600,
+                        fontSize: 14,
+                      ),
+                    ),
+                    const SizedBox(width: 6),
+                    const Icon(Icons.arrow_forward_rounded, size: 16),
+                  ],
+                ),
+              ),
+            ],
+          ),
         ),
       ),
     );
