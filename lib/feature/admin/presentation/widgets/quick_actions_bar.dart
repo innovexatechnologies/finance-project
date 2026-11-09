@@ -1,5 +1,6 @@
 import 'package:flutter/material.dart';
 import 'package:link_vibe/core/constants/app_colors.dart';
+import 'package:link_vibe/feature/admin/presentation/screens/company_management_screen.dart';
 import 'package:link_vibe/feature/admin/presentation/screens/student_management_screen.dart';
 import 'package:link_vibe/feature/admin/services/admin_dashboard_service.dart';
 import 'package:link_vibe/feature/company/models/company_verification_model.dart';
@@ -20,109 +21,9 @@ class QuickActionsBar extends StatelessWidget {
   }
 
   void _openManageCompaniesModal(BuildContext context) {
-    final company = CompanyProfileService().currentProfile;
-    final verif = CompanyVerificationService().currentVerification;
-
-    showModalBottomSheet(
-      context: context,
-      isScrollControlled: true,
-      shape: const RoundedRectangleBorder(
-        borderRadius: BorderRadius.vertical(top: Radius.circular(20)),
-      ),
-      builder: (ctx) => Container(
-        padding: const EdgeInsets.all(24),
-        child: Column(
-          mainAxisSize: MainAxisSize.min,
-          crossAxisAlignment: CrossAxisAlignment.start,
-          children: [
-            Row(
-              mainAxisAlignment: MainAxisAlignment.spaceBetween,
-              children: [
-                Row(
-                  children: [
-                    Container(
-                      padding: const EdgeInsets.all(8),
-                      decoration: BoxDecoration(
-                        color: AppColors.accentTeal.withValues(alpha: 0.12),
-                        borderRadius: BorderRadius.circular(10),
-                      ),
-                      child: const Icon(Icons.domain_rounded, color: AppColors.accentTeal, size: 22),
-                    ),
-                    const SizedBox(width: 12),
-                    const Column(
-                      crossAxisAlignment: CrossAxisAlignment.start,
-                      children: [
-                        Text(
-                          'Corporate Partner Registry',
-                          style: TextStyle(
-                            fontSize: 18,
-                            fontWeight: FontWeight.bold,
-                            color: AppColors.darkNavy,
-                          ),
-                        ),
-                        Text(
-                          'SECP-registered corporate entities',
-                          style: TextStyle(fontSize: 12, color: AppColors.textSecondary),
-                        ),
-                      ],
-                    ),
-                  ],
-                ),
-                IconButton(
-                  icon: const Icon(Icons.close_rounded),
-                  onPressed: () => Navigator.pop(ctx),
-                ),
-              ],
-            ),
-            const SizedBox(height: 16),
-            const Divider(),
-            ListTile(
-              leading: CircleAvatar(
-                backgroundColor: AppColors.darkNavy,
-                child: Text(
-                  company.logoInitial,
-                  style: const TextStyle(color: Colors.white, fontWeight: FontWeight.bold),
-                ),
-              ),
-              title: Text(company.companyName, style: const TextStyle(fontWeight: FontWeight.bold)),
-              subtitle: Text('${company.industry} • ${company.city}'),
-              trailing: Container(
-                padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 4),
-                decoration: BoxDecoration(
-                  color: verif.status == VerificationStatus.verified
-                      ? AppColors.successBg
-                      : AppColors.warningBg,
-                  borderRadius: BorderRadius.circular(6),
-                ),
-                child: Text(
-                  verif.status == VerificationStatus.verified ? 'Verified' : 'Pending SECP Review',
-                  style: TextStyle(
-                    fontSize: 11,
-                    fontWeight: FontWeight.bold,
-                    color: verif.status == VerificationStatus.verified
-                        ? const Color(0xFF166534)
-                        : const Color(0xFF92400E),
-                  ),
-                ),
-              ),
-            ),
-            const SizedBox(height: 16),
-            Container(
-              padding: const EdgeInsets.all(12),
-              decoration: BoxDecoration(
-                color: AppColors.background,
-                borderRadius: BorderRadius.circular(8),
-                border: Border.all(color: AppColors.border),
-              ),
-              child: Text(
-                'Description: ${company.description}',
-                style: const TextStyle(fontSize: 12, color: AppColors.textSecondary),
-              ),
-            ),
-            const SizedBox(height: 24),
-          ],
-        ),
-      ),
+    Navigator.push(
+      context,
+      MaterialPageRoute(builder: (_) => const CompanyManagementScreen()),
     );
   }
 

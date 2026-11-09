@@ -4,7 +4,7 @@ import 'package:link_vibe/core/constants/app_colors.dart';
 import 'package:link_vibe/feature/admin/models/admin_student_model.dart';
 import 'package:link_vibe/feature/admin/presentation/screens/admin_dashboard_screen.dart';
 import 'package:link_vibe/feature/admin/presentation/screens/admin_login_screen.dart';
-import 'package:link_vibe/feature/admin/presentation/screens/company_verifications_screen.dart';
+import 'package:link_vibe/feature/admin/presentation/screens/company_management_screen.dart';
 import 'package:link_vibe/feature/admin/presentation/widgets/admin_sidebar.dart';
 import 'package:link_vibe/feature/admin/presentation/widgets/admin_top_navbar.dart';
 import 'package:link_vibe/feature/admin/services/admin_auth_service.dart';
@@ -113,10 +113,10 @@ class _StudentManagementScreenState extends State<StudentManagementScreen> {
         context,
         MaterialPageRoute(builder: (_) => const AdminDashboardScreen()),
       );
-    } else if (routeId == 'company_verifications') {
+    } else if (routeId == 'company_verifications' || routeId == 'company_management') {
       Navigator.pushReplacement(
         context,
-        MaterialPageRoute(builder: (_) => const CompanyVerificationsScreen()),
+        MaterialPageRoute(builder: (_) => const CompanyManagementScreen()),
       );
     }
   }
