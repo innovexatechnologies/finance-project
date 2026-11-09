@@ -3,6 +3,7 @@ import 'package:google_fonts/google_fonts.dart';
 import 'package:supabase_flutter/supabase_flutter.dart';
 import 'package:link_vibe/core/constants/app_colors.dart';
 import 'package:link_vibe/core/services/app_data_service.dart';
+import 'package:link_vibe/core/services/share_service.dart';
 import 'package:link_vibe/feature/student/explore/presentation/screens/explore_projects_screen.dart';
 import 'package:link_vibe/feature/student/project_details/presentation/screens/student_project_details_screen.dart';
 import 'package:link_vibe/feature/student/notifications/presentation/screens/notifications_screen.dart';
@@ -593,7 +594,23 @@ class _StudentHomeScreenState extends State<StudentHomeScreen> {
                   ),
                 ),
               ),
-              const SizedBox(width: 6),
+              const SizedBox(width: 4),
+              IconButton(
+                constraints: const BoxConstraints(),
+                padding: EdgeInsets.zero,
+                icon: const Icon(
+                  Icons.share_outlined,
+                  size: 20,
+                  color: AppColors.grayText,
+                ),
+                onPressed: () {
+                  ShareService.shareProject(
+                    context: context,
+                    project: project,
+                  );
+                },
+              ),
+              const SizedBox(width: 4),
               IconButton(
                 constraints: const BoxConstraints(),
                 padding: EdgeInsets.zero,

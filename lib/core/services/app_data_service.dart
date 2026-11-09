@@ -11,6 +11,12 @@ class AppDataService extends ChangeNotifier {
   SharedPreferences? _prefs;
 
   // Cache in memory for instant synchronous UI reads
+  bool _isLoggedIn = false;
+  String _userRole = 'Student';
+  String _userEmail = '';
+  String _userName = '';
+  String _userId = '';
+
   List<Map<String, dynamic>> _savedProjects = [];
   List<Map<String, dynamic>> _applications = [];
   List<Map<String, dynamic>> _customProjects = [];
@@ -18,8 +24,14 @@ class AppDataService extends ChangeNotifier {
   Map<String, dynamic> _profile = {};
   List<String> _skills = [];
   List<Map<String, dynamic>> _notifications = [];
+  List<Map<String, dynamic>> _certificates = [];
 
   // Keys
+  static const _kIsLoggedIn = 'cc_is_logged_in_v1';
+  static const _kUserRole = 'cc_user_role_v1';
+  static const _kUserEmail = 'cc_user_email_v1';
+  static const _kUserName = 'cc_user_name_v1';
+  static const _kUserId = 'cc_user_id_v1';
   static const _kSavedProjects = 'cc_saved_projects_v1';
   static const _kApplications = 'cc_applications_v1';
   static const _kCustomProjects = 'cc_custom_projects_v1';
@@ -27,6 +39,7 @@ class AppDataService extends ChangeNotifier {
   static const _kProfile = 'cc_profile_v1';
   static const _kSkills = 'cc_skills_v1';
   static const _kNotifications = 'cc_notifications_v1';
+  static const _kCertificates = 'cc_certificates_v1';
 
   // Default seed projects matching user document and image
   static final List<Map<String, dynamic>> defaultSeedProjects = [
@@ -122,6 +135,23 @@ class AppDataService extends ChangeNotifier {
     },
   ];
 
+  static final List<Map<String, dynamic>> defaultSeedCertificates = [
+    {
+      'id': 'CC-2026-8841',
+      'title': 'Project Completion Certificate',
+      'project': 'Barcode Scanning Mobile Utility',
+      'issuer': 'CampusConnect & CodeCraft Solutions',
+      'date': 'March 15, 2026',
+    },
+    {
+      'id': 'CC-2026-7732',
+      'title': 'Project Completion Certificate',
+      'project': 'Flutter App Mobile UI Development',
+      'issuer': 'CampusConnect & TechVista Corp',
+      'date': 'Feb 28, 2026',
+    },
+  ];
+
   /// Initialize persistent storage and load cached data
   Future<void> init() async {
     _prefs = await SharedPreferences.getInstance();
@@ -130,6 +160,33 @@ class AppDataService extends ChangeNotifier {
 
   void _loadAllFromPrefs() {
     if (_prefs == null) return;
+
+    // 0. Auth Session Persistence
+    _isLoggedIn = _prefs!.getBool(_kIsLoggedIn) ?? false;
+    _userRole = _prefs!.getString(_kUserRole) ?? 'Student';
+    _userEmail = _prefs!.getString(_kUserEmail) ?? '';
+    _userName = _prefs!.getString(_kUserName) ?? '';
+    _userId = _prefs!.getString(_kUserId) ?? '';
+
+    // Check Supabase session
+    try {
+      final sbUser = Supabase.instance.client.auth.currentUser;
+      if (sbUser != null) {
+        _isLoggedIn = true;
+        _userId = sbUser.id;
+        if (sbUser.email != null && sbUser.email!.isNotEmpty) {
+          _userEmail = sbUser.email!;
+        }
+        final metaRole = sbUser.userMetadata?['user_type']?.toString();
+        if (metaRole != null && metaRole.isNotEmpty) {
+          _userRole = metaRole;
+        }
+        final metaName = sbUser.userMetadata?['name']?.toString();
+        if (metaName != null && metaName.isNotEmpty) {
+          _userName = metaName;
+        }
+      }
+    } catch (_) {}
 
     // 1. Saved Projects
     final savedJson = _prefs!.getString(_kSavedProjects);
@@ -291,6 +348,20 @@ class AppDataService extends ChangeNotifier {
           'isRead': true,
         },
       ];
+    }
+
+    // 8. Certificates
+    final certJson = _prefs!.getString(_kCertificates);
+    if (certJson != null) {
+      try {
+        final List decoded = jsonDecode(certJson);
+        _certificates = decoded.map((e) => Map<String, dynamic>.from(e)).toList();
+      } catch (e) {
+        debugPrint('Error loading certificates: $e');
+        _certificates = List.from(defaultSeedCertificates);
+      }
+    } else {
+      _certificates = List.from(defaultSeedCertificates);
     }
 
     notifyListeners();
@@ -614,6 +685,87 @@ class AppDataService extends ChangeNotifier {
   }
 
   // ==========================================
+  // AUTH SESSION PERSISTENCE
+  // ==========================================
+
+  bool get isLoggedIn {
+    if (_isLoggedIn) return true;
+    try {
+      return Supabase.instance.client.auth.currentUser != null;
+    } catch (_) {
+      return false;
+    }
+  }
+
+  String get userRole => _userRole;
+  String get userEmail => _userEmail;
+  String get userName => _userName;
+  String get userId => _userId;
+
+  Future<void> saveAuthSession({
+    required String role,
+    String? email,
+    String? name,
+    String? userId,
+  }) async {
+    _isLoggedIn = true;
+    _userRole = role;
+    if (email != null && email.isNotEmpty) _userEmail = email;
+    if (name != null && name.isNotEmpty) _userName = name;
+    if (userId != null && userId.isNotEmpty) _userId = userId;
+
+    if (name != null && name.isNotEmpty) {
+      _profile['name'] = name;
+    }
+    if (email != null && email.isNotEmpty) {
+      _profile['email'] = email;
+    }
+
+    notifyListeners();
+
+    if (_prefs != null) {
+      await _prefs!.setBool(_kIsLoggedIn, true);
+      await _prefs!.setString(_kUserRole, _userRole);
+      if (_userEmail.isNotEmpty) await _prefs!.setString(_kUserEmail, _userEmail);
+      if (_userName.isNotEmpty) await _prefs!.setString(_kUserName, _userName);
+      if (_userId.isNotEmpty) await _prefs!.setString(_kUserId, _userId);
+      await _prefs!.setString(_kProfile, jsonEncode(_profile));
+    }
+  }
+
+  Future<void> clearAuthSession() async {
+    _isLoggedIn = false;
+    _userRole = 'Student';
+    _userEmail = '';
+    _userName = '';
+    _userId = '';
+
+    notifyListeners();
+
+    if (_prefs != null) {
+      await _prefs!.setBool(_kIsLoggedIn, false);
+      await _prefs!.remove(_kUserRole);
+      await _prefs!.remove(_kUserEmail);
+      await _prefs!.remove(_kUserName);
+      await _prefs!.remove(_kUserId);
+    }
+  }
+
+  // ==========================================
+  // CERTIFICATES
+  // ==========================================
+
+  List<Map<String, dynamic>> getCertificates() => List.unmodifiable(_certificates);
+
+  Future<void> addCertificate(Map<String, dynamic> cert) async {
+    _certificates.insert(0, cert);
+    notifyListeners();
+    if (_prefs != null) {
+      await _prefs!.setString(_kCertificates, jsonEncode(_certificates));
+    }
+  }
+
+  // ==========================================
   // STATS
   // ==========================================
 
@@ -633,7 +785,7 @@ class AppDataService extends ChangeNotifier {
     return _applications.where((a) => a['status'] == 'Completed').length;
   }
 
-  int get certificatesCount => 2; // Initial earned certificates
+  int get certificatesCount => _certificates.length;
 
   // Helper date formatter
   String _formattedDate(DateTime dt) {

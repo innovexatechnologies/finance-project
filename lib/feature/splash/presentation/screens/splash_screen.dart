@@ -1,7 +1,11 @@
+import 'dart:async';
 import 'package:flutter/material.dart';
 import 'package:google_fonts/google_fonts.dart';
 import 'package:link_vibe/core/constants/app_colors.dart';
+import 'package:link_vibe/core/services/app_data_service.dart';
+import 'package:link_vibe/feature/company/presentation/screens/company_dashboard.dart';
 import 'package:link_vibe/feature/onboarding/presentation/screens/onboarding_screen.dart';
+import 'package:link_vibe/feature/student/presentation/screens/student_main_nav.dart';
 
 class SplashScreen extends StatefulWidget {
   const SplashScreen({super.key});
@@ -15,6 +19,7 @@ class _SplashScreenState extends State<SplashScreen>
   late AnimationController _animController;
   late Animation<double> _fadeAnimation;
   late Animation<double> _scaleAnimation;
+  Timer? _autoLoginTimer;
 
   @override
   void initState() {
@@ -31,19 +36,48 @@ class _SplashScreenState extends State<SplashScreen>
       CurvedAnimation(parent: _animController, curve: Curves.easeOutBack),
     );
     _animController.forward();
+
+    // Auto-login check: If user has an active session, auto navigate directly to main screen
+    _autoLoginTimer = Timer(const Duration(milliseconds: 1500), () {
+      if (!mounted) return;
+      if (AppDataService.instance.isLoggedIn) {
+        _navigateToMain();
+      }
+    });
   }
 
   @override
   void dispose() {
+    _autoLoginTimer?.cancel();
     _animController.dispose();
     super.dispose();
   }
 
-  void _navigateToOnboarding() {
-    Navigator.pushReplacement(
-      context,
-      MaterialPageRoute(builder: (context) => const OnboardingScreen()),
-    );
+  void _navigateToMain() {
+    if (!mounted) return;
+    final role = AppDataService.instance.userRole;
+    if (role == 'Company') {
+      Navigator.pushReplacement(
+        context,
+        MaterialPageRoute(builder: (context) => const CompanyDashboardScreen()),
+      );
+    } else {
+      Navigator.pushReplacement(
+        context,
+        MaterialPageRoute(builder: (context) => const StudentMainNav()),
+      );
+    }
+  }
+
+  void _onGetStartedPressed() {
+    if (AppDataService.instance.isLoggedIn) {
+      _navigateToMain();
+    } else {
+      Navigator.pushReplacement(
+        context,
+        MaterialPageRoute(builder: (context) => const OnboardingScreen()),
+      );
+    }
   }
 
   @override
@@ -243,7 +277,7 @@ class _SplashScreenState extends State<SplashScreen>
                                     borderRadius: BorderRadius.circular(25),
                                   ),
                                 ),
-                                onPressed: _navigateToOnboarding,
+                                onPressed: _onGetStartedPressed,
                                 child: Row(
                                   mainAxisAlignment: MainAxisAlignment.center,
                                   children: [

@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 import 'package:google_fonts/google_fonts.dart';
 import 'package:supabase_flutter/supabase_flutter.dart';
 import 'package:link_vibe/core/constants/app_colors.dart';
+import 'package:link_vibe/core/services/app_data_service.dart';
 import 'package:link_vibe/feature/company/presentation/screens/company_dashboard.dart';
 import 'package:link_vibe/feature/student/presentation/screens/student_main_nav.dart';
 import 'login_screen.dart';
@@ -114,6 +115,16 @@ class _SignupScreenState extends State<SignupScreen> {
         );
         return;
       }
+
+      // Persist auth session locally
+      await AppDataService.instance.saveAuthSession(
+        role: _selectedRole,
+        email: email,
+        name: name,
+        userId: authResponse.user?.id,
+      );
+
+      if (!mounted) return;
 
       ScaffoldMessenger.of(context).showSnackBar(
         const SnackBar(

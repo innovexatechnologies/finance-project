@@ -140,5 +140,60 @@ void main() {
     expect(AppDataService.instance.getProfile()['name'], equals('Rabia Student'));
     expect(AppDataService.instance.getProfile()['bio'], contains('Senior Software Engineering Student'));
   });
+
+  test('Persistent Auth Session & Auto-Login across app restarts', () async {
+    // Initially not logged in
+    expect(AppDataService.instance.isLoggedIn, isFalse);
+
+    // Login user
+    await AppDataService.instance.saveAuthSession(
+      role: 'Student',
+      email: 'student@campus.edu.pk',
+      name: 'Ahmed Khan',
+      userId: 'usr_test_123',
+    );
+
+    expect(AppDataService.instance.isLoggedIn, isTrue);
+    expect(AppDataService.instance.userRole, equals('Student'));
+    expect(AppDataService.instance.userEmail, equals('student@campus.edu.pk'));
+
+    // SIMULATE APP CLOSE & REOPEN
+    await AppDataService.instance.init();
+
+    // Must still be logged in!
+    expect(AppDataService.instance.isLoggedIn, isTrue);
+    expect(AppDataService.instance.userRole, equals('Student'));
+    expect(AppDataService.instance.userEmail, equals('student@campus.edu.pk'));
+
+    // Test logout clears auth session
+    await AppDataService.instance.clearAuthSession();
+    expect(AppDataService.instance.isLoggedIn, isFalse);
+
+    // Reopen after logout
+    await AppDataService.instance.init();
+    expect(AppDataService.instance.isLoggedIn, isFalse);
+  });
+
+  test('Persistent Certificates across app restarts', () async {
+    final certCount = AppDataService.instance.getCertificates().length;
+    expect(certCount, greaterThanOrEqualTo(2));
+
+    await AppDataService.instance.addCertificate({
+      'id': 'CC-TEST-999',
+      'title': 'AI Machine Learning Certificate',
+      'project': 'Deep Learning Model Tuning',
+      'issuer': 'CampusConnect & AI Lab',
+      'date': 'Nov 09, 2026',
+    });
+
+    expect(AppDataService.instance.getCertificates().length, equals(certCount + 1));
+
+    // SIMULATE APP CLOSE & REOPEN
+    await AppDataService.instance.init();
+
+    expect(AppDataService.instance.getCertificates().length, equals(certCount + 1));
+    final newCert = AppDataService.instance.getCertificates().firstWhere((c) => c['id'] == 'CC-TEST-999');
+    expect(newCert['title'], equals('AI Machine Learning Certificate'));
+  });
 }
 

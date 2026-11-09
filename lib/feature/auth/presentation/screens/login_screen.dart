@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 import 'package:google_fonts/google_fonts.dart';
 import 'package:supabase_flutter/supabase_flutter.dart';
 import 'package:link_vibe/core/constants/app_colors.dart';
+import 'package:link_vibe/core/services/app_data_service.dart';
 import 'package:link_vibe/feature/company/presentation/screens/company_dashboard.dart';
 import 'package:link_vibe/feature/student/presentation/screens/student_main_nav.dart';
 import 'signup_screen.dart';
@@ -57,6 +58,16 @@ class _LoginScreenState extends State<LoginScreen> {
       if (metaRole != null && metaRole.toString().isNotEmpty) {
         role = metaRole.toString();
       }
+
+      // Persist auth session locally so app reopens directly to main screen
+      await AppDataService.instance.saveAuthSession(
+        role: role,
+        email: email,
+        name: authResponse.user?.userMetadata?['name']?.toString() ?? 'Ahmed Khan',
+        userId: authResponse.user?.id,
+      );
+
+      if (!mounted) return;
 
       ScaffoldMessenger.of(context).showSnackBar(
         const SnackBar(
@@ -125,7 +136,13 @@ class _LoginScreenState extends State<LoginScreen> {
     );
   }
 
-  void _enterAsStudentGuest() {
+  Future<void> _enterAsStudentGuest() async {
+    await AppDataService.instance.saveAuthSession(
+      role: 'Student',
+      email: 'rabia32pk@gmail.com',
+      name: 'Ahmed Khan',
+    );
+    if (!mounted) return;
     Navigator.pushReplacement(
       context,
       MaterialPageRoute(

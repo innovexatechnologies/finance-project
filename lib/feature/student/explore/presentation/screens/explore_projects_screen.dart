@@ -3,6 +3,7 @@ import 'package:google_fonts/google_fonts.dart';
 import 'package:supabase_flutter/supabase_flutter.dart';
 import 'package:link_vibe/core/constants/app_colors.dart';
 import 'package:link_vibe/core/services/app_data_service.dart';
+import 'package:link_vibe/core/services/share_service.dart';
 import 'package:link_vibe/feature/student/project_details/presentation/screens/student_project_details_screen.dart';
 
 class ExploreProjectsScreen extends StatefulWidget {
@@ -379,6 +380,23 @@ class _ExploreProjectsScreenState extends State<ExploreProjectsScreen> {
                                                   color: AppColors.statusOpen,
                                                 ),
                                               ),
+                                            ),
+                                            const SizedBox(width: 8),
+                                            // Share Button
+                                            IconButton(
+                                              constraints: const BoxConstraints(),
+                                              padding: EdgeInsets.zero,
+                                              icon: const Icon(
+                                                Icons.share_outlined,
+                                                color: AppColors.grayText,
+                                                size: 20,
+                                              ),
+                                              onPressed: () {
+                                                ShareService.shareProject(
+                                                  context: context,
+                                                  project: project,
+                                                );
+                                              },
                                             ),
                                             const SizedBox(width: 8),
                                             // Bookmark Button
