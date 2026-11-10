@@ -25,10 +25,21 @@ void main() async {
   );
 
   await AppDataService.instance.init();
+  final bootSupabase = SupabaseHelper.clientOrNull;
+  StreamSubscription<AuthState>? bootSub;
+  if (bootSupabase != null) {
+    bootSub = bootSupabase.auth.onAuthStateChange.listen((data) {
+      if (data.event == AuthChangeEvent.passwordRecovery) {
+        SupabaseHelper.pendingPasswordRecovery = true;
+      }
+    });
+  }
+
   if (SupabaseHelper.currentUser != null) {
     await AppDataService.instance.syncFromSupabase();
   }
 
+  await bootSub?.cancel();
   runApp(const MyApp());
 }
 
@@ -47,6 +58,7 @@ class MyApp extends StatefulWidget {
 class _MyAppState extends State<MyApp> {
   StreamSubscription<AuthState>? _authSub;
   bool _handlingAuthCallback = false;
+  bool _recoveryDialogOpen = false;
 
   @override
   void initState() {
@@ -54,6 +66,11 @@ class _MyAppState extends State<MyApp> {
     final supabase = SupabaseHelper.clientOrNull;
     if (supabase != null) {
       _authSub = supabase.auth.onAuthStateChange.listen(_onAuthStateChanged);
+    }
+    if (SupabaseHelper.pendingPasswordRecovery) {
+      WidgetsBinding.instance.addPostFrameCallback((_) {
+        _showPasswordRecoveryDialog();
+      });
     }
   }
 
@@ -163,9 +180,17 @@ class _MyAppState extends State<MyApp> {
   }
 
   void _showPasswordRecoveryDialog() {
+    if (_recoveryDialogOpen) return;
     final ctx = MyApp.navigatorKey.currentContext;
-    if (ctx == null) return;
+    if (ctx == null) {
+      WidgetsBinding.instance.addPostFrameCallback((_) {
+        if (mounted) _showPasswordRecoveryDialog();
+      });
+      return;
+    }
 
+    SupabaseHelper.pendingPasswordRecovery = false;
+    _recoveryDialogOpen = true;
     final passCtrl = TextEditingController();
     final confirmCtrl = TextEditingController();
     String? errorMsg;
@@ -242,12 +267,15 @@ class _MyAppState extends State<MyApp> {
                         await supabase.auth.updateUser(
                           UserAttributes(password: p1),
                         );
+                        if (!AppDataService.instance.isLoggedIn) {
+                          await supabase.auth.signOut();
+                        }
                         if (dialogCtx.mounted) Navigator.pop(dialogCtx);
                         if (ctx.mounted) {
                           ScaffoldMessenger.of(ctx).showSnackBar(
                             const SnackBar(
                               content: Text(
-                                'Password updated successfully! You can now continue.',
+                                'Password updated successfully! Please sign in with your new password.',
                               ),
                               backgroundColor: AppColors.statusOpen,
                             ),
@@ -274,7 +302,11 @@ class _MyAppState extends State<MyApp> {
           ],
         ),
       ),
-    );
+    ).whenComplete(() {
+      _recoveryDialogOpen = false;
+      passCtrl.dispose();
+      confirmCtrl.dispose();
+    });
   }
 
   @override

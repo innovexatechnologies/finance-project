@@ -84,8 +84,9 @@ class CompanyProjectService {
         final pid = p['id']?.toString() ?? '';
         final skills = SupabaseHelper.parseStringList(p['skills']);
         final dbAssigned = p['assigned_student']?.toString().trim() ?? '';
-        final computedAssigned =
-            dbAssigned.isNotEmpty ? dbAssigned : assignedNames[pid];
+        final computedAssigned = dbAssigned.isNotEmpty
+            ? dbAssigned
+            : assignedNames[pid];
 
         return ProjectModel(
           id: pid,
@@ -103,8 +104,8 @@ class CompanyProjectService {
           companyName: (p['company_name']?.toString().trim().isNotEmpty == true)
               ? p['company_name'].toString().trim()
               : (profile.companyName.isNotEmpty
-                  ? profile.companyName
-                  : 'Company Partner'),
+                    ? profile.companyName
+                    : 'Company Partner'),
           companyId: p['company_id']?.toString() ?? profile.id,
           status: p['status']?.toString() ?? 'Open',
           duration: p['duration']?.toString() ?? '3-4 weeks',
@@ -138,8 +139,8 @@ class CompanyProjectService {
     final companyName = project.companyName.trim().isNotEmpty
         ? project.companyName.trim()
         : (profile.companyName.isNotEmpty
-            ? profile.companyName
-            : 'Company Partner');
+              ? profile.companyName
+              : 'Company Partner');
     final companyId = project.companyId.isNotEmpty
         ? project.companyId
         : profile.id;
@@ -191,24 +192,25 @@ class CompanyProjectService {
   Future<void> updateProject(ProjectModel project) async {
     final supabase = SupabaseHelper.clientOrNull;
     final user = supabase?.auth.currentUser;
-    if (supabase != null &&
-        user != null &&
-        SupabaseHelper.isUuid(project.id)) {
-      await supabase.from('projects').update({
-        'title': project.title,
-        'category': project.category,
-        'description': project.description,
-        'requirements': project.requirements,
-        'deliverables': project.deliverables,
-        'additional_instructions': project.additionalInstructions,
-        'work_mode': project.projectType,
-        'duration': project.duration,
-        'deadline': project.deadline,
-        'openings': project.openings,
-        'skills': project.skillsRequired,
-        'status': project.status,
-        'updated_at': DateTime.now().toIso8601String(),
-      }).eq('id', project.id);
+    if (supabase != null && user != null && SupabaseHelper.isUuid(project.id)) {
+      await supabase
+          .from('projects')
+          .update({
+            'title': project.title,
+            'category': project.category,
+            'description': project.description,
+            'requirements': project.requirements,
+            'deliverables': project.deliverables,
+            'additional_instructions': project.additionalInstructions,
+            'work_mode': project.projectType,
+            'duration': project.duration,
+            'deadline': project.deadline,
+            'openings': project.openings,
+            'skills': project.skillsRequired,
+            'status': project.status,
+            'updated_at': DateTime.now().toIso8601String(),
+          })
+          .eq('id', project.id);
     }
 
     projectsNotifier.value = projectsNotifier.value
@@ -227,16 +229,17 @@ class CompanyProjectService {
 
     final supabase = SupabaseHelper.clientOrNull;
     final user = supabase?.auth.currentUser;
-    if (supabase != null &&
-        user != null &&
-        SupabaseHelper.isUuid(projectId)) {
+    if (supabase != null && user != null && SupabaseHelper.isUuid(projectId)) {
       try {
-        await supabase.from('projects').update({
-          'status': newStatus,
-          'assigned_student': ?assignedStudent,
-          'progress': ?resolvedProgress,
-          'updated_at': DateTime.now().toIso8601String(),
-        }).eq('id', projectId);
+        await supabase
+            .from('projects')
+            .update({
+              'status': newStatus,
+              'assigned_student': ?assignedStudent,
+              'progress': ?resolvedProgress,
+              'updated_at': DateTime.now().toIso8601String(),
+            })
+            .eq('id', projectId);
       } catch (e) {
         debugPrint('CompanyProjectService updateProjectStatus error: $e');
       }
@@ -263,14 +266,13 @@ class CompanyProjectService {
   Future<void> deleteProject(String projectId) async {
     final supabase = SupabaseHelper.clientOrNull;
     final user = supabase?.auth.currentUser;
-    if (supabase != null &&
-        user != null &&
-        SupabaseHelper.isUuid(projectId)) {
+    if (supabase != null && user != null && SupabaseHelper.isUuid(projectId)) {
       await supabase.from('projects').delete().eq('id', projectId);
     }
 
-    projectsNotifier.value =
-        projectsNotifier.value.where((p) => p.id != projectId).toList();
+    projectsNotifier.value = projectsNotifier.value
+        .where((p) => p.id != projectId)
+        .toList();
   }
 
   List<ProjectModel> getOpenProjectsForStudents() {

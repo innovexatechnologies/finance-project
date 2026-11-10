@@ -83,8 +83,11 @@ class _StudentMainNavState extends State<StudentMainNav> {
             SnackBar(
               content: Row(
                 children: [
-                  const Icon(Icons.info_outline_rounded,
-                      color: Colors.white, size: 18),
+                  const Icon(
+                    Icons.info_outline_rounded,
+                    color: Colors.white,
+                    size: 18,
+                  ),
                   const SizedBox(width: 8),
                   Text(
                     'Press back again to exit CampusConnect',
@@ -110,10 +113,7 @@ class _StudentMainNavState extends State<StudentMainNav> {
         SystemNavigator.pop();
       },
       child: Scaffold(
-        body: IndexedStack(
-          index: _currentIndex,
-          children: screens,
-        ),
+        body: IndexedStack(index: _currentIndex, children: screens),
         bottomNavigationBar: Container(
           decoration: BoxDecoration(
             color: Colors.white,
@@ -127,8 +127,10 @@ class _StudentMainNavState extends State<StudentMainNav> {
           ),
           child: SafeArea(
             child: Padding(
-              padding:
-                  const EdgeInsets.symmetric(horizontal: 8.0, vertical: 6.0),
+              padding: const EdgeInsets.symmetric(
+                horizontal: 8.0,
+                vertical: 6.0,
+              ),
               child: ListenableBuilder(
                 listenable: AppDataService.instance,
                 builder: (context, _) {

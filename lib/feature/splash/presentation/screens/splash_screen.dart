@@ -1,4 +1,5 @@
 import 'dart:async';
+
 import 'package:flutter/material.dart';
 import 'package:google_fonts/google_fonts.dart';
 import 'package:link_vibe/core/constants/app_colors.dart';
@@ -68,8 +69,8 @@ class _SplashScreenState extends State<SplashScreen>
         final role = AppDataService.instance.userRole.toLowerCase();
 
         if (role == 'admin') {
-          final restoredAdmin =
-              await AdminAuthService().restoreFromCurrentUser();
+          final restoredAdmin = await AdminAuthService()
+              .restoreFromCurrentUser();
           if (!mounted) return;
           if (restoredAdmin == null) {
             await AppDataService.instance.clearAuthSession();
@@ -135,11 +136,7 @@ class _SplashScreenState extends State<SplashScreen>
           gradient: LinearGradient(
             begin: Alignment.topLeft,
             end: Alignment.bottomRight,
-            colors: [
-              Color(0xFF061936),
-              AppColors.deepNavy,
-              Color(0xFF123E78),
-            ],
+            colors: [Color(0xFF061936), AppColors.deepNavy, Color(0xFF123E78)],
           ),
         ),
         child: SafeArea(
@@ -158,8 +155,10 @@ class _SplashScreenState extends State<SplashScreen>
                   child: ConstrainedBox(
                     constraints: BoxConstraints(
                       maxWidth: 460,
-                      minHeight: (constraints.maxHeight - 40)
-                          .clamp(0.0, double.infinity),
+                      minHeight: (constraints.maxHeight - 40).clamp(
+                        0.0,
+                        double.infinity,
+                      ),
                     ),
                     child: IntrinsicHeight(
                       child: FadeTransition(
@@ -189,14 +188,16 @@ class _SplashScreenState extends State<SplashScreen>
                                         ],
                                       ),
                                       border: Border.all(
-                                        color: Colors.white
-                                            .withValues(alpha: 0.28),
+                                        color: Colors.white.withValues(
+                                          alpha: 0.28,
+                                        ),
                                         width: 1.5,
                                       ),
                                       boxShadow: [
                                         BoxShadow(
-                                          color: AppColors.teal
-                                              .withValues(alpha: 0.35),
+                                          color: AppColors.teal.withValues(
+                                            alpha: 0.35,
+                                          ),
                                           blurRadius: 24,
                                           spreadRadius: 2,
                                         ),
@@ -258,12 +259,14 @@ class _SplashScreenState extends State<SplashScreen>
                                       vertical: 4,
                                     ),
                                     decoration: BoxDecoration(
-                                      color:
-                                          Colors.white.withValues(alpha: 0.08),
+                                      color: Colors.white.withValues(
+                                        alpha: 0.08,
+                                      ),
                                       borderRadius: BorderRadius.circular(20),
                                       border: Border.all(
-                                        color: Colors.white
-                                            .withValues(alpha: 0.12),
+                                        color: Colors.white.withValues(
+                                          alpha: 0.12,
+                                        ),
                                       ),
                                     ),
                                     child: Text(
@@ -302,8 +305,9 @@ class _SplashScreenState extends State<SplashScreen>
                                   Container(
                                     padding: const EdgeInsets.all(10),
                                     decoration: BoxDecoration(
-                                      color:
-                                          AppColors.teal.withValues(alpha: 0.18),
+                                      color: AppColors.teal.withValues(
+                                        alpha: 0.18,
+                                      ),
                                       borderRadius: BorderRadius.circular(14),
                                     ),
                                     child: Icon(

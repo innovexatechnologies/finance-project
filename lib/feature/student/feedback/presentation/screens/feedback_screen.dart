@@ -23,7 +23,8 @@ class _FeedbackScreenState extends State<FeedbackScreen> {
   @override
   void initState() {
     super.initState();
-    final projectId = widget.project['projectId']?.toString() ??
+    final projectId =
+        widget.project['projectId']?.toString() ??
         widget.project['id']?.toString() ??
         '';
     final existing = AppDataService.instance.getSubmission(projectId);
@@ -64,17 +65,18 @@ class _FeedbackScreenState extends State<FeedbackScreen> {
 
     setState(() => _isSubmitting = true);
     try {
-      final projectId = widget.project['projectId']?.toString() ??
+      final projectId =
+          widget.project['projectId']?.toString() ??
           widget.project['id']?.toString() ??
           '';
       final projectTitle =
           widget.project['title']?.toString().trim().isNotEmpty == true
-              ? widget.project['title'].toString().trim()
-              : 'Assigned Project';
+          ? widget.project['title'].toString().trim()
+          : 'Assigned Project';
       final company =
           widget.project['company']?.toString().trim().isNotEmpty == true
-              ? widget.project['company'].toString().trim()
-              : 'Partner Company';
+          ? widget.project['company'].toString().trim()
+          : 'Partner Company';
 
       await AppDataService.instance.submitWork(
         projectId: projectId,
@@ -108,11 +110,13 @@ class _FeedbackScreenState extends State<FeedbackScreen> {
 
   @override
   Widget build(BuildContext context) {
-    final projectId = widget.project['projectId']?.toString() ??
+    final projectId =
+        widget.project['projectId']?.toString() ??
         widget.project['id']?.toString() ??
         '';
     final existing = AppDataService.instance.getSubmission(projectId);
-    final rawFeedback = widget.project['companyFeedback']?.toString().trim() ??
+    final rawFeedback =
+        widget.project['companyFeedback']?.toString().trim() ??
         existing?['feedback']?.toString().trim() ??
         '';
     final feedbackText = rawFeedback.isNotEmpty
@@ -121,12 +125,12 @@ class _FeedbackScreenState extends State<FeedbackScreen> {
     final deadline = widget.project['deadline']?.toString().trim() ?? '';
     final projectTitle =
         widget.project['title']?.toString().trim().isNotEmpty == true
-            ? widget.project['title'].toString().trim()
-            : 'Project Revision';
+        ? widget.project['title'].toString().trim()
+        : 'Project Revision';
     final company =
         widget.project['company']?.toString().trim().isNotEmpty == true
-            ? widget.project['company'].toString().trim()
-            : 'Partner Company';
+        ? widget.project['company'].toString().trim()
+        : 'Partner Company';
 
     return Scaffold(
       backgroundColor: AppColors.background,
@@ -200,8 +204,11 @@ class _FeedbackScreenState extends State<FeedbackScreen> {
                     children: [
                       Row(
                         children: [
-                          const Icon(Icons.feedback_rounded,
-                              color: Color(0xFFD97706), size: 20),
+                          const Icon(
+                            Icons.feedback_rounded,
+                            color: Color(0xFFD97706),
+                            size: 20,
+                          ),
                           const SizedBox(width: 8),
                           Expanded(
                             child: Text(
@@ -258,8 +265,7 @@ class _FeedbackScreenState extends State<FeedbackScreen> {
                         controller: _revisionNotesController,
                         maxLines: 4,
                         decoration: const InputDecoration(
-                          hintText:
-                              'Summarize the updates made in response to supervisor feedback...',
+                          hintText: 'Summarize the updates made in response to supervisor feedback...',
                         ),
                         validator: (val) {
                           final v = val?.trim() ?? '';
@@ -312,8 +318,7 @@ class _FeedbackScreenState extends State<FeedbackScreen> {
                         controller: _fileNameController,
                         decoration: const InputDecoration(
                           hintText: 'e.g. deliverable_v2.pdf',
-                          prefixIcon:
-                              Icon(Icons.attach_file_rounded, size: 20),
+                          prefixIcon: Icon(Icons.attach_file_rounded, size: 20),
                         ),
                         validator: (val) {
                           if ((val?.trim() ?? '').isEmpty) {

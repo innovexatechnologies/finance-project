@@ -18,6 +18,10 @@ class SupabaseHelper {
   /// external verification/recovery redirects.
   static bool isInteractiveAuthInProgress = false;
 
+  /// Set if a password recovery deep link arrives during app cold boot before
+  /// the widget tree mounts.
+  static bool pendingPasswordRecovery = false;
+
   static final Random _random = Random();
   static final RegExp _uuidRegex = RegExp(
     r'^[0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{12}$',

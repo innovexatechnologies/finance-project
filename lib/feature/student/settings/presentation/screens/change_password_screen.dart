@@ -97,13 +97,16 @@ class _ChangePasswordScreenState extends State<ChangePasswordScreen> {
     } on AuthException catch (e) {
       if (!mounted) return;
       ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(content: Text(e.message), backgroundColor: Colors.redAccent),
+        SnackBar(
+          content: Text(SupabaseHelper.friendlyError(e)),
+          backgroundColor: Colors.redAccent,
+        ),
       );
     } catch (e) {
       if (!mounted) return;
       ScaffoldMessenger.of(context).showSnackBar(
         SnackBar(
-          content: Text('Unable to send password reset email: $e'),
+          content: Text(SupabaseHelper.friendlyError(e)),
           backgroundColor: Colors.redAccent,
         ),
       );

@@ -28,7 +28,8 @@ class CompanyManagementScreen extends StatefulWidget {
   const CompanyManagementScreen({super.key});
 
   @override
-  State<CompanyManagementScreen> createState() => _CompanyManagementScreenState();
+  State<CompanyManagementScreen> createState() =>
+      _CompanyManagementScreenState();
 }
 
 class _CompanyManagementScreenState extends State<CompanyManagementScreen> {
@@ -39,7 +40,8 @@ class _CompanyManagementScreenState extends State<CompanyManagementScreen> {
   String _searchQuery = '';
   String _selectedIndustry = 'All Industries';
   String _selectedLocation = 'All Locations';
-  String _selectedVerificationStatus = 'All'; // 'All', 'Verified', 'Pending', 'Rejected'
+  String _selectedVerificationStatus =
+      'All'; // 'All', 'Verified', 'Pending', 'Rejected'
   String _selectedAccountStatus = 'All'; // 'All', 'Active', 'Suspended'
   String _sortBy = 'Newest First'; // 'Newest First', 'Oldest First', 'Most Projects', 'Company Name (A-Z)'
 
@@ -49,7 +51,12 @@ class _CompanyManagementScreenState extends State<CompanyManagementScreen> {
   int _currentPage = 1;
   final int _itemsPerPage = 5;
 
-  final List<String> _verificationFilters = ['All', 'Verified', 'Pending', 'Rejected'];
+  final List<String> _verificationFilters = [
+    'All',
+    'Verified',
+    'Pending',
+    'Rejected',
+  ];
   final List<String> _accountFilters = ['All', 'Active', 'Suspended'];
   final List<String> _sortOptions = [
     'Newest First',
@@ -150,8 +157,10 @@ class _CompanyManagementScreenState extends State<CompanyManagementScreen> {
       return;
     }
     try {
-      final launched =
-          await launchUrl(uri, mode: LaunchMode.externalApplication);
+      final launched = await launchUrl(
+        uri,
+        mode: LaunchMode.externalApplication,
+      );
       if (!launched && mounted) {
         ScaffoldMessenger.of(context).showSnackBar(
           const SnackBar(
@@ -216,7 +225,9 @@ class _CompanyManagementScreenState extends State<CompanyManagementScreen> {
         final query = _searchQuery.toLowerCase();
         final matchesName = c.companyName.toLowerCase().contains(query);
         final matchesEmail = c.officialEmail.toLowerCase().contains(query);
-        final matchesContact = c.contactPersonName.toLowerCase().contains(query);
+        final matchesContact = c.contactPersonName.toLowerCase().contains(
+          query,
+        );
         final matchesReg = c.registrationNumber.toLowerCase().contains(query);
         if (!matchesName && !matchesEmail && !matchesContact && !matchesReg) {
           return false;
@@ -224,7 +235,8 @@ class _CompanyManagementScreenState extends State<CompanyManagementScreen> {
       }
 
       // 2. Industry filter
-      if (effectiveIndustry != 'All Industries' && c.industry != effectiveIndustry) {
+      if (effectiveIndustry != 'All Industries' &&
+          c.industry != effectiveIndustry) {
         return false;
       }
 
@@ -262,18 +274,17 @@ class _CompanyManagementScreenState extends State<CompanyManagementScreen> {
       }
 
       return true;
-    }).toList()
-      ..sort((a, b) {
-        if (_sortBy == 'Newest First') {
-          return b.registrationDateTime.compareTo(a.registrationDateTime);
-        } else if (_sortBy == 'Oldest First') {
-          return a.registrationDateTime.compareTo(b.registrationDateTime);
-        } else if (_sortBy == 'Most Projects') {
-          return b.postedProjectsCount.compareTo(a.postedProjectsCount);
-        } else {
-          return a.companyName.compareTo(b.companyName);
-        }
-      });
+    }).toList()..sort((a, b) {
+      if (_sortBy == 'Newest First') {
+        return b.registrationDateTime.compareTo(a.registrationDateTime);
+      } else if (_sortBy == 'Oldest First') {
+        return a.registrationDateTime.compareTo(b.registrationDateTime);
+      } else if (_sortBy == 'Most Projects') {
+        return b.postedProjectsCount.compareTo(a.postedProjectsCount);
+      } else {
+        return a.companyName.compareTo(b.companyName);
+      }
+    });
   }
 
   // 4. Company Profile Detailed Drawer
@@ -315,7 +326,9 @@ class _CompanyManagementScreenState extends State<CompanyManagementScreen> {
                             borderRadius: BorderRadius.circular(12),
                             boxShadow: [
                               BoxShadow(
-                                color: AppColors.darkNavy.withValues(alpha: 0.18),
+                                color: AppColors.darkNavy.withValues(
+                                  alpha: 0.18,
+                                ),
                                 blurRadius: 8,
                                 offset: const Offset(0, 3),
                               ),
@@ -391,21 +404,30 @@ class _CompanyManagementScreenState extends State<CompanyManagementScreen> {
                 runSpacing: 8,
                 children: [
                   _buildStatusPill(
-                    label: company.verificationStatus == CompanyVerificationState.verified
+                    label:
+                        company.verificationStatus ==
+                            CompanyVerificationState.verified
                         ? 'Verified Partner'
-                        : company.verificationStatus == CompanyVerificationState.pending
-                            ? 'Verification Pending'
-                            : 'Verification Rejected',
-                    color: company.verificationStatus == CompanyVerificationState.verified
+                        : company.verificationStatus ==
+                              CompanyVerificationState.pending
+                        ? 'Verification Pending'
+                        : 'Verification Rejected',
+                    color:
+                        company.verificationStatus ==
+                            CompanyVerificationState.verified
                         ? AppColors.success
-                        : company.verificationStatus == CompanyVerificationState.pending
-                            ? AppColors.warning
-                            : AppColors.error,
-                    bgColor: company.verificationStatus == CompanyVerificationState.verified
+                        : company.verificationStatus ==
+                              CompanyVerificationState.pending
+                        ? AppColors.warning
+                        : AppColors.error,
+                    bgColor:
+                        company.verificationStatus ==
+                            CompanyVerificationState.verified
                         ? AppColors.successBg
-                        : company.verificationStatus == CompanyVerificationState.pending
-                            ? AppColors.warningBg
-                            : AppColors.errorBg,
+                        : company.verificationStatus ==
+                              CompanyVerificationState.pending
+                        ? AppColors.warningBg
+                        : AppColors.errorBg,
                   ),
                   _buildStatusPill(
                     label: company.accountStatus == CompanyAccountState.active
@@ -453,20 +475,52 @@ class _CompanyManagementScreenState extends State<CompanyManagementScreen> {
               // 2. Organization & Registration Details
               _buildSectionHeader('2. Corporate Registry & Address'),
               const SizedBox(height: 8),
-              _buildInfoRow(Icons.business_rounded, 'Industry Vertical', company.industry),
-              _buildInfoRow(Icons.numbers_rounded, 'Registration Number', company.registrationNumber),
+              _buildInfoRow(
+                Icons.business_rounded,
+                'Industry Vertical',
+                company.industry,
+              ),
+              _buildInfoRow(
+                Icons.numbers_rounded,
+                'Registration Number',
+                company.registrationNumber,
+              ),
               _buildInfoRow(Icons.location_on_rounded, 'City', company.city),
-              _buildInfoRow(Icons.home_work_rounded, 'Physical Headquarters', company.completeAddress),
-              _buildInfoRow(Icons.link_rounded, 'Official Website', company.websiteUrl),
-              _buildInfoRow(Icons.calendar_today_rounded, 'Registered On', company.registrationDate),
+              _buildInfoRow(
+                Icons.home_work_rounded,
+                'Physical Headquarters',
+                company.completeAddress,
+              ),
+              _buildInfoRow(
+                Icons.link_rounded,
+                'Official Website',
+                company.websiteUrl,
+              ),
+              _buildInfoRow(
+                Icons.calendar_today_rounded,
+                'Registered On',
+                company.registrationDate,
+              ),
               const SizedBox(height: 20),
 
               // 3. Official Contact Person
               _buildSectionHeader('3. Authorized Corporate Liaison'),
               const SizedBox(height: 8),
-              _buildInfoRow(Icons.person_outline_rounded, 'Contact Person', company.contactPersonName),
-              _buildInfoRow(Icons.email_outlined, 'Official Email', company.officialEmail),
-              _buildInfoRow(Icons.phone_outlined, 'Official Phone', company.phoneNumber),
+              _buildInfoRow(
+                Icons.person_outline_rounded,
+                'Contact Person',
+                company.contactPersonName,
+              ),
+              _buildInfoRow(
+                Icons.email_outlined,
+                'Official Email',
+                company.officialEmail,
+              ),
+              _buildInfoRow(
+                Icons.phone_outlined,
+                'Official Phone',
+                company.phoneNumber,
+              ),
               const SizedBox(height: 20),
 
               // 4. Verification Evidence Document
@@ -529,7 +583,10 @@ class _CompanyManagementScreenState extends State<CompanyManagementScreen> {
                       style: ElevatedButton.styleFrom(
                         backgroundColor: AppColors.primary,
                         foregroundColor: Colors.white,
-                        padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
+                        padding: const EdgeInsets.symmetric(
+                          horizontal: 12,
+                          vertical: 8,
+                        ),
                       ),
                       icon: const Icon(Icons.verified_outlined, size: 16),
                       label: const Text(
@@ -544,7 +601,9 @@ class _CompanyManagementScreenState extends State<CompanyManagementScreen> {
               const SizedBox(height: 20),
 
               // 5. Posted Collaboration Projects (Strictly Non-Financial)
-              _buildSectionHeader('5. Posted Collaboration Projects (${postedProjects.length})'),
+              _buildSectionHeader(
+                '5. Posted Collaboration Projects (${postedProjects.length})',
+              ),
               const SizedBox(height: 8),
               if (postedProjects.isEmpty)
                 Container(
@@ -557,15 +616,20 @@ class _CompanyManagementScreenState extends State<CompanyManagementScreen> {
                   child: const Center(
                     child: Text(
                       'No projects posted by this company yet.',
-                      style: TextStyle(fontSize: 12.5, color: AppColors.textSecondary),
+                      style: TextStyle(
+                        fontSize: 12.5,
+                        color: AppColors.textSecondary,
+                      ),
                     ),
                   ),
                 )
               else
                 ...postedProjects.map((project) {
-                  final isOpen = project.status == AdminProjectStatus.published ||
+                  final isOpen =
+                      project.status == AdminProjectStatus.published ||
                       project.status == AdminProjectStatus.active;
-                  final isPendingReview = project.status == AdminProjectStatus.pendingReview;
+                  final isPendingReview =
+                      project.status == AdminProjectStatus.pendingReview;
                   return Container(
                     margin: const EdgeInsets.only(bottom: 10),
                     padding: const EdgeInsets.all(12),
@@ -602,20 +666,23 @@ class _CompanyManagementScreenState extends State<CompanyManagementScreen> {
                         ),
                         const SizedBox(width: 8),
                         Container(
-                          padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 4),
+                          padding: const EdgeInsets.symmetric(
+                            horizontal: 10,
+                            vertical: 4,
+                          ),
                           decoration: BoxDecoration(
                             color: isOpen
                                 ? AppColors.successBg
                                 : isPendingReview
-                                    ? AppColors.warningBg
-                                    : AppColors.background,
+                                ? AppColors.warningBg
+                                : AppColors.background,
                             borderRadius: BorderRadius.circular(6),
                             border: Border.all(
                               color: isOpen
                                   ? AppColors.success.withValues(alpha: 0.3)
                                   : isPendingReview
-                                      ? AppColors.warning.withValues(alpha: 0.3)
-                                      : AppColors.border,
+                                  ? AppColors.warning.withValues(alpha: 0.3)
+                                  : AppColors.border,
                             ),
                           ),
                           child: Text(
@@ -626,8 +693,8 @@ class _CompanyManagementScreenState extends State<CompanyManagementScreen> {
                               color: isOpen
                                   ? AppColors.success
                                   : isPendingReview
-                                      ? AppColors.warning
-                                      : AppColors.textSecondary,
+                                  ? AppColors.warning
+                                  : AppColors.textSecondary,
                             ),
                           ),
                         ),
@@ -648,7 +715,9 @@ class _CompanyManagementScreenState extends State<CompanyManagementScreen> {
                   decoration: BoxDecoration(
                     color: AppColors.errorBg,
                     borderRadius: BorderRadius.circular(10),
-                    border: Border.all(color: AppColors.error.withValues(alpha: 0.3)),
+                    border: Border.all(
+                      color: AppColors.error.withValues(alpha: 0.3),
+                    ),
                   ),
                   child: Text(
                     'Suspension Reason: "${company.suspensionReason}"',
@@ -696,14 +765,20 @@ class _CompanyManagementScreenState extends State<CompanyManagementScreen> {
                             ),
                             Text(
                               audit.timestamp,
-                              style: const TextStyle(fontSize: 11, color: AppColors.textMuted),
+                              style: const TextStyle(
+                                fontSize: 11,
+                                color: AppColors.textMuted,
+                              ),
                             ),
                           ],
                         ),
                         const SizedBox(height: 2),
                         Text(
                           'Recorded by: ${audit.adminName}',
-                          style: const TextStyle(fontSize: 11.5, color: AppColors.textSecondary),
+                          style: const TextStyle(
+                            fontSize: 11.5,
+                            color: AppColors.textSecondary,
+                          ),
                         ),
                         if (audit.note != null) ...[
                           const SizedBox(height: 4),
@@ -725,7 +800,8 @@ class _CompanyManagementScreenState extends State<CompanyManagementScreen> {
               // Primary Action Buttons
               LayoutBuilder(
                 builder: (context, constraints) {
-                  if (company.verificationStatus == CompanyVerificationState.pending) {
+                  if (company.verificationStatus ==
+                      CompanyVerificationState.pending) {
                     return Wrap(
                       spacing: 8,
                       runSpacing: 8,
@@ -735,7 +811,9 @@ class _CompanyManagementScreenState extends State<CompanyManagementScreen> {
                             foregroundColor: AppColors.error,
                             side: const BorderSide(color: AppColors.error),
                             padding: const EdgeInsets.symmetric(
-                                horizontal: 14, vertical: 12),
+                              horizontal: 14,
+                              vertical: 12,
+                            ),
                           ),
                           icon: const Icon(Icons.cancel_outlined, size: 16),
                           label: const Text('Reject Verification'),
@@ -749,9 +827,14 @@ class _CompanyManagementScreenState extends State<CompanyManagementScreen> {
                             foregroundColor: AppColors.warning,
                             side: const BorderSide(color: AppColors.warning),
                             padding: const EdgeInsets.symmetric(
-                                horizontal: 14, vertical: 12),
+                              horizontal: 14,
+                              vertical: 12,
+                            ),
                           ),
-                          icon: const Icon(Icons.contact_support_outlined, size: 16),
+                          icon: const Icon(
+                            Icons.contact_support_outlined,
+                            size: 16,
+                          ),
                           label: const Text('Request Docs'),
                           onPressed: () {
                             Navigator.pop(ctx);
@@ -763,12 +846,18 @@ class _CompanyManagementScreenState extends State<CompanyManagementScreen> {
                             backgroundColor: AppColors.success,
                             foregroundColor: Colors.white,
                             padding: const EdgeInsets.symmetric(
-                                horizontal: 16, vertical: 12),
+                              horizontal: 16,
+                              vertical: 12,
+                            ),
                           ),
-                          icon: const Icon(Icons.check_circle_outline, size: 16),
+                          icon: const Icon(
+                            Icons.check_circle_outline,
+                            size: 16,
+                          ),
                           label: const Text('Approve Verification'),
                           onPressed: () async {
-                            final admin = _authService.currentAdmin?.fullName ??
+                            final admin =
+                                _authService.currentAdmin?.fullName ??
                                 'Executive Administrator';
                             await _companyService.approveCompanyVerification(
                               companyId: company.id,
@@ -779,7 +868,8 @@ class _CompanyManagementScreenState extends State<CompanyManagementScreen> {
                             ScaffoldMessenger.of(this.context).showSnackBar(
                               SnackBar(
                                 content: Text(
-                                    'Verification approved for ${company.companyName}!'),
+                                  'Verification approved for ${company.companyName}!',
+                                ),
                                 backgroundColor: AppColors.success,
                                 behavior: SnackBarBehavior.floating,
                               ),
@@ -875,8 +965,11 @@ class _CompanyManagementScreenState extends State<CompanyManagementScreen> {
                   ),
                   child: Row(
                     children: [
-                      const Icon(Icons.description_outlined,
-                          color: AppColors.primary, size: 20),
+                      const Icon(
+                        Icons.description_outlined,
+                        color: AppColors.primary,
+                        size: 20,
+                      ),
                       const SizedBox(width: 10),
                       Expanded(
                         child: Text(
@@ -961,11 +1054,15 @@ class _CompanyManagementScreenState extends State<CompanyManagementScreen> {
             icon: const Icon(Icons.copy_rounded, size: 16),
             label: const Text('Copy Reg Number'),
             onPressed: () {
-              Clipboard.setData(ClipboardData(text: company.registrationNumber));
+              Clipboard.setData(
+                ClipboardData(text: company.registrationNumber),
+              );
               Navigator.pop(ctx);
               ScaffoldMessenger.of(context).showSnackBar(
                 SnackBar(
-                  content: Text('Copied ${company.registrationNumber} to clipboard!'),
+                  content: Text(
+                    'Copied ${company.registrationNumber} to clipboard!',
+                  ),
                   backgroundColor: AppColors.primary,
                   behavior: SnackBarBehavior.floating,
                 ),
@@ -1002,7 +1099,10 @@ class _CompanyManagementScreenState extends State<CompanyManagementScreen> {
             Expanded(
               child: Text(
                 'Reject Verification: ${company.companyName}',
-                style: GoogleFonts.poppins(fontSize: 16, fontWeight: FontWeight.bold),
+                style: GoogleFonts.poppins(
+                  fontSize: 16,
+                  fontWeight: FontWeight.bold,
+                ),
                 overflow: TextOverflow.ellipsis,
               ),
             ),
@@ -1016,15 +1116,17 @@ class _CompanyManagementScreenState extends State<CompanyManagementScreen> {
             children: [
               const Text(
                 'A mandatory rejection reason is required so corporate liaisons can rectify their registration filing.',
-                style: TextStyle(fontSize: 12.5, color: AppColors.textSecondary),
+                style: TextStyle(
+                  fontSize: 12.5,
+                  color: AppColors.textSecondary,
+                ),
               ),
               const SizedBox(height: 14),
               TextField(
                 controller: reasonController,
                 decoration: const InputDecoration(
                   labelText: 'Rejection Reason *',
-                  hintText:
-                      'e.g. Uploaded registration certificate has expired or number mismatch...',
+                  hintText: 'e.g. Uploaded registration certificate has expired or number mismatch...',
                   border: OutlineInputBorder(),
                 ),
                 maxLines: 3,
@@ -1047,7 +1149,8 @@ class _CompanyManagementScreenState extends State<CompanyManagementScreen> {
               if (reason.isEmpty) return;
 
               final admin =
-                  _authService.currentAdmin?.fullName ?? 'Executive Administrator';
+                  _authService.currentAdmin?.fullName ??
+                  'Executive Administrator';
               await _companyService.rejectCompanyVerification(
                 companyId: company.id,
                 reason: reason,
@@ -1059,7 +1162,8 @@ class _CompanyManagementScreenState extends State<CompanyManagementScreen> {
               ScaffoldMessenger.of(context).showSnackBar(
                 SnackBar(
                   content: Text(
-                      'Verification rejected for ${company.companyName}. Reason recorded.'),
+                    'Verification rejected for ${company.companyName}. Reason recorded.',
+                  ),
                   backgroundColor: AppColors.error,
                   behavior: SnackBarBehavior.floating,
                 ),
@@ -1082,12 +1186,18 @@ class _CompanyManagementScreenState extends State<CompanyManagementScreen> {
         shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
         title: Row(
           children: [
-            const Icon(Icons.contact_support_outlined, color: AppColors.warning),
+            const Icon(
+              Icons.contact_support_outlined,
+              color: AppColors.warning,
+            ),
             const SizedBox(width: 10),
             Expanded(
               child: Text(
                 'Request Documents: ${company.companyName}',
-                style: GoogleFonts.poppins(fontSize: 16, fontWeight: FontWeight.bold),
+                style: GoogleFonts.poppins(
+                  fontSize: 16,
+                  fontWeight: FontWeight.bold,
+                ),
                 overflow: TextOverflow.ellipsis,
               ),
             ),
@@ -1101,15 +1211,17 @@ class _CompanyManagementScreenState extends State<CompanyManagementScreen> {
             children: [
               const Text(
                 'Specify what supplementary filings or documents the company must submit to satisfy verification.',
-                style: TextStyle(fontSize: 12.5, color: AppColors.textSecondary),
+                style: TextStyle(
+                  fontSize: 12.5,
+                  color: AppColors.textSecondary,
+                ),
               ),
               const SizedBox(height: 14),
               TextField(
                 controller: instructionsController,
                 decoration: const InputDecoration(
                   labelText: 'Document Instructions *',
-                  hintText:
-                      'e.g. Please provide Incorporation Certificate alongside official letterhead confirmation...',
+                  hintText: 'e.g. Please provide Incorporation Certificate alongside official letterhead confirmation...',
                   border: OutlineInputBorder(),
                 ),
                 maxLines: 3,
@@ -1132,7 +1244,8 @@ class _CompanyManagementScreenState extends State<CompanyManagementScreen> {
               if (instructions.isEmpty) return;
 
               final admin =
-                  _authService.currentAdmin?.fullName ?? 'Executive Administrator';
+                  _authService.currentAdmin?.fullName ??
+                  'Executive Administrator';
               await _companyService.requestAdditionalDocuments(
                 companyId: company.id,
                 instructions: instructions,
@@ -1144,7 +1257,8 @@ class _CompanyManagementScreenState extends State<CompanyManagementScreen> {
               ScaffoldMessenger.of(context).showSnackBar(
                 SnackBar(
                   content: Text(
-                      'Additional document request dispatched to ${company.companyName}.'),
+                    'Additional document request dispatched to ${company.companyName}.',
+                  ),
                   backgroundColor: AppColors.warning,
                   behavior: SnackBarBehavior.floating,
                 ),
@@ -1172,7 +1286,10 @@ class _CompanyManagementScreenState extends State<CompanyManagementScreen> {
             Expanded(
               child: Text(
                 'Suspend Account: ${company.companyName}',
-                style: GoogleFonts.poppins(fontSize: 16, fontWeight: FontWeight.bold),
+                style: GoogleFonts.poppins(
+                  fontSize: 16,
+                  fontWeight: FontWeight.bold,
+                ),
                 overflow: TextOverflow.ellipsis,
               ),
             ),
@@ -1186,15 +1303,17 @@ class _CompanyManagementScreenState extends State<CompanyManagementScreen> {
             children: [
               const Text(
                 'Suspending this corporate partner will immediately unlist their active projects and prevent student hiring.',
-                style: TextStyle(fontSize: 12.5, color: AppColors.textSecondary),
+                style: TextStyle(
+                  fontSize: 12.5,
+                  color: AppColors.textSecondary,
+                ),
               ),
               const SizedBox(height: 14),
               TextField(
                 controller: reasonController,
                 decoration: const InputDecoration(
                   labelText: 'Mandatory Suspension Reason *',
-                  hintText:
-                      'e.g. Policy breach or commercial solicitation violating platform guidelines...',
+                  hintText: 'e.g. Policy breach or commercial solicitation violating platform guidelines...',
                   border: OutlineInputBorder(),
                 ),
                 maxLines: 3,
@@ -1217,7 +1336,8 @@ class _CompanyManagementScreenState extends State<CompanyManagementScreen> {
               if (reason.isEmpty) return;
 
               final admin =
-                  _authService.currentAdmin?.fullName ?? 'Executive Administrator';
+                  _authService.currentAdmin?.fullName ??
+                  'Executive Administrator';
               await _companyService.suspendCompanyAccount(
                 companyId: company.id,
                 reason: reason,
@@ -1229,7 +1349,8 @@ class _CompanyManagementScreenState extends State<CompanyManagementScreen> {
               ScaffoldMessenger.of(context).showSnackBar(
                 SnackBar(
                   content: Text(
-                      '${company.companyName} corporate account has been suspended.'),
+                    '${company.companyName} corporate account has been suspended.',
+                  ),
                   backgroundColor: AppColors.error,
                   behavior: SnackBarBehavior.floating,
                 ),
@@ -1255,7 +1376,10 @@ class _CompanyManagementScreenState extends State<CompanyManagementScreen> {
             Expanded(
               child: Text(
                 'Reactivate Account: ${company.companyName}',
-                style: GoogleFonts.poppins(fontSize: 16, fontWeight: FontWeight.bold),
+                style: GoogleFonts.poppins(
+                  fontSize: 16,
+                  fontWeight: FontWeight.bold,
+                ),
                 overflow: TextOverflow.ellipsis,
               ),
             ),
@@ -1277,7 +1401,8 @@ class _CompanyManagementScreenState extends State<CompanyManagementScreen> {
             ),
             onPressed: () async {
               final admin =
-                  _authService.currentAdmin?.fullName ?? 'Executive Administrator';
+                  _authService.currentAdmin?.fullName ??
+                  'Executive Administrator';
               await _companyService.reactivateCompanyAccount(
                 companyId: company.id,
                 adminName: admin,
@@ -1287,7 +1412,9 @@ class _CompanyManagementScreenState extends State<CompanyManagementScreen> {
               if (!mounted) return;
               ScaffoldMessenger.of(context).showSnackBar(
                 SnackBar(
-                  content: Text('${company.companyName} account has been reactivated.'),
+                  content: Text(
+                    '${company.companyName} account has been reactivated.',
+                  ),
                   backgroundColor: AppColors.success,
                   behavior: SnackBarBehavior.floating,
                 ),
@@ -1328,7 +1455,10 @@ class _CompanyManagementScreenState extends State<CompanyManagementScreen> {
             children: [
               const Text(
                 'The authorized corporate roster has been generated in CSV format per platform data governance:',
-                style: TextStyle(fontSize: 12.5, color: AppColors.textSecondary),
+                style: TextStyle(
+                  fontSize: 12.5,
+                  color: AppColors.textSecondary,
+                ),
               ),
               const SizedBox(height: 12),
               Container(
@@ -1343,7 +1473,10 @@ class _CompanyManagementScreenState extends State<CompanyManagementScreen> {
                 child: SingleChildScrollView(
                   child: Text(
                     csv,
-                    style: const TextStyle(fontFamily: 'monospace', fontSize: 11),
+                    style: const TextStyle(
+                      fontFamily: 'monospace',
+                      fontSize: 11,
+                    ),
                   ),
                 ),
               ),
@@ -1423,7 +1556,10 @@ class _CompanyManagementScreenState extends State<CompanyManagementScreen> {
           const SizedBox(width: 8),
           Text(
             '$label: ',
-            style: const TextStyle(fontSize: 12.5, color: AppColors.textSecondary),
+            style: const TextStyle(
+              fontSize: 12.5,
+              color: AppColors.textSecondary,
+            ),
           ),
           Expanded(
             child: Text(
@@ -1480,7 +1616,8 @@ class _CompanyManagementScreenState extends State<CompanyManagementScreen> {
                     // Top Navigation Bar
                     AdminTopNavbar(
                       pageTitle: 'Company Management & Verification',
-                      onOpenDrawer: () => _scaffoldKey.currentState?.openDrawer(),
+                      onOpenDrawer: () =>
+                          _scaffoldKey.currentState?.openDrawer(),
                       onSignOut: _handleSignOut,
                       onSearch: (query) {
                         setState(() {
@@ -1498,13 +1635,13 @@ class _CompanyManagementScreenState extends State<CompanyManagementScreen> {
                           final industries = _buildIndustryOptions(companies);
                           final effectiveIndustry =
                               industries.contains(_selectedIndustry)
-                                  ? _selectedIndustry
-                                  : 'All Industries';
+                              ? _selectedIndustry
+                              : 'All Industries';
                           final locations = _buildLocationOptions(companies);
                           final effectiveLocation =
                               locations.contains(_selectedLocation)
-                                  ? _selectedLocation
-                                  : 'All Locations';
+                              ? _selectedLocation
+                              : 'All Locations';
 
                           final filtered = _getFilteredCompanies(
                             companies,
@@ -1512,8 +1649,9 @@ class _CompanyManagementScreenState extends State<CompanyManagementScreen> {
                             effectiveLocation: effectiveLocation,
                           );
 
-                          final totalPages =
-                              (filtered.length / _itemsPerPage).ceil().clamp(1, 999);
+                          final totalPages = (filtered.length / _itemsPerPage)
+                              .ceil()
+                              .clamp(1, 999);
                           final safePage = _currentPage.clamp(1, totalPages);
                           final startIndex = (safePage - 1) * _itemsPerPage;
                           final pageItems = filtered
@@ -1690,7 +1828,10 @@ class _CompanyManagementScreenState extends State<CompanyManagementScreen> {
           ),
           Text(
             subtitle,
-            style: GoogleFonts.inter(fontSize: 10.5, color: AppColors.textMuted),
+            style: GoogleFonts.inter(
+              fontSize: 10.5,
+              color: AppColors.textMuted,
+            ),
             maxLines: 1,
             overflow: TextOverflow.ellipsis,
           ),
@@ -1774,14 +1915,18 @@ class _CompanyManagementScreenState extends State<CompanyManagementScreen> {
                         ),
                         icon: const Icon(Icons.fact_check_outlined, size: 16),
                         label: const Text('Verification Queue'),
-                        onPressed: () => _onRouteSelected('company_verifications'),
+                        onPressed: () =>
+                            _onRouteSelected('company_verifications'),
                       ),
                       OutlinedButton.icon(
                         style: OutlinedButton.styleFrom(
                           foregroundColor: AppColors.darkNavy,
                           side: const BorderSide(color: AppColors.border),
                         ),
-                        icon: const Icon(Icons.file_download_outlined, size: 16),
+                        icon: const Icon(
+                          Icons.file_download_outlined,
+                          size: 16,
+                        ),
                         label: const Text('Export CSV'),
                         onPressed: () => _exportCsvRecords(filteredCompanies),
                       ),
@@ -1811,19 +1956,24 @@ class _CompanyManagementScreenState extends State<CompanyManagementScreen> {
                       decoration: InputDecoration(
                         labelText: 'Industry Sector',
                         contentPadding: const EdgeInsets.symmetric(
-                            horizontal: 12, vertical: 10),
+                          horizontal: 12,
+                          vertical: 10,
+                        ),
                         border: OutlineInputBorder(
-                            borderRadius: BorderRadius.circular(10)),
+                          borderRadius: BorderRadius.circular(10),
+                        ),
                       ),
                       items: industries
-                          .map((ind) => DropdownMenuItem(
-                                value: ind,
-                                child: Text(
-                                  ind,
-                                  style: const TextStyle(fontSize: 12.5),
-                                  overflow: TextOverflow.ellipsis,
-                                ),
-                              ))
+                          .map(
+                            (ind) => DropdownMenuItem(
+                              value: ind,
+                              child: Text(
+                                ind,
+                                style: const TextStyle(fontSize: 12.5),
+                                overflow: TextOverflow.ellipsis,
+                              ),
+                            ),
+                          )
                           .toList(),
                       onChanged: (val) {
                         if (val != null) {
@@ -1843,19 +1993,24 @@ class _CompanyManagementScreenState extends State<CompanyManagementScreen> {
                       decoration: InputDecoration(
                         labelText: 'Headquarters Location',
                         contentPadding: const EdgeInsets.symmetric(
-                            horizontal: 12, vertical: 10),
+                          horizontal: 12,
+                          vertical: 10,
+                        ),
                         border: OutlineInputBorder(
-                            borderRadius: BorderRadius.circular(10)),
+                          borderRadius: BorderRadius.circular(10),
+                        ),
                       ),
                       items: locations
-                          .map((loc) => DropdownMenuItem(
-                                value: loc,
-                                child: Text(
-                                  loc,
-                                  style: const TextStyle(fontSize: 12.5),
-                                  overflow: TextOverflow.ellipsis,
-                                ),
-                              ))
+                          .map(
+                            (loc) => DropdownMenuItem(
+                              value: loc,
+                              child: Text(
+                                loc,
+                                style: const TextStyle(fontSize: 12.5),
+                                overflow: TextOverflow.ellipsis,
+                              ),
+                            ),
+                          )
                           .toList(),
                       onChanged: (val) {
                         if (val != null) {
@@ -1875,19 +2030,24 @@ class _CompanyManagementScreenState extends State<CompanyManagementScreen> {
                       decoration: InputDecoration(
                         labelText: 'Sort By',
                         contentPadding: const EdgeInsets.symmetric(
-                            horizontal: 12, vertical: 10),
+                          horizontal: 12,
+                          vertical: 10,
+                        ),
                         border: OutlineInputBorder(
-                            borderRadius: BorderRadius.circular(10)),
+                          borderRadius: BorderRadius.circular(10),
+                        ),
                       ),
                       items: _sortOptions
-                          .map((s) => DropdownMenuItem(
-                                value: s,
-                                child: Text(
-                                  s,
-                                  style: const TextStyle(fontSize: 12.5),
-                                  overflow: TextOverflow.ellipsis,
-                                ),
-                              ))
+                          .map(
+                            (s) => DropdownMenuItem(
+                              value: s,
+                              child: Text(
+                                s,
+                                style: const TextStyle(fontSize: 12.5),
+                                overflow: TextOverflow.ellipsis,
+                              ),
+                            ),
+                          )
                           .toList(),
                       onChanged: (val) {
                         if (val != null) setState(() => _sortBy = val);
@@ -1932,7 +2092,8 @@ class _CompanyManagementScreenState extends State<CompanyManagementScreen> {
                         fontWeight: isSel ? FontWeight.bold : FontWeight.normal,
                       ),
                       shape: RoundedRectangleBorder(
-                          borderRadius: BorderRadius.circular(6)),
+                        borderRadius: BorderRadius.circular(6),
+                      ),
                       onSelected: (val) {
                         if (val) {
                           setState(() {
@@ -1971,7 +2132,8 @@ class _CompanyManagementScreenState extends State<CompanyManagementScreen> {
                         fontWeight: isSel ? FontWeight.bold : FontWeight.normal,
                       ),
                       shape: RoundedRectangleBorder(
-                          borderRadius: BorderRadius.circular(6)),
+                        borderRadius: BorderRadius.circular(6),
+                      ),
                       onSelected: (val) {
                         if (val) {
                           setState(() {
@@ -2002,8 +2164,8 @@ class _CompanyManagementScreenState extends State<CompanyManagementScreen> {
         color: isVerified
             ? AppColors.successBg
             : isPending
-                ? AppColors.warningBg
-                : AppColors.errorBg,
+            ? AppColors.warningBg
+            : AppColors.errorBg,
         borderRadius: BorderRadius.circular(6),
       ),
       child: Row(
@@ -2013,30 +2175,30 @@ class _CompanyManagementScreenState extends State<CompanyManagementScreen> {
             isVerified
                 ? Icons.verified_rounded
                 : isPending
-                    ? Icons.hourglass_top_rounded
-                    : Icons.cancel_outlined,
+                ? Icons.hourglass_top_rounded
+                : Icons.cancel_outlined,
             size: 13,
             color: isVerified
                 ? AppColors.success
                 : isPending
-                    ? AppColors.warning
-                    : AppColors.error,
+                ? AppColors.warning
+                : AppColors.error,
           ),
           const SizedBox(width: 5),
           Text(
             isVerified
                 ? 'Verified'
                 : isPending
-                    ? 'Pending'
-                    : 'Rejected',
+                ? 'Pending'
+                : 'Rejected',
             style: TextStyle(
               fontSize: 11,
               fontWeight: FontWeight.bold,
               color: isVerified
                   ? const Color(0xFF166534)
                   : isPending
-                      ? const Color(0xFF92400E)
-                      : const Color(0xFF991B1B),
+                  ? const Color(0xFF92400E)
+                  : const Color(0xFF991B1B),
             ),
           ),
         ],
@@ -2105,11 +2267,16 @@ class _CompanyManagementScreenState extends State<CompanyManagementScreen> {
             value: 'approve',
             child: Row(
               children: [
-                Icon(Icons.check_circle_outline,
-                    size: 16, color: AppColors.success),
+                Icon(
+                  Icons.check_circle_outline,
+                  size: 16,
+                  color: AppColors.success,
+                ),
                 SizedBox(width: 8),
-                Text('Approve Verification',
-                    style: TextStyle(fontSize: 12, color: AppColors.success)),
+                Text(
+                  'Approve Verification',
+                  style: TextStyle(fontSize: 12, color: AppColors.success),
+                ),
               ],
             ),
           ),
@@ -2119,8 +2286,10 @@ class _CompanyManagementScreenState extends State<CompanyManagementScreen> {
               children: [
                 Icon(Icons.cancel_outlined, size: 16, color: AppColors.error),
                 SizedBox(width: 8),
-                Text('Reject Verification',
-                    style: TextStyle(fontSize: 12, color: AppColors.error)),
+                Text(
+                  'Reject Verification',
+                  style: TextStyle(fontSize: 12, color: AppColors.error),
+                ),
               ],
             ),
           ),
@@ -2128,11 +2297,16 @@ class _CompanyManagementScreenState extends State<CompanyManagementScreen> {
             value: 'request_docs',
             child: Row(
               children: [
-                Icon(Icons.contact_support_outlined,
-                    size: 16, color: AppColors.warning),
+                Icon(
+                  Icons.contact_support_outlined,
+                  size: 16,
+                  color: AppColors.warning,
+                ),
                 SizedBox(width: 8),
-                Text('Request Additional Docs',
-                    style: TextStyle(fontSize: 12, color: AppColors.warning)),
+                Text(
+                  'Request Additional Docs',
+                  style: TextStyle(fontSize: 12, color: AppColors.warning),
+                ),
               ],
             ),
           ),
@@ -2144,8 +2318,10 @@ class _CompanyManagementScreenState extends State<CompanyManagementScreen> {
               children: [
                 Icon(Icons.block_rounded, size: 16, color: AppColors.error),
                 SizedBox(width: 8),
-                Text('Suspend Account',
-                    style: TextStyle(fontSize: 12, color: AppColors.error)),
+                Text(
+                  'Suspend Account',
+                  style: TextStyle(fontSize: 12, color: AppColors.error),
+                ),
               ],
             ),
           )
@@ -2154,11 +2330,16 @@ class _CompanyManagementScreenState extends State<CompanyManagementScreen> {
             value: 'reactivate',
             child: Row(
               children: [
-                Icon(Icons.lock_open_rounded,
-                    size: 16, color: AppColors.success),
+                Icon(
+                  Icons.lock_open_rounded,
+                  size: 16,
+                  color: AppColors.success,
+                ),
                 SizedBox(width: 8),
-                Text('Reactivate Account',
-                    style: TextStyle(fontSize: 12, color: AppColors.success)),
+                Text(
+                  'Reactivate Account',
+                  style: TextStyle(fontSize: 12, color: AppColors.success),
+                ),
               ],
             ),
           ),
@@ -2234,7 +2415,8 @@ class _CompanyManagementScreenState extends State<CompanyManagementScreen> {
                 separatorBuilder: (_, index) => const Divider(height: 1),
                 itemBuilder: (context, index) {
                   final company = pageCompanies[index];
-                  final isPending = company.verificationStatus ==
+                  final isPending =
+                      company.verificationStatus ==
                       CompanyVerificationState.pending;
                   final isSuspended =
                       company.accountStatus == CompanyAccountState.suspended;
@@ -2332,12 +2514,18 @@ class _CompanyManagementScreenState extends State<CompanyManagementScreen> {
                                   backgroundColor: AppColors.darkNavy,
                                   foregroundColor: Colors.white,
                                   padding: const EdgeInsets.symmetric(
-                                      horizontal: 12, vertical: 8),
+                                    horizontal: 12,
+                                    vertical: 8,
+                                  ),
                                 ),
-                                icon: const Icon(Icons.assignment_ind_outlined,
-                                    size: 15),
-                                label: const Text('View Profile',
-                                    style: TextStyle(fontSize: 11.5)),
+                                icon: const Icon(
+                                  Icons.assignment_ind_outlined,
+                                  size: 15,
+                                ),
+                                label: const Text(
+                                  'View Profile',
+                                  style: TextStyle(fontSize: 11.5),
+                                ),
                                 onPressed: () =>
                                     _openCompanyProfileDrawer(company),
                               ),
@@ -2350,7 +2538,9 @@ class _CompanyManagementScreenState extends State<CompanyManagementScreen> {
 
                   return Container(
                     padding: const EdgeInsets.symmetric(
-                        horizontal: 16, vertical: 14),
+                      horizontal: 16,
+                      vertical: 14,
+                    ),
                     child: Row(
                       children: [
                         Container(
@@ -2453,12 +2643,18 @@ class _CompanyManagementScreenState extends State<CompanyManagementScreen> {
                             backgroundColor: AppColors.darkNavy,
                             foregroundColor: Colors.white,
                             padding: const EdgeInsets.symmetric(
-                                horizontal: 12, vertical: 8),
+                              horizontal: 12,
+                              vertical: 8,
+                            ),
                           ),
-                          icon: const Icon(Icons.assignment_ind_outlined,
-                              size: 15),
-                          label: const Text('View Profile',
-                              style: TextStyle(fontSize: 11.5)),
+                          icon: const Icon(
+                            Icons.assignment_ind_outlined,
+                            size: 15,
+                          ),
+                          label: const Text(
+                            'View Profile',
+                            style: TextStyle(fontSize: 11.5),
+                          ),
                           onPressed: () => _openCompanyProfileDrawer(company),
                         ),
                         const SizedBox(width: 6),
@@ -2476,8 +2672,10 @@ class _CompanyManagementScreenState extends State<CompanyManagementScreen> {
               // Pagination Bar
               Container(
                 width: double.infinity,
-                padding:
-                    const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
+                padding: const EdgeInsets.symmetric(
+                  horizontal: 16,
+                  vertical: 12,
+                ),
                 decoration: const BoxDecoration(
                   border: Border(top: BorderSide(color: AppColors.border)),
                 ),
@@ -2500,7 +2698,8 @@ class _CompanyManagementScreenState extends State<CompanyManagementScreen> {
                         IconButton(
                           icon: const Icon(Icons.chevron_left_rounded),
                           onPressed: safePage > 1
-                              ? () => setState(() => _currentPage = safePage - 1)
+                              ? () =>
+                                    setState(() => _currentPage = safePage - 1)
                               : null,
                         ),
                         Text(
@@ -2513,7 +2712,8 @@ class _CompanyManagementScreenState extends State<CompanyManagementScreen> {
                         IconButton(
                           icon: const Icon(Icons.chevron_right_rounded),
                           onPressed: safePage < totalPages
-                              ? () => setState(() => _currentPage = safePage + 1)
+                              ? () =>
+                                    setState(() => _currentPage = safePage + 1)
                               : null,
                         ),
                       ],
@@ -2528,4 +2728,3 @@ class _CompanyManagementScreenState extends State<CompanyManagementScreen> {
     );
   }
 }
-
