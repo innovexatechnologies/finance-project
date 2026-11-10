@@ -1,9 +1,22 @@
 import 'dart:math';
+import 'package:flutter/foundation.dart' show kIsWeb;
 import 'package:supabase_flutter/supabase_flutter.dart';
 
 /// Safe wrapper & utilities for Supabase client access across runtime & tests.
 class SupabaseHelper {
   SupabaseHelper._();
+
+  static const String authRedirectUri =
+      'io.supabase.campusconnect://login-callback/';
+
+  /// Returns mobile deep-link callback URI on Android/iOS/desktop, or `null`
+  /// on Flutter Web so Supabase falls back to the current web origin.
+  static String? get emailRedirectUrl => kIsWeb ? null : authRedirectUri;
+
+  /// Guard set while LoginScreen / SignupScreen / AdminAuthService perform an
+  /// interactive auth call so the global deep-link listener only handles
+  /// external verification/recovery redirects.
+  static bool isInteractiveAuthInProgress = false;
 
   static final Random _random = Random();
   static final RegExp _uuidRegex = RegExp(

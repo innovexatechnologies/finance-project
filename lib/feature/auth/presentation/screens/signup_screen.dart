@@ -55,6 +55,7 @@ class _SignupScreenState extends State<SignupScreen> {
     final password = _passwordController.text.trim();
 
     setState(() => _isLoading = true);
+    SupabaseHelper.isInteractiveAuthInProgress = true;
 
     try {
       final supabase = SupabaseHelper.clientOrNull;
@@ -63,6 +64,7 @@ class _SignupScreenState extends State<SignupScreen> {
         final authResponse = await supabase.auth.signUp(
           email: email,
           password: password,
+          emailRedirectTo: SupabaseHelper.emailRedirectUrl,
           data: {
             'name': name,
             'user_type': _selectedRole,
@@ -236,6 +238,7 @@ class _SignupScreenState extends State<SignupScreen> {
       if (!mounted) return;
       setState(() => _errorBanner = SupabaseHelper.friendlyError(e));
     } finally {
+      SupabaseHelper.isInteractiveAuthInProgress = false;
       if (mounted) {
         setState(() => _isLoading = false);
       }

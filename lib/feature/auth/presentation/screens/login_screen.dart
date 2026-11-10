@@ -27,6 +27,8 @@ class _LoginScreenState extends State<LoginScreen> {
   late String _selectedRole;
   bool _isLoading = false;
   bool _obscurePassword = true;
+  bool _needsEmailConfirmation = false;
+  bool _isResendingConfirmation = false;
   String? _errorBanner;
 
   @override
@@ -42,8 +44,41 @@ class _LoginScreenState extends State<LoginScreen> {
     super.dispose();
   }
 
+  Future<void> _resendVerificationEmail() async {
+    final email = _emailController.text.trim();
+    if (email.isEmpty || _isResendingConfirmation) return;
+    final supabase = SupabaseHelper.clientOrNull;
+    if (supabase == null) return;
+
+    setState(() => _isResendingConfirmation = true);
+    try {
+      await supabase.auth.resend(
+        type: OtpType.signup,
+        email: email,
+        emailRedirectTo: SupabaseHelper.emailRedirectUrl,
+      );
+      if (!mounted) return;
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(
+          content: Text('Verification link resent to $email. Please check your inbox.'),
+          backgroundColor: AppColors.statusOpen,
+        ),
+      );
+    } catch (e) {
+      if (!mounted) return;
+      setState(() => _errorBanner = SupabaseHelper.friendlyError(e));
+    } finally {
+      if (mounted) {
+        setState(() => _isResendingConfirmation = false);
+      }
+    }
+  }
+
   Future<void> _handleLogin() async {
-    setState(() => _errorBanner = null);
+    setState(() {
+      _errorBanner = null;
+      _needsEmailConfirmation = false;
+    });
 
     if (!_formKey.currentState!.validate()) {
       return;
@@ -53,6 +88,7 @@ class _LoginScreenState extends State<LoginScreen> {
     final password = _passwordController.text.trim();
 
     setState(() => _isLoading = true);
+    SupabaseHelper.isInteractiveAuthInProgress = true;
 
     try {
       // 1. Real Supabase Cloud Authentication (when initialized)
@@ -259,11 +295,16 @@ class _LoginScreenState extends State<LoginScreen> {
       });
     } on AuthException catch (e) {
       if (!mounted) return;
-      setState(() => _errorBanner = SupabaseHelper.friendlyError(e));
+      setState(() {
+        _needsEmailConfirmation =
+            e.message.toLowerCase().contains('email not confirmed');
+        _errorBanner = SupabaseHelper.friendlyError(e);
+      });
     } catch (e) {
       if (!mounted) return;
       setState(() => _errorBanner = SupabaseHelper.friendlyError(e));
     } finally {
+      SupabaseHelper.isInteractiveAuthInProgress = false;
       if (mounted) {
         setState(() => _isLoading = false);
       }
@@ -369,7 +410,10 @@ class _LoginScreenState extends State<LoginScreen> {
                         if (supabase == null) {
                           throw Exception('Supabase client unavailable.');
                         }
-                        await supabase.auth.resetPasswordForEmail(target);
+                        await supabase.auth.resetPasswordForEmail(
+                          target,
+                          redirectTo: SupabaseHelper.emailRedirectUrl,
+                        );
                         if (!dialogCtx.mounted) return;
                         setDialogState(() {
                           submitting = false;
@@ -526,13 +570,47 @@ class _LoginScreenState extends State<LoginScreen> {
                                   ),
                                   const SizedBox(width: 8),
                                   Expanded(
-                                    child: Text(
-                                      _errorBanner!,
-                                      style: GoogleFonts.inter(
-                                        fontSize: 12.5,
-                                        fontWeight: FontWeight.w600,
-                                        color: const Color(0xFF991B1B),
-                                      ),
+                                    child: Column(
+                                      crossAxisAlignment:
+                                          CrossAxisAlignment.start,
+                                      children: [
+                                        Text(
+                                          _errorBanner!,
+                                          style: GoogleFonts.inter(
+                                            fontSize: 12.5,
+                                            fontWeight: FontWeight.w600,
+                                            color: const Color(0xFF991B1B),
+                                          ),
+                                        ),
+                                        if (_needsEmailConfirmation) ...[
+                                          const SizedBox(height: 6),
+                                          TextButton(
+                                            style: TextButton.styleFrom(
+                                              padding: EdgeInsets.zero,
+                                              minimumSize: const Size(0, 0),
+                                              tapTargetSize:
+                                                  MaterialTapTargetSize
+                                                      .shrinkWrap,
+                                            ),
+                                            onPressed:
+                                                _isResendingConfirmation
+                                                    ? null
+                                                    : _resendVerificationEmail,
+                                            child: Text(
+                                              _isResendingConfirmation
+                                                  ? 'Sending...'
+                                                  : 'Resend verification email',
+                                              style: GoogleFonts.inter(
+                                                fontSize: 12,
+                                                fontWeight: FontWeight.w700,
+                                                color: AppColors.primaryBlue,
+                                                decoration:
+                                                    TextDecoration.underline,
+                                              ),
+                                            ),
+                                          ),
+                                        ],
+                                      ],
                                     ),
                                   ),
                                 ],
@@ -569,6 +647,7 @@ class _LoginScreenState extends State<LoginScreen> {
                                         : () => setState(() {
                                               _selectedRole = role;
                                               _errorBanner = null;
+                                              _needsEmailConfirmation = false;
                                             }),
                                     child: AnimatedContainer(
                                       duration:

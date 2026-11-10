@@ -71,7 +71,10 @@ class _ChangePasswordScreenState extends State<ChangePasswordScreen> {
     setState(() => _isSendingEmail = true);
 
     try {
-      await supabase.auth.resetPasswordForEmail(email);
+      await supabase.auth.resetPasswordForEmail(
+        email,
+        redirectTo: SupabaseHelper.emailRedirectUrl,
+      );
 
       await AppDataService.instance.addNotification(
         title: 'Password Reset Email Sent',

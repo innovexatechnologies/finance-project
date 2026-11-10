@@ -124,6 +124,7 @@ class AdminAuthService {
     final supabase = SupabaseHelper.clientOrNull;
 
     if (supabase != null) {
+      SupabaseHelper.isInteractiveAuthInProgress = true;
       try {
         final response = await supabase.auth.signInWithPassword(
           email: normalizedEmail,
@@ -241,6 +242,8 @@ class AdminAuthService {
         return AdminAuthResult.failed(
           SupabaseHelper.friendlyError(e),
         );
+      } finally {
+        SupabaseHelper.isInteractiveAuthInProgress = false;
       }
     }
 
@@ -370,7 +373,10 @@ class AdminAuthService {
     }
 
     try {
-      await supabase.auth.resetPasswordForEmail(normalized);
+      await supabase.auth.resetPasswordForEmail(
+        normalized,
+        redirectTo: SupabaseHelper.emailRedirectUrl,
+      );
       return true;
     } catch (e) {
       debugPrint('AdminAuthService requestPasswordReset error: $e');

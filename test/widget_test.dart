@@ -162,6 +162,11 @@ void main() {
         ),
       );
       expect(msg, contains('internet connection'));
+      expect(
+        SupabaseHelper.authRedirectUri,
+        'io.supabase.campusconnect://login-callback/',
+      );
+      expect(SupabaseHelper.isInteractiveAuthInProgress, isFalse);
     });
 
     testWidgets(
