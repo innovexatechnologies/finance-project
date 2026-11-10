@@ -1,199 +1,443 @@
 import 'package:flutter/foundation.dart';
+import 'package:link_vibe/feature/admin/models/admin_application_monitoring_model.dart';
+import 'package:link_vibe/feature/admin/models/admin_company_model.dart';
 import 'package:link_vibe/feature/admin/models/admin_dashboard_model.dart';
+import 'package:link_vibe/feature/admin/models/admin_project_model.dart';
+import 'package:link_vibe/feature/admin/models/admin_student_model.dart';
+import 'package:link_vibe/feature/admin/services/admin_analytics_service.dart';
+import 'package:link_vibe/feature/admin/services/admin_application_monitoring_service.dart';
+import 'package:link_vibe/feature/admin/services/admin_auth_service.dart';
+import 'package:link_vibe/feature/admin/services/admin_certificate_service.dart';
+import 'package:link_vibe/feature/admin/services/admin_company_service.dart';
+import 'package:link_vibe/feature/admin/services/admin_project_service.dart';
+import 'package:link_vibe/feature/admin/services/admin_settings_service.dart';
+import 'package:link_vibe/feature/admin/services/admin_student_service.dart';
+import 'package:link_vibe/feature/admin/services/admin_verification_service.dart';
 import 'package:link_vibe/feature/company/models/company_verification_model.dart';
-import 'package:link_vibe/feature/company/services/company_applicant_service.dart';
-import 'package:link_vibe/feature/company/services/company_assignment_service.dart';
-import 'package:link_vibe/feature/company/services/company_project_service.dart';
-import 'package:link_vibe/feature/company/services/company_verification_service.dart';
 
 /// Enterprise Dashboard Service for CampusConnect Admin Console.
-/// Aggregates real-time data across student, company, and project domains.
+/// Aggregates 100% live metrics, cohort trends, and activity feeds from Supabase-backed services.
 class AdminDashboardService {
-  static final AdminDashboardService _instance = AdminDashboardService._internal();
+  static final AdminDashboardService _instance =
+      AdminDashboardService._internal();
   factory AdminDashboardService() => _instance;
 
   AdminDashboardService._internal() {
     _initListeners();
-    _refreshStats();
+    _recompute();
   }
 
-  late final ValueNotifier<PlatformStatsModel> statsNotifier;
-  late final ValueNotifier<List<AdminActivityItem>> activitiesNotifier;
-  late final ValueNotifier<String> selectedDateRangeNotifier;
-  late final ValueNotifier<bool> isLoadingNotifier;
+  final ValueNotifier<PlatformStatsModel> statsNotifier =
+      ValueNotifier<PlatformStatsModel>(
+    const PlatformStatsModel(
+      totalStudents: 0,
+      totalCompanies: 0,
+      pendingVerifications: 0,
+      totalProjects: 0,
+      activeProjects: 0,
+      completedProjects: 0,
+      pendingReports: 0,
+      studentGrowth: 0.0,
+      companyGrowth: 0.0,
+      projectGrowth: 0.0,
+      completionRate: 0.0,
+      categoryDistribution: {},
+      trends: [],
+    ),
+  );
+
+  final ValueNotifier<List<AdminActivityItem>> activitiesNotifier =
+      ValueNotifier<List<AdminActivityItem>>([]);
+
+  final ValueNotifier<String> selectedDateRangeNotifier =
+      ValueNotifier<String>('Last 30 Days');
+  final ValueNotifier<bool> isLoadingNotifier = ValueNotifier<bool>(false);
 
   void _initListeners() {
-    selectedDateRangeNotifier = ValueNotifier<String>('Last 30 Days');
-    isLoadingNotifier = ValueNotifier<bool>(false);
+    AdminCompanyService().companiesNotifier.addListener(_recompute);
+    AdminVerificationService().verificationsNotifier.addListener(_recompute);
+    AdminStudentService().studentsNotifier.addListener(_recompute);
+    AdminProjectService().projectsNotifier.addListener(_recompute);
+    AdminApplicationMonitoringService()
+        .applicationsNotifier
+        .addListener(_recompute);
+    AdminCertificateService().certificatesNotifier.addListener(_recompute);
+    AdminSettingsService().auditLogsNotifier.addListener(_recompute);
+  }
 
-    // Initial seed stats
-    statsNotifier = ValueNotifier<PlatformStatsModel>(_calculateStats('Last 30 Days'));
-    activitiesNotifier = ValueNotifier<List<AdminActivityItem>>(_getInitialActivities());
+  /// Loads every dataset for the entire Admin Console directly from Supabase.
+  Future<void> loadAllAdminData() async {
+    isLoadingNotifier.value = true;
+    try {
+      await Future.wait([
+        AdminCompanyService().loadFromSupabase(),
+        AdminVerificationService().loadFromSupabase(),
+        AdminStudentService().loadFromSupabase(),
+        AdminProjectService().loadFromSupabase(),
+        AdminApplicationMonitoringService().loadFromSupabase(),
+        AdminCertificateService().loadFromSupabase(),
+      ]);
+      // Load settings after projects & students so taxonomy counts match
+      await AdminSettingsService().loadFromSupabase();
+      _recompute();
+      AdminAnalyticsService().refreshAnalytics();
+    } catch (e) {
+      debugPrint('AdminDashboardService loadAllAdminData error: $e');
+    } finally {
+      isLoadingNotifier.value = false;
+    }
+  }
 
-    // Listen to company project changes
-    CompanyProjectService().projectsNotifier.addListener(() {
-      statsNotifier.value = _calculateStats(selectedDateRangeNotifier.value);
-    });
+  void _recompute() {
+    statsNotifier.value = _calculateStats(selectedDateRangeNotifier.value);
+    activitiesNotifier.value = _buildLiveActivities();
+  }
 
-    // Listen to verification changes
-    CompanyVerificationService().verificationNotifier.addListener(() {
-      statsNotifier.value = _calculateStats(selectedDateRangeNotifier.value);
-    });
+  DateTime? _cutoffForRange(String dateRange) {
+    final now = DateTime.now();
+    switch (dateRange) {
+      case 'Today':
+        return DateTime(now.year, now.month, now.day);
+      case 'Last 7 Days':
+        return now.subtract(const Duration(days: 7));
+      case 'Last 30 Days':
+        return now.subtract(const Duration(days: 30));
+      case 'All Time':
+      default:
+        return null;
+    }
+  }
 
-    // Listen to applicant changes
-    CompanyApplicantService().applicantsNotifier.addListener(() {
-      statsNotifier.value = _calculateStats(selectedDateRangeNotifier.value);
-    });
+  double _computeGrowthPct(List<DateTime> dates) {
+    if (dates.isEmpty) return 0.0;
+    final now = DateTime.now();
+    final recentCutoff = now.subtract(const Duration(days: 30));
+    final prevCutoff = now.subtract(const Duration(days: 60));
+
+    final recent = dates.where((d) => !d.isBefore(recentCutoff)).length;
+    final prior = dates
+        .where((d) => d.isBefore(recentCutoff) && !d.isBefore(prevCutoff))
+        .length;
+
+    if (prior == 0) {
+      return recent > 0 ? 100.0 : 0.0;
+    }
+    final pct = ((recent - prior) / prior) * 100.0;
+    return double.parse(pct.toStringAsFixed(1));
   }
 
   PlatformStatsModel _calculateStats(String dateRange) {
-    final projectService = CompanyProjectService();
-    final verificationService = CompanyVerificationService();
-    final applicantService = CompanyApplicantService();
-    final assignmentService = CompanyAssignmentService();
+    final allStudents = AdminStudentService().allStudents;
+    final allCompanies = AdminCompanyService().allCompanies;
+    final allVerifications = AdminVerificationService().allVerifications;
+    final allProjects = AdminProjectService().allProjects;
+    final allApps = AdminApplicationMonitoringService().allApplications;
 
-    final allProjects = projectService.projects;
-    final activeProjectsList = allProjects
-        .where((p) => p.status == 'Open' || p.status == 'In Progress')
+    final cutoff = _cutoffForRange(dateRange);
+
+    final filteredStudents = cutoff == null
+        ? allStudents
+        : allStudents
+            .where((s) => !s.registrationDateTime.isBefore(cutoff))
+            .toList();
+    final filteredCompanies = cutoff == null
+        ? allCompanies
+        : allCompanies
+            .where((c) => !c.registrationDateTime.isBefore(cutoff))
+            .toList();
+    final filteredProjects = cutoff == null
+        ? allProjects
+        : allProjects
+            .where((p) => !p.createdDateTime.isBefore(cutoff))
+            .toList();
+
+    final activeProjectsList = filteredProjects
+        .where((p) =>
+            p.status == AdminProjectStatus.published ||
+            p.status == AdminProjectStatus.active)
         .toList();
-    final completedProjectsList =
-        allProjects.where((p) => p.status == 'Completed').toList();
+    final completedProjectsList = filteredProjects
+        .where((p) => p.status == AdminProjectStatus.completed)
+        .toList();
 
-    // Check verification status from CompanyVerificationService
-    int pendingVerifCount = 0;
-    if (verificationService.currentVerification.status == VerificationStatus.pending) {
-      pendingVerifCount += 1;
-    }
-    // Also include student pending verifications
-    pendingVerifCount += 2; // e.g. UET & PUCIT student degree verifications
+    final pendingCompanyVerifs = allVerifications
+        .where((v) => v.status == VerificationStatus.pending)
+        .length;
+    final pendingStudentVerifs = allStudents
+        .where((s) => s.verificationStatus == StudentVerificationStatus.pending)
+        .length;
 
-    // Category distribution from real projects
+    final pendingReports = allApps
+        .where((a) =>
+            a.reportStatus == ApplicationReportStatus.reported ||
+            a.reportStatus == ApplicationReportStatus.underInvestigation)
+        .length;
+
+    // Category distribution strictly from live projects
     final Map<String, int> categories = {};
-    for (final p in allProjects) {
-      categories[p.category] = (categories[p.category] ?? 0) + 1;
+    for (final p in filteredProjects) {
+      final key = p.category.trim().isNotEmpty ? p.category.trim() : 'General';
+      categories[key] = (categories[key] ?? 0) + 1;
     }
 
-    // Dynamic multipliers based on selected date filter
-    double scale = 1.0;
-    if (dateRange == 'Today') scale = 0.2;
-    if (dateRange == 'Last 7 Days') scale = 0.55;
-    if (dateRange == 'Last 30 Days') scale = 1.0;
-    if (dateRange == 'All Time') scale = 1.4;
+    final totalProjCount = filteredProjects.length;
+    final completionRate = totalProjCount > 0
+        ? double.parse(
+            ((completedProjectsList.length / totalProjCount) * 100.0)
+                .toStringAsFixed(1),
+          )
+        : 0.0;
+
+    final trends = _buildTrendPoints(
+      students: allStudents,
+      companies: allCompanies,
+      projects: allProjects,
+    );
 
     return PlatformStatsModel(
-      totalStudents: (applicantService.allApplicants.length * 15 * scale).round() + 120,
-      totalCompanies: 48,
-      pendingVerifications: pendingVerifCount,
-      totalProjects: allProjects.length,
+      totalStudents: filteredStudents.length,
+      totalCompanies: filteredCompanies.length,
+      pendingVerifications: pendingCompanyVerifs + pendingStudentVerifs,
+      totalProjects: totalProjCount,
       activeProjects: activeProjectsList.length,
       completedProjects: completedProjectsList.length,
-      pendingReports: (assignmentService.allAssignments.where((a) => a.hasSubmission).length),
+      pendingReports: pendingReports,
+      studentGrowth: _computeGrowthPct(
+        allStudents.map((s) => s.registrationDateTime).toList(),
+      ),
+      companyGrowth: _computeGrowthPct(
+        allCompanies.map((c) => c.registrationDateTime).toList(),
+      ),
+      projectGrowth: _computeGrowthPct(
+        allProjects.map((p) => p.createdDateTime).toList(),
+      ),
+      completionRate: completionRate,
       categoryDistribution: categories,
-      trends: const [
-        TrendDataPoint(label: 'Jul', students: 85, companies: 6, projectsCreated: 4, projectsCompleted: 2),
-        TrendDataPoint(label: 'Aug', students: 120, companies: 10, projectsCreated: 7, projectsCompleted: 5),
-        TrendDataPoint(label: 'Sep', students: 160, companies: 14, projectsCreated: 9, projectsCompleted: 6),
-        TrendDataPoint(label: 'Oct', students: 210, companies: 18, projectsCreated: 12, projectsCompleted: 9),
-        TrendDataPoint(label: 'Nov', students: 285, companies: 24, projectsCreated: 15, projectsCompleted: 11),
-      ],
+      trends: trends,
     );
   }
 
-  List<AdminActivityItem> _getInitialActivities() {
-    return [
-      const AdminActivityItem(
-        id: 'act_01',
-        type: ActivityType.verificationSubmission,
-        title: 'Company Verification Request',
-        description: 'TechVista Innovations uploaded SECP / NTN Registration documentation for authorization.',
-        timeAgo: '12 mins ago',
-        actorName: 'TechVista Innovations',
-        actorRole: 'Corporate Partner',
-        badgeText: 'Pending Review',
-      ),
-      const AdminActivityItem(
-        id: 'act_02',
-        type: ActivityType.newProject,
-        title: 'New Project Published',
-        description: 'Mobile App Development sprint "Flutter E-Commerce Mobile App" published to campus feed.',
-        timeAgo: '45 mins ago',
-        actorName: 'Danish Ali Rajpoot',
-        actorRole: 'Project Manager',
-        badgeText: 'Active Sprint',
-      ),
-      const AdminActivityItem(
-        id: 'act_03',
-        type: ActivityType.studentRegistration,
-        title: 'New Student Profile Verified',
-        description: 'Ali Khan from FAST-NUCES Islamabad completed university degree verification.',
-        timeAgo: '2 hours ago',
-        actorName: 'FAST-NUCES Academic Registrar',
-        actorRole: 'University Liaison',
-        badgeText: 'Verified Student',
-      ),
-      const AdminActivityItem(
-        id: 'act_04',
-        type: ActivityType.projectCompletion,
-        title: 'Milestone Deliverable Approved',
-        description: 'Ali Khan completed Milestone 2 code deliverables with 94% test coverage.',
-        timeAgo: '3 hours ago',
-        actorName: 'Corporate Tech Lead',
-        actorRole: 'Mentor',
-        badgeText: 'Deliverable Approved',
-      ),
-      const AdminActivityItem(
-        id: 'act_05',
-        type: ActivityType.reportSubmission,
-        title: 'Quarterly University Accreditation Report',
-        description: 'NUST Quality Enhancement Cell submitted compliance milestone documentation.',
-        timeAgo: '5 hours ago',
-        actorName: 'NUST QEC Directorate',
-        actorRole: 'University Authority',
-        badgeText: 'Compliance Logged',
-      ),
-      const AdminActivityItem(
-        id: 'act_06',
-        type: ActivityType.companyRegistration,
-        title: 'New Corporate Account Onboarded',
-        description: 'Innovexa Cloud Technologies initialized corporate identity setup on CampusConnect.',
-        timeAgo: 'Yesterday',
-        actorName: 'Innovexa HR Portal',
-        actorRole: 'Corporate Partner',
-        badgeText: 'Registered',
-      ),
+  List<TrendDataPoint> _buildTrendPoints({
+    required List<AdminStudentModel> students,
+    required List<AdminCompanyModel> companies,
+    required List<AdminProjectModel> projects,
+  }) {
+    if (students.isEmpty && companies.isEmpty && projects.isEmpty) {
+      return [];
+    }
+
+    final now = DateTime.now();
+    const months = [
+      'Jan',
+      'Feb',
+      'Mar',
+      'Apr',
+      'May',
+      'Jun',
+      'Jul',
+      'Aug',
+      'Sep',
+      'Oct',
+      'Nov',
+      'Dec',
     ];
+
+    final List<TrendDataPoint> points = [];
+    for (int offset = 5; offset >= 0; offset--) {
+      final target = DateTime(now.year, now.month - offset, 1);
+      final label = months[target.month - 1];
+
+      final sCount = students
+          .where((s) =>
+              s.registrationDateTime.year == target.year &&
+              s.registrationDateTime.month == target.month)
+          .length;
+      final cCount = companies
+          .where((c) =>
+              c.registrationDateTime.year == target.year &&
+              c.registrationDateTime.month == target.month)
+          .length;
+      final pCreated = projects
+          .where((p) =>
+              p.createdDateTime.year == target.year &&
+              p.createdDateTime.month == target.month)
+          .length;
+      final pCompleted = projects
+          .where((p) =>
+              p.status == AdminProjectStatus.completed &&
+              p.createdDateTime.year == target.year &&
+              p.createdDateTime.month == target.month)
+          .length;
+
+      points.add(
+        TrendDataPoint(
+          label: label,
+          students: sCount,
+          companies: cCount,
+          projectsCreated: pCreated,
+          projectsCompleted: pCompleted,
+        ),
+      );
+    }
+    return points;
   }
 
-  /// Change Date-Range filter with loading state simulation
+  List<AdminActivityItem> _buildLiveActivities() {
+    final List<({DateTime time, AdminActivityItem item})> entries = [];
+
+    for (final v in AdminVerificationService().allVerifications.take(4)) {
+      final cMatch = AdminCompanyService()
+          .allCompanies
+          .where((c) => c.id == v.companyId)
+          .toList();
+      final dt =
+          cMatch.isNotEmpty ? cMatch.first.registrationDateTime : DateTime.now();
+      entries.add((
+        time: dt,
+        item: AdminActivityItem(
+          id: 'verif_${v.companyId}',
+          type: ActivityType.verificationSubmission,
+          title: 'Company Verification',
+          description: v.status == VerificationStatus.pending
+              ? '${v.companyName} submitted verification documents for review.'
+              : '${v.companyName} verification status: ${v.status.name}.',
+          timeAgo: v.submittedAt,
+          actorName: v.companyName,
+          actorRole: 'Corporate Partner',
+          badgeText: v.status == VerificationStatus.pending
+              ? 'Pending Review'
+              : v.status.name.toUpperCase(),
+        ),
+      ));
+    }
+
+    for (final p in AdminProjectService().allProjects.take(4)) {
+      entries.add((
+        time: p.createdDateTime,
+        item: AdminActivityItem(
+          id: 'proj_${p.id}',
+          type: p.status == AdminProjectStatus.completed
+              ? ActivityType.projectCompletion
+              : ActivityType.newProject,
+          title: p.status == AdminProjectStatus.completed
+              ? 'Project Completed'
+              : 'Project Listing',
+          description: '${p.title} (${p.category}) — ${p.companyName}',
+          timeAgo: p.createdAt,
+          actorName: p.companyName,
+          actorRole: 'Project Sponsor',
+          badgeText: p.statusDisplay,
+        ),
+      ));
+    }
+
+    for (final s in AdminStudentService().allStudents.take(4)) {
+      entries.add((
+        time: s.registrationDateTime,
+        item: AdminActivityItem(
+          id: 'stud_${s.id}',
+          type: ActivityType.studentRegistration,
+          title: 'Student Registration',
+          description:
+              '${s.name}${s.university.isNotEmpty ? " (${s.university})" : ""} joined CampusConnect.',
+          timeAgo: s.registrationDate,
+          actorName: s.name,
+          actorRole: 'Student',
+          badgeText: s.verificationStatus == StudentVerificationStatus.verified
+              ? 'Verified Student'
+              : 'Pending Review',
+        ),
+      ));
+    }
+
+    for (final a in AdminApplicationMonitoringService()
+        .allApplications
+        .where((x) =>
+            x.reportStatus == ApplicationReportStatus.reported ||
+            x.reportStatus == ApplicationReportStatus.underInvestigation)
+        .take(3)) {
+      entries.add((
+        time: a.submissionDateTime,
+        item: AdminActivityItem(
+          id: 'rep_${a.id}',
+          type: ActivityType.reportSubmission,
+          title: 'Flagged Application Case',
+          description:
+              '${a.studentName} applied to "${a.projectTitle}" — ${a.reportStatusDisplay}.',
+          timeAgo: a.submissionDate,
+          actorName: a.companyLiaison,
+          actorRole: 'Compliance Alert',
+          badgeText: a.reportStatusDisplay,
+        ),
+      ));
+    }
+
+    entries.sort((a, b) => b.time.compareTo(a.time));
+    return entries.take(8).map((e) => e.item).toList();
+  }
+
+  /// Change Date-Range filter across live platform records.
   Future<void> changeDateRange(String newRange) async {
     if (selectedDateRangeNotifier.value == newRange) return;
-
-    isLoadingNotifier.value = true;
     selectedDateRangeNotifier.value = newRange;
-
-    // Simulate backend aggregation query latency
-    await Future.delayed(const Duration(milliseconds: 400));
-    statsNotifier.value = _calculateStats(newRange);
-    isLoadingNotifier.value = false;
+    _recompute();
   }
 
-  void _refreshStats() {
-    statsNotifier.value = _calculateStats(selectedDateRangeNotifier.value);
-  }
-
-  /// Quick Action 1: Approve Company Verification directly from Admin Console
+  /// Quick Action 1: Approve first pending Company Verification directly from Admin Console.
   Future<bool> quickApproveCompanyVerification() async {
-    await Future.delayed(const Duration(milliseconds: 300));
-    CompanyVerificationService().simulateAdminApproval();
-    _refreshStats();
-    return true;
+    final pending = AdminVerificationService()
+        .allVerifications
+        .where((v) => v.status == VerificationStatus.pending)
+        .toList();
+    if (pending.isEmpty) return false;
+
+    final reviewer =
+        AdminAuthService().currentAdmin?.fullName ?? 'Executive Administrator';
+    final ok = await AdminVerificationService().approveCompany(
+      verificationId: pending.first.id,
+      reviewerName: reviewer,
+    );
+    _recompute();
+    return ok;
   }
 
-  /// Quick Action 2: Reject Company Verification with feedback
+  /// Quick Action 2: Reject first pending Company Verification with feedback.
   Future<bool> quickRejectCompanyVerification(String feedback) async {
-    await Future.delayed(const Duration(milliseconds: 300));
-    CompanyVerificationService().simulateAdminRejection(feedback);
-    _refreshStats();
-    return true;
+    final pending = AdminVerificationService()
+        .allVerifications
+        .where((v) => v.status == VerificationStatus.pending)
+        .toList();
+    if (pending.isEmpty) return false;
+
+    final reviewer =
+        AdminAuthService().currentAdmin?.fullName ?? 'Executive Administrator';
+    final ok = await AdminVerificationService().rejectCompany(
+      verificationId: pending.first.id,
+      feedback: feedback,
+      reviewerName: reviewer,
+    );
+    _recompute();
+    return ok;
+  }
+
+  void reset() {
+    selectedDateRangeNotifier.value = 'Last 30 Days';
+    isLoadingNotifier.value = false;
+    activitiesNotifier.value = [];
+    statsNotifier.value = const PlatformStatsModel(
+      totalStudents: 0,
+      totalCompanies: 0,
+      pendingVerifications: 0,
+      totalProjects: 0,
+      activeProjects: 0,
+      completedProjects: 0,
+      pendingReports: 0,
+      studentGrowth: 0.0,
+      companyGrowth: 0.0,
+      projectGrowth: 0.0,
+      completionRate: 0.0,
+      categoryDistribution: {},
+      trends: [],
+    );
   }
 }

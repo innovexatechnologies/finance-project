@@ -1,22 +1,27 @@
 import 'dart:math';
 import 'package:flutter/material.dart';
+import 'package:link_vibe/core/services/supabase_helper.dart';
 import 'package:link_vibe/feature/admin/models/admin_analytics_model.dart';
+import 'package:link_vibe/feature/admin/models/admin_company_model.dart';
+import 'package:link_vibe/feature/admin/models/admin_project_model.dart';
+import 'package:link_vibe/feature/admin/models/admin_student_model.dart';
 import 'package:link_vibe/feature/admin/services/admin_application_monitoring_service.dart';
+import 'package:link_vibe/feature/admin/services/admin_auth_service.dart';
 import 'package:link_vibe/feature/admin/services/admin_certificate_service.dart';
 import 'package:link_vibe/feature/admin/services/admin_company_service.dart';
+import 'package:link_vibe/feature/admin/services/admin_dashboard_service.dart';
 import 'package:link_vibe/feature/admin/services/admin_project_service.dart';
 import 'package:link_vibe/feature/admin/services/admin_student_service.dart';
 
 /// Enterprise Business Intelligence & Analytics Service for CampusConnect Admin Console.
-/// Performs non-financial platform analytics, real-time aggregation across services,
-/// multi-timeframe cohort trends, skills demand analysis, and executive report generation.
+/// Computes all registration cohorts, project metrics, category distributions, skills matrix,
+/// verification metrics, and executive reports strictly from live database state (zero mock numbers).
 class AdminAnalyticsService {
-  static final AdminAnalyticsService _instance = AdminAnalyticsService._internal();
+  static final AdminAnalyticsService _instance =
+      AdminAnalyticsService._internal();
   factory AdminAnalyticsService() => _instance;
 
-  AdminAnalyticsService._internal() {
-    _initReports();
-  }
+  AdminAnalyticsService._internal();
 
   final AdminStudentService _studentService = AdminStudentService();
   final AdminCompanyService _companyService = AdminCompanyService();
@@ -25,561 +30,301 @@ class AdminAnalyticsService {
       AdminApplicationMonitoringService();
   final AdminCertificateService _certificateService = AdminCertificateService();
 
-  late final ValueNotifier<List<AnalyticsReportModel>> reportsNotifier;
-  late final ValueNotifier<DateTime> lastRefreshedNotifier;
+  final ValueNotifier<List<AnalyticsReportModel>> reportsNotifier =
+      ValueNotifier<List<AnalyticsReportModel>>([]);
+  final ValueNotifier<DateTime> lastRefreshedNotifier =
+      ValueNotifier<DateTime>(DateTime.now());
+
+  static const List<Color> _palette = [
+    Color(0xFF6366F1),
+    Color(0xFF0D9488),
+    Color(0xFF3B82F6),
+    Color(0xFF10B981),
+    Color(0xFFF59E0B),
+    Color(0xFFEC4899),
+    Color(0xFF8B5CF6),
+    Color(0xFF0EA5E9),
+  ];
 
   int get totalCertificatesVault => _certificateService.totalCount;
 
-  void _initReports() {
-    lastRefreshedNotifier = ValueNotifier<DateTime>(DateTime.now());
-    reportsNotifier = ValueNotifier<List<AnalyticsReportModel>>([
-      AnalyticsReportModel(
-        reportId: 'REP-2026-Q4-001',
-        title: 'Executive Platform Health & Performance Audit',
-        timeframe: AnalyticsTimeframe.thisQuarter,
-        categoryFilter: 'All Categories',
-        generatedAt: DateTime(2026, 11, 8, 14, 30),
-        generatedByAdmin: 'superadmin@campusconnect.edu.pk',
-        reportStatus: 'Ready',
-        executiveSummary:
-            'Platform exhibits strong academic-industry throughput with 88.5% project completion velocity and 91.2% credential authenticity across top tier engineering faculties.',
-        cryptographicChecksum: 'SHA256: 4b29c118e9a7e0f2142d1e0284ab9f73',
-      ),
-      AnalyticsReportModel(
-        reportId: 'REP-2026-M10-042',
-        title: 'Monthly Verification SLA & Institutional Growth Ledger',
-        timeframe: AnalyticsTimeframe.last30Days,
-        categoryFilter: 'All Categories',
-        generatedAt: DateTime(2026, 11, 1, 9, 15),
-        generatedByAdmin: 'superadmin@campusconnect.edu.pk',
-        reportStatus: 'Ready',
-        executiveSummary:
-            'October registration cohorts expanded by 24.8% with average verification turnaround reduced to 6.2 hours per SECP corporate accreditation.',
-        cryptographicChecksum: 'SHA256: 7d81a9f023be6417c83b482a17f201e9',
-      ),
-    ]);
-  }
-
-  void refreshAnalytics() {
+  Future<void> refreshAnalytics() async {
     lastRefreshedNotifier.value = DateTime.now();
   }
 
-  // 1. REGISTRATION TRENDS (by timeframe)
+  Future<void> reloadAllAndRefresh() async {
+    await AdminDashboardService().loadAllAdminData();
+    lastRefreshedNotifier.value = DateTime.now();
+  }
+
+  List<({String label, DateTime start, DateTime end})> _bucketsForTimeframe(
+    AnalyticsTimeframe timeframe,
+  ) {
+    final now = DateTime.now();
+    switch (timeframe) {
+      case AnalyticsTimeframe.last7Days:
+        const weekdays = ['Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat', 'Sun'];
+        return List.generate(7, (idx) {
+          final day = now.subtract(Duration(days: 6 - idx));
+          final start = DateTime(day.year, day.month, day.day);
+          final end = start.add(const Duration(days: 1));
+          return (
+            label: '${weekdays[day.weekday - 1]} ${day.day}',
+            start: start,
+            end: end,
+          );
+        });
+      case AnalyticsTimeframe.last30Days:
+        return List.generate(4, (idx) {
+          final weekStart =
+              DateTime(now.year, now.month, now.day).subtract(Duration(days: (3 - idx) * 7 + 6));
+          final weekEnd = weekStart.add(const Duration(days: 7));
+          return (
+            label: 'Wk ${idx + 1}',
+            start: weekStart,
+            end: weekEnd,
+          );
+        });
+      case AnalyticsTimeframe.thisQuarter:
+        const months = [
+          'Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun',
+          'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec',
+        ];
+        return List.generate(3, (idx) {
+          final start = DateTime(now.year, now.month - (2 - idx), 1);
+          final end = DateTime(now.year, now.month - (2 - idx) + 1, 1);
+          return (label: months[start.month - 1], start: start, end: end);
+        });
+      case AnalyticsTimeframe.thisYear:
+      case AnalyticsTimeframe.allTime:
+        const months = [
+          'Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun',
+          'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec',
+        ];
+        return List.generate(6, (idx) {
+          final start = DateTime(now.year, now.month - (5 - idx), 1);
+          final end = DateTime(now.year, now.month - (5 - idx) + 1, 1);
+          return (label: months[start.month - 1], start: start, end: end);
+        });
+    }
+  }
+
+  List<AdminProjectModel> _filteredProjects(String categoryFilter) {
+    final all = _projectService.allProjects;
+    if (categoryFilter == 'All Categories' || categoryFilter.trim().isEmpty) {
+      return all;
+    }
+    return all
+        .where((p) => p.category.toLowerCase() == categoryFilter.toLowerCase())
+        .toList();
+  }
+
+  // 1. REGISTRATION TRENDS (strictly from live students & companies)
   List<RegistrationTrendPoint> getRegistrationTrends(
-      AnalyticsTimeframe timeframe, String categoryFilter) {
-    switch (timeframe) {
-      case AnalyticsTimeframe.last7Days:
-        return [
-          RegistrationTrendPoint(
-            label: 'Mon',
-            date: DateTime(2026, 11, 4),
-            studentRegistrations: 14,
-            companyRegistrations: 2,
-            cumulativeStudents: 1380,
-            cumulativeCompanies: 112,
-            growthRatePercentage: 3.4,
-          ),
-          RegistrationTrendPoint(
-            label: 'Tue',
-            date: DateTime(2026, 11, 5),
-            studentRegistrations: 22,
-            companyRegistrations: 3,
-            cumulativeStudents: 1402,
-            cumulativeCompanies: 115,
-            growthRatePercentage: 4.8,
-          ),
-          RegistrationTrendPoint(
-            label: 'Wed',
-            date: DateTime(2026, 11, 6),
-            studentRegistrations: 18,
-            companyRegistrations: 2,
-            cumulativeStudents: 1420,
-            cumulativeCompanies: 117,
-            growthRatePercentage: 3.9,
-          ),
-          RegistrationTrendPoint(
-            label: 'Thu',
-            date: DateTime(2026, 11, 7),
-            studentRegistrations: 31,
-            companyRegistrations: 4,
-            cumulativeStudents: 1451,
-            cumulativeCompanies: 121,
-            growthRatePercentage: 6.2,
-          ),
-          RegistrationTrendPoint(
-            label: 'Fri',
-            date: DateTime(2026, 11, 8),
-            studentRegistrations: 27,
-            companyRegistrations: 3,
-            cumulativeStudents: 1478,
-            cumulativeCompanies: 124,
-            growthRatePercentage: 5.1,
-          ),
-          RegistrationTrendPoint(
-            label: 'Sat',
-            date: DateTime(2026, 11, 9),
-            studentRegistrations: 12,
-            companyRegistrations: 1,
-            cumulativeStudents: 1490,
-            cumulativeCompanies: 125,
-            growthRatePercentage: 2.1,
-          ),
-          RegistrationTrendPoint(
-            label: 'Sun',
-            date: DateTime(2026, 11, 10),
-            studentRegistrations: 16,
-            companyRegistrations: 2,
-            cumulativeStudents: 1506,
-            cumulativeCompanies: 127,
-            growthRatePercentage: 2.8,
-          ),
-        ];
+    AnalyticsTimeframe timeframe,
+    String categoryFilter,
+  ) {
+    final students = _studentService.allStudents;
+    final companies = _companyService.allCompanies;
+    if (students.isEmpty && companies.isEmpty) return [];
 
-      case AnalyticsTimeframe.last30Days:
-        return [
-          RegistrationTrendPoint(
-            label: 'Wk 1 (Oct 13)',
-            date: DateTime(2026, 10, 13),
-            studentRegistrations: 78,
-            companyRegistrations: 9,
-            cumulativeStudents: 1280,
-            cumulativeCompanies: 98,
-            growthRatePercentage: 14.2,
-          ),
-          RegistrationTrendPoint(
-            label: 'Wk 2 (Oct 20)',
-            date: DateTime(2026, 10, 20),
-            studentRegistrations: 94,
-            companyRegistrations: 11,
-            cumulativeStudents: 1374,
-            cumulativeCompanies: 109,
-            growthRatePercentage: 16.8,
-          ),
-          RegistrationTrendPoint(
-            label: 'Wk 3 (Oct 27)',
-            date: DateTime(2026, 10, 27),
-            studentRegistrations: 115,
-            companyRegistrations: 14,
-            cumulativeStudents: 1489,
-            cumulativeCompanies: 123,
-            growthRatePercentage: 19.4,
-          ),
-          RegistrationTrendPoint(
-            label: 'Wk 4 (Nov 3)',
-            date: DateTime(2026, 11, 3),
-            studentRegistrations: 140,
-            companyRegistrations: 18,
-            cumulativeStudents: 1629,
-            cumulativeCompanies: 141,
-            growthRatePercentage: 22.1,
-          ),
-        ];
+    final buckets = _bucketsForTimeframe(timeframe);
+    int runningStudents = students
+        .where((s) => s.registrationDateTime.isBefore(buckets.first.start))
+        .length;
+    int runningCompanies = companies
+        .where((c) => c.registrationDateTime.isBefore(buckets.first.start))
+        .length;
 
-      case AnalyticsTimeframe.thisQuarter:
-        return [
-          RegistrationTrendPoint(
-            label: 'Sep',
-            date: DateTime(2026, 9, 1),
-            studentRegistrations: 280,
-            companyRegistrations: 26,
-            cumulativeStudents: 1080,
-            cumulativeCompanies: 76,
-            growthRatePercentage: 18.2,
-          ),
-          RegistrationTrendPoint(
-            label: 'Oct',
-            date: DateTime(2026, 10, 1),
-            studentRegistrations: 395,
-            companyRegistrations: 38,
-            cumulativeStudents: 1475,
-            cumulativeCompanies: 114,
-            growthRatePercentage: 24.8,
-          ),
-          RegistrationTrendPoint(
-            label: 'Nov (MTD)',
-            date: DateTime(2026, 11, 1),
-            studentRegistrations: 165,
-            companyRegistrations: 16,
-            cumulativeStudents: 1640,
-            cumulativeCompanies: 130,
-            growthRatePercentage: 27.6,
-          ),
-        ];
+    final List<RegistrationTrendPoint> points = [];
+    for (final b in buckets) {
+      final sInBucket = students
+          .where((s) =>
+              !s.registrationDateTime.isBefore(b.start) &&
+              s.registrationDateTime.isBefore(b.end))
+          .length;
+      final cInBucket = companies
+          .where((c) =>
+              !c.registrationDateTime.isBefore(b.start) &&
+              c.registrationDateTime.isBefore(b.end))
+          .length;
 
-      case AnalyticsTimeframe.thisYear:
-      case AnalyticsTimeframe.allTime:
-        return [
-          RegistrationTrendPoint(
-            label: 'Q1 (Jan-Mar)',
-            date: DateTime(2026, 1, 1),
-            studentRegistrations: 320,
-            companyRegistrations: 32,
-            cumulativeStudents: 450,
-            cumulativeCompanies: 40,
-            growthRatePercentage: 12.0,
-          ),
-          RegistrationTrendPoint(
-            label: 'Q2 (Apr-Jun)',
-            date: DateTime(2026, 4, 1),
-            studentRegistrations: 460,
-            companyRegistrations: 45,
-            cumulativeStudents: 910,
-            cumulativeCompanies: 85,
-            growthRatePercentage: 19.5,
-          ),
-          RegistrationTrendPoint(
-            label: 'Q3 (Jul-Sep)',
-            date: DateTime(2026, 7, 1),
-            studentRegistrations: 610,
-            companyRegistrations: 58,
-            cumulativeStudents: 1520,
-            cumulativeCompanies: 143,
-            growthRatePercentage: 26.4,
-          ),
-          RegistrationTrendPoint(
-            label: 'Q4 (Oct-Dec)',
-            date: DateTime(2026, 10, 1),
-            studentRegistrations: 560,
-            companyRegistrations: 54,
-            cumulativeStudents: 2080,
-            cumulativeCompanies: 197,
-            growthRatePercentage: 28.9,
-          ),
-        ];
+      final prevTotal = runningStudents + runningCompanies;
+      runningStudents += sInBucket;
+      runningCompanies += cInBucket;
+      final added = sInBucket + cInBucket;
+      final growthPct = prevTotal > 0
+          ? double.parse(((added / prevTotal) * 100.0).toStringAsFixed(1))
+          : (added > 0 ? 100.0 : 0.0);
+
+      points.add(
+        RegistrationTrendPoint(
+          label: b.label,
+          date: b.start,
+          studentRegistrations: sInBucket,
+          companyRegistrations: cInBucket,
+          cumulativeStudents: runningStudents,
+          cumulativeCompanies: runningCompanies,
+          growthRatePercentage: growthPct,
+        ),
+      );
     }
+
+    return points;
   }
 
-  // 2. PROJECT & COMPLETION TRENDS
+  // 2. PROJECT & COMPLETION TRENDS (strictly from live projects)
   List<ProjectTrendPoint> getProjectTrends(
-      AnalyticsTimeframe timeframe, String categoryFilter) {
-    switch (timeframe) {
-      case AnalyticsTimeframe.last7Days:
-        return [
-          ProjectTrendPoint(
-            label: 'Mon',
-            date: DateTime(2026, 11, 4),
-            projectsCreated: 3,
-            projectsPublished: 3,
-            projectsActive: 6,
-            projectsCompleted: 2,
-            projectsClosed: 0,
-            completionRatePercentage: 66.7,
-          ),
-          ProjectTrendPoint(
-            label: 'Tue',
-            date: DateTime(2026, 11, 5),
-            projectsCreated: 5,
-            projectsPublished: 4,
-            projectsActive: 8,
-            projectsCompleted: 3,
-            projectsClosed: 1,
-            completionRatePercentage: 72.0,
-          ),
-          ProjectTrendPoint(
-            label: 'Wed',
-            date: DateTime(2026, 11, 6),
-            projectsCreated: 4,
-            projectsPublished: 4,
-            projectsActive: 9,
-            projectsCompleted: 4,
-            projectsClosed: 0,
-            completionRatePercentage: 78.5,
-          ),
-          ProjectTrendPoint(
-            label: 'Thu',
-            date: DateTime(2026, 11, 7),
-            projectsCreated: 6,
-            projectsPublished: 5,
-            projectsActive: 11,
-            projectsCompleted: 5,
-            projectsClosed: 1,
-            completionRatePercentage: 81.2,
-          ),
-          ProjectTrendPoint(
-            label: 'Fri',
-            date: DateTime(2026, 11, 8),
-            projectsCreated: 4,
-            projectsPublished: 4,
-            projectsActive: 12,
-            projectsCompleted: 6,
-            projectsClosed: 1,
-            completionRatePercentage: 85.0,
-          ),
-          ProjectTrendPoint(
-            label: 'Sat',
-            date: DateTime(2026, 11, 9),
-            projectsCreated: 2,
-            projectsPublished: 2,
-            projectsActive: 11,
-            projectsCompleted: 3,
-            projectsClosed: 0,
-            completionRatePercentage: 84.6,
-          ),
-          ProjectTrendPoint(
-            label: 'Sun',
-            date: DateTime(2026, 11, 10),
-            projectsCreated: 3,
-            projectsPublished: 3,
-            projectsActive: 12,
-            projectsCompleted: 4,
-            projectsClosed: 0,
-            completionRatePercentage: 86.8,
-          ),
-        ];
+    AnalyticsTimeframe timeframe,
+    String categoryFilter,
+  ) {
+    final projects = _filteredProjects(categoryFilter);
+    if (projects.isEmpty) return [];
 
-      case AnalyticsTimeframe.last30Days:
-        return [
-          ProjectTrendPoint(
-            label: 'Wk 1',
-            date: DateTime(2026, 10, 13),
-            projectsCreated: 14,
-            projectsPublished: 12,
-            projectsActive: 18,
-            projectsCompleted: 11,
-            projectsClosed: 2,
-            completionRatePercentage: 78.6,
-          ),
-          ProjectTrendPoint(
-            label: 'Wk 2',
-            date: DateTime(2026, 10, 20),
-            projectsCreated: 18,
-            projectsPublished: 16,
-            projectsActive: 22,
-            projectsCompleted: 15,
-            projectsClosed: 3,
-            completionRatePercentage: 83.3,
-          ),
-          ProjectTrendPoint(
-            label: 'Wk 3',
-            date: DateTime(2026, 10, 27),
-            projectsCreated: 23,
-            projectsPublished: 21,
-            projectsActive: 27,
-            projectsCompleted: 19,
-            projectsClosed: 4,
-            completionRatePercentage: 86.4,
-          ),
-          ProjectTrendPoint(
-            label: 'Wk 4',
-            date: DateTime(2026, 11, 3),
-            projectsCreated: 28,
-            projectsPublished: 26,
-            projectsActive: 31,
-            projectsCompleted: 24,
-            projectsClosed: 5,
-            completionRatePercentage: 89.2,
-          ),
-        ];
+    final buckets = _bucketsForTimeframe(timeframe);
+    final List<ProjectTrendPoint> points = [];
 
-      case AnalyticsTimeframe.thisQuarter:
-        return [
-          ProjectTrendPoint(
-            label: 'Sep',
-            date: DateTime(2026, 9, 1),
-            projectsCreated: 48,
-            projectsPublished: 44,
-            projectsActive: 32,
-            projectsCompleted: 36,
-            projectsClosed: 8,
-            completionRatePercentage: 81.8,
-          ),
-          ProjectTrendPoint(
-            label: 'Oct',
-            date: DateTime(2026, 10, 1),
-            projectsCreated: 65,
-            projectsPublished: 61,
-            projectsActive: 44,
-            projectsCompleted: 53,
-            projectsClosed: 12,
-            completionRatePercentage: 86.9,
-          ),
-          ProjectTrendPoint(
-            label: 'Nov (MTD)',
-            date: DateTime(2026, 11, 1),
-            projectsCreated: 34,
-            projectsPublished: 32,
-            projectsActive: 28,
-            projectsCompleted: 29,
-            projectsClosed: 4,
-            completionRatePercentage: 90.6,
-          ),
-        ];
+    for (final b in buckets) {
+      final inBucket = projects
+          .where((p) =>
+              !p.createdDateTime.isBefore(b.start) &&
+              p.createdDateTime.isBefore(b.end))
+          .toList();
 
-      case AnalyticsTimeframe.thisYear:
-      case AnalyticsTimeframe.allTime:
-        return [
-          ProjectTrendPoint(
-            label: 'Q1',
-            date: DateTime(2026, 1, 1),
-            projectsCreated: 68,
-            projectsPublished: 62,
-            projectsActive: 40,
-            projectsCompleted: 48,
-            projectsClosed: 14,
-            completionRatePercentage: 77.4,
-          ),
-          ProjectTrendPoint(
-            label: 'Q2',
-            date: DateTime(2026, 4, 1),
-            projectsCreated: 98,
-            projectsPublished: 92,
-            projectsActive: 58,
-            projectsCompleted: 76,
-            projectsClosed: 16,
-            completionRatePercentage: 82.6,
-          ),
-          ProjectTrendPoint(
-            label: 'Q3',
-            date: DateTime(2026, 7, 1),
-            projectsCreated: 135,
-            projectsPublished: 128,
-            projectsActive: 82,
-            projectsCompleted: 112,
-            projectsClosed: 22,
-            completionRatePercentage: 87.5,
-          ),
-          ProjectTrendPoint(
-            label: 'Q4 (Est.)',
-            date: DateTime(2026, 10, 1),
-            projectsCreated: 147,
-            projectsPublished: 141,
-            projectsActive: 94,
-            projectsCompleted: 128,
-            projectsClosed: 18,
-            completionRatePercentage: 90.8,
-          ),
-        ];
+      final created = inBucket.length;
+      final published = inBucket
+          .where((p) => p.status == AdminProjectStatus.published)
+          .length;
+      final active = inBucket
+          .where((p) => p.status == AdminProjectStatus.active)
+          .length;
+      final completed = inBucket
+          .where((p) => p.status == AdminProjectStatus.completed)
+          .length;
+      final closed = inBucket
+          .where((p) => p.status == AdminProjectStatus.closed)
+          .length;
+      final rate = created > 0
+          ? double.parse(((completed / created) * 100.0).toStringAsFixed(1))
+          : 0.0;
+
+      points.add(
+        ProjectTrendPoint(
+          label: b.label,
+          date: b.start,
+          projectsCreated: created,
+          projectsPublished: published,
+          projectsActive: active,
+          projectsCompleted: completed,
+          projectsClosed: closed,
+          completionRatePercentage: rate,
+        ),
+      );
     }
+
+    return points;
   }
 
-  // 3. CATEGORY DISTRIBUTION ANALYTICS
+  // 3. CATEGORY DISTRIBUTION ANALYTICS (computed from live projects & applications)
   List<CategoryDistributionItem> getCategoryDistribution(String filter) {
-    final list = [
-      const CategoryDistributionItem(
-        categoryName: 'Artificial Intelligence & Machine Learning',
-        projectCount: 28,
-        studentParticipants: 142,
-        companyCount: 16,
-        percentage: 31.5,
-        color: Color(0xFF6366F1), // Indigo
-        completedProjects: 22,
-      ),
-      const CategoryDistributionItem(
-        categoryName: 'Mobile Application Development',
-        projectCount: 22,
-        studentParticipants: 118,
-        companyCount: 14,
-        percentage: 24.7,
-        color: Color(0xFF0D9488), // Teal
-        completedProjects: 18,
-      ),
-      const CategoryDistributionItem(
-        categoryName: 'Cloud Infrastructure & DevOps',
-        projectCount: 15,
-        studentParticipants: 84,
-        companyCount: 11,
-        percentage: 16.9,
-        color: Color(0xFF3B82F6), // Blue
-        completedProjects: 12,
-      ),
-      const CategoryDistributionItem(
-        categoryName: 'Full Stack Web Engineering',
-        projectCount: 12,
-        studentParticipants: 72,
-        companyCount: 9,
-        percentage: 13.5,
-        color: Color(0xFF10B981), // Emerald
-        completedProjects: 10,
-      ),
-      const CategoryDistributionItem(
-        categoryName: 'Cybersecurity & Threat Intelligence',
-        projectCount: 7,
-        studentParticipants: 38,
-        companyCount: 6,
-        percentage: 7.9,
-        color: Color(0xFFF59E0B), // Amber
-        completedProjects: 5,
-      ),
-      const CategoryDistributionItem(
-        categoryName: 'UI/UX & Product Design Systems',
-        projectCount: 5,
-        studentParticipants: 29,
-        companyCount: 4,
-        percentage: 5.5,
-        color: Color(0xFFEC4899), // Pink
-        completedProjects: 4,
-      ),
-    ];
+    final projects = _filteredProjects(filter);
+    if (projects.isEmpty) return [];
 
-    if (filter != 'All Categories') {
-      return list.where((c) => c.categoryName.contains(filter) || filter.contains(c.categoryName)).toList();
+    final apps = _applicationService.allApplications;
+    final Map<String, List<AdminProjectModel>> byCat = {};
+    for (final p in projects) {
+      final key = p.category.trim().isNotEmpty ? p.category.trim() : 'General';
+      byCat.putIfAbsent(key, () => []).add(p);
     }
-    return list;
+
+    final total = projects.length;
+    final entries = byCat.entries.toList()
+      ..sort((a, b) => b.value.length.compareTo(a.value.length));
+
+    final List<CategoryDistributionItem> items = [];
+    for (int i = 0; i < entries.length; i++) {
+      final catName = entries[i].key;
+      final catProjects = entries[i].value;
+      final projectIds = catProjects.map((p) => p.id).toSet();
+      final participantStudents = apps
+          .where((a) => projectIds.contains(a.projectId))
+          .map((a) => a.studentId)
+          .toSet()
+          .length;
+      final distinctCompanies =
+          catProjects.map((p) => p.companyName).toSet().length;
+      final completedCount = catProjects
+          .where((p) => p.status == AdminProjectStatus.completed)
+          .length;
+
+      items.add(
+        CategoryDistributionItem(
+          categoryName: catName,
+          projectCount: catProjects.length,
+          studentParticipants: participantStudents,
+          companyCount: distinctCompanies,
+          percentage: double.parse(
+            ((catProjects.length / total) * 100.0).toStringAsFixed(1),
+          ),
+          color: _palette[i % _palette.length],
+          completedProjects: completedCount,
+        ),
+      );
+    }
+
+    return items;
   }
 
-  // 4. IN-DEMAND SKILLS MATRIX
+  // 4. IN-DEMAND SKILLS MATRIX (computed from live projects + student skills)
   List<SkillDemandItem> getTopSkills() {
-    return const [
-      SkillDemandItem(
-        skillName: 'Flutter & Dart',
-        projectRequirementCount: 26,
-        certifiedStudentCount: 114,
-        primaryCategory: 'Mobile App Development',
-        demandGrowthRate: 34.2,
-      ),
-      SkillDemandItem(
-        skillName: 'Python & PyTorch (LLM/NLP)',
-        projectRequirementCount: 24,
-        certifiedStudentCount: 98,
-        primaryCategory: 'AI & Machine Learning',
-        demandGrowthRate: 42.6,
-      ),
-      SkillDemandItem(
-        skillName: 'Docker & Kubernetes (K8s)',
-        projectRequirementCount: 18,
-        certifiedStudentCount: 72,
-        primaryCategory: 'Cloud DevOps',
-        demandGrowthRate: 28.5,
-      ),
-      SkillDemandItem(
-        skillName: 'React & Next.js 14',
-        projectRequirementCount: 16,
-        certifiedStudentCount: 88,
-        primaryCategory: 'Full Stack Web',
-        demandGrowthRate: 19.8,
-      ),
-      SkillDemandItem(
-        skillName: 'PostgreSQL & Supabase',
-        projectRequirementCount: 15,
-        certifiedStudentCount: 80,
-        primaryCategory: 'Database Engineering',
-        demandGrowthRate: 22.4,
-      ),
-      SkillDemandItem(
-        skillName: 'FastAPI & Microservices',
-        projectRequirementCount: 13,
-        certifiedStudentCount: 64,
-        primaryCategory: 'Backend Architecture',
-        demandGrowthRate: 25.1,
-      ),
-      SkillDemandItem(
-        skillName: 'Penetration Testing & OWASP',
-        projectRequirementCount: 9,
-        certifiedStudentCount: 36,
-        primaryCategory: 'Cybersecurity',
-        demandGrowthRate: 31.0,
-      ),
-      SkillDemandItem(
-        skillName: 'Figma & Design Tokens',
-        projectRequirementCount: 8,
-        certifiedStudentCount: 42,
-        primaryCategory: 'UI/UX Systems',
-        demandGrowthRate: 17.5,
-      ),
-    ];
+    final projects = _projectService.allProjects;
+    final students = _studentService.allStudents;
+    if (projects.isEmpty && students.isEmpty) return [];
+
+    final Map<String, int> projReqCounts = {};
+    final Map<String, String> primaryCatBySkill = {};
+
+    for (final p in projects) {
+      for (final rawSkill in p.skillsRequired) {
+        final s = rawSkill.trim();
+        if (s.isEmpty) continue;
+        projReqCounts[s] = (projReqCounts[s] ?? 0) + 1;
+        primaryCatBySkill.putIfAbsent(s, () => p.category);
+      }
+    }
+
+    final Map<String, int> studentSkillCounts = {};
+    for (final st in students) {
+      for (final rawSkill in st.skills) {
+        final s = rawSkill.trim();
+        if (s.isEmpty) continue;
+        studentSkillCounts[s] = (studentSkillCounts[s] ?? 0) + 1;
+      }
+    }
+
+    final allSkillKeys = {...projReqCounts.keys, ...studentSkillCounts.keys};
+    final List<SkillDemandItem> items = allSkillKeys.map((skill) {
+      final reqCount = projReqCounts[skill] ?? 0;
+      final studCount = studentSkillCounts[skill] ?? 0;
+      final growth = (studCount > 0 && reqCount > 0)
+          ? double.parse(((reqCount / studCount) * 100.0).clamp(0, 100).toStringAsFixed(1))
+          : (reqCount > 0 ? 100.0 : 0.0);
+      return SkillDemandItem(
+        skillName: skill,
+        projectRequirementCount: reqCount,
+        certifiedStudentCount: studCount,
+        primaryCategory: primaryCatBySkill[skill] ?? 'General',
+        demandGrowthRate: growth,
+      );
+    }).toList();
+
+    items.sort(
+      (a, b) => b.projectRequirementCount.compareTo(a.projectRequirementCount),
+    );
+    return items.take(10).toList();
   }
 
-  // 5. VERIFICATION ANALYTICS SUMMARY
+  // 5. VERIFICATION ANALYTICS SUMMARY (strictly live counts)
   VerificationAnalyticsSummary getVerificationAnalytics() {
     final sTotal = _studentService.totalCount;
     final sVerified = _studentService.verifiedCount;
@@ -596,7 +341,8 @@ class AdminAnalyticsService {
     final pending = sPending + cPending;
     final rejected = sRejected + cRejected;
 
-    final double approvalRate = totalReq > 0 ? (approved / totalReq) * 100 : 0.0;
+    final double approvalRate =
+        totalReq > 0 ? (approved / totalReq) * 100.0 : 0.0;
 
     return VerificationAnalyticsSummary(
       totalRequests: totalReq,
@@ -604,214 +350,236 @@ class AdminAnalyticsService {
       rejectedCount: rejected,
       pendingCount: pending,
       approvalRatePercentage: double.parse(approvalRate.toStringAsFixed(1)),
-      averageTurnaroundHours: 5.8,
+      averageTurnaroundHours: 0.0,
       studentVerificationsTotal: sTotal,
       companyVerificationsTotal: cTotal,
     );
   }
 
-  // 6. USER ENGAGEMENT & PARTICIPATION SUMMARY
+  // 6. USER ENGAGEMENT & PARTICIPATION SUMMARY (strictly live counts)
   UserEngagementSummary getUserEngagement() {
-    final sTotal = _studentService.totalCount;
-    final cTotal = _companyService.totalCount;
+    final allStudents = _studentService.allStudents;
+    final allCompanies = _companyService.allCompanies;
+    final sTotal = allStudents.length;
+    final cTotal = allCompanies.length;
+    final activeStudents = allStudents
+        .where((s) => s.accountStatus == StudentAccountStatus.active)
+        .length;
+    final activeCompanies = allCompanies
+        .where((c) => c.accountStatus == CompanyAccountState.active)
+        .length;
+
     final appTotal = _applicationService.totalCount;
     final appAccepted = _applicationService.acceptedCount;
     final appRejected = _applicationService.rejectedCount;
     final appPending = _applicationService.pendingCount;
 
-    final activeProjects = _projectService.activeCount;
-    final double avgAppPerProject = activeProjects > 0
-        ? double.parse((appTotal / activeProjects).toStringAsFixed(1))
-        : 3.5;
+    final totalProjects = _projectService.totalCount;
+    final double avgAppPerProject = totalProjects > 0
+        ? double.parse((appTotal / totalProjects).toStringAsFixed(1))
+        : 0.0;
 
     final double acceptanceRate = appTotal > 0
-        ? double.parse(((appAccepted / appTotal) * 100).toStringAsFixed(1))
-        : 28.5;
+        ? double.parse(((appAccepted / appTotal) * 100.0).toStringAsFixed(1))
+        : 0.0;
+
+    final double verifiedShare = (sTotal + cTotal) > 0
+        ? ((_studentService.verifiedCount + _companyService.verifiedCount) /
+                (sTotal + cTotal)) *
+            100.0
+        : 0.0;
 
     return UserEngagementSummary(
-      activeStudents: sTotal > 0 ? (sTotal * 0.85).round() : 18,
-      totalStudents: sTotal > 0 ? sTotal : 20,
-      activeCompanies: cTotal > 0 ? (cTotal * 0.90).round() : 12,
-      totalCompanies: cTotal > 0 ? cTotal : 14,
-      totalApplications: appTotal > 0 ? appTotal : 24,
-      acceptedApplications: appAccepted > 0 ? appAccepted : 8,
-      rejectedApplications: appRejected > 0 ? appRejected : 6,
-      pendingApplications: appPending > 0 ? appPending : 10,
+      activeStudents: activeStudents,
+      totalStudents: sTotal,
+      activeCompanies: activeCompanies,
+      totalCompanies: cTotal,
+      totalApplications: appTotal,
+      acceptedApplications: appAccepted,
+      rejectedApplications: appRejected,
+      pendingApplications: appPending,
       applicationAcceptanceRate: acceptanceRate,
       averageApplicationsPerProject: avgAppPerProject,
-      engagementIndex: 94.6, // Out of 100
+      engagementIndex: double.parse(verifiedShare.toStringAsFixed(1)),
     );
   }
 
-  // 7. DETAILED BREAKDOWN DATA TABLE ROWS
+  // 7. DETAILED BREAKDOWN DATA TABLE ROWS (strictly live cohorts)
   List<AnalyticsTableRow> getDetailedTableRows(AnalyticsTimeframe timeframe) {
-    switch (timeframe) {
-      case AnalyticsTimeframe.last7Days:
-        return const [
-          AnalyticsTableRow(
-            periodLabel: 'Day 7 (Nov 10, Sun)',
-            studentRegistrations: 16,
-            companyRegistrations: 2,
-            projectsPublished: 3,
-            projectsCompleted: 4,
-            applicationsSubmitted: 22,
-            completionRate: 86.8,
-            growthRate: 2.8,
-            healthStatus: 'Optimal',
-          ),
-          AnalyticsTableRow(
-            periodLabel: 'Day 6 (Nov 9, Sat)',
-            studentRegistrations: 12,
-            companyRegistrations: 1,
-            projectsPublished: 2,
-            projectsCompleted: 3,
-            applicationsSubmitted: 16,
-            completionRate: 84.6,
-            growthRate: 2.1,
-            healthStatus: 'Stable',
-          ),
-          AnalyticsTableRow(
-            periodLabel: 'Day 5 (Nov 8, Fri)',
-            studentRegistrations: 27,
-            companyRegistrations: 3,
-            projectsPublished: 4,
-            projectsCompleted: 6,
-            applicationsSubmitted: 38,
-            completionRate: 85.0,
-            growthRate: 5.1,
-            healthStatus: 'Expanding',
-          ),
-          AnalyticsTableRow(
-            periodLabel: 'Day 4 (Nov 7, Thu)',
-            studentRegistrations: 31,
-            companyRegistrations: 4,
-            projectsPublished: 5,
-            projectsCompleted: 5,
-            applicationsSubmitted: 42,
-            completionRate: 81.2,
-            growthRate: 6.2,
-            healthStatus: 'Expanding',
-          ),
-          AnalyticsTableRow(
-            periodLabel: 'Day 3 (Nov 6, Wed)',
-            studentRegistrations: 18,
-            companyRegistrations: 2,
-            projectsPublished: 4,
-            projectsCompleted: 4,
-            applicationsSubmitted: 26,
-            completionRate: 78.5,
-            growthRate: 3.9,
-            healthStatus: 'Optimal',
-          ),
-        ];
+    final students = _studentService.allStudents;
+    final companies = _companyService.allCompanies;
+    final projects = _projectService.allProjects;
+    final apps = _applicationService.allApplications;
 
-      case AnalyticsTimeframe.last30Days:
-      default:
-        return const [
-          AnalyticsTableRow(
-            periodLabel: 'Week 4 (Nov 3 - Nov 10)',
-            studentRegistrations: 140,
-            companyRegistrations: 18,
-            projectsPublished: 26,
-            projectsCompleted: 24,
-            applicationsSubmitted: 182,
-            completionRate: 89.2,
-            growthRate: 22.1,
-            healthStatus: 'Expanding',
-          ),
-          AnalyticsTableRow(
-            periodLabel: 'Week 3 (Oct 27 - Nov 2)',
-            studentRegistrations: 115,
-            companyRegistrations: 14,
-            projectsPublished: 21,
-            projectsCompleted: 19,
-            applicationsSubmitted: 154,
-            completionRate: 86.4,
-            growthRate: 19.4,
-            healthStatus: 'Expanding',
-          ),
-          AnalyticsTableRow(
-            periodLabel: 'Week 2 (Oct 20 - Oct 26)',
-            studentRegistrations: 94,
-            companyRegistrations: 11,
-            projectsPublished: 16,
-            projectsCompleted: 15,
-            applicationsSubmitted: 126,
-            completionRate: 83.3,
-            growthRate: 16.8,
-            healthStatus: 'Optimal',
-          ),
-          AnalyticsTableRow(
-            periodLabel: 'Week 1 (Oct 13 - Oct 19)',
-            studentRegistrations: 78,
-            companyRegistrations: 9,
-            projectsPublished: 12,
-            projectsCompleted: 11,
-            applicationsSubmitted: 104,
-            completionRate: 78.6,
-            growthRate: 14.2,
-            healthStatus: 'Stable',
-          ),
-        ];
+    if (students.isEmpty &&
+        companies.isEmpty &&
+        projects.isEmpty &&
+        apps.isEmpty) {
+      return [];
     }
+
+    final buckets = _bucketsForTimeframe(timeframe).reversed.toList();
+    final List<AnalyticsTableRow> rows = [];
+
+    for (final b in buckets) {
+      final sCount = students
+          .where((s) =>
+              !s.registrationDateTime.isBefore(b.start) &&
+              s.registrationDateTime.isBefore(b.end))
+          .length;
+      final cCount = companies
+          .where((c) =>
+              !c.registrationDateTime.isBefore(b.start) &&
+              c.registrationDateTime.isBefore(b.end))
+          .length;
+      final pInBucket = projects
+          .where((p) =>
+              !p.createdDateTime.isBefore(b.start) &&
+              p.createdDateTime.isBefore(b.end))
+          .toList();
+      final pCompleted = pInBucket
+          .where((p) => p.status == AdminProjectStatus.completed)
+          .length;
+      final appCount = apps
+          .where((a) =>
+              !a.submissionDateTime.isBefore(b.start) &&
+              a.submissionDateTime.isBefore(b.end))
+          .length;
+
+      final compRate = pInBucket.isNotEmpty
+          ? double.parse(((pCompleted / pInBucket.length) * 100.0).toStringAsFixed(1))
+          : 0.0;
+
+      final activitySum = sCount + cCount + pInBucket.length + appCount;
+      final status = activitySum == 0
+          ? 'Quiet'
+          : (compRate >= 50 || activitySum >= 5 ? 'Expanding' : 'Active');
+
+      rows.add(
+        AnalyticsTableRow(
+          periodLabel: b.label,
+          studentRegistrations: sCount,
+          companyRegistrations: cCount,
+          projectsPublished: pInBucket.length,
+          projectsCompleted: pCompleted,
+          applicationsSubmitted: appCount,
+          completionRate: compRate,
+          growthRate: activitySum > 0 ? compRate : 0.0,
+          healthStatus: status,
+        ),
+      );
+    }
+
+    return rows;
   }
 
-  // 8. REPORT GENERATION ENGINE
+  // 8. REPORT GENERATION ENGINE (live summary + audit log entry)
   AnalyticsReportModel generateExecutiveReport({
     required AnalyticsTimeframe timeframe,
     required String categoryFilter,
     required String adminEmail,
   }) {
-    final randomHex = List.generate(16, (_) => Random().nextInt(256).toRadixString(16).padLeft(2, '0')).join();
-    final newId = 'REP-2026-GEN-${Random().nextInt(9000) + 1000}';
+    final stats = AdminDashboardService().statsNotifier.value;
+    final verif = getVerificationAnalytics();
+    final effectiveAdmin = adminEmail.trim().isNotEmpty
+        ? adminEmail.trim()
+        : (AdminAuthService().currentAdmin?.email ?? 'admin@campusconnect.edu.pk');
+
+    final randomHex = List.generate(
+      16,
+      (_) => Random().nextInt(256).toRadixString(16).padLeft(2, '0'),
+    ).join();
+    final now = DateTime.now();
+    final newId =
+        'REP-${now.year}-${(Random().nextInt(9000) + 1000).toString()}';
+
+    final summary =
+        'Live platform audit (${timeframe.label}, $categoryFilter): '
+        '${stats.totalStudents} students, ${stats.totalCompanies} companies, '
+        '${stats.totalProjects} projects (${stats.completedProjects} completed, '
+        '${stats.completionRate.toStringAsFixed(1)}% completion rate), '
+        '${verif.approvalRatePercentage.toStringAsFixed(1)}% verification rate, '
+        '$totalCertificatesVault certificates in vault.';
 
     final report = AnalyticsReportModel(
       reportId: newId,
-      title: 'Executive Platform Business Intelligence & Audit Ledger',
+      title: 'Platform Business Intelligence Report (${timeframe.label})',
       timeframe: timeframe,
       categoryFilter: categoryFilter,
-      generatedAt: DateTime.now(),
-      generatedByAdmin: adminEmail,
+      generatedAt: now,
+      generatedByAdmin: effectiveAdmin,
       reportStatus: 'Ready',
-      executiveSummary:
-          'Audit analysis confirms exceptional platform engagement with an 88.4% project fulfillment coefficient across ${categoryFilter == 'All Categories' ? 'all accredited faculties' : categoryFilter}. Institutional student applications reached new quarterly velocity.',
+      executiveSummary: summary,
       cryptographicChecksum: 'SHA256: $randomHex',
     );
 
     reportsNotifier.value = [report, ...reportsNotifier.value];
+
+    final supabase = SupabaseHelper.clientOrNull;
+    if (supabase != null) {
+      supabase.from('admin_audit_logs').insert({
+        'admin_email': effectiveAdmin,
+        'action': 'BI_REPORT_GENERATED',
+        'target': newId,
+        'details': summary,
+      }).catchError((e) {
+        debugPrint('AdminAnalyticsService report audit error: $e');
+        return null;
+      });
+    }
+
     return report;
   }
 
-  // 9. CSV EXPORT BUILDER (Format-compliant for spreadsheet ingestion)
-  String exportAnalyticsCsv(AnalyticsTimeframe timeframe, String categoryFilter) {
+  // 9. CSV EXPORT BUILDER
+  String exportAnalyticsCsv(
+    AnalyticsTimeframe timeframe,
+    String categoryFilter,
+  ) {
     final buffer = StringBuffer();
-    buffer.writeln('CAMPUSCONNECT EXECUTIVE BI & PLATFORM ANALYTICS AUDIT');
+    buffer.writeln('CAMPUSCONNECT PLATFORM ANALYTICS REPORT');
     buffer.writeln('Export Generated: ${DateTime.now().toIso8601String()}');
     buffer.writeln('Selected Timeframe: ${timeframe.label}');
     buffer.writeln('Category Filter: $categoryFilter');
-    buffer.writeln('Classification: Enterprise Confidential / Educational Collaboration');
     buffer.writeln('');
-    buffer.writeln('PERIOD,STUDENT_REGISTRATIONS,COMPANY_REGISTRATIONS,PROJECTS_PUBLISHED,PROJECTS_COMPLETED,APPLICATIONS,COMPLETION_RATE_PCT,GROWTH_RATE_PCT,HEALTH_STATUS');
+    buffer.writeln(
+      'PERIOD,STUDENT_REGISTRATIONS,COMPANY_REGISTRATIONS,PROJECTS_PUBLISHED,PROJECTS_COMPLETED,APPLICATIONS,COMPLETION_RATE_PCT,GROWTH_RATE_PCT,HEALTH_STATUS',
+    );
 
     final rows = getDetailedTableRows(timeframe);
     for (final r in rows) {
-      buffer.writeln('"${r.periodLabel}",${r.studentRegistrations},${r.companyRegistrations},${r.projectsPublished},${r.projectsCompleted},${r.applicationsSubmitted},${r.completionRate}%,${r.growthRate}%,${r.healthStatus}');
+      buffer.writeln(
+        '"${r.periodLabel}",${r.studentRegistrations},${r.companyRegistrations},${r.projectsPublished},${r.projectsCompleted},${r.applicationsSubmitted},${r.completionRate}%,${r.growthRate}%,${r.healthStatus}',
+      );
     }
 
     buffer.writeln('');
-    buffer.writeln('CATEGORY_DISTRIBUTION,PROJECT_COUNT,STUDENT_PARTICIPANTS,CORPORATE_COUNT,PERCENTAGE_SHARE');
+    buffer.writeln(
+      'CATEGORY_DISTRIBUTION,PROJECT_COUNT,STUDENT_PARTICIPANTS,CORPORATE_COUNT,PERCENTAGE_SHARE',
+    );
     final categories = getCategoryDistribution(categoryFilter);
     for (final c in categories) {
-      buffer.writeln('"${c.categoryName}",${c.projectCount},${c.studentParticipants},${c.companyCount},${c.percentage}%');
+      buffer.writeln(
+        '"${c.categoryName}",${c.projectCount},${c.studentParticipants},${c.companyCount},${c.percentage}%',
+      );
     }
 
     buffer.writeln('');
-    buffer.writeln('IN_DEMAND_SKILLS,REQUIREMENTS_COUNT,CERTIFIED_STUDENTS,CATEGORY,DEMAND_GROWTH');
+    buffer.writeln(
+      'IN_DEMAND_SKILLS,REQUIREMENTS_COUNT,CERTIFIED_STUDENTS,CATEGORY,DEMAND_GROWTH',
+    );
     final skills = getTopSkills();
     for (final s in skills) {
-      buffer.writeln('"${s.skillName}",${s.projectRequirementCount},${s.certifiedStudentCount},"${s.primaryCategory}",+${s.demandGrowthRate}%');
+      buffer.writeln(
+        '"${s.skillName}",${s.projectRequirementCount},${s.certifiedStudentCount},"${s.primaryCategory}",${s.demandGrowthRate}%',
+      );
     }
 
     return buffer.toString();
+  }
+
+  void reset() {
+    reportsNotifier.value = [];
+    lastRefreshedNotifier.value = DateTime.now();
   }
 }

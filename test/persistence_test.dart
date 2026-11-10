@@ -175,8 +175,8 @@ void main() {
   });
 
   test('Persistent Certificates across app restarts', () async {
-    final certCount = AppDataService.instance.getCertificates().length;
-    expect(certCount, greaterThanOrEqualTo(2));
+    final initialCertCount = AppDataService.instance.getCertificates().length;
+    expect(initialCertCount, equals(0));
 
     await AppDataService.instance.addCertificate({
       'id': 'CC-TEST-999',
@@ -186,13 +186,21 @@ void main() {
       'date': 'Nov 09, 2026',
     });
 
-    expect(AppDataService.instance.getCertificates().length, equals(certCount + 1));
+    expect(
+      AppDataService.instance.getCertificates().length,
+      equals(initialCertCount + 1),
+    );
 
     // SIMULATE APP CLOSE & REOPEN
     await AppDataService.instance.init();
 
-    expect(AppDataService.instance.getCertificates().length, equals(certCount + 1));
-    final newCert = AppDataService.instance.getCertificates().firstWhere((c) => c['id'] == 'CC-TEST-999');
+    expect(
+      AppDataService.instance.getCertificates().length,
+      equals(initialCertCount + 1),
+    );
+    final newCert = AppDataService.instance
+        .getCertificates()
+        .firstWhere((c) => c['id'] == 'CC-TEST-999');
     expect(newCert['title'], equals('AI Machine Learning Certificate'));
   });
 
@@ -225,9 +233,12 @@ void main() {
   });
 
   test('Persistent Chat & Company Messaging across app restarts', () async {
-    final convs = AppDataService.instance.getConversations();
-    expect(convs, isNotEmpty);
-    final convId = convs.first['id'] as String;
+    final convId = await AppDataService.instance.openOrCreateConversation(
+      companyName: 'Test Partner Corp',
+      supervisorName: 'Project Lead',
+      projectTitle: 'Cloud Migration',
+    );
+    expect(AppDataService.instance.getConversations(), isNotEmpty);
 
     await AppDataService.instance.sendChatMessage(
       conversationId: convId,

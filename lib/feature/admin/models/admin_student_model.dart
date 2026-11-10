@@ -27,6 +27,7 @@ class StudentAuditRecord {
 
 class AdminStudentModel {
   final String id;
+  final String? userId;
   final String name;
   final String email;
   final String avatarInitial;
@@ -44,6 +45,7 @@ class AdminStudentModel {
   final String verificationDocumentName;
   final String verificationDocumentType;
   final String verificationDocumentSize;
+  final String? verificationDocumentUrl;
   final String portfolioUrl;
   final String githubUrl;
   final String bio;
@@ -53,6 +55,7 @@ class AdminStudentModel {
 
   const AdminStudentModel({
     required this.id,
+    this.userId,
     required this.name,
     required this.email,
     required this.avatarInitial,
@@ -70,6 +73,7 @@ class AdminStudentModel {
     required this.verificationDocumentName,
     required this.verificationDocumentType,
     required this.verificationDocumentSize,
+    this.verificationDocumentUrl,
     required this.portfolioUrl,
     required this.githubUrl,
     required this.bio,
@@ -80,6 +84,7 @@ class AdminStudentModel {
 
   AdminStudentModel copyWith({
     String? id,
+    String? userId,
     String? name,
     String? email,
     String? avatarInitial,
@@ -94,9 +99,11 @@ class AdminStudentModel {
     String? registrationDate,
     DateTime? registrationDateTime,
     String? suspensionReason,
+    bool clearSuspensionReason = false,
     String? verificationDocumentName,
     String? verificationDocumentType,
     String? verificationDocumentSize,
+    String? verificationDocumentUrl,
     String? portfolioUrl,
     String? githubUrl,
     String? bio,
@@ -106,6 +113,7 @@ class AdminStudentModel {
   }) {
     return AdminStudentModel(
       id: id ?? this.id,
+      userId: userId ?? this.userId,
       name: name ?? this.name,
       email: email ?? this.email,
       avatarInitial: avatarInitial ?? this.avatarInitial,
@@ -119,13 +127,16 @@ class AdminStudentModel {
       accountStatus: accountStatus ?? this.accountStatus,
       registrationDate: registrationDate ?? this.registrationDate,
       registrationDateTime: registrationDateTime ?? this.registrationDateTime,
-      suspensionReason: suspensionReason ?? this.suspensionReason,
+      suspensionReason:
+          clearSuspensionReason ? null : (suspensionReason ?? this.suspensionReason),
       verificationDocumentName:
           verificationDocumentName ?? this.verificationDocumentName,
       verificationDocumentType:
           verificationDocumentType ?? this.verificationDocumentType,
       verificationDocumentSize:
           verificationDocumentSize ?? this.verificationDocumentSize,
+      verificationDocumentUrl:
+          verificationDocumentUrl ?? this.verificationDocumentUrl,
       portfolioUrl: portfolioUrl ?? this.portfolioUrl,
       githubUrl: githubUrl ?? this.githubUrl,
       bio: bio ?? this.bio,

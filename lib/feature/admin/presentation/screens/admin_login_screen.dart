@@ -1,5 +1,6 @@
 import 'dart:async';
 import 'package:flutter/material.dart';
+import 'package:google_fonts/google_fonts.dart';
 import 'package:link_vibe/core/constants/app_colors.dart';
 import 'package:link_vibe/feature/admin/presentation/screens/admin_dashboard_screen.dart';
 import 'package:link_vibe/feature/admin/services/admin_auth_service.dart';
@@ -134,53 +135,62 @@ class _AdminLoginScreenState extends State<AdminLoginScreen> {
     }
   }
 
-  void _fillSampleCredentials({required String email, required String password}) {
-    setState(() {
-      _emailController.text = email;
-      _passwordController.text = password;
-      _errorMessage = null;
-    });
-  }
-
   void _openForgotPasswordDialog() {
-    final resetEmailController = TextEditingController(text: _emailController.text.trim());
+    final resetEmailController =
+        TextEditingController(text: _emailController.text.trim());
     bool isSubmitting = false;
+    bool sentSuccessfully = false;
     String? dialogStatus;
 
     showDialog(
       context: context,
       builder: (ctx) => StatefulBuilder(
-        builder: (context, setDialogState) {
+        builder: (dialogCtx, setDialogState) {
           return AlertDialog(
             shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
-            title: const Row(
+            title: Row(
               children: [
-                Icon(Icons.lock_reset_rounded, color: AppColors.primary),
-                SizedBox(width: 10),
-                Text(
-                  'Admin Recovery Protocol',
-                  style: TextStyle(fontSize: 17, fontWeight: FontWeight.bold),
+                const Icon(Icons.lock_reset_rounded, color: AppColors.primary),
+                const SizedBox(width: 10),
+                Expanded(
+                  child: Text(
+                    'Admin Password Reset',
+                    style: GoogleFonts.poppins(
+                      fontSize: 17,
+                      fontWeight: FontWeight.bold,
+                    ),
+                  ),
                 ),
               ],
             ),
-            content: SizedBox(
-              width: 420,
+            content: ConstrainedBox(
+              constraints: const BoxConstraints(maxWidth: 420),
               child: Column(
                 mainAxisSize: MainAxisSize.min,
                 crossAxisAlignment: CrossAxisAlignment.start,
                 children: [
-                  const Text(
-                    'Administrative accounts cannot be self-reset through public email triggers. Enter your verified institutional address to notify the CampusConnect Security Directorate.',
-                    style: TextStyle(fontSize: 13, color: AppColors.textSecondary, height: 1.4),
+                  Text(
+                    'Enter your registered administrator email address to receive a password recovery email via Supabase Auth.',
+                    style: GoogleFonts.inter(
+                      fontSize: 13,
+                      color: AppColors.textSecondary,
+                      height: 1.4,
+                    ),
                   ),
                   const SizedBox(height: 16),
                   TextFormField(
                     controller: resetEmailController,
+                    keyboardType: TextInputType.emailAddress,
                     decoration: InputDecoration(
                       labelText: 'Registered Admin Email',
                       prefixIcon: const Icon(Icons.email_outlined, size: 20),
-                      border: OutlineInputBorder(borderRadius: BorderRadius.circular(10)),
-                      contentPadding: const EdgeInsets.symmetric(horizontal: 14, vertical: 12),
+                      border: OutlineInputBorder(
+                        borderRadius: BorderRadius.circular(10),
+                      ),
+                      contentPadding: const EdgeInsets.symmetric(
+                        horizontal: 14,
+                        vertical: 12,
+                      ),
                     ),
                   ),
                   if (dialogStatus != null) ...[
@@ -188,20 +198,38 @@ class _AdminLoginScreenState extends State<AdminLoginScreen> {
                     Container(
                       padding: const EdgeInsets.all(12),
                       decoration: BoxDecoration(
-                        color: AppColors.successBg,
+                        color: sentSuccessfully
+                            ? AppColors.successBg
+                            : AppColors.errorBg,
                         borderRadius: BorderRadius.circular(8),
-                        border: Border.all(color: AppColors.success.withValues(alpha: 0.3)),
+                        border: Border.all(
+                          color: (sentSuccessfully
+                                  ? AppColors.success
+                                  : AppColors.error)
+                              .withValues(alpha: 0.35),
+                        ),
                       ),
                       child: Row(
+                        crossAxisAlignment: CrossAxisAlignment.start,
                         children: [
-                          const Icon(Icons.check_circle_outline, color: AppColors.success, size: 20),
+                          Icon(
+                            sentSuccessfully
+                                ? Icons.check_circle_outline
+                                : Icons.error_outline_rounded,
+                            color: sentSuccessfully
+                                ? AppColors.success
+                                : AppColors.error,
+                            size: 20,
+                          ),
                           const SizedBox(width: 8),
                           Expanded(
                             child: Text(
                               dialogStatus!,
-                              style: const TextStyle(
+                              style: GoogleFonts.inter(
                                 fontSize: 12,
-                                color: Color(0xFF166534),
+                                color: sentSuccessfully
+                                    ? const Color(0xFF166534)
+                                    : const Color(0xFF991B1B),
                                 fontWeight: FontWeight.w600,
                               ),
                             ),
@@ -218,7 +246,7 @@ class _AdminLoginScreenState extends State<AdminLoginScreen> {
                 onPressed: () => Navigator.pop(ctx),
                 child: const Text('Close'),
               ),
-              if (dialogStatus == null)
+              if (!sentSuccessfully)
                 ElevatedButton(
                   style: ElevatedButton.styleFrom(
                     backgroundColor: AppColors.darkNavy,
@@ -228,10 +256,13 @@ class _AdminLoginScreenState extends State<AdminLoginScreen> {
                       ? null
                       : () async {
                           final targetEmail = resetEmailController.text.trim();
-                          if (targetEmail.isEmpty || !targetEmail.contains('@')) {
+                          if (targetEmail.isEmpty ||
+                              !targetEmail.contains('@')) {
                             ScaffoldMessenger.of(context).showSnackBar(
                               const SnackBar(
-                                content: Text('Please enter a valid administrative email.'),
+                                content: Text(
+                                  'Please enter a valid administrative email.',
+                                ),
                                 behavior: SnackBarBehavior.floating,
                               ),
                             );
@@ -240,23 +271,31 @@ class _AdminLoginScreenState extends State<AdminLoginScreen> {
 
                           setDialogState(() {
                             isSubmitting = true;
+                            dialogStatus = null;
                           });
 
-                          await _authService.requestPasswordReset(targetEmail);
+                          final sent =
+                              await _authService.requestPasswordReset(targetEmail);
+                          if (!dialogCtx.mounted) return;
 
                           setDialogState(() {
                             isSubmitting = false;
-                            dialogStatus =
-                                'Security token generated and dispatched to the Governance Security Vault for institutional review.';
+                            sentSuccessfully = sent;
+                            dialogStatus = sent
+                                ? 'Password reset instructions have been dispatched to $targetEmail if the account exists.'
+                                : 'Unable to send reset email for $targetEmail. Verify the address and try again.';
                           });
                         },
                   child: isSubmitting
                       ? const SizedBox(
                           width: 16,
                           height: 16,
-                          child: CircularProgressIndicator(strokeWidth: 2, color: Colors.white),
+                          child: CircularProgressIndicator(
+                            strokeWidth: 2,
+                            color: Colors.white,
+                          ),
                         )
-                      : const Text('Dispatch Recovery Alert'),
+                      : const Text('Send Reset Link'),
                 ),
             ],
           );
@@ -441,7 +480,7 @@ class _AdminLoginScreenState extends State<AdminLoginScreen> {
               // Feature Badges
               _buildHeroFeatureRow(
                 icon: Icons.verified_user_outlined,
-                title: 'SECP & University Verification Desk',
+                title: 'Company & University Verification Desk',
                 subtitle: 'Authorized multi-tier vetting of corporate identity & student degrees.',
               ),
               const SizedBox(height: 16),
@@ -616,25 +655,27 @@ class _AdminLoginScreenState extends State<AdminLoginScreen> {
                   child: const Icon(Icons.lock_rounded, color: AppColors.primary, size: 20),
                 ),
                 const SizedBox(width: 12),
-                const Column(
-                  crossAxisAlignment: CrossAxisAlignment.start,
-                  children: [
-                    Text(
-                      'Admin Sign In',
-                      style: TextStyle(
-                        fontSize: 20,
-                        fontWeight: FontWeight.bold,
-                        color: AppColors.darkNavy,
+                const Expanded(
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      Text(
+                        'Admin Sign In',
+                        style: TextStyle(
+                          fontSize: 20,
+                          fontWeight: FontWeight.bold,
+                          color: AppColors.darkNavy,
+                        ),
                       ),
-                    ),
-                    Text(
-                      'Authorized credentials required',
-                      style: TextStyle(
-                        fontSize: 12,
-                        color: AppColors.textSecondary,
+                      Text(
+                        'Authorized credentials required',
+                        style: TextStyle(
+                          fontSize: 12,
+                          color: AppColors.textSecondary,
+                        ),
                       ),
-                    ),
-                  ],
+                    ],
+                  ),
                 ),
               ],
             ),
@@ -695,9 +736,10 @@ class _AdminLoginScreenState extends State<AdminLoginScreen> {
             TextFormField(
               controller: _emailController,
               keyboardType: TextInputType.emailAddress,
+              textInputAction: TextInputAction.next,
               enabled: !_isLoading && _lockoutSeconds == 0,
               decoration: InputDecoration(
-                hintText: 'admin@campusconnect.edu.pk',
+                hintText: 'Enter institutional administrator email',
                 hintStyle: const TextStyle(fontSize: 13, color: AppColors.textMuted),
                 prefixIcon: const Icon(Icons.alternate_email_rounded, size: 19, color: AppColors.primary),
                 filled: true,
@@ -720,7 +762,8 @@ class _AdminLoginScreenState extends State<AdminLoginScreen> {
                 if (value == null || value.trim().isEmpty) {
                   return 'Please enter your institutional admin email';
                 }
-                final emailPattern = RegExp(r'^[\w-\.]+@([\w-]+\.)+[\w-]{2,4}$');
+                final emailPattern =
+                    RegExp(r'^[\w\-\.]+@([\w\-]+\.)+[\w\-]{2,10}$');
                 if (!emailPattern.hasMatch(value.trim())) {
                   return 'Enter a valid institutional email address';
                 }
@@ -742,6 +785,10 @@ class _AdminLoginScreenState extends State<AdminLoginScreen> {
             TextFormField(
               controller: _passwordController,
               obscureText: _obscurePassword,
+              textInputAction: TextInputAction.done,
+              onFieldSubmitted: (_) {
+                if (!_isLoading && _lockoutSeconds == 0) _handleLogin();
+              },
               enabled: !_isLoading && _lockoutSeconds == 0,
               decoration: InputDecoration(
                 hintText: '••••••••••••',
@@ -788,8 +835,11 @@ class _AdminLoginScreenState extends State<AdminLoginScreen> {
             const SizedBox(height: 14),
 
             // 3. Remember Me & Forgot Password Row
-            Row(
-              mainAxisAlignment: MainAxisAlignment.spaceBetween,
+            Wrap(
+              alignment: WrapAlignment.spaceBetween,
+              crossAxisAlignment: WrapCrossAlignment.center,
+              runSpacing: 8,
+              spacing: 12,
               children: [
                 Row(
                   mainAxisSize: MainAxisSize.min,
@@ -886,54 +936,6 @@ class _AdminLoginScreenState extends State<AdminLoginScreen> {
                         ],
                       ),
               ),
-            ),
-            const SizedBox(height: 24),
-
-            // Divider
-            Row(
-              children: [
-                const Expanded(child: Divider(color: AppColors.border)),
-                Padding(
-                  padding: const EdgeInsets.symmetric(horizontal: 10),
-                  child: Text(
-                    'AUTHORIZED CREDENTIALS (QA)',
-                    style: TextStyle(
-                      fontSize: 10,
-                      fontWeight: FontWeight.bold,
-                      letterSpacing: 0.8,
-                      color: AppColors.textMuted.withValues(alpha: 0.8),
-                    ),
-                  ),
-                ),
-                const Expanded(child: Divider(color: AppColors.border)),
-              ],
-            ),
-            const SizedBox(height: 14),
-
-            // Quick Fill Presets for seamless testing
-            Wrap(
-              spacing: 8,
-              runSpacing: 8,
-              children: [
-                ActionChip(
-                  avatar: const Icon(Icons.shield, size: 14, color: AppColors.primary),
-                  label: const Text('SuperAdmin', style: TextStyle(fontSize: 11.5)),
-                  backgroundColor: AppColors.lightIceBlue,
-                  onPressed: () => _fillSampleCredentials(
-                    email: 'admin@campusconnect.edu.pk',
-                    password: 'Admin@CampusConnect2026!',
-                  ),
-                ),
-                ActionChip(
-                  avatar: const Icon(Icons.verified, size: 14, color: AppColors.success),
-                  label: const Text('Operations Admin', style: TextStyle(fontSize: 11.5)),
-                  backgroundColor: AppColors.successBg,
-                  onPressed: () => _fillSampleCredentials(
-                    email: 'ops@campusconnect.edu.pk',
-                    password: 'CampusOps2026!',
-                  ),
-                ),
-              ],
             ),
             const SizedBox(height: 24),
 

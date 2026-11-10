@@ -33,7 +33,7 @@ class ProjectModel {
     this.openings = 1,
     this.additionalInstructions = '',
     required this.companyName,
-    this.companyId = 'comp_01',
+    this.companyId = '',
     required this.status,
     this.duration = '3-4 weeks',
     this.budget = '',
@@ -91,30 +91,33 @@ class ProjectModel {
   }
 
   factory ProjectModel.fromJson(Map<String, dynamic> json) {
+    final rawSkills = json['skills_required'] ?? json['skills'];
     return ProjectModel(
-      id: json['id'] ?? '',
-      title: json['title'] ?? '',
-      category: json['category'] ?? 'Mobile Dev',
-      description: json['description'] ?? '',
-      requirements: json['requirements'] ?? '',
-      skillsRequired: (json['skills_required'] as List<dynamic>?)
+      id: (json['id'] ?? '').toString(),
+      title: (json['title'] ?? '').toString(),
+      category: (json['category'] ?? 'Development').toString(),
+      description: (json['description'] ?? '').toString(),
+      requirements: (json['requirements'] ?? '').toString(),
+      skillsRequired: (rawSkills as List<dynamic>?)
               ?.map((e) => e.toString())
               .toList() ??
           const [],
-      deliverables: json['deliverables'] ?? '',
-      deadline: json['deadline'] ?? 'Flexible',
-      projectType: json['project_type'] ?? 'Remote',
+      deliverables: (json['deliverables'] ?? '').toString(),
+      deadline: (json['deadline'] ?? 'Flexible').toString(),
+      projectType:
+          (json['project_type'] ?? json['work_mode'] ?? 'Remote').toString(),
       openings: (json['openings'] as num?)?.toInt() ?? 1,
-      additionalInstructions: json['additional_instructions'] ?? '',
-      companyName: json['company_name'] ?? 'TechVista Innovations',
-      companyId: json['company_id'] ?? 'comp_01',
-      status: json['status'] ?? 'Open',
-      duration: json['duration'] ?? '3-4 weeks',
-      budget: json['budget'] ?? '',
+      additionalInstructions:
+          (json['additional_instructions'] ?? '').toString(),
+      companyName: (json['company_name'] ?? '').toString(),
+      companyId: (json['company_id'] ?? '').toString(),
+      status: (json['status'] ?? 'Open').toString(),
+      duration: (json['duration'] ?? '3-4 weeks').toString(),
+      budget: (json['budget'] ?? '').toString(),
       applicantsCount: (json['applicants_count'] as num?)?.toInt() ?? 0,
-      assignedStudent: json['assigned_student'],
+      assignedStudent: json['assigned_student']?.toString(),
       progress: (json['progress'] as num?)?.toDouble() ?? 0.0,
-      createdAt: json['created_at'] ?? 'Recently',
+      createdAt: (json['created_at'] ?? 'Recently').toString(),
     );
   }
 

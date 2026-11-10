@@ -164,26 +164,25 @@ class ApplicantModel {
     required this.name,
     required this.email,
     required this.university,
-    this.isEducationVerified = true,
+    this.isEducationVerified = false,
     required this.degree,
-    this.department = 'Computer Science & Software Engineering',
-    this.semester = '7th Semester',
+    this.department = '',
+    this.semester = '',
     required this.cgpa,
     required this.skills,
     required this.appliedDate,
     required this.proposalSummary,
     this.status = 'Pending',
-    this.avatarInitial = 'AK',
+    this.avatarInitial = 'ST',
     this.profilePictureUrl,
     this.portfolioUrl = '',
-    this.rating = 4.8,
-    this.bio =
-        'Driven student developer with hands-on project experience in clean architecture and scalable systems.',
-    this.resumeFileName = 'Student_Official_Resume.pdf',
+    this.rating = 0.0,
+    this.bio = '',
+    this.resumeFileName = '',
     this.portfolioProjects = const [],
     this.previousProjects = const [],
     this.certificates = const [],
-  }) : studentId = studentId ?? 'std_$id';
+  }) : studentId = studentId ?? id;
 
   ApplicantModel copyWith({
     String? id,
@@ -242,38 +241,43 @@ class ApplicantModel {
   }
 
   factory ApplicantModel.fromJson(Map<String, dynamic> json) {
+    final nameStr = (json['name'] ?? json['student_name'] ?? '').toString();
     return ApplicantModel(
-      id: json['id'] ?? '',
-      studentId: json['student_id'],
-      projectId: json['project_id'] ?? '',
-      projectTitle: json['project_title'] ?? 'Project Challenge',
-      name: json['name'] ?? '',
-      email: json['email'] ?? '',
-      university: json['university'] ?? '',
-      isEducationVerified: json['is_education_verified'] ?? true,
-      degree: json['degree'] ?? '',
-      department: json['department'] ?? 'Computer Science & Software Engineering',
-      semester: json['semester'] ?? '7th Semester',
-      cgpa: (json['cgpa'] as num?)?.toDouble() ?? 3.5,
+      id: (json['id'] ?? '').toString(),
+      studentId: (json['student_id'] ?? json['user_id'])?.toString(),
+      projectId: (json['project_id'] ?? '').toString(),
+      projectTitle: (json['project_title'] ?? 'Project Challenge').toString(),
+      name: nameStr,
+      email: (json['email'] ?? json['student_email'] ?? '').toString(),
+      university: (json['university'] ?? '').toString(),
+      isEducationVerified: json['is_education_verified'] ?? false,
+      degree: (json['degree'] ?? json['student_degree'] ?? '').toString(),
+      department:
+          (json['department'] ?? json['student_department'] ?? '').toString(),
+      semester: (json['semester'] ?? json['student_semester'] ?? '').toString(),
+      cgpa: ((json['cgpa'] ?? json['student_cgpa']) as num?)?.toDouble() ?? 0.0,
       skills: (json['skills'] as List<dynamic>?)
               ?.map((e) => e.toString())
               .toList() ??
           const [],
-      appliedDate: json['applied_date'] ?? 'Recently',
-      proposalSummary: json['proposal_summary'] ??
-          json['cover_letter'] ??
-          'Student proposal submitted for project evaluation.',
-      status: json['status'] ?? 'Pending',
-      avatarInitial: json['avatar_initial'] ??
-          (json['name'] != null && (json['name'] as String).length >= 2
-              ? (json['name'] as String).substring(0, 2).toUpperCase()
+      appliedDate:
+          (json['applied_date'] ?? json['submitted_at'] ?? 'Recently').toString(),
+      proposalSummary: (json['proposal_summary'] ??
+              json['cover_letter'] ??
+              'No proposal summary provided.')
+          .toString(),
+      status: (json['status'] ?? 'Pending').toString(),
+      avatarInitial: json['avatar_initial']?.toString() ??
+          (nameStr.trim().length >= 2
+              ? nameStr.trim().substring(0, 2).toUpperCase()
               : 'ST'),
-      profilePictureUrl: json['profile_picture_url'],
-      portfolioUrl: json['portfolio_url'] ?? '',
-      rating: (json['rating'] as num?)?.toDouble() ?? 4.8,
-      bio: json['bio'] ??
-          'Driven student developer with hands-on project experience in clean architecture and scalable systems.',
-      resumeFileName: json['resume_file_name'] ?? 'Student_Official_Resume.pdf',
+      profilePictureUrl: json['profile_picture_url']?.toString(),
+      portfolioUrl:
+          (json['portfolio_url'] ?? json['portfolio_link'] ?? '').toString(),
+      rating: (json['rating'] as num?)?.toDouble() ?? 0.0,
+      bio: (json['bio'] ?? '').toString(),
+      resumeFileName:
+          (json['resume_file_name'] ?? json['resume_link'] ?? '').toString(),
       portfolioProjects: (json['portfolio_projects'] as List<dynamic>?)
               ?.map((p) =>
                   StudentPortfolioItem.fromJson(p as Map<String, dynamic>))

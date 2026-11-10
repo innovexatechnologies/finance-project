@@ -43,8 +43,8 @@ class CertificateModel {
     this.communicationRating = 5.0,
     this.timelinessRating = 5.0,
     required this.recommendationLetter,
-    this.signatoryName = 'Danish Ali Rajpoot',
-    this.signatoryTitle = 'Head of Engineering & Talent Partnerships',
+    this.signatoryName = 'Authorized Signatory',
+    this.signatoryTitle = 'Head of Talent & Partnerships',
     this.verificationUrl = '',
     this.isIssued = true,
   });
@@ -104,20 +104,21 @@ class CertificateModel {
 
   factory CertificateModel.fromJson(Map<String, dynamic> json) {
     return CertificateModel(
-      id: json['id'] ?? '',
-      credentialId: json['credential_id'] ?? '',
-      companyId: json['company_id'] ?? 'comp_01',
-      companyName: json['company_name'] ?? 'TechVista Innovations',
-      projectId: json['project_id'] ?? '',
-      projectTitle: json['project_title'] ?? '',
-      projectCategory: json['project_category'] ?? 'Software Dev',
-      studentId: json['student_id'] ?? '',
-      studentName: json['student_name'] ?? '',
-      studentUniversity: json['student_university'] ?? '',
-      studentDegree: json['student_degree'] ?? '',
-      certificateTitle:
-          json['certificate_title'] ?? 'Certificate of Project Completion',
-      issueDate: json['issue_date'] ?? 'Recently',
+      id: (json['id'] ?? '').toString(),
+      credentialId: (json['credential_id'] ?? json['certificate_id'] ?? '').toString(),
+      companyId: (json['company_id'] ?? '').toString(),
+      companyName: (json['company_name'] ?? '').toString(),
+      projectId: (json['project_id'] ?? '').toString(),
+      projectTitle: (json['project_title'] ?? '').toString(),
+      projectCategory: (json['project_category'] ?? 'Development').toString(),
+      studentId: (json['student_id'] ?? '').toString(),
+      studentName: (json['student_name'] ?? '').toString(),
+      studentUniversity: (json['student_university'] ?? '').toString(),
+      studentDegree: (json['student_degree'] ?? '').toString(),
+      certificateTitle: (json['certificate_title'] ??
+              'Certificate of Project Completion')
+          .toString(),
+      issueDate: (json['issue_date'] ?? 'Recently').toString(),
       overallRating: (json['overall_rating'] as num?)?.toDouble() ?? 5.0,
       technicalRating: (json['technical_rating'] as num?)?.toDouble() ?? 5.0,
       codeQualityRating:

@@ -1,18 +1,27 @@
 import 'package:flutter/material.dart';
+import 'package:google_fonts/google_fonts.dart';
 import 'package:link_vibe/core/constants/app_colors.dart';
+import 'package:link_vibe/core/widgets/app_empty_state.dart';
 import 'package:link_vibe/feature/admin/models/admin_company_verification_model.dart';
 import 'package:link_vibe/feature/admin/presentation/screens/admin_dashboard_screen.dart';
 import 'package:link_vibe/feature/admin/presentation/screens/admin_login_screen.dart';
+import 'package:link_vibe/feature/admin/presentation/screens/admin_settings_screen.dart';
+import 'package:link_vibe/feature/admin/presentation/screens/application_monitoring_screen.dart';
+import 'package:link_vibe/feature/admin/presentation/screens/certificate_management_screen.dart';
+import 'package:link_vibe/feature/admin/presentation/screens/company_management_screen.dart';
+import 'package:link_vibe/feature/admin/presentation/screens/project_management_screen.dart';
+import 'package:link_vibe/feature/admin/presentation/screens/reports_analytics_screen.dart';
 import 'package:link_vibe/feature/admin/presentation/screens/student_management_screen.dart';
 import 'package:link_vibe/feature/admin/presentation/widgets/admin_sidebar.dart';
 import 'package:link_vibe/feature/admin/presentation/widgets/admin_top_navbar.dart';
 import 'package:link_vibe/feature/admin/services/admin_auth_service.dart';
 import 'package:link_vibe/feature/admin/services/admin_verification_service.dart';
 import 'package:link_vibe/feature/company/models/company_verification_model.dart';
+import 'package:url_launcher/url_launcher.dart';
 
 /// Enterprise Company Verification Management & Review Desk (Screen 34)
-/// Provides a comprehensive audit data grid, evidence inspection drawer,
-/// and live cross-panel synchronization with company accounts.
+/// Provides a live audit data grid, uploaded evidence inspection,
+/// and cross-panel Supabase synchronization with company accounts.
 class CompanyVerificationsScreen extends StatefulWidget {
   const CompanyVerificationsScreen({super.key});
 
@@ -29,7 +38,7 @@ class _CompanyVerificationsScreenState
   final GlobalKey<ScaffoldState> _scaffoldKey = GlobalKey<ScaffoldState>();
 
   String _searchQuery = '';
-  String _selectedStatusFilter = 'All'; // 'All', 'Pending', 'Verified', 'Rejected'
+  String _selectedStatusFilter = 'All';
   bool _isSidebarCollapsed = false;
 
   final List<String> _filters = ['All', 'Pending', 'Verified', 'Rejected'];
@@ -79,15 +88,70 @@ class _CompanyVerificationsScreenState
   }
 
   void _onRouteSelected(String routeId) {
+    if (_scaffoldKey.currentState?.isDrawerOpen ?? false) {
+      Navigator.pop(context);
+    }
+    if (routeId == 'company_verifications') return;
+
+    Widget? target;
     if (routeId == 'dashboard') {
-      Navigator.pushReplacement(
-        context,
-        MaterialPageRoute(builder: (_) => const AdminDashboardScreen()),
-      );
+      target = const AdminDashboardScreen();
+    } else if (routeId == 'company_management') {
+      target = const CompanyManagementScreen();
     } else if (routeId == 'student_verifications') {
+      target = const StudentManagementScreen();
+    } else if (routeId == 'projects_audit' || routeId == 'projects') {
+      target = const ProjectManagementScreen();
+    } else if (routeId == 'compliance' || routeId == 'application_monitoring') {
+      target = const ApplicationMonitoringScreen();
+    } else if (routeId == 'audit_logs' || routeId == 'certificates') {
+      target = const CertificateManagementScreen();
+    } else if (routeId == 'analytics' || routeId == 'reports') {
+      target = const ReportsAnalyticsScreen();
+    } else if (routeId == 'settings') {
+      target = const AdminSettingsScreen();
+    }
+
+    if (target != null) {
       Navigator.pushReplacement(
         context,
-        MaterialPageRoute(builder: (_) => const StudentManagementScreen()),
+        MaterialPageRoute(builder: (_) => target!),
+      );
+    }
+  }
+
+  Future<void> _launchExternalUrl(String rawUrl) async {
+    final trimmed = rawUrl.trim();
+    if (trimmed.isEmpty) return;
+    final uri = Uri.tryParse(trimmed);
+    if (uri == null || !uri.hasScheme) {
+      if (!mounted) return;
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(
+          content: Text('Invalid or incomplete document URL.'),
+          behavior: SnackBarBehavior.floating,
+        ),
+      );
+      return;
+    }
+    try {
+      final launched =
+          await launchUrl(uri, mode: LaunchMode.externalApplication);
+      if (!launched && mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(
+            content: Text('Could not open document link in browser/viewer.'),
+            behavior: SnackBarBehavior.floating,
+          ),
+        );
+      }
+    } catch (e) {
+      if (!mounted) return;
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(
+          content: Text('Unable to open document: $e'),
+          behavior: SnackBarBehavior.floating,
+        ),
       );
     }
   }
@@ -109,46 +173,51 @@ class _CompanyVerificationsScreenState
           child: ListView(
             controller: scrollController,
             children: [
-              // Header Row
               Row(
                 mainAxisAlignment: MainAxisAlignment.spaceBetween,
                 children: [
-                  Row(
-                    children: [
-                      CircleAvatar(
-                        radius: 22,
-                        backgroundColor: AppColors.darkNavy,
-                        child: Text(
-                          item.logoInitial,
-                          style: const TextStyle(
-                            color: Colors.white,
-                            fontWeight: FontWeight.bold,
-                            fontSize: 15,
+                  Expanded(
+                    child: Row(
+                      children: [
+                        CircleAvatar(
+                          radius: 22,
+                          backgroundColor: AppColors.darkNavy,
+                          child: Text(
+                            item.logoInitial,
+                            style: GoogleFonts.poppins(
+                              color: Colors.white,
+                              fontWeight: FontWeight.bold,
+                              fontSize: 15,
+                            ),
                           ),
                         ),
-                      ),
-                      const SizedBox(width: 14),
-                      Column(
-                        crossAxisAlignment: CrossAxisAlignment.start,
-                        children: [
-                          Text(
-                            item.companyName,
-                            style: const TextStyle(
-                              fontSize: 18,
-                              fontWeight: FontWeight.bold,
-                              color: AppColors.darkNavy,
-                            ),
+                        const SizedBox(width: 14),
+                        Expanded(
+                          child: Column(
+                            crossAxisAlignment: CrossAxisAlignment.start,
+                            children: [
+                              Text(
+                                item.companyName,
+                                style: GoogleFonts.poppins(
+                                  fontSize: 18,
+                                  fontWeight: FontWeight.bold,
+                                  color: AppColors.darkNavy,
+                                ),
+                                overflow: TextOverflow.ellipsis,
+                              ),
+                              Text(
+                                '${item.industry} • ${item.city}',
+                                style: GoogleFonts.inter(
+                                  fontSize: 12,
+                                  color: AppColors.textSecondary,
+                                ),
+                                overflow: TextOverflow.ellipsis,
+                              ),
+                            ],
                           ),
-                          Text(
-                            '${item.industry} • ${item.city}',
-                            style: const TextStyle(
-                              fontSize: 12,
-                              color: AppColors.textSecondary,
-                            ),
-                          ),
-                        ],
-                      ),
-                    ],
+                        ),
+                      ],
+                    ),
                   ),
                   IconButton(
                     icon: const Icon(Icons.close_rounded),
@@ -160,33 +229,36 @@ class _CompanyVerificationsScreenState
               const Divider(),
               const SizedBox(height: 12),
 
-              // Status Card
               _buildDossierStatusBanner(item),
               const SizedBox(height: 16),
 
-              // SECP & Corporate Identity Details
               _buildSectionTitle('1. Corporate Identity & Registration'),
               const SizedBox(height: 8),
               _buildDetailInfoTile(
                 icon: Icons.badge_outlined,
                 title: 'SECP / NTN Registration Number',
-                value: item.registrationNumber,
+                value: item.registrationNumber.isNotEmpty
+                    ? item.registrationNumber
+                    : 'Not Provided',
               ),
               _buildDetailInfoTile(
                 icon: Icons.verified_outlined,
                 title: 'Official Corporate Email',
                 value: item.officialEmail,
-                badge: item.isEmailVerified ? 'Email Verified' : 'Unverified Email',
-                badgeColor: item.isEmailVerified ? AppColors.success : AppColors.error,
+                badge:
+                    item.isEmailVerified ? 'Email Verified' : 'Unverified Email',
+                badgeColor:
+                    item.isEmailVerified ? AppColors.success : AppColors.warning,
               ),
               _buildDetailInfoTile(
                 icon: Icons.language_rounded,
                 title: 'Corporate Website',
-                value: item.websiteUrl,
+                value: item.websiteUrl.isNotEmpty
+                    ? item.websiteUrl
+                    : 'Not Specified',
               ),
               const SizedBox(height: 20),
 
-              // Submitted Evidence Document
               _buildSectionTitle('2. Submitted Business Evidence Document'),
               const SizedBox(height: 8),
               Container(
@@ -196,10 +268,14 @@ class _CompanyVerificationsScreenState
                   borderRadius: BorderRadius.circular(12),
                   border: Border.all(color: AppColors.border),
                 ),
-                child: Column(
-                  crossAxisAlignment: CrossAxisAlignment.start,
+                child: Wrap(
+                  spacing: 12,
+                  runSpacing: 12,
+                  alignment: WrapAlignment.spaceBetween,
+                  crossAxisAlignment: WrapCrossAlignment.center,
                   children: [
                     Row(
+                      mainAxisSize: MainAxisSize.min,
                       children: [
                         Container(
                           padding: const EdgeInsets.all(10),
@@ -207,55 +283,59 @@ class _CompanyVerificationsScreenState
                             color: AppColors.primary.withValues(alpha: 0.12),
                             borderRadius: BorderRadius.circular(8),
                           ),
-                          child: const Icon(Icons.picture_as_pdf_rounded,
-                              color: AppColors.primary, size: 24),
+                          child: const Icon(
+                            Icons.picture_as_pdf_rounded,
+                            color: AppColors.primary,
+                            size: 24,
+                          ),
                         ),
                         const SizedBox(width: 14),
-                        Expanded(
-                          child: Column(
-                            crossAxisAlignment: CrossAxisAlignment.start,
-                            children: [
-                              Text(
-                                item.documentName,
-                                style: const TextStyle(
-                                  fontWeight: FontWeight.bold,
-                                  fontSize: 13.5,
-                                  color: AppColors.darkNavy,
-                                ),
+                        Column(
+                          crossAxisAlignment: CrossAxisAlignment.start,
+                          children: [
+                            Text(
+                              item.documentName,
+                              style: GoogleFonts.inter(
+                                fontWeight: FontWeight.bold,
+                                fontSize: 13.5,
+                                color: AppColors.darkNavy,
                               ),
-                              const SizedBox(height: 2),
-                              Text(
-                                '${item.documentType} • ${item.documentSize}',
-                                style: const TextStyle(
-                                  fontSize: 11.5,
-                                  color: AppColors.textMuted,
-                                ),
-                              ),
-                            ],
-                          ),
-                        ),
-                        ElevatedButton.icon(
-                          style: ElevatedButton.styleFrom(
-                            backgroundColor: AppColors.primary,
-                            foregroundColor: Colors.white,
-                            padding: const EdgeInsets.symmetric(
-                              horizontal: 12,
-                              vertical: 8,
                             ),
-                          ),
-                          icon: const Icon(Icons.visibility_outlined, size: 16),
-                          label: const Text('Inspect Document', style: TextStyle(fontSize: 11.5)),
-                          onPressed: () => _openDocumentPreviewModal(item),
+                            const SizedBox(height: 2),
+                            Text(
+                              '${item.documentType} • ${item.documentSize}',
+                              style: GoogleFonts.inter(
+                                fontSize: 11.5,
+                                color: AppColors.textMuted,
+                              ),
+                            ),
+                          ],
                         ),
                       ],
+                    ),
+                    ElevatedButton.icon(
+                      style: ElevatedButton.styleFrom(
+                        backgroundColor: AppColors.primary,
+                        foregroundColor: Colors.white,
+                        padding: const EdgeInsets.symmetric(
+                          horizontal: 12,
+                          vertical: 8,
+                        ),
+                      ),
+                      icon: const Icon(Icons.visibility_outlined, size: 16),
+                      label: const Text(
+                        'Inspect Document',
+                        style: TextStyle(fontSize: 11.5),
+                      ),
+                      onPressed: () => _openDocumentPreviewModal(item),
                     ),
                   ],
                 ),
               ),
               const SizedBox(height: 20),
 
-              // Admin Feedback or Rejection Reason if any
-              if (item.adminFeedback != null) ...[
+              if (item.adminFeedback != null &&
+                  item.adminFeedback!.trim().isNotEmpty) ...[
                 _buildSectionTitle('3. Previous Review Comments'),
                 const SizedBox(height: 8),
                 Container(
@@ -264,21 +344,21 @@ class _CompanyVerificationsScreenState
                   decoration: BoxDecoration(
                     color: AppColors.errorBg,
                     borderRadius: BorderRadius.circular(10),
-                    border: Border.all(color: AppColors.error.withValues(alpha: 0.3)),
+                    border:
+                        Border.all(color: AppColors.error.withValues(alpha: 0.3)),
                   ),
                   child: Text(
                     '"${item.adminFeedback}"',
-                    style: const TextStyle(
+                    style: GoogleFonts.inter(
                       fontSize: 12.5,
                       fontStyle: FontStyle.italic,
-                      color: Color(0xFF991B1B),
+                      color: const Color(0xFF991B1B),
                     ),
                   ),
                 ),
                 const SizedBox(height: 20),
               ],
 
-              // Decision Action Buttons
               Row(
                 children: [
                   Expanded(
@@ -308,7 +388,7 @@ class _CompanyVerificationsScreenState
                       label: const Text('Grant Verified Status'),
                       onPressed: () async {
                         final admin = _authService.currentAdmin?.fullName ??
-                            'Executive SuperAdmin';
+                            'Executive Administrator';
                         await _verificationService.approveCompany(
                           verificationId: item.id,
                           reviewerName: admin,
@@ -338,6 +418,8 @@ class _CompanyVerificationsScreenState
   }
 
   void _openDocumentPreviewModal(AdminCompanyVerificationItem item) {
+    final hasUrl = item.documentUrl != null && item.documentUrl!.trim().isNotEmpty;
+
     showDialog(
       context: context,
       builder: (dialogCtx) => AlertDialog(
@@ -345,12 +427,23 @@ class _CompanyVerificationsScreenState
         title: Row(
           mainAxisAlignment: MainAxisAlignment.spaceBetween,
           children: [
-            Row(
-              children: [
-                const Icon(Icons.verified_user_rounded, color: AppColors.primary),
-                const SizedBox(width: 8),
-                Text(item.documentName, style: const TextStyle(fontSize: 15)),
-              ],
+            Expanded(
+              child: Row(
+                children: [
+                  const Icon(Icons.description_outlined, color: AppColors.primary),
+                  const SizedBox(width: 8),
+                  Expanded(
+                    child: Text(
+                      item.documentName,
+                      style: GoogleFonts.poppins(
+                        fontSize: 15,
+                        fontWeight: FontWeight.bold,
+                      ),
+                      overflow: TextOverflow.ellipsis,
+                    ),
+                  ),
+                ],
+              ),
             ),
             IconButton(
               icon: const Icon(Icons.close_rounded),
@@ -358,74 +451,97 @@ class _CompanyVerificationsScreenState
             ),
           ],
         ),
-        content: Container(
-          width: 500,
-          height: 380,
-          padding: const EdgeInsets.all(20),
-          decoration: BoxDecoration(
-            color: AppColors.background,
-            borderRadius: BorderRadius.circular(12),
-            border: Border.all(color: AppColors.border),
-          ),
-          child: Column(
-            mainAxisAlignment: MainAxisAlignment.center,
-            children: [
-              Container(
-                padding: const EdgeInsets.all(18),
-                decoration: BoxDecoration(
-                  color: Colors.white,
-                  shape: BoxShape.circle,
-                  boxShadow: [
-                    BoxShadow(
-                      color: Colors.black.withValues(alpha: 0.05),
-                      blurRadius: 10,
-                    ),
-                  ],
+        content: ConstrainedBox(
+          constraints: const BoxConstraints(maxWidth: 500),
+          child: Container(
+            width: double.infinity,
+            padding: const EdgeInsets.all(20),
+            decoration: BoxDecoration(
+              color: AppColors.background,
+              borderRadius: BorderRadius.circular(12),
+              border: Border.all(color: AppColors.border),
+            ),
+            child: Column(
+              mainAxisSize: MainAxisSize.min,
+              children: [
+                Container(
+                  padding: const EdgeInsets.all(16),
+                  decoration: BoxDecoration(
+                    color: Colors.white,
+                    shape: BoxShape.circle,
+                    boxShadow: [
+                      BoxShadow(
+                        color: Colors.black.withValues(alpha: 0.05),
+                        blurRadius: 10,
+                      ),
+                    ],
+                  ),
+                  child: const Icon(
+                    Icons.document_scanner_rounded,
+                    color: AppColors.primary,
+                    size: 44,
+                  ),
                 ),
-                child: const Icon(Icons.document_scanner_rounded,
-                    color: AppColors.primary, size: 48),
-              ),
-              const SizedBox(height: 18),
-              Text(
-                item.documentType,
-                style: const TextStyle(fontSize: 16, fontWeight: FontWeight.bold),
-              ),
-              const SizedBox(height: 6),
-              Text(
-                'Registration Authority: SECP Pakistan\nEntity: ${item.companyName}\nCertificate ID: ${item.registrationNumber}',
-                textAlign: TextAlign.center,
-                style: const TextStyle(fontSize: 12.5, color: AppColors.textSecondary, height: 1.4),
-              ),
-              const SizedBox(height: 20),
-              Container(
-                padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 6),
-                decoration: BoxDecoration(
-                  color: AppColors.successBg,
-                  borderRadius: BorderRadius.circular(6),
+                const SizedBox(height: 16),
+                Text(
+                  item.documentType,
+                  style: GoogleFonts.poppins(
+                    fontSize: 16,
+                    fontWeight: FontWeight.bold,
+                    color: AppColors.darkNavy,
+                  ),
+                  textAlign: TextAlign.center,
                 ),
-                child: const Row(
-                  mainAxisSize: MainAxisSize.min,
-                  children: [
-                    Icon(Icons.check_circle_outline, color: AppColors.success, size: 16),
-                    SizedBox(width: 6),
-                    Text(
-                      'SECP Digital Seal Verified (TLS Checksum OK)',
-                      style: TextStyle(
-                        fontSize: 11.5,
-                        fontWeight: FontWeight.bold,
-                        color: Color(0xFF166534),
+                const SizedBox(height: 8),
+                Text(
+                  'Company: ${item.companyName}\nRegistration No: ${item.registrationNumber.isNotEmpty ? item.registrationNumber : "Not Listed"}\nOfficial Email: ${item.officialEmail}\nDocument Size: ${item.documentSize}',
+                  textAlign: TextAlign.center,
+                  style: GoogleFonts.inter(
+                    fontSize: 12.5,
+                    color: AppColors.textSecondary,
+                    height: 1.5,
+                  ),
+                ),
+                const SizedBox(height: 18),
+                if (hasUrl)
+                  ElevatedButton.icon(
+                    style: ElevatedButton.styleFrom(
+                      backgroundColor: AppColors.primary,
+                      foregroundColor: Colors.white,
+                      padding: const EdgeInsets.symmetric(
+                        horizontal: 16,
+                        vertical: 11,
                       ),
                     ),
-                  ],
-                ),
-              ),
-            ],
+                    icon: const Icon(Icons.open_in_new_rounded, size: 17),
+                    label: const Text('Open Uploaded Document'),
+                    onPressed: () => _launchExternalUrl(item.documentUrl!),
+                  )
+                else
+                  Container(
+                    padding:
+                        const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
+                    decoration: BoxDecoration(
+                      color: AppColors.warningBg,
+                      borderRadius: BorderRadius.circular(8),
+                    ),
+                    child: Text(
+                      'No external file URL attached by applicant.',
+                      style: GoogleFonts.inter(
+                        fontSize: 11.5,
+                        fontWeight: FontWeight.w600,
+                        color: const Color(0xFF92400E),
+                      ),
+                    ),
+                  ),
+              ],
+            ),
           ),
         ),
         actions: [
           TextButton(
             onPressed: () => Navigator.pop(dialogCtx),
-            child: const Text('Done Inspection'),
+            child: const Text('Close'),
           ),
         ],
       ),
@@ -443,23 +559,37 @@ class _CompanyVerificationsScreenState
           children: [
             const Icon(Icons.feedback_outlined, color: AppColors.error),
             const SizedBox(width: 10),
-            Text('Reject Verification: ${item.companyName}'),
+            Expanded(
+              child: Text(
+                'Reject Verification: ${item.companyName}',
+                style: GoogleFonts.poppins(
+                  fontSize: 16,
+                  fontWeight: FontWeight.bold,
+                ),
+                overflow: TextOverflow.ellipsis,
+              ),
+            ),
           ],
         ),
         content: Column(
           mainAxisSize: MainAxisSize.min,
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
-            const Text(
+            Text(
               'Specify mandatory audit feedback so the corporate sponsor can correct discrepancies and resubmit credentials.',
-              style: TextStyle(fontSize: 13, color: AppColors.textSecondary, height: 1.35),
+              style: GoogleFonts.inter(
+                fontSize: 13,
+                color: AppColors.textSecondary,
+                height: 1.35,
+              ),
             ),
             const SizedBox(height: 14),
             TextField(
               controller: feedbackController,
               decoration: const InputDecoration(
                 labelText: 'Rejection Reason / Feedback *',
-                hintText: 'e.g. Uploaded SECP certificate is expired or illegible...',
+                hintText:
+                    'e.g. Uploaded registration certificate is expired or illegible...',
                 border: OutlineInputBorder(),
               ),
               maxLines: 3,
@@ -480,13 +610,15 @@ class _CompanyVerificationsScreenState
               final text = feedbackController.text.trim();
               if (text.isEmpty) {
                 ScaffoldMessenger.of(context).showSnackBar(
-                  const SnackBar(content: Text('Feedback is strictly mandatory.')),
+                  const SnackBar(
+                    content: Text('Feedback is strictly mandatory.'),
+                  ),
                 );
                 return;
               }
 
               final admin = _authService.currentAdmin?.fullName ??
-                  'Executive SuperAdmin';
+                  'Executive Administrator';
               await _verificationService.rejectCompany(
                 verificationId: item.id,
                 feedback: text,
@@ -497,7 +629,9 @@ class _CompanyVerificationsScreenState
               Navigator.pop(ctx);
               ScaffoldMessenger.of(context).showSnackBar(
                 SnackBar(
-                  content: Text('Verification rejected for ${item.companyName}. Feedback logged.'),
+                  content: Text(
+                    'Verification rejected for ${item.companyName}. Feedback logged.',
+                  ),
                   backgroundColor: AppColors.error,
                   behavior: SnackBarBehavior.floating,
                 ),
@@ -562,7 +696,7 @@ class _CompanyVerificationsScreenState
           Expanded(
             child: Text(
               '$title • Submitted: ${item.submittedAt}',
-              style: TextStyle(
+              style: GoogleFonts.inter(
                 fontSize: 13,
                 fontWeight: FontWeight.bold,
                 color: textColor,
@@ -577,7 +711,7 @@ class _CompanyVerificationsScreenState
   Widget _buildSectionTitle(String title) {
     return Text(
       title,
-      style: const TextStyle(
+      style: GoogleFonts.poppins(
         fontSize: 14,
         fontWeight: FontWeight.bold,
         color: AppColors.darkNavy,
@@ -595,39 +729,52 @@ class _CompanyVerificationsScreenState
     return Padding(
       padding: const EdgeInsets.symmetric(vertical: 6),
       child: Row(
+        crossAxisAlignment: CrossAxisAlignment.start,
         children: [
           Icon(icon, size: 18, color: AppColors.textSecondary),
           const SizedBox(width: 10),
-          Text(
-            '$title: ',
-            style: const TextStyle(fontSize: 12.5, color: AppColors.textSecondary),
-          ),
-          Text(
-            value,
-            style: const TextStyle(
-              fontSize: 13,
-              fontWeight: FontWeight.bold,
-              color: AppColors.darkNavy,
-            ),
-          ),
-          if (badge != null) ...[
-            const SizedBox(width: 8),
-            Container(
-              padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 2),
-              decoration: BoxDecoration(
-                color: (badgeColor ?? AppColors.primary).withValues(alpha: 0.12),
-                borderRadius: BorderRadius.circular(4),
-              ),
-              child: Text(
-                badge,
-                style: TextStyle(
-                  fontSize: 10.5,
-                  fontWeight: FontWeight.bold,
-                  color: badgeColor ?? AppColors.primary,
+          Expanded(
+            child: Wrap(
+              spacing: 8,
+              runSpacing: 4,
+              crossAxisAlignment: WrapCrossAlignment.center,
+              children: [
+                Text(
+                  '$title: ',
+                  style: GoogleFonts.inter(
+                    fontSize: 12.5,
+                    color: AppColors.textSecondary,
+                  ),
                 ),
-              ),
+                Text(
+                  value,
+                  style: GoogleFonts.inter(
+                    fontSize: 13,
+                    fontWeight: FontWeight.bold,
+                    color: AppColors.darkNavy,
+                  ),
+                ),
+                if (badge != null)
+                  Container(
+                    padding:
+                        const EdgeInsets.symmetric(horizontal: 6, vertical: 2),
+                    decoration: BoxDecoration(
+                      color:
+                          (badgeColor ?? AppColors.primary).withValues(alpha: 0.12),
+                      borderRadius: BorderRadius.circular(4),
+                    ),
+                    child: Text(
+                      badge,
+                      style: GoogleFonts.inter(
+                        fontSize: 10.5,
+                        fontWeight: FontWeight.bold,
+                        color: badgeColor ?? AppColors.primary,
+                      ),
+                    ),
+                  ),
+              ],
             ),
-          ],
+          ),
         ],
       ),
     );
@@ -670,16 +817,17 @@ class _CompanyVerificationsScreenState
                     AdminTopNavbar(
                       pageTitle: 'Company Verifications',
                       breadcrumb: 'Governance',
-                      onOpenDrawer: () => _scaffoldKey.currentState?.openDrawer(),
+                      onOpenDrawer: () =>
+                          _scaffoldKey.currentState?.openDrawer(),
                       onSignOut: _handleSignOut,
                       onSearch: (q) => setState(() => _searchQuery = q),
                     ),
                     Expanded(
                       child: ValueListenableBuilder<
                           List<AdminCompanyVerificationItem>>(
-                        valueListenable: _verificationService.verificationsNotifier,
+                        valueListenable:
+                            _verificationService.verificationsNotifier,
                         builder: (context, verifications, _) {
-                          // Filter by status & search
                           final filtered = verifications.where((item) {
                             if (_selectedStatusFilter == 'Pending' &&
                                 item.status != VerificationStatus.pending) {
@@ -696,9 +844,15 @@ class _CompanyVerificationsScreenState
 
                             if (_searchQuery.isNotEmpty) {
                               final query = _searchQuery.toLowerCase();
-                              return item.companyName.toLowerCase().contains(query) ||
-                                  item.registrationNumber.toLowerCase().contains(query) ||
-                                  item.officialEmail.toLowerCase().contains(query) ||
+                              return item.companyName
+                                      .toLowerCase()
+                                      .contains(query) ||
+                                  item.registrationNumber
+                                      .toLowerCase()
+                                      .contains(query) ||
+                                  item.officialEmail
+                                      .toLowerCase()
+                                      .contains(query) ||
                                   item.industry.toLowerCase().contains(query);
                             }
                             return true;
@@ -711,7 +865,10 @@ class _CompanyVerificationsScreenState
                               children: [
                                 _buildHeaderActionsBar(verifications),
                                 const SizedBox(height: 20),
-                                _buildVerificationsTableCard(filtered),
+                                _buildVerificationsTableCard(
+                                  filtered,
+                                  hasAnyRecords: verifications.isNotEmpty,
+                                ),
                               ],
                             ),
                           );
@@ -729,9 +886,8 @@ class _CompanyVerificationsScreenState
   }
 
   Widget _buildHeaderActionsBar(List<AdminCompanyVerificationItem> allItems) {
-    final pendingCount = allItems
-        .where((i) => i.status == VerificationStatus.pending)
-        .length;
+    final pendingCount =
+        allItems.where((i) => i.status == VerificationStatus.pending).length;
 
     return Container(
       padding: const EdgeInsets.all(18),
@@ -743,15 +899,18 @@ class _CompanyVerificationsScreenState
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
-          Row(
-            mainAxisAlignment: MainAxisAlignment.spaceBetween,
+          Wrap(
+            spacing: 12,
+            runSpacing: 12,
+            alignment: WrapAlignment.spaceBetween,
+            crossAxisAlignment: WrapCrossAlignment.center,
             children: [
               Column(
                 crossAxisAlignment: CrossAxisAlignment.start,
                 children: [
-                  const Text(
+                  Text(
                     'Corporate Verification Review Desk',
-                    style: TextStyle(
+                    style: GoogleFonts.poppins(
                       fontSize: 17,
                       fontWeight: FontWeight.bold,
                       color: AppColors.darkNavy,
@@ -760,39 +919,82 @@ class _CompanyVerificationsScreenState
                   const SizedBox(height: 2),
                   Text(
                     '$pendingCount pending verification${pendingCount == 1 ? '' : 's'} awaiting administrative sign-off',
-                    style: const TextStyle(fontSize: 12, color: AppColors.textSecondary),
+                    style: GoogleFonts.inter(
+                      fontSize: 12,
+                      color: AppColors.textSecondary,
+                    ),
                   ),
                 ],
               ),
-              Container(
-                padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 4),
-                decoration: BoxDecoration(
-                  color: pendingCount > 0 ? AppColors.warningBg : AppColors.successBg,
-                  borderRadius: BorderRadius.circular(20),
-                  border: Border.all(
-                    color: pendingCount > 0
-                        ? AppColors.warning.withValues(alpha: 0.3)
-                        : AppColors.success.withValues(alpha: 0.3),
+              Wrap(
+                spacing: 10,
+                runSpacing: 8,
+                crossAxisAlignment: WrapCrossAlignment.center,
+                children: [
+                  Container(
+                    padding:
+                        const EdgeInsets.symmetric(horizontal: 10, vertical: 5),
+                    decoration: BoxDecoration(
+                      color: pendingCount > 0
+                          ? AppColors.warningBg
+                          : AppColors.successBg,
+                      borderRadius: BorderRadius.circular(20),
+                      border: Border.all(
+                        color: pendingCount > 0
+                            ? AppColors.warning.withValues(alpha: 0.3)
+                            : AppColors.success.withValues(alpha: 0.3),
+                      ),
+                    ),
+                    child: Text(
+                      pendingCount > 0
+                          ? '$pendingCount Action Required'
+                          : 'All Clear',
+                      style: GoogleFonts.inter(
+                        fontSize: 11.5,
+                        fontWeight: FontWeight.bold,
+                        color: pendingCount > 0
+                            ? const Color(0xFF92400E)
+                            : const Color(0xFF166534),
+                      ),
+                    ),
                   ),
-                ),
-                child: Text(
-                  pendingCount > 0 ? '$pendingCount Action Required' : 'All Clear',
-                  style: TextStyle(
-                    fontSize: 11.5,
-                    fontWeight: FontWeight.bold,
-                    color: pendingCount > 0 ? const Color(0xFF92400E) : const Color(0xFF166534),
+                  OutlinedButton.icon(
+                    onPressed: () {
+                      Navigator.pushReplacement(
+                        context,
+                        MaterialPageRoute(
+                          builder: (_) => const CompanyManagementScreen(),
+                        ),
+                      );
+                    },
+                    icon: const Icon(Icons.domain_rounded, size: 16),
+                    label: const Text('Full Company Directory'),
                   ),
-                ),
+                  IconButton(
+                    tooltip: 'Refresh Verification Queue',
+                    onPressed: () async {
+                      await _verificationService.loadFromSupabase();
+                      if (!mounted) return;
+                      ScaffoldMessenger.of(context).showSnackBar(
+                        const SnackBar(
+                          content: Text('Company verification queue refreshed.'),
+                          behavior: SnackBarBehavior.floating,
+                          duration: Duration(seconds: 2),
+                        ),
+                      );
+                    },
+                    icon: const Icon(Icons.refresh_rounded),
+                  ),
+                ],
               ),
             ],
           ),
           const SizedBox(height: 16),
           const Divider(),
           const SizedBox(height: 10),
-
-          // Filter Chips
           Wrap(
             spacing: 8,
+            runSpacing: 8,
             children: _filters.map((filter) {
               final isSelected = _selectedStatusFilter == filter;
               return ChoiceChip(
@@ -800,12 +1002,14 @@ class _CompanyVerificationsScreenState
                 selected: isSelected,
                 selectedColor: AppColors.darkNavy,
                 backgroundColor: AppColors.background,
-                labelStyle: TextStyle(
+                labelStyle: GoogleFonts.inter(
                   fontSize: 12,
                   fontWeight: isSelected ? FontWeight.bold : FontWeight.normal,
                   color: isSelected ? Colors.white : AppColors.textSecondary,
                 ),
-                shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(8)),
+                shape: RoundedRectangleBorder(
+                  borderRadius: BorderRadius.circular(8),
+                ),
                 onSelected: (val) {
                   if (val) setState(() => _selectedStatusFilter = filter);
                 },
@@ -817,159 +1021,304 @@ class _CompanyVerificationsScreenState
     );
   }
 
-  Widget _buildVerificationsTableCard(List<AdminCompanyVerificationItem> items) {
+  Widget _buildVerificationsTableCard(
+    List<AdminCompanyVerificationItem> items, {
+    required bool hasAnyRecords,
+  }) {
     if (items.isEmpty) {
       return Container(
         width: double.infinity,
-        padding: const EdgeInsets.symmetric(vertical: 48),
+        padding: const EdgeInsets.symmetric(vertical: 28, horizontal: 16),
         decoration: BoxDecoration(
           color: Colors.white,
           borderRadius: BorderRadius.circular(16),
           border: Border.all(color: AppColors.border),
         ),
-        child: const Center(
-          child: Column(
-            children: [
-              Icon(Icons.search_off_rounded, size: 40, color: AppColors.textMuted),
-              SizedBox(height: 12),
-              Text(
-                'No verification records match your filter criteria',
-                style: TextStyle(fontSize: 14, fontWeight: FontWeight.bold, color: AppColors.darkNavy),
-              ),
-              SizedBox(height: 4),
-              Text(
-                'Try selecting "All" or clearing the search query to see full list.',
-                style: TextStyle(fontSize: 12, color: AppColors.textSecondary),
-              ),
-            ],
-          ),
+        child: AppEmptyState(
+          icon: hasAnyRecords
+              ? Icons.search_off_rounded
+              : Icons.domain_verification_outlined,
+          title: hasAnyRecords
+              ? 'No Verification Records Match Filter'
+              : 'No Company Verification Submissions Yet',
+          subtitle: hasAnyRecords
+              ? 'Try selecting "All" or clearing the search query to inspect the full list.'
+              : 'Submitted corporate verification dossiers from registered companies will appear here.',
         ),
       );
     }
 
-    return Container(
-      decoration: BoxDecoration(
-        color: Colors.white,
-        borderRadius: BorderRadius.circular(16),
-        border: Border.all(color: AppColors.border),
-        boxShadow: [
-          BoxShadow(
-            color: Colors.black.withValues(alpha: 0.03),
-            blurRadius: 10,
-            offset: const Offset(0, 3),
-          ),
-        ],
-      ),
-      child: Column(
-        children: items.map((item) {
-          final isPending = item.status == VerificationStatus.pending;
-          final isVerified = item.status == VerificationStatus.verified;
+    return LayoutBuilder(
+      builder: (context, constraints) {
+        final isCompact = constraints.maxWidth < 760;
 
-          return Container(
-            padding: const EdgeInsets.all(18),
-            decoration: BoxDecoration(
-              border: Border(bottom: BorderSide(color: AppColors.border, width: 0.8)),
-            ),
-            child: Row(
-              children: [
-                CircleAvatar(
-                  radius: 20,
-                  backgroundColor: AppColors.darkNavy,
-                  child: Text(
-                    item.logoInitial,
-                    style: const TextStyle(color: Colors.white, fontWeight: FontWeight.bold),
+        return Container(
+          decoration: BoxDecoration(
+            color: Colors.white,
+            borderRadius: BorderRadius.circular(16),
+            border: Border.all(color: AppColors.border),
+            boxShadow: [
+              BoxShadow(
+                color: Colors.black.withValues(alpha: 0.03),
+                blurRadius: 10,
+                offset: const Offset(0, 3),
+              ),
+            ],
+          ),
+          child: Column(
+            children: items.map((item) {
+              final isPending = item.status == VerificationStatus.pending;
+              final isVerified = item.status == VerificationStatus.verified;
+              final badgeColor = isPending
+                  ? AppColors.warningBg
+                  : isVerified
+                      ? AppColors.successBg
+                      : AppColors.errorBg;
+              final badgeTextColor = isPending
+                  ? const Color(0xFF92400E)
+                  : isVerified
+                      ? const Color(0xFF166534)
+                      : const Color(0xFF991B1B);
+              final badgeLabel = isPending
+                  ? 'Pending Review'
+                  : isVerified
+                      ? 'Verified'
+                      : 'Rejected';
+
+              if (isCompact) {
+                return Container(
+                  padding: const EdgeInsets.all(16),
+                  decoration: const BoxDecoration(
+                    border: Border(
+                      bottom: BorderSide(color: AppColors.border, width: 0.8),
+                    ),
                   ),
-                ),
-                const SizedBox(width: 14),
-                Expanded(
-                  flex: 3,
-                  child: Column(
-                    crossAxisAlignment: CrossAxisAlignment.start,
-                    children: [
-                      Text(
-                        item.companyName,
-                        style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 14),
-                      ),
-                      const SizedBox(height: 2),
-                      Text(
-                        '${item.industry} • Reg: ${item.registrationNumber}',
-                        style: const TextStyle(fontSize: 11.5, color: AppColors.textSecondary),
-                      ),
-                    ],
-                  ),
-                ),
-                Expanded(
-                  flex: 2,
                   child: Column(
                     crossAxisAlignment: CrossAxisAlignment.start,
                     children: [
                       Row(
                         children: [
-                          Icon(
-                            item.isEmailVerified ? Icons.check_circle : Icons.warning_amber_rounded,
-                            size: 14,
-                            color: item.isEmailVerified ? AppColors.success : AppColors.warning,
+                          CircleAvatar(
+                            radius: 18,
+                            backgroundColor: AppColors.darkNavy,
+                            child: Text(
+                              item.logoInitial,
+                              style: GoogleFonts.poppins(
+                                color: Colors.white,
+                                fontWeight: FontWeight.bold,
+                                fontSize: 13,
+                              ),
+                            ),
                           ),
-                          const SizedBox(width: 5),
+                          const SizedBox(width: 12),
+                          Expanded(
+                            child: Column(
+                              crossAxisAlignment: CrossAxisAlignment.start,
+                              children: [
+                                Text(
+                                  item.companyName,
+                                  style: GoogleFonts.poppins(
+                                    fontWeight: FontWeight.bold,
+                                    fontSize: 14,
+                                  ),
+                                ),
+                                Text(
+                                  '${item.industry} • Reg: ${item.registrationNumber}',
+                                  style: GoogleFonts.inter(
+                                    fontSize: 11.5,
+                                    color: AppColors.textSecondary,
+                                  ),
+                                  overflow: TextOverflow.ellipsis,
+                                ),
+                              ],
+                            ),
+                          ),
+                          Container(
+                            padding: const EdgeInsets.symmetric(
+                              horizontal: 8,
+                              vertical: 4,
+                            ),
+                            decoration: BoxDecoration(
+                              color: badgeColor,
+                              borderRadius: BorderRadius.circular(6),
+                            ),
+                            child: Text(
+                              badgeLabel,
+                              style: GoogleFonts.inter(
+                                fontSize: 10.5,
+                                fontWeight: FontWeight.bold,
+                                color: badgeTextColor,
+                              ),
+                            ),
+                          ),
+                        ],
+                      ),
+                      const SizedBox(height: 10),
+                      Row(
+                        mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                        children: [
+                          Expanded(
+                            child: Text(
+                              '${item.officialEmail} • ${item.documentName}',
+                              style: GoogleFonts.inter(
+                                fontSize: 11.5,
+                                color: AppColors.textMuted,
+                              ),
+                              overflow: TextOverflow.ellipsis,
+                            ),
+                          ),
+                          const SizedBox(width: 8),
+                          ElevatedButton(
+                            style: ElevatedButton.styleFrom(
+                              backgroundColor: AppColors.darkNavy,
+                              foregroundColor: Colors.white,
+                              padding: const EdgeInsets.symmetric(
+                                horizontal: 12,
+                                vertical: 8,
+                              ),
+                            ),
+                            onPressed: () => _openDossierModal(item),
+                            child: const Text(
+                              'Review Dossier',
+                              style: TextStyle(fontSize: 12),
+                            ),
+                          ),
+                        ],
+                      ),
+                    ],
+                  ),
+                );
+              }
+
+              return Container(
+                padding: const EdgeInsets.all(18),
+                decoration: const BoxDecoration(
+                  border: Border(
+                    bottom: BorderSide(color: AppColors.border, width: 0.8),
+                  ),
+                ),
+                child: Row(
+                  children: [
+                    CircleAvatar(
+                      radius: 20,
+                      backgroundColor: AppColors.darkNavy,
+                      child: Text(
+                        item.logoInitial,
+                        style: GoogleFonts.poppins(
+                          color: Colors.white,
+                          fontWeight: FontWeight.bold,
+                        ),
+                      ),
+                    ),
+                    const SizedBox(width: 14),
+                    Expanded(
+                      flex: 3,
+                      child: Column(
+                        crossAxisAlignment: CrossAxisAlignment.start,
+                        children: [
                           Text(
-                            item.officialEmail,
-                            style: const TextStyle(fontSize: 12, fontWeight: FontWeight.w500),
+                            item.companyName,
+                            style: GoogleFonts.poppins(
+                              fontWeight: FontWeight.bold,
+                              fontSize: 14,
+                            ),
+                            overflow: TextOverflow.ellipsis,
+                          ),
+                          const SizedBox(height: 2),
+                          Text(
+                            '${item.industry} • Reg: ${item.registrationNumber}',
+                            style: GoogleFonts.inter(
+                              fontSize: 11.5,
+                              color: AppColors.textSecondary,
+                            ),
+                            overflow: TextOverflow.ellipsis,
+                          ),
+                        ],
+                      ),
+                    ),
+                    Expanded(
+                      flex: 2,
+                      child: Column(
+                        crossAxisAlignment: CrossAxisAlignment.start,
+                        children: [
+                          Row(
+                            children: [
+                              Icon(
+                                item.isEmailVerified
+                                    ? Icons.check_circle
+                                    : Icons.warning_amber_rounded,
+                                size: 14,
+                                color: item.isEmailVerified
+                                    ? AppColors.success
+                                    : AppColors.warning,
+                              ),
+                              const SizedBox(width: 5),
+                              Expanded(
+                                child: Text(
+                                  item.officialEmail,
+                                  style: GoogleFonts.inter(
+                                    fontSize: 12,
+                                    fontWeight: FontWeight.w500,
+                                  ),
+                                  maxLines: 1,
+                                  overflow: TextOverflow.ellipsis,
+                                ),
+                              ),
+                            ],
+                          ),
+                          Text(
+                            'Doc: ${item.documentName}',
+                            style: GoogleFonts.inter(
+                              fontSize: 11,
+                              color: AppColors.textMuted,
+                            ),
                             maxLines: 1,
                             overflow: TextOverflow.ellipsis,
                           ),
                         ],
                       ),
-                      Text(
-                        'Doc: ${item.documentName}',
-                        style: const TextStyle(fontSize: 11, color: AppColors.textMuted),
-                        maxLines: 1,
-                        overflow: TextOverflow.ellipsis,
-                      ),
-                    ],
-                  ),
-                ),
-                Container(
-                  padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 4),
-                  decoration: BoxDecoration(
-                    color: isPending
-                        ? AppColors.warningBg
-                        : isVerified
-                            ? AppColors.successBg
-                            : AppColors.errorBg,
-                    borderRadius: BorderRadius.circular(6),
-                  ),
-                  child: Text(
-                    isPending
-                        ? 'Pending Review'
-                        : isVerified
-                            ? 'Verified'
-                            : 'Rejected',
-                    style: TextStyle(
-                      fontSize: 11,
-                      fontWeight: FontWeight.bold,
-                      color: isPending
-                          ? const Color(0xFF92400E)
-                          : isVerified
-                              ? const Color(0xFF166534)
-                              : const Color(0xFF991B1B),
                     ),
-                  ),
+                    Container(
+                      padding: const EdgeInsets.symmetric(
+                        horizontal: 10,
+                        vertical: 4,
+                      ),
+                      decoration: BoxDecoration(
+                        color: badgeColor,
+                        borderRadius: BorderRadius.circular(6),
+                      ),
+                      child: Text(
+                        badgeLabel,
+                        style: GoogleFonts.inter(
+                          fontSize: 11,
+                          fontWeight: FontWeight.bold,
+                          color: badgeTextColor,
+                        ),
+                      ),
+                    ),
+                    const SizedBox(width: 16),
+                    ElevatedButton(
+                      style: ElevatedButton.styleFrom(
+                        backgroundColor: AppColors.darkNavy,
+                        foregroundColor: Colors.white,
+                        padding: const EdgeInsets.symmetric(
+                          horizontal: 14,
+                          vertical: 8,
+                        ),
+                      ),
+                      onPressed: () => _openDossierModal(item),
+                      child: const Text(
+                        'Review Dossier',
+                        style: TextStyle(fontSize: 12),
+                      ),
+                    ),
+                  ],
                 ),
-                const SizedBox(width: 16),
-                ElevatedButton(
-                  style: ElevatedButton.styleFrom(
-                    backgroundColor: AppColors.darkNavy,
-                    foregroundColor: Colors.white,
-                    padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 8),
-                  ),
-                  onPressed: () => _openDossierModal(item),
-                  child: const Text('Review Dossier', style: TextStyle(fontSize: 12)),
-                ),
-              ],
-            ),
-          );
-        }).toList(),
-      ),
+              );
+            }).toList(),
+          ),
+        );
+      },
     );
   }
 }

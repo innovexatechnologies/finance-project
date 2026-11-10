@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 import 'package:google_fonts/google_fonts.dart';
 import 'package:link_vibe/core/constants/app_colors.dart';
 import 'package:link_vibe/core/services/app_data_service.dart';
+import 'package:link_vibe/core/widgets/status_badge.dart';
 
 class SubmitWorkScreen extends StatefulWidget {
   final Map<String, dynamic> project;
@@ -16,9 +17,9 @@ class _SubmitWorkScreenState extends State<SubmitWorkScreen> {
   final _formKey = GlobalKey<FormState>();
   final _responseController = TextEditingController();
   final _linkController = TextEditingController();
+  final _fileNameController = TextEditingController();
   bool _isSubmitting = false;
   bool _autoValidate = false;
-  String _selectedFileName = 'project_report_final.pdf';
 
   @override
   void initState() {
@@ -27,16 +28,14 @@ class _SubmitWorkScreenState extends State<SubmitWorkScreen> {
   }
 
   void _loadPreviousSubmission() {
-    final projectId = widget.project['id']?.toString() ??
-        widget.project['projectId']?.toString() ??
+    final projectId = widget.project['projectId']?.toString() ??
+        widget.project['id']?.toString() ??
         '';
     final existing = AppDataService.instance.getSubmission(projectId);
     if (existing != null) {
-      _responseController.text = existing['summary'] ?? '';
-      _linkController.text = existing['workLink'] ?? '';
-      if (existing['fileName'] != null && existing['fileName'].toString().isNotEmpty) {
-        _selectedFileName = existing['fileName'];
-      }
+      _responseController.text = existing['summary']?.toString() ?? '';
+      _linkController.text = existing['workLink']?.toString() ?? '';
+      _fileNameController.text = existing['fileName']?.toString() ?? '';
     }
   }
 
@@ -44,6 +43,7 @@ class _SubmitWorkScreenState extends State<SubmitWorkScreen> {
   void dispose() {
     _responseController.dispose();
     _linkController.dispose();
+    _fileNameController.dispose();
     super.dispose();
   }
 
@@ -53,7 +53,8 @@ class _SubmitWorkScreenState extends State<SubmitWorkScreen> {
     if (val.isEmpty || val.contains(' ')) return false;
 
     String normalized = val;
-    if (!normalized.startsWith('http://') && !normalized.startsWith('https://')) {
+    if (!normalized.startsWith('http://') &&
+        !normalized.startsWith('https://')) {
       normalized = 'https://$normalized';
     }
 
@@ -71,83 +72,6 @@ class _SubmitWorkScreenState extends State<SubmitWorkScreen> {
     return true;
   }
 
-  void _showFileAttachmentSheet() {
-    final customNameCtrl = TextEditingController();
-    showModalBottomSheet(
-      context: context,
-      shape: const RoundedRectangleBorder(
-        borderRadius: BorderRadius.vertical(top: Radius.circular(20)),
-      ),
-      builder: (ctx) {
-        return Padding(
-          padding: const EdgeInsets.all(20.0),
-          child: Column(
-            mainAxisSize: MainAxisSize.min,
-            crossAxisAlignment: CrossAxisAlignment.start,
-            children: [
-              Text(
-                'Select Deliverable File',
-                style: GoogleFonts.poppins(
-                  fontSize: 16,
-                  fontWeight: FontWeight.bold,
-                  color: AppColors.deepNavy,
-                ),
-              ),
-              const SizedBox(height: 14),
-              ListTile(
-                contentPadding: EdgeInsets.zero,
-                leading: const Icon(Icons.picture_as_pdf_rounded, color: Colors.red),
-                title: const Text('Final_Project_Report.pdf'),
-                subtitle: const Text('2.4 MB • PDF Document'),
-                onTap: () {
-                  setState(() => _selectedFileName = 'Final_Project_Report.pdf');
-                  Navigator.pop(ctx);
-                },
-              ),
-              ListTile(
-                contentPadding: EdgeInsets.zero,
-                leading: const Icon(Icons.folder_zip_rounded, color: Colors.amber),
-                title: const Text('Source_Code_Archive.zip'),
-                subtitle: const Text('14.2 MB • ZIP Archive'),
-                onTap: () {
-                  setState(() => _selectedFileName = 'Source_Code_Archive.zip');
-                  Navigator.pop(ctx);
-                },
-              ),
-              ListTile(
-                contentPadding: EdgeInsets.zero,
-                leading: const Icon(Icons.draw_rounded, color: Colors.deepPurple),
-                title: const Text('UI_UX_Design_Prototypes.fig'),
-                subtitle: const Text('8.1 MB • Figma Deliverable'),
-                onTap: () {
-                  setState(() => _selectedFileName = 'UI_UX_Design_Prototypes.fig');
-                  Navigator.pop(ctx);
-                },
-              ),
-              const SizedBox(height: 10),
-              TextField(
-                controller: customNameCtrl,
-                decoration: InputDecoration(
-                  hintText: 'Or enter custom file name (e.g. results.docx)',
-                  suffixIcon: IconButton(
-                    icon: const Icon(Icons.check, color: AppColors.primaryBlue),
-                    onPressed: () {
-                      final val = customNameCtrl.text.trim();
-                      if (val.isNotEmpty) {
-                        setState(() => _selectedFileName = val);
-                        Navigator.pop(ctx);
-                      }
-                    },
-                  ),
-                ),
-              ),
-            ],
-          ),
-        );
-      },
-    );
-  }
-
   Future<void> _submitWork() async {
     setState(() => _autoValidate = true);
 
@@ -155,20 +79,10 @@ class _SubmitWorkScreenState extends State<SubmitWorkScreen> {
       ScaffoldMessenger.of(context).showSnackBar(
         const SnackBar(
           content: Text(
-            'Please fill all submission fields correctly (valid URL and descriptive summary required).',
+            'Please provide a valid URL, deliverable label, and detailed summary.',
           ),
-          backgroundColor: Colors.redAccent,
+          backgroundColor: AppColors.statusClosed,
           duration: Duration(seconds: 3),
-        ),
-      );
-      return;
-    }
-
-    if (_selectedFileName.trim().isEmpty) {
-      ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(
-          content: Text('Please attach your deliverable file before submitting.'),
-          backgroundColor: Colors.redAccent,
         ),
       );
       return;
@@ -177,11 +91,17 @@ class _SubmitWorkScreenState extends State<SubmitWorkScreen> {
     setState(() => _isSubmitting = true);
 
     try {
-      final projectId = widget.project['id']?.toString() ??
-          widget.project['projectId']?.toString() ??
-          'proj_${DateTime.now().millisecondsSinceEpoch}';
-      final projectTitle = widget.project['title'] ?? 'Assigned Project';
-      final company = widget.project['company'] ?? 'Company';
+      final projectId = widget.project['projectId']?.toString() ??
+          widget.project['id']?.toString() ??
+          '';
+      final projectTitle =
+          widget.project['title']?.toString().trim().isNotEmpty == true
+              ? widget.project['title'].toString().trim()
+              : 'Assigned Project';
+      final company =
+          widget.project['company']?.toString().trim().isNotEmpty == true
+              ? widget.project['company'].toString().trim()
+              : 'Partner Company';
 
       await AppDataService.instance.submitWork(
         projectId: projectId,
@@ -189,7 +109,7 @@ class _SubmitWorkScreenState extends State<SubmitWorkScreen> {
         company: company,
         summary: _responseController.text.trim(),
         workLink: _linkController.text.trim(),
-        fileName: _selectedFileName,
+        fileName: _fileNameController.text.trim(),
       );
 
       if (!mounted) return;
@@ -197,9 +117,8 @@ class _SubmitWorkScreenState extends State<SubmitWorkScreen> {
       showDialog(
         context: context,
         barrierDismissible: false,
-        builder: (context) => AlertDialog(
-          shape:
-              RoundedRectangleBorder(borderRadius: BorderRadius.circular(20)),
+        builder: (dialogCtx) => AlertDialog(
+          shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(20)),
           content: Column(
             mainAxisSize: MainAxisSize.min,
             children: [
@@ -226,28 +145,21 @@ class _SubmitWorkScreenState extends State<SubmitWorkScreen> {
               ),
               const SizedBox(height: 8),
               Text(
-                'Your work has been securely stored and sent to $company for review. You will receive feedback once evaluated.',
+                'Your deliverable has been recorded and sent to $company for review.',
                 textAlign: TextAlign.center,
                 style: GoogleFonts.inter(
                   fontSize: 13,
                   color: AppColors.grayText,
-                  height: 1.4,
+                  height: 1.45,
                 ),
               ),
-              const SizedBox(height: 24),
+              const SizedBox(height: 22),
               SizedBox(
                 width: double.infinity,
                 child: ElevatedButton(
-                  style: ElevatedButton.styleFrom(
-                    backgroundColor: AppColors.primaryBlue,
-                    foregroundColor: Colors.white,
-                    shape: RoundedRectangleBorder(
-                      borderRadius: BorderRadius.circular(12),
-                    ),
-                  ),
                   onPressed: () {
-                    Navigator.pop(context); // dialog
-                    Navigator.pop(context); // screen
+                    Navigator.pop(dialogCtx);
+                    Navigator.pop(context);
                   },
                   child: const Text('Back to My Projects'),
                 ),
@@ -259,7 +171,10 @@ class _SubmitWorkScreenState extends State<SubmitWorkScreen> {
     } catch (e) {
       if (!mounted) return;
       ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(content: Text('Error: $e'), backgroundColor: Colors.red),
+        SnackBar(
+          content: Text('Error submitting work: $e'),
+          backgroundColor: AppColors.statusClosed,
+        ),
       );
     } finally {
       if (mounted) {
@@ -270,10 +185,16 @@ class _SubmitWorkScreenState extends State<SubmitWorkScreen> {
 
   @override
   Widget build(BuildContext context) {
-    final title = widget.project['title'] ?? 'Project Submission';
-    final company = widget.project['company'] ?? 'TechVista';
-    final projectId = widget.project['id']?.toString() ??
-        widget.project['projectId']?.toString() ??
+    final title = widget.project['title']?.toString().trim().isNotEmpty == true
+        ? widget.project['title'].toString().trim()
+        : 'Project Deliverable';
+    final company =
+        widget.project['company']?.toString().trim().isNotEmpty == true
+            ? widget.project['company'].toString().trim()
+            : 'Partner Company';
+    final deadline = widget.project['deadline']?.toString().trim() ?? '';
+    final projectId = widget.project['projectId']?.toString() ??
+        widget.project['id']?.toString() ??
         '';
     final existingSubmission = AppDataService.instance.getSubmission(projectId);
 
@@ -287,278 +208,197 @@ class _SubmitWorkScreenState extends State<SubmitWorkScreen> {
         ),
       ),
       body: SingleChildScrollView(
-        padding: const EdgeInsets.all(20.0),
-        child: Column(
-          crossAxisAlignment: CrossAxisAlignment.start,
-          children: [
-            // Project Brief Box
-            Container(
-              padding: const EdgeInsets.all(16),
-              decoration: BoxDecoration(
-                color: AppColors.cardWhite,
-                borderRadius: BorderRadius.circular(16),
-                border: Border.all(color: AppColors.lightGray),
-              ),
-              child: Column(
-                crossAxisAlignment: CrossAxisAlignment.start,
-                children: [
-                  Row(
-                    mainAxisAlignment: MainAxisAlignment.spaceBetween,
+        padding: const EdgeInsets.all(20),
+        child: Center(
+          child: ConstrainedBox(
+            constraints: const BoxConstraints(maxWidth: 680),
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                // Project Summary Card
+                Container(
+                  padding: const EdgeInsets.all(16),
+                  decoration: BoxDecoration(
+                    color: AppColors.cardWhite,
+                    borderRadius: BorderRadius.circular(16),
+                    border: Border.all(color: AppColors.lightGray),
+                    boxShadow: AppColors.softShadow,
+                  ),
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
                     children: [
-                      Expanded(
-                        child: Text(
-                          title,
-                          style: GoogleFonts.poppins(
-                            fontSize: 15,
-                            fontWeight: FontWeight.bold,
-                            color: AppColors.deepNavy,
+                      Row(
+                        crossAxisAlignment: CrossAxisAlignment.start,
+                        children: [
+                          Expanded(
+                            child: Text(
+                              title,
+                              style: GoogleFonts.poppins(
+                                fontSize: 15.5,
+                                fontWeight: FontWeight.bold,
+                                color: AppColors.deepNavy,
+                              ),
+                            ),
                           ),
-                        ),
+                          const SizedBox(width: 8),
+                          StatusBadge(
+                            label: existingSubmission != null
+                                ? 'Submitted'
+                                : (deadline.isNotEmpty
+                                    ? 'Due: $deadline'
+                                    : 'Pending'),
+                          ),
+                        ],
                       ),
-                      Container(
-                        padding: const EdgeInsets.symmetric(
-                            horizontal: 8, vertical: 3),
-                        decoration: BoxDecoration(
-                          color: AppColors.lightAqua,
-                          borderRadius: BorderRadius.circular(6),
-                        ),
-                        child: Text(
-                          existingSubmission != null
-                              ? 'Submitted'
-                              : 'Due Nov 15',
-                          style: GoogleFonts.inter(
-                            fontSize: 11,
-                            fontWeight: FontWeight.bold,
-                            color: AppColors.primaryBlue,
-                          ),
+                      const SizedBox(height: 6),
+                      Text(
+                        'Partner: $company',
+                        style: GoogleFonts.inter(
+                          fontSize: 12.5,
+                          color: AppColors.grayText,
                         ),
                       ),
                     ],
                   ),
-                  const SizedBox(height: 4),
-                  Text(
-                    'Client: $company',
-                    style: GoogleFonts.inter(
-                      fontSize: 12,
-                      color: AppColors.grayText,
-                    ),
-                  ),
-                ],
-              ),
-            ),
-            const SizedBox(height: 24),
-
-            if (existingSubmission != null) ...[
-              Container(
-                padding: const EdgeInsets.all(12),
-                decoration: BoxDecoration(
-                  color: AppColors.teal.withValues(alpha: 0.1),
-                  borderRadius: BorderRadius.circular(12),
-                  border: Border.all(
-                      color: AppColors.teal.withValues(alpha: 0.3)),
                 ),
-                child: Row(
-                  children: [
-                    const Icon(Icons.check_circle_outline_rounded,
-                        color: AppColors.teal, size: 20),
-                    const SizedBox(width: 8),
-                    Expanded(
-                      child: Text(
-                        'Previous submission stored (${existingSubmission['submittedAt']}). You can edit and re-submit below.',
-                        style: GoogleFonts.inter(
-                          fontSize: 12,
-                          color: AppColors.deepNavy,
-                        ),
-                      ),
-                    ),
-                  ],
-                ),
-              ),
-              const SizedBox(height: 16),
-            ],
+                const SizedBox(height: 20),
 
-            Form(
-              key: _formKey,
-              autovalidateMode: _autoValidate
-                  ? AutovalidateMode.onUserInteraction
-                  : AutovalidateMode.disabled,
-              child: Column(
-                crossAxisAlignment: CrossAxisAlignment.start,
-                children: [
-                  // Submission Notes
-                  Text(
-                    'Summary & Notes *',
-                    style: GoogleFonts.inter(
-                      fontSize: 13,
-                      fontWeight: FontWeight.w600,
-                      color: AppColors.darkText,
-                    ),
-                  ),
-                  const SizedBox(height: 6),
-                  TextFormField(
-                    controller: _responseController,
-                    maxLines: 5,
-                    decoration: const InputDecoration(
-                      hintText:
-                          'Explain what you completed, results obtained, methodology used, and any important notes...',
-                    ),
-                    validator: (value) {
-                      final v = value?.trim() ?? '';
-                      if (v.isEmpty) {
-                        return 'Work summary is required';
-                      }
-                      if (v.length < 20) {
-                        return 'Please provide more details (minimum 20 characters, currently ${v.length})';
-                      }
-                      return null;
-                    },
-                  ),
-                  const SizedBox(height: 20),
-
-                  // Live Demo / GitHub Repo Link
-                  Text(
-                    'Project URL / GitHub Repository Link *',
-                    style: GoogleFonts.inter(
-                      fontSize: 13,
-                      fontWeight: FontWeight.w600,
-                      color: AppColors.darkText,
-                    ),
-                  ),
-                  const SizedBox(height: 6),
-                  TextFormField(
-                    controller: _linkController,
-                    keyboardType: TextInputType.url,
-                    decoration: const InputDecoration(
-                      hintText: 'https://github.com/username/project-repo',
-                      prefixIcon: Icon(Icons.link_rounded, size: 20),
-                    ),
-                    validator: (value) {
-                      final v = value?.trim() ?? '';
-                      if (v.isEmpty) {
-                        return 'Project / repository link is required';
-                      }
-                      if (!_isValidUrl(v)) {
-                        return 'Please enter a valid URL link (e.g. https://github.com/username/repo or https://...)';
-                      }
-                      return null;
-                    },
-                  ),
-                ],
-              ),
-            ),
-            const SizedBox(height: 20),
-
-            // File Upload Section
-            Text(
-              'Deliverable File (PDF, ZIP, DOCX) *',
-              style: GoogleFonts.inter(
-                fontSize: 13,
-                fontWeight: FontWeight.w600,
-                color: AppColors.darkText,
-              ),
-            ),
-            const SizedBox(height: 8),
-
-            Container(
-              padding: const EdgeInsets.all(16),
-              decoration: BoxDecoration(
-                color: AppColors.cardWhite,
-                borderRadius: BorderRadius.circular(16),
-                border: Border.all(
-                  color: AppColors.teal.withValues(alpha: 0.5),
-                  width: 1.2,
-                ),
-              ),
-              child: Row(
-                children: [
+                if (existingSubmission != null) ...[
                   Container(
-                    padding: const EdgeInsets.all(10),
+                    padding: const EdgeInsets.all(12),
                     decoration: BoxDecoration(
-                      color: AppColors.lightAqua,
-                      borderRadius: BorderRadius.circular(10),
+                      color: AppColors.teal.withValues(alpha: 0.1),
+                      borderRadius: BorderRadius.circular(12),
+                      border: Border.all(
+                          color: AppColors.teal.withValues(alpha: 0.3)),
                     ),
-                    child: const Icon(
-                      Icons.description_rounded,
-                      color: AppColors.primaryBlue,
-                      size: 24,
-                    ),
-                  ),
-                  const SizedBox(width: 12),
-                  Expanded(
-                    child: Column(
-                      crossAxisAlignment: CrossAxisAlignment.start,
+                    child: Row(
                       children: [
-                        Text(
-                          _selectedFileName.isNotEmpty
-                              ? _selectedFileName
-                              : 'No file selected',
-                          style: GoogleFonts.poppins(
-                            fontSize: 13,
-                            fontWeight: FontWeight.w600,
-                            color: _selectedFileName.isNotEmpty
-                                ? AppColors.deepNavy
-                                : Colors.redAccent,
-                          ),
-                        ),
-                        Text(
-                          _selectedFileName.isNotEmpty
-                              ? 'Deliverable attached • Ready for evaluation'
-                              : 'Please attach a deliverable file',
-                          style: GoogleFonts.inter(
-                            fontSize: 11,
-                            color: _selectedFileName.isNotEmpty
-                                ? AppColors.grayText
-                                : Colors.redAccent,
+                        const Icon(Icons.check_circle_outline_rounded,
+                            color: AppColors.teal, size: 20),
+                        const SizedBox(width: 8),
+                        Expanded(
+                          child: Text(
+                            'Previous submission recorded (${existingSubmission['submittedAt'] ?? 'Recently'}). Update fields below to resubmit.',
+                            style: GoogleFonts.inter(
+                              fontSize: 12,
+                              color: AppColors.deepNavy,
+                            ),
                           ),
                         ),
                       ],
                     ),
                   ),
-                  TextButton.icon(
-                    onPressed: _showFileAttachmentSheet,
-                    icon: const Icon(Icons.attach_file_rounded, size: 16),
-                    label: const Text('Change'),
-                  ),
+                  const SizedBox(height: 18),
                 ],
-              ),
-            ),
-            const SizedBox(height: 32),
 
-            // Submit Button
-            SizedBox(
-              width: double.infinity,
-              height: 50,
-              child: ElevatedButton(
-                style: ElevatedButton.styleFrom(
-                  backgroundColor: AppColors.primaryBlue,
-                  foregroundColor: Colors.white,
-                  shape: RoundedRectangleBorder(
-                    borderRadius: BorderRadius.circular(14),
+                Form(
+                  key: _formKey,
+                  autovalidateMode: _autoValidate
+                      ? AutovalidateMode.onUserInteraction
+                      : AutovalidateMode.disabled,
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      _label('Summary & Methodology *'),
+                      const SizedBox(height: 6),
+                      TextFormField(
+                        controller: _responseController,
+                        maxLines: 5,
+                        decoration: const InputDecoration(
+                          hintText:
+                              'Describe completed deliverables, key findings, methodology, and testing verification...',
+                        ),
+                        validator: (value) {
+                          final v = value?.trim() ?? '';
+                          if (v.isEmpty) return 'Work summary is required';
+                          if (v.length < 20) {
+                            return 'Provide at least 20 characters (currently ${v.length})';
+                          }
+                          return null;
+                        },
+                      ),
+                      const SizedBox(height: 18),
+
+                      _label('Project URL / Cloud Drive / GitHub Repo *'),
+                      const SizedBox(height: 6),
+                      TextFormField(
+                        controller: _linkController,
+                        keyboardType: TextInputType.url,
+                        decoration: const InputDecoration(
+                          hintText: 'https://github.com/username/deliverable',
+                          prefixIcon: Icon(Icons.link_rounded, size: 20),
+                        ),
+                        validator: (value) {
+                          final v = value?.trim() ?? '';
+                          if (v.isEmpty) {
+                            return 'Deliverable repository or cloud link is required';
+                          }
+                          if (!_isValidUrl(v)) {
+                            return 'Enter a valid URL (e.g. https://github.com/user/repo)';
+                          }
+                          return null;
+                        },
+                      ),
+                      const SizedBox(height: 18),
+
+                      _label('Deliverable Package / File Name *'),
+                      const SizedBox(height: 6),
+                      TextFormField(
+                        controller: _fileNameController,
+                        decoration: const InputDecoration(
+                          hintText: 'e.g. final_report.pdf or source_build.zip',
+                          prefixIcon: Icon(Icons.description_outlined, size: 20),
+                        ),
+                        validator: (value) {
+                          final v = value?.trim() ?? '';
+                          if (v.isEmpty) {
+                            return 'Please specify your deliverable file name or artifact label';
+                          }
+                          return null;
+                        },
+                      ),
+                    ],
                   ),
                 ),
-                onPressed: _isSubmitting ? null : _submitWork,
-                child: _isSubmitting
-                    ? const SizedBox(
-                        width: 24,
-                        height: 24,
-                        child: CircularProgressIndicator(
-                          color: Colors.white,
-                          strokeWidth: 2,
-                        ),
-                      )
-                    : Text(
-                        existingSubmission != null
-                            ? 'Update & Resubmit Work'
-                            : 'Submit Work',
-                        style: GoogleFonts.poppins(
-                          fontSize: 15,
-                          fontWeight: FontWeight.bold,
-                        ),
-                      ),
-              ),
+                const SizedBox(height: 28),
+
+                SizedBox(
+                  width: double.infinity,
+                  height: 50,
+                  child: ElevatedButton(
+                    onPressed: _isSubmitting ? null : _submitWork,
+                    child: _isSubmitting
+                        ? const SizedBox(
+                            width: 22,
+                            height: 22,
+                            child: CircularProgressIndicator(
+                              color: Colors.white,
+                              strokeWidth: 2,
+                            ),
+                          )
+                        : Text(
+                            existingSubmission != null
+                                ? 'Update & Resubmit Work'
+                                : 'Submit Work',
+                          ),
+                  ),
+                ),
+              ],
             ),
-          ],
+          ),
         ),
+      ),
+    );
+  }
+
+  Widget _label(String text) {
+    return Text(
+      text,
+      style: GoogleFonts.inter(
+        fontSize: 13,
+        fontWeight: FontWeight.w600,
+        color: AppColors.darkText,
       ),
     );
   }

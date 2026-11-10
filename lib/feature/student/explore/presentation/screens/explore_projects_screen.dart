@@ -1,9 +1,12 @@
 import 'package:flutter/material.dart';
 import 'package:google_fonts/google_fonts.dart';
-import 'package:supabase_flutter/supabase_flutter.dart';
 import 'package:link_vibe/core/constants/app_colors.dart';
 import 'package:link_vibe/core/services/app_data_service.dart';
 import 'package:link_vibe/core/services/share_service.dart';
+import 'package:link_vibe/core/services/supabase_helper.dart';
+import 'package:link_vibe/core/widgets/app_empty_state.dart';
+import 'package:link_vibe/core/widgets/status_badge.dart';
+import 'package:link_vibe/feature/admin/services/admin_settings_service.dart';
 import 'package:link_vibe/feature/student/project_details/presentation/screens/student_project_details_screen.dart';
 
 class ExploreProjectsScreen extends StatefulWidget {
@@ -17,7 +20,7 @@ class _ExploreProjectsScreenState extends State<ExploreProjectsScreen> {
   final _searchController = TextEditingController();
   String _selectedCategory = 'All';
 
-  final List<String> _categories = [
+  static const List<String> _defaultCategories = [
     'All',
     'Design',
     'Development',
@@ -27,13 +30,12 @@ class _ExploreProjectsScreenState extends State<ExploreProjectsScreen> {
     'Data Analysis',
   ];
 
-  List<Map<String, dynamic>> _supabaseProjects = [];
   bool _isLoading = false;
 
   @override
   void initState() {
     super.initState();
-    _fetchLiveProjects();
+    _refreshLiveCatalog();
   }
 
   @override
@@ -42,8 +44,11 @@ class _ExploreProjectsScreenState extends State<ExploreProjectsScreen> {
     super.dispose();
   }
 
-  Future<void> _fetchLiveProjects(
-      {bool showFeedback = false, bool resetFilters = false}) async {
+  Future<void> _refreshLiveCatalog({
+    bool showFeedback = false,
+    bool resetFilters = false,
+  }) async {
+    if (!mounted) return;
     setState(() {
       _isLoading = true;
       if (resetFilters) {
@@ -53,42 +58,9 @@ class _ExploreProjectsScreenState extends State<ExploreProjectsScreen> {
     });
 
     try {
-      if (showFeedback) {
-        await Future.delayed(const Duration(milliseconds: 600));
-      }
-
-      final supabase = Supabase.instance.client;
-      final response = await supabase
-          .from('projects')
-          .select()
-          .order('created_at', ascending: false);
-
-      final List<Map<String, dynamic>> loaded = [];
-      for (var item in response) {
-        loaded.add({
-          'id': item['id']?.toString() ?? '',
-          'title': item['title'] ?? 'Untitled Project',
-          'company': (item['company_name']?.toString().isNotEmpty == true)
-              ? item['company_name']
-              : 'Company',
-          'category': 'Development',
-          'duration': '3-5 days',
-          'workMode': 'Remote',
-          'status': item['status'] ?? 'Open',
-          'stipend': item['budget'] ?? '20-30K',
-          'description': item['description'] ?? 'No description provided.',
-          'skills': ['Flutter', 'Dart', 'Teamwork'],
-          'isVerified': true,
-        });
-      }
-
-      if (mounted) {
-        setState(() {
-          _supabaseProjects = loaded;
-        });
-      }
+      await AppDataService.instance.syncFromSupabase(forceRefresh: true);
     } catch (_) {
-      // Fallback to local storage
+      // Handled gracefully inside syncFromSupabase
     } finally {
       if (mounted) {
         setState(() => _isLoading = false);
@@ -100,11 +72,11 @@ class _ExploreProjectsScreenState extends State<ExploreProjectsScreen> {
               content: Row(
                 children: [
                   const Icon(Icons.check_circle_rounded,
-                      color: Colors.white, size: 20),
+                      color: Colors.white, size: 18),
                   const SizedBox(width: 10),
                   Expanded(
                     child: Text(
-                      'Projects refreshed! $count open opportunities available.',
+                      'Catalog synced! $count open ${count == 1 ? 'opportunity' : 'opportunities'} found.',
                       style: GoogleFonts.inter(fontSize: 13),
                     ),
                   ),
@@ -112,7 +84,6 @@ class _ExploreProjectsScreenState extends State<ExploreProjectsScreen> {
               ),
               backgroundColor: AppColors.statusOpen,
               duration: const Duration(seconds: 2),
-              behavior: SnackBarBehavior.floating,
             ),
           );
         }
@@ -120,39 +91,60 @@ class _ExploreProjectsScreenState extends State<ExploreProjectsScreen> {
     }
   }
 
+  List<String> _buildCategories(List<Map<String, dynamic>> projects) {
+    final seenLower = <String>{};
+    final result = <String>[];
+
+    void addCat(String raw) {
+      final cleaned = raw.trim();
+      if (cleaned.isEmpty) return;
+      final key = cleaned.toLowerCase();
+      if (seenLower.add(key)) {
+        result.add(cleaned);
+      }
+    }
+
+    for (final c in _defaultCategories) {
+      addCat(c);
+    }
+    for (final item in AdminSettingsService().categoriesNotifier.value) {
+      if (item.isActive) addCat(item.name);
+    }
+    for (final p in projects) {
+      final cat = p['category']?.toString() ?? '';
+      if (cat.isNotEmpty) addCat(cat);
+    }
+    return result;
+  }
+
   List<Map<String, dynamic>> _getFilteredProjects() {
-    final localProjects = AppDataService.instance.getAllProjects();
-
-    // Merge Supabase projects and local projects without duplicates
-    final existingIds = <String>{};
-    final combined = <Map<String, dynamic>>[];
-
-    for (var p in _supabaseProjects) {
-      final id = p['id']?.toString() ?? '';
-      if (id.isNotEmpty && !existingIds.contains(id)) {
-        existingIds.add(id);
-        combined.add(p);
-      }
-    }
-
-    for (var p in localProjects) {
-      final id = p['id']?.toString() ?? '';
-      if (!existingIds.contains(id)) {
-        existingIds.add(id);
-        combined.add(p);
-      }
-    }
-
+    final allProjects = AppDataService.instance.getAllProjects();
     final query = _searchController.text.trim().toLowerCase();
 
-    return combined.where((p) {
+    return allProjects.where((p) {
+      final status = (p['status']?.toString() ?? 'Open').toLowerCase();
+      if (status == 'removed' || status == 'flagged' || status == 'closed') {
+        return false;
+      }
+
       final matchesCategory = _selectedCategory == 'All' ||
           (p['category']?.toString().toLowerCase() ==
               _selectedCategory.toLowerCase());
-      final matchesSearch = query.isEmpty ||
-          (p['title']?.toString().toLowerCase().contains(query) ?? false) ||
-          (p['company']?.toString().toLowerCase().contains(query) ?? false);
-      return matchesCategory && matchesSearch;
+
+      if (!matchesCategory) return false;
+      if (query.isEmpty) return true;
+
+      final title = p['title']?.toString().toLowerCase() ?? '';
+      final company = p['company']?.toString().toLowerCase() ?? '';
+      final desc = p['description']?.toString().toLowerCase() ?? '';
+      final skills = SupabaseHelper.parseStringList(p['skills'])
+          .join(' ')
+          .toLowerCase();
+
+      return title.contains(query) ||
+          company.contains(query) ||
+          desc.contains(query) ||
+          skills.contains(query);
     }).toList();
   }
 
@@ -165,7 +157,7 @@ class _ExploreProjectsScreenState extends State<ExploreProjectsScreen> {
         centerTitle: false,
         actions: [
           IconButton(
-            tooltip: 'Refresh Projects',
+            tooltip: 'Refresh Live Catalog',
             icon: _isLoading
                 ? const SizedBox(
                     width: 20,
@@ -178,8 +170,10 @@ class _ExploreProjectsScreenState extends State<ExploreProjectsScreen> {
                 : const Icon(Icons.refresh_rounded),
             onPressed: _isLoading
                 ? null
-                : () =>
-                    _fetchLiveProjects(showFeedback: true, resetFilters: true),
+                : () => _refreshLiveCatalog(
+                      showFeedback: true,
+                      resetFilters: true,
+                    ),
           ),
           const SizedBox(width: 8),
         ],
@@ -187,430 +181,445 @@ class _ExploreProjectsScreenState extends State<ExploreProjectsScreen> {
       body: ListenableBuilder(
         listenable: AppDataService.instance,
         builder: (context, _) {
+          final allProjects = AppDataService.instance.getAllProjects();
+          final categories = _buildCategories(allProjects);
           final filteredProjects = _getFilteredProjects();
+          final hasActiveFilters = _selectedCategory != 'All' ||
+              _searchController.text.trim().isNotEmpty;
 
-          return Column(
-            children: [
-              if (_isLoading)
-                const LinearProgressIndicator(
-                  minHeight: 3,
-                  color: AppColors.primaryBlue,
-                  backgroundColor: AppColors.lightAqua,
-                ),
-              // Search & Filter Row
-              Padding(
-                padding:
-                    const EdgeInsets.symmetric(horizontal: 16.0, vertical: 8.0),
-                child: Row(
-                  children: [
-                    Expanded(
-                      child: Container(
-                        decoration: BoxDecoration(
-                          color: AppColors.cardWhite,
-                          borderRadius: BorderRadius.circular(12),
-                          border: Border.all(color: AppColors.lightGray),
-                        ),
-                        child: TextField(
-                          controller: _searchController,
-                          onChanged: (_) => setState(() {}),
-                          decoration: const InputDecoration(
-                            hintText: 'Search projects, companies...',
-                            prefixIcon: Icon(Icons.search_rounded,
-                                color: AppColors.grayText),
-                            border: InputBorder.none,
-                            enabledBorder: InputBorder.none,
-                            focusedBorder: InputBorder.none,
-                            contentPadding:
-                                EdgeInsets.symmetric(vertical: 12),
-                          ),
-                        ),
-                      ),
+          return Center(
+            child: ConstrainedBox(
+              constraints: const BoxConstraints(maxWidth: 960),
+              child: Column(
+                children: [
+                  if (_isLoading)
+                    const LinearProgressIndicator(
+                      minHeight: 3,
+                      color: AppColors.primaryBlue,
+                      backgroundColor: AppColors.lightAqua,
                     ),
-                    const SizedBox(width: 8),
-                    Container(
-                      decoration: BoxDecoration(
-                        color: AppColors.primaryBlue,
-                        borderRadius: BorderRadius.circular(12),
-                      ),
-                      child: IconButton(
-                        icon: const Icon(Icons.tune_rounded,
-                            color: Colors.white, size: 20),
-                        onPressed: () {
-                          // Quick filter reset
-                          setState(() {
-                            _selectedCategory = 'All';
-                            _searchController.clear();
-                          });
-                        },
-                      ),
-                    ),
-                  ],
-                ),
-              ),
 
-              // Categories Horizontal List
-              SizedBox(
-                height: 44,
-                child: ListView.builder(
-                  scrollDirection: Axis.horizontal,
-                  padding: const EdgeInsets.symmetric(horizontal: 12),
-                  itemCount: _categories.length,
-                  itemBuilder: (context, index) {
-                    final cat = _categories[index];
-                    final isSelected = _selectedCategory == cat;
-                    return Padding(
-                      padding: const EdgeInsets.symmetric(horizontal: 4.0),
-                      child: ChoiceChip(
-                        label: Text(cat),
-                        selected: isSelected,
-                        onSelected: (selected) {
-                          if (selected) {
-                            setState(() {
-                              _selectedCategory = cat;
-                            });
-                          }
-                        },
-                        selectedColor: AppColors.primaryBlue,
-                        backgroundColor: AppColors.cardWhite,
-                        labelStyle: GoogleFonts.inter(
-                          fontSize: 12,
-                          fontWeight:
-                              isSelected ? FontWeight.bold : FontWeight.w500,
-                          color: isSelected ? Colors.white : AppColors.darkText,
-                        ),
-                        shape: RoundedRectangleBorder(
-                          borderRadius: BorderRadius.circular(20),
-                          side: BorderSide(
-                            color: isSelected
-                                ? AppColors.primaryBlue
-                                : AppColors.lightGray,
-                          ),
-                        ),
-                        showCheckmark: false,
-                        padding: const EdgeInsets.symmetric(
-                            horizontal: 10, vertical: 4),
-                      ),
-                    );
-                  },
-                ),
-              ),
-              const SizedBox(height: 8),
-
-              // Projects Listing
-              Expanded(
-                child: _isLoading && filteredProjects.isEmpty
-                    ? const Center(child: CircularProgressIndicator())
-                    : filteredProjects.isEmpty
-                        ? Center(
-                            child: Column(
-                              mainAxisAlignment: MainAxisAlignment.center,
-                              children: [
-                                const Icon(Icons.search_off_rounded,
-                                    size: 48, color: AppColors.grayText),
-                                const SizedBox(height: 12),
-                                Text(
-                                  'No projects found',
-                                  style: GoogleFonts.poppins(
-                                    fontSize: 16,
-                                    fontWeight: FontWeight.bold,
-                                    color: AppColors.deepNavy,
-                                  ),
-                                ),
-                                const SizedBox(height: 4),
-                                Text(
-                                  'Try searching for something else or change category',
-                                  style: GoogleFonts.inter(
-                                    fontSize: 12,
-                                    color: AppColors.grayText,
-                                  ),
-                                ),
-                              ],
+                  // Search & Reset Row
+                  Padding(
+                    padding: const EdgeInsets.symmetric(
+                        horizontal: 16, vertical: 10),
+                    child: Row(
+                      children: [
+                        Expanded(
+                          child: TextField(
+                            controller: _searchController,
+                            onChanged: (_) => setState(() {}),
+                            decoration: InputDecoration(
+                              hintText: 'Search projects, companies, skills...',
+                              prefixIcon: const Icon(
+                                Icons.search_rounded,
+                                color: AppColors.grayText,
+                              ),
+                              suffixIcon: _searchController.text.isNotEmpty
+                                  ? IconButton(
+                                      icon: const Icon(Icons.close_rounded,
+                                          size: 18),
+                                      onPressed: () {
+                                        _searchController.clear();
+                                        setState(() {});
+                                      },
+                                    )
+                                  : null,
                             ),
-                          )
-                        : ListView.builder(
-                            padding: const EdgeInsets.all(16.0),
-                            itemCount: filteredProjects.length,
-                            itemBuilder: (context, index) {
-                              final project = filteredProjects[index];
-                              final id = project['id']?.toString() ?? '';
-                              final isBookmarked =
-                                  AppDataService.instance.isProjectSaved(id);
-                              final skills = (project['skills'] as List?) ??
-                                  ['Research', 'Analysis'];
-                              final companyStr =
-                                  (project['company']?.toString().isNotEmpty == true)
-                                      ? project['company'].toString()
-                                      : 'Company';
-
-                              return Card(
-                                margin: const EdgeInsets.only(bottom: 14),
-                                shape: RoundedRectangleBorder(
-                                  borderRadius: BorderRadius.circular(16),
-                                  side: const BorderSide(
-                                      color: AppColors.lightGray),
-                                ),
-                                child: InkWell(
-                                  borderRadius: BorderRadius.circular(16),
-                                  onTap: () {
-                                    Navigator.push(
-                                      context,
-                                      MaterialPageRoute(
-                                        builder: (context) =>
-                                            StudentProjectDetailsScreen(
-                                                project: project),
-                                      ),
-                                    );
-                                  },
-                                  child: Padding(
-                                    padding: const EdgeInsets.all(16.0),
-                                    child: Column(
-                                      crossAxisAlignment:
-                                          CrossAxisAlignment.start,
-                                      children: [
-                                        // Top Row: Company Logo, Title, Bookmark
-                                        Row(
-                                          children: [
-                                            // Company Icon Box
-                                            Container(
-                                              width: 44,
-                                              height: 44,
-                                              decoration: BoxDecoration(
-                                                color: AppColors.lightAqua,
-                                                borderRadius:
-                                                    BorderRadius.circular(12),
-                                              ),
-                                              child: Center(
-                                                child: Text(
-                                                  companyStr[0].toUpperCase(),
-                                                  style: GoogleFonts.poppins(
-                                                    fontSize: 18,
-                                                    fontWeight: FontWeight.bold,
-                                                    color: AppColors.primaryBlue,
-                                                  ),
-                                                ),
-                                              ),
-                                            ),
-                                            const SizedBox(width: 12),
-                                            Expanded(
-                                              child: Column(
-                                                crossAxisAlignment:
-                                                    CrossAxisAlignment.start,
-                                                children: [
-                                                  Text(
-                                                    project['title'] ?? 'Title',
-                                                    style: GoogleFonts.poppins(
-                                                      fontSize: 15,
-                                                      fontWeight:
-                                                          FontWeight.bold,
-                                                      color: AppColors.deepNavy,
-                                                    ),
-                                                  ),
-                                                  Text(
-                                                    companyStr,
-                                                    style: GoogleFonts.inter(
-                                                      fontSize: 12,
-                                                      color: AppColors.grayText,
-                                                    ),
-                                                  ),
-                                                ],
-                                              ),
-                                            ),
-                                            // Status Chip
-                                            Container(
-                                              padding:
-                                                  const EdgeInsets.symmetric(
-                                                      horizontal: 8,
-                                                      vertical: 3),
-                                              decoration: BoxDecoration(
-                                                color: AppColors.statusOpen
-                                                    .withValues(alpha: 0.12),
-                                                borderRadius:
-                                                    BorderRadius.circular(6),
-                                              ),
-                                              child: Text(
-                                                project['status'] ?? 'Open',
-                                                style: GoogleFonts.inter(
-                                                  fontSize: 11,
-                                                  fontWeight: FontWeight.bold,
-                                                  color: AppColors.statusOpen,
-                                                ),
-                                              ),
-                                            ),
-                                            const SizedBox(width: 8),
-                                            // Share Button
-                                            IconButton(
-                                              constraints: const BoxConstraints(),
-                                              padding: EdgeInsets.zero,
-                                              icon: const Icon(
-                                                Icons.share_outlined,
-                                                color: AppColors.grayText,
-                                                size: 20,
-                                              ),
-                                              onPressed: () {
-                                                ShareService.shareProject(
-                                                  context: context,
-                                                  project: project,
-                                                );
-                                              },
-                                            ),
-                                            const SizedBox(width: 8),
-                                            // Bookmark Button
-                                            IconButton(
-                                              constraints:
-                                                  const BoxConstraints(),
-                                              padding: EdgeInsets.zero,
-                                              icon: Icon(
-                                                isBookmarked
-                                                    ? Icons.bookmark_rounded
-                                                    : Icons
-                                                        .bookmark_border_rounded,
-                                                color: isBookmarked
-                                                    ? AppColors.teal
-                                                    : AppColors.grayText,
-                                                size: 24,
-                                              ),
-                                              onPressed: () {
-                                                AppDataService.instance
-                                                    .toggleSaveProject(project);
-                                                ScaffoldMessenger.of(context)
-                                                    .showSnackBar(
-                                                  SnackBar(
-                                                    content: Text(
-                                                      isBookmarked
-                                                          ? 'Removed from saved projects'
-                                                          : 'Project saved to bookmarks!',
-                                                    ),
-                                                    duration: const Duration(
-                                                        seconds: 1),
-                                                  ),
-                                                );
-                                              },
-                                            ),
-                                          ],
-                                        ),
-                                        const SizedBox(height: 12),
-
-                                        // Short Description
-                                        Text(
-                                          project['description'] ?? '',
-                                          maxLines: 2,
-                                          overflow: TextOverflow.ellipsis,
-                                          style: GoogleFonts.inter(
-                                            fontSize: 13,
-                                            color: AppColors.darkText,
-                                            height: 1.4,
-                                          ),
-                                        ),
-                                        const SizedBox(height: 12),
-
-                                        // Skills Tags
-                                        Wrap(
-                                          spacing: 6,
-                                          runSpacing: 4,
-                                          children: skills.map((s) {
-                                            return Container(
-                                              padding:
-                                                  const EdgeInsets.symmetric(
-                                                      horizontal: 8,
-                                                      vertical: 3),
-                                              decoration: BoxDecoration(
-                                                color: AppColors.background,
-                                                borderRadius:
-                                                    BorderRadius.circular(6),
-                                                border: Border.all(
-                                                    color: AppColors.lightGray),
-                                              ),
-                                              child: Text(
-                                                s.toString(),
-                                                style: GoogleFonts.inter(
-                                                  fontSize: 11,
-                                                  color: AppColors.grayText,
-                                                  fontWeight: FontWeight.w500,
-                                                ),
-                                              ),
-                                            );
-                                          }).toList(),
-                                        ),
-                                        const SizedBox(height: 12),
-
-                                        // Details: Duration, Remote, Stipend (using Wrap to prevent overflow on all devices)
-                                        Wrap(
-                                          spacing: 14,
-                                          runSpacing: 6,
-                                          crossAxisAlignment:
-                                              WrapCrossAlignment.center,
-                                          children: [
-                                            Row(
-                                              mainAxisSize: MainAxisSize.min,
-                                              children: [
-                                                const Icon(
-                                                    Icons.schedule_rounded,
-                                                    size: 14,
-                                                    color: AppColors.grayText),
-                                                const SizedBox(width: 4),
-                                                Text(
-                                                  project['duration'] ??
-                                                      '3-5 days',
-                                                  style: GoogleFonts.inter(
-                                                    fontSize: 12,
-                                                    color: AppColors.grayText,
-                                                  ),
-                                                ),
-                                              ],
-                                            ),
-                                            Row(
-                                              mainAxisSize: MainAxisSize.min,
-                                              children: [
-                                                const Icon(Icons.public_rounded,
-                                                    size: 14,
-                                                    color: AppColors.grayText),
-                                                const SizedBox(width: 4),
-                                                Text(
-                                                  project['workMode'] ??
-                                                      'Remote',
-                                                  style: GoogleFonts.inter(
-                                                    fontSize: 12,
-                                                    color: AppColors.grayText,
-                                                  ),
-                                                ),
-                                              ],
-                                            ),
-                                            if (project['stipend'] != null)
-                                              Row(
-                                                mainAxisSize: MainAxisSize.min,
-                                                children: [
-                                                  const Icon(
-                                                      Icons.payments_outlined,
-                                                      size: 14,
-                                                      color:
-                                                          AppColors.statusOpen),
-                                                  const SizedBox(width: 4),
-                                                  Text(
-                                                    project['stipend']
-                                                        .toString(),
-                                                    style: GoogleFonts.inter(
-                                                      fontSize: 12,
-                                                      fontWeight:
-                                                          FontWeight.w600,
-                                                      color: AppColors.deepNavy,
-                                                    ),
-                                                  ),
-                                                ],
-                                              ),
-                                          ],
-                                        ),
-                                      ],
-                                    ),
-                                  ),
-                                ),
-                              );
+                          ),
+                        ),
+                        const SizedBox(width: 8),
+                        Container(
+                          decoration: BoxDecoration(
+                            color: hasActiveFilters
+                                ? AppColors.primaryBlue
+                                : AppColors.cardWhite,
+                            borderRadius: BorderRadius.circular(12),
+                            border: Border.all(
+                              color: hasActiveFilters
+                                  ? AppColors.primaryBlue
+                                  : AppColors.lightGray,
+                            ),
+                          ),
+                          child: IconButton(
+                            tooltip: 'Reset Filters',
+                            icon: Icon(
+                              Icons.filter_alt_off_rounded,
+                              color: hasActiveFilters
+                                  ? Colors.white
+                                  : AppColors.deepNavy,
+                              size: 20,
+                            ),
+                            onPressed: () {
+                              setState(() {
+                                _selectedCategory = 'All';
+                                _searchController.clear();
+                              });
                             },
                           ),
+                        ),
+                      ],
+                    ),
+                  ),
+
+                  // Categories Chip Strip
+                  SizedBox(
+                    height: 44,
+                    child: ListView.builder(
+                      scrollDirection: Axis.horizontal,
+                      padding: const EdgeInsets.symmetric(horizontal: 12),
+                      itemCount: categories.length,
+                      itemBuilder: (context, index) {
+                        final cat = categories[index];
+                        final isSelected = _selectedCategory == cat;
+                        return Padding(
+                          padding: const EdgeInsets.symmetric(horizontal: 4),
+                          child: ChoiceChip(
+                            label: Text(cat),
+                            selected: isSelected,
+                            onSelected: (selected) {
+                              if (selected) {
+                                setState(() => _selectedCategory = cat);
+                              }
+                            },
+                            selectedColor: AppColors.primaryBlue,
+                            backgroundColor: AppColors.cardWhite,
+                            labelStyle: GoogleFonts.inter(
+                              fontSize: 12,
+                              fontWeight: isSelected
+                                  ? FontWeight.w700
+                                  : FontWeight.w500,
+                              color: isSelected
+                                  ? Colors.white
+                                  : AppColors.darkText,
+                            ),
+                            shape: RoundedRectangleBorder(
+                              borderRadius: BorderRadius.circular(20),
+                              side: BorderSide(
+                                color: isSelected
+                                    ? AppColors.primaryBlue
+                                    : AppColors.lightGray,
+                              ),
+                            ),
+                            showCheckmark: false,
+                            padding: const EdgeInsets.symmetric(
+                                horizontal: 10, vertical: 4),
+                          ),
+                        );
+                      },
+                    ),
+                  ),
+                  const SizedBox(height: 8),
+
+                  // Projects Listing
+                  Expanded(
+                    child: RefreshIndicator(
+                      color: AppColors.primaryBlue,
+                      onRefresh: () =>
+                          _refreshLiveCatalog(showFeedback: false),
+                      child: _isLoading && filteredProjects.isEmpty
+                          ? const Center(child: CircularProgressIndicator())
+                          : filteredProjects.isEmpty
+                              ? ListView(
+                                  physics:
+                                      const AlwaysScrollableScrollPhysics(),
+                                  padding: const EdgeInsets.all(24),
+                                  children: [
+                                    const SizedBox(height: 36),
+                                    AppEmptyState(
+                                      icon: hasActiveFilters
+                                          ? Icons.search_off_rounded
+                                          : Icons.work_outline_rounded,
+                                      title: hasActiveFilters
+                                          ? 'No Matching Projects Found'
+                                          : 'No Open Projects Published Yet',
+                                      subtitle: hasActiveFilters
+                                          ? 'Try clearing your search or switching back to "All" categories.'
+                                          : 'Once partner companies publish opportunities, they will appear live here.',
+                                      actionLabel: hasActiveFilters
+                                          ? 'Reset Filters'
+                                          : 'Refresh Catalog',
+                                      actionIcon: hasActiveFilters
+                                          ? Icons.restart_alt_rounded
+                                          : Icons.refresh_rounded,
+                                      onAction: hasActiveFilters
+                                          ? () {
+                                              setState(() {
+                                                _selectedCategory = 'All';
+                                                _searchController.clear();
+                                              });
+                                            }
+                                          : () => _refreshLiveCatalog(
+                                                showFeedback: true,
+                                              ),
+                                    ),
+                                  ],
+                                )
+                              : ListView.builder(
+                                  physics:
+                                      const AlwaysScrollableScrollPhysics(),
+                                  padding: const EdgeInsets.all(16),
+                                  itemCount: filteredProjects.length,
+                                  itemBuilder: (context, index) {
+                                    return _buildProjectCard(
+                                      filteredProjects[index],
+                                    );
+                                  },
+                                ),
+                    ),
+                  ),
+                ],
               ),
-            ],
+            ),
           );
         },
       ),
+    );
+  }
+
+  Widget _buildProjectCard(Map<String, dynamic> project) {
+    final id = project['id']?.toString() ?? '';
+    final isBookmarked = AppDataService.instance.isProjectSaved(id);
+    final skills = SupabaseHelper.parseStringList(project['skills']);
+    final companyStr =
+        (project['company']?.toString().trim().isNotEmpty == true)
+            ? project['company'].toString().trim()
+            : 'Partner Company';
+    final isVerified = project['isVerified'] == true;
+    final duration = project['duration']?.toString().trim() ?? 'Flexible';
+    final workMode = project['workMode']?.toString().trim() ?? 'Remote';
+    final stipend = project['stipend']?.toString().trim() ?? '';
+    final status = project['status']?.toString() ?? 'Open';
+    final category = project['category']?.toString().trim() ?? '';
+
+    return Card(
+      margin: const EdgeInsets.only(bottom: 14),
+      child: InkWell(
+        borderRadius: BorderRadius.circular(16),
+        onTap: () {
+          Navigator.push(
+            context,
+            MaterialPageRoute(
+              builder: (_) => StudentProjectDetailsScreen(project: project),
+            ),
+          );
+        },
+        child: Padding(
+          padding: const EdgeInsets.all(16),
+          child: Column(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              Row(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  Container(
+                    width: 44,
+                    height: 44,
+                    decoration: BoxDecoration(
+                      color: AppColors.lightAqua,
+                      borderRadius: BorderRadius.circular(12),
+                    ),
+                    child: Center(
+                      child: Text(
+                        SupabaseHelper.initialsFor(companyStr, fallback: 'CO'),
+                        style: GoogleFonts.poppins(
+                          fontSize: 15,
+                          fontWeight: FontWeight.bold,
+                          color: AppColors.primaryBlue,
+                        ),
+                      ),
+                    ),
+                  ),
+                  const SizedBox(width: 12),
+                  Expanded(
+                    child: Column(
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      children: [
+                        Text(
+                          project['title']?.toString() ?? 'Untitled Project',
+                          maxLines: 2,
+                          overflow: TextOverflow.ellipsis,
+                          style: GoogleFonts.poppins(
+                            fontSize: 15,
+                            fontWeight: FontWeight.w700,
+                            color: AppColors.deepNavy,
+                          ),
+                        ),
+                        const SizedBox(height: 2),
+                        Row(
+                          children: [
+                            Flexible(
+                              child: Text(
+                                companyStr,
+                                maxLines: 1,
+                                overflow: TextOverflow.ellipsis,
+                                style: GoogleFonts.inter(
+                                  fontSize: 12.5,
+                                  color: AppColors.grayText,
+                                  fontWeight: FontWeight.w500,
+                                ),
+                              ),
+                            ),
+                            if (isVerified) ...[
+                              const SizedBox(width: 4),
+                              const Icon(
+                                Icons.verified_rounded,
+                                size: 14,
+                                color: AppColors.teal,
+                              ),
+                            ],
+                          ],
+                        ),
+                      ],
+                    ),
+                  ),
+                  const SizedBox(width: 6),
+                  StatusBadge(label: status),
+                ],
+              ),
+              const SizedBox(height: 12),
+
+              if ((project['description']?.toString().trim() ?? '').isNotEmpty)
+                Padding(
+                  padding: const EdgeInsets.only(bottom: 12),
+                  child: Text(
+                    project['description'].toString().trim(),
+                    maxLines: 2,
+                    overflow: TextOverflow.ellipsis,
+                    style: GoogleFonts.inter(
+                      fontSize: 13,
+                      color: AppColors.darkText,
+                      height: 1.45,
+                    ),
+                  ),
+                ),
+
+              if (skills.isNotEmpty) ...[
+                Wrap(
+                  spacing: 6,
+                  runSpacing: 6,
+                  children: skills.take(5).map((s) {
+                    return Container(
+                      padding: const EdgeInsets.symmetric(
+                          horizontal: 9, vertical: 4),
+                      decoration: BoxDecoration(
+                        color: AppColors.surfaceAlt,
+                        borderRadius: BorderRadius.circular(8),
+                        border: Border.all(color: AppColors.lightGray),
+                      ),
+                      child: Text(
+                        s,
+                        style: GoogleFonts.inter(
+                          fontSize: 11,
+                          color: AppColors.darkText,
+                          fontWeight: FontWeight.w500,
+                        ),
+                      ),
+                    );
+                  }).toList(),
+                ),
+                const SizedBox(height: 12),
+              ],
+
+              Row(
+                children: [
+                  Expanded(
+                    child: Wrap(
+                      spacing: 12,
+                      runSpacing: 6,
+                      crossAxisAlignment: WrapCrossAlignment.center,
+                      children: [
+                        if (category.isNotEmpty)
+                          _metaItem(
+                            Icons.category_outlined,
+                            category,
+                            AppColors.primaryBlue,
+                          ),
+                        _metaItem(
+                          Icons.schedule_rounded,
+                          duration,
+                          AppColors.grayText,
+                        ),
+                        _metaItem(
+                          Icons.public_rounded,
+                          workMode,
+                          AppColors.grayText,
+                        ),
+                        if (stipend.isNotEmpty)
+                          _metaItem(
+                            Icons.workspace_premium_outlined,
+                            stipend,
+                            AppColors.statusOpen,
+                          ),
+                      ],
+                    ),
+                  ),
+                  IconButton(
+                    constraints: const BoxConstraints(),
+                    padding: const EdgeInsets.all(6),
+                    tooltip: 'Share Project',
+                    icon: const Icon(
+                      Icons.share_outlined,
+                      color: AppColors.grayText,
+                      size: 20,
+                    ),
+                    onPressed: () {
+                      ShareService.shareProject(
+                        context: context,
+                        project: project,
+                      );
+                    },
+                  ),
+                  IconButton(
+                    constraints: const BoxConstraints(),
+                    padding: const EdgeInsets.all(6),
+                    tooltip: isBookmarked ? 'Remove Bookmark' : 'Save Project',
+                    icon: Icon(
+                      isBookmarked
+                          ? Icons.bookmark_rounded
+                          : Icons.bookmark_border_rounded,
+                      color: isBookmarked ? AppColors.teal : AppColors.grayText,
+                      size: 22,
+                    ),
+                    onPressed: () {
+                      AppDataService.instance.toggleSaveProject(project);
+                      ScaffoldMessenger.of(context).hideCurrentSnackBar();
+                      ScaffoldMessenger.of(context).showSnackBar(
+                        SnackBar(
+                          content: Text(
+                            isBookmarked
+                                ? 'Removed from saved projects'
+                                : 'Project saved to bookmarks!',
+                          ),
+                          duration: const Duration(seconds: 1),
+                        ),
+                      );
+                    },
+                  ),
+                ],
+              ),
+            ],
+          ),
+        ),
+      ),
+    );
+  }
+
+  Widget _metaItem(IconData icon, String text, Color color) {
+    return Row(
+      mainAxisSize: MainAxisSize.min,
+      children: [
+        Icon(icon, size: 14, color: color),
+        const SizedBox(width: 4),
+        Text(
+          text,
+          style: GoogleFonts.inter(
+            fontSize: 12,
+            fontWeight: FontWeight.w500,
+            color: AppColors.grayText,
+          ),
+        ),
+      ],
     );
   }
 }

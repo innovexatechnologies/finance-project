@@ -98,8 +98,10 @@ class ShareService {
     final issuer = certificate['issuer']?.toString() ?? 'CampusConnect Partner';
     final date = certificate['date']?.toString() ?? '2026';
     final studentName =
-        AppDataService.instance.getProfile()['name']?.toString() ??
-            'Ahmed Khan';
+        (AppDataService.instance.userName.isNotEmpty
+            ? AppDataService.instance.userName
+            : (AppDataService.instance.getProfile()['name'] ?? 'Student'))
+            .toString();
 
     final buffer = StringBuffer();
     buffer.writeln('🎓 VERIFIED CERTIFICATE OF COMPLETION');

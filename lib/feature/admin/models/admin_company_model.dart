@@ -27,6 +27,7 @@ class CompanyAuditRecord {
 
 class AdminCompanyModel {
   final String id;
+  final String? userId;
   final String companyName;
   final String logoInitial;
   final String officialEmail;
@@ -47,11 +48,13 @@ class AdminCompanyModel {
   final String evidenceFileName;
   final String evidenceFileType;
   final String evidenceFileSize;
+  final String? evidenceUrl;
   final int postedProjectsCount;
   final List<CompanyAuditRecord> auditHistory;
 
   const AdminCompanyModel({
     required this.id,
+    this.userId,
     required this.companyName,
     required this.logoInitial,
     required this.officialEmail,
@@ -72,12 +75,14 @@ class AdminCompanyModel {
     required this.evidenceFileName,
     required this.evidenceFileType,
     required this.evidenceFileSize,
+    this.evidenceUrl,
     this.postedProjectsCount = 0,
     required this.auditHistory,
   });
 
   AdminCompanyModel copyWith({
     String? id,
+    String? userId,
     String? companyName,
     String? logoInitial,
     String? officialEmail,
@@ -95,14 +100,17 @@ class AdminCompanyModel {
     String? registrationDate,
     DateTime? registrationDateTime,
     String? suspensionReason,
+    bool clearSuspensionReason = false,
     String? evidenceFileName,
     String? evidenceFileType,
     String? evidenceFileSize,
+    String? evidenceUrl,
     int? postedProjectsCount,
     List<CompanyAuditRecord>? auditHistory,
   }) {
     return AdminCompanyModel(
       id: id ?? this.id,
+      userId: userId ?? this.userId,
       companyName: companyName ?? this.companyName,
       logoInitial: logoInitial ?? this.logoInitial,
       officialEmail: officialEmail ?? this.officialEmail,
@@ -119,10 +127,12 @@ class AdminCompanyModel {
       accountStatus: accountStatus ?? this.accountStatus,
       registrationDate: registrationDate ?? this.registrationDate,
       registrationDateTime: registrationDateTime ?? this.registrationDateTime,
-      suspensionReason: suspensionReason ?? this.suspensionReason,
+      suspensionReason:
+          clearSuspensionReason ? null : (suspensionReason ?? this.suspensionReason),
       evidenceFileName: evidenceFileName ?? this.evidenceFileName,
       evidenceFileType: evidenceFileType ?? this.evidenceFileType,
       evidenceFileSize: evidenceFileSize ?? this.evidenceFileSize,
+      evidenceUrl: evidenceUrl ?? this.evidenceUrl,
       postedProjectsCount: postedProjectsCount ?? this.postedProjectsCount,
       auditHistory: auditHistory ?? this.auditHistory,
     );

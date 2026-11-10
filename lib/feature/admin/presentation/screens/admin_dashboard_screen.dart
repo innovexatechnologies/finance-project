@@ -1,4 +1,5 @@
 import 'package:flutter/material.dart';
+import 'package:google_fonts/google_fonts.dart';
 import 'package:link_vibe/core/constants/app_colors.dart';
 import 'package:link_vibe/feature/admin/models/admin_dashboard_model.dart';
 import 'package:link_vibe/feature/admin/models/admin_user_model.dart';
@@ -7,6 +8,7 @@ import 'package:link_vibe/feature/admin/presentation/screens/admin_settings_scre
 import 'package:link_vibe/feature/admin/presentation/screens/application_monitoring_screen.dart';
 import 'package:link_vibe/feature/admin/presentation/screens/certificate_management_screen.dart';
 import 'package:link_vibe/feature/admin/presentation/screens/company_management_screen.dart';
+import 'package:link_vibe/feature/admin/presentation/screens/company_verifications_screen.dart';
 import 'package:link_vibe/feature/admin/presentation/screens/project_management_screen.dart';
 import 'package:link_vibe/feature/admin/presentation/screens/reports_analytics_screen.dart';
 import 'package:link_vibe/feature/admin/presentation/screens/student_management_screen.dart';
@@ -34,7 +36,7 @@ class _AdminDashboardScreenState extends State<AdminDashboardScreen> {
   final AdminDashboardService _dashboardService = AdminDashboardService();
   final GlobalKey<ScaffoldState> _scaffoldKey = GlobalKey<ScaffoldState>();
 
-  String _activeRouteId = 'dashboard';
+  static const String _activeRouteId = 'dashboard';
   bool _isSidebarCollapsed = false;
   String _searchQuery = '';
 
@@ -90,45 +92,34 @@ class _AdminDashboardScreenState extends State<AdminDashboardScreen> {
   }
 
   void _onRouteSelected(String routeId) {
-    setState(() => _activeRouteId = routeId);
     if (_scaffoldKey.currentState?.isDrawerOpen ?? false) {
       Navigator.pop(context); // Close mobile drawer
     }
+    if (routeId == _activeRouteId) return;
 
-    if (routeId == 'company_verifications' || routeId == 'company_management') {
-      Navigator.push(
-        context,
-        MaterialPageRoute(builder: (_) => const CompanyManagementScreen()),
-      );
+    Widget? target;
+    if (routeId == 'company_verifications') {
+      target = const CompanyVerificationsScreen();
+    } else if (routeId == 'company_management') {
+      target = const CompanyManagementScreen();
     } else if (routeId == 'student_verifications') {
-      Navigator.push(
-        context,
-        MaterialPageRoute(builder: (_) => const StudentManagementScreen()),
-      );
+      target = const StudentManagementScreen();
     } else if (routeId == 'projects_audit' || routeId == 'projects') {
-      Navigator.push(
-        context,
-        MaterialPageRoute(builder: (_) => const ProjectManagementScreen()),
-      );
+      target = const ProjectManagementScreen();
     } else if (routeId == 'compliance' || routeId == 'application_monitoring') {
-      Navigator.push(
-        context,
-        MaterialPageRoute(builder: (_) => const ApplicationMonitoringScreen()),
-      );
+      target = const ApplicationMonitoringScreen();
     } else if (routeId == 'audit_logs' || routeId == 'certificates') {
-      Navigator.push(
-        context,
-        MaterialPageRoute(builder: (_) => const CertificateManagementScreen()),
-      );
+      target = const CertificateManagementScreen();
     } else if (routeId == 'analytics' || routeId == 'reports') {
-      Navigator.push(
-        context,
-        MaterialPageRoute(builder: (_) => const ReportsAnalyticsScreen()),
-      );
+      target = const ReportsAnalyticsScreen();
     } else if (routeId == 'settings') {
-      Navigator.push(
+      target = const AdminSettingsScreen();
+    }
+
+    if (target != null) {
+      Navigator.pushReplacement(
         context,
-        MaterialPageRoute(builder: (_) => const AdminSettingsScreen()),
+        MaterialPageRoute(builder: (_) => target!),
       );
     }
   }
@@ -266,147 +257,220 @@ class _AdminDashboardScreenState extends State<AdminDashboardScreen> {
 
   // 1. Welcome Hero Header & Date Range Filter
   Widget _buildHeroHeaderSection() {
-    final admin = _authService.currentAdmin ??
-        const AdminUserModel(
-          id: 'adm_root',
-          fullName: 'Dr. Tariq Mahmood',
-          email: 'admin@campusconnect.edu.pk',
-          role: 'SUPER_ADMIN',
-          roleDisplayName: 'Super Administrator',
-          department: 'Executive Governance Council',
-          avatarInitial: 'TM',
-          permissions: ['all'],
-          lastLoginAt: 'Just now',
-        );
+    return ValueListenableBuilder<AdminUserModel?>(
+      valueListenable: _authService.currentAdminNotifier,
+      builder: (context, activeAdmin, _) {
+        final admin = activeAdmin ??
+            const AdminUserModel(
+              id: 'adm_root',
+              fullName: 'Executive Administrator',
+              email: 'admin@campusconnect.edu.pk',
+              role: 'SUPER_ADMIN',
+              roleDisplayName: 'Executive Super Administrator',
+              department: 'CampusConnect Governance Council',
+              avatarInitial: 'EA',
+              permissions: ['all'],
+              lastLoginAt: 'Active Session',
+            );
 
-    return Container(
-      width: double.infinity,
-      padding: const EdgeInsets.all(24),
-      decoration: BoxDecoration(
-        gradient: const LinearGradient(
-          colors: [AppColors.darkNavy, Color(0xFF1E3A8A)],
-          begin: Alignment.topLeft,
-          end: Alignment.bottomRight,
-        ),
-        borderRadius: BorderRadius.circular(16),
-        boxShadow: [
-          BoxShadow(
-            color: AppColors.darkNavy.withValues(alpha: 0.18),
-            blurRadius: 14,
-            offset: const Offset(0, 5),
-          ),
-        ],
-      ),
-      child: Column(
-        crossAxisAlignment: CrossAxisAlignment.start,
-        children: [
-          Row(
-            mainAxisAlignment: MainAxisAlignment.spaceBetween,
-            crossAxisAlignment: CrossAxisAlignment.start,
-            children: [
-              Expanded(
-                child: Column(
-                  crossAxisAlignment: CrossAxisAlignment.start,
-                  children: [
-                    Container(
-                      padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 4),
-                      decoration: BoxDecoration(
-                        color: AppColors.accentTeal.withValues(alpha: 0.2),
-                        borderRadius: BorderRadius.circular(6),
-                        border: Border.all(color: AppColors.accentTeal.withValues(alpha: 0.4)),
-                      ),
-                      child: Text(
-                        admin.roleDisplayName.toUpperCase(),
-                        style: const TextStyle(
-                          color: AppColors.accentTeal,
-                          fontSize: 10.5,
-                          fontWeight: FontWeight.bold,
-                          letterSpacing: 0.8,
-                        ),
-                      ),
-                    ),
-                    const SizedBox(height: 12),
-                    Text(
-                      'Welcome to CampusConnect Governance, ${admin.fullName}',
-                      style: const TextStyle(
-                        color: Colors.white,
-                        fontSize: 22,
-                        fontWeight: FontWeight.w800,
-                        letterSpacing: -0.3,
-                      ),
-                    ),
-                    const SizedBox(height: 6),
-                    const Text(
-                      'Complete administrative visibility over registered universities, corporate SECP verifications, and student project sprints.',
-                      style: TextStyle(color: Color(0xFFCBD5E1), fontSize: 13, height: 1.4),
-                    ),
-                  ],
-                ),
-              ),
-              const SizedBox(width: 16),
-              Container(
-                padding: const EdgeInsets.all(12),
-                decoration: BoxDecoration(
-                  color: Colors.white.withValues(alpha: 0.1),
-                  shape: BoxShape.circle,
-                ),
-                child: const Icon(Icons.shield_rounded, color: AppColors.accentTeal, size: 36),
+        return Container(
+          width: double.infinity,
+          padding: const EdgeInsets.all(24),
+          decoration: BoxDecoration(
+            gradient: const LinearGradient(
+              colors: [AppColors.darkNavy, Color(0xFF1E3A8A)],
+              begin: Alignment.topLeft,
+              end: Alignment.bottomRight,
+            ),
+            borderRadius: BorderRadius.circular(16),
+            boxShadow: [
+              BoxShadow(
+                color: AppColors.darkNavy.withValues(alpha: 0.18),
+                blurRadius: 14,
+                offset: const Offset(0, 5),
               ),
             ],
           ),
-          const SizedBox(height: 20),
-          const Divider(color: Colors.white12),
-          const SizedBox(height: 12),
-
-          // Date Range Selector
-          Row(
-            mainAxisAlignment: MainAxisAlignment.spaceBetween,
+          child: Column(
+            crossAxisAlignment: CrossAxisAlignment.start,
             children: [
-              const Row(
+              Row(
+                mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                crossAxisAlignment: CrossAxisAlignment.start,
                 children: [
-                  Icon(Icons.calendar_today_rounded, size: 14, color: AppColors.accentTeal),
-                  SizedBox(width: 6),
-                  Text(
-                    'Audit Timeframe:',
-                    style: TextStyle(color: Colors.white70, fontSize: 12, fontWeight: FontWeight.w600),
-                  ),
-                ],
-              ),
-              ValueListenableBuilder<String>(
-                valueListenable: _dashboardService.selectedDateRangeNotifier,
-                builder: (context, activeRange, _) {
-                  return Wrap(
-                    spacing: 8,
-                    children: _dateRanges.map((range) {
-                      final isSelected = activeRange == range;
-                      return InkWell(
-                        onTap: () => _dashboardService.changeDateRange(range),
-                        borderRadius: BorderRadius.circular(6),
-                        child: Container(
-                          padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 5),
+                  Expanded(
+                    child: Column(
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      children: [
+                        Container(
+                          padding: const EdgeInsets.symmetric(
+                            horizontal: 10,
+                            vertical: 4,
+                          ),
                           decoration: BoxDecoration(
-                            color: isSelected ? Colors.white : Colors.white.withValues(alpha: 0.1),
+                            color: AppColors.accentTeal.withValues(alpha: 0.2),
                             borderRadius: BorderRadius.circular(6),
+                            border: Border.all(
+                              color:
+                                  AppColors.accentTeal.withValues(alpha: 0.4),
+                            ),
                           ),
                           child: Text(
-                            range,
-                            style: TextStyle(
-                              color: isSelected ? AppColors.darkNavy : Colors.white,
-                              fontSize: 11,
-                              fontWeight: isSelected ? FontWeight.bold : FontWeight.normal,
+                            admin.roleDisplayName.toUpperCase(),
+                            style: GoogleFonts.inter(
+                              color: AppColors.accentTeal,
+                              fontSize: 10.5,
+                              fontWeight: FontWeight.bold,
+                              letterSpacing: 0.8,
                             ),
                           ),
                         ),
+                        const SizedBox(height: 12),
+                        Text(
+                          'Welcome to CampusConnect Governance, ${admin.fullName}',
+                          style: GoogleFonts.poppins(
+                            color: Colors.white,
+                            fontSize: 22,
+                            fontWeight: FontWeight.w800,
+                            letterSpacing: -0.3,
+                          ),
+                        ),
+                        const SizedBox(height: 6),
+                        Text(
+                          'Live administrative visibility over registered universities, company verifications, and student project sprints.',
+                          style: GoogleFonts.inter(
+                            color: const Color(0xFFCBD5E1),
+                            fontSize: 13,
+                            height: 1.4,
+                          ),
+                        ),
+                      ],
+                    ),
+                  ),
+                  const SizedBox(width: 12),
+                  Column(
+                    children: [
+                      Container(
+                        padding: const EdgeInsets.all(12),
+                        decoration: BoxDecoration(
+                          color: Colors.white.withValues(alpha: 0.1),
+                          shape: BoxShape.circle,
+                        ),
+                        child: const Icon(
+                          Icons.shield_rounded,
+                          color: AppColors.accentTeal,
+                          size: 32,
+                        ),
+                      ),
+                      const SizedBox(height: 8),
+                      IconButton(
+                        tooltip: 'Refresh Live Database',
+                        onPressed: () async {
+                          await _dashboardService.loadAllAdminData();
+                          if (!mounted) return;
+                          ScaffoldMessenger.of(this.context).showSnackBar(
+                            const SnackBar(
+                              content: Text(
+                                'Dashboard metrics synced with live database.',
+                              ),
+                              behavior: SnackBarBehavior.floating,
+                              duration: Duration(seconds: 2),
+                            ),
+                          );
+                        },
+                        icon: const Icon(
+                          Icons.refresh_rounded,
+                          color: Colors.white70,
+                          size: 20,
+                        ),
+                      ),
+                    ],
+                  ),
+                ],
+              ),
+              const SizedBox(height: 20),
+              const Divider(color: Colors.white12),
+              const SizedBox(height: 12),
+
+              // Date Range Selector (overflow-safe Wrap)
+              Wrap(
+                spacing: 12,
+                runSpacing: 10,
+                alignment: WrapAlignment.spaceBetween,
+                crossAxisAlignment: WrapCrossAlignment.center,
+                children: [
+                  Row(
+                    mainAxisSize: MainAxisSize.min,
+                    children: [
+                      const Icon(
+                        Icons.calendar_today_rounded,
+                        size: 14,
+                        color: AppColors.accentTeal,
+                      ),
+                      const SizedBox(width: 6),
+                      Text(
+                        'Audit Timeframe:',
+                        style: GoogleFonts.inter(
+                          color: Colors.white70,
+                          fontSize: 12,
+                          fontWeight: FontWeight.w600,
+                        ),
+                      ),
+                    ],
+                  ),
+                  ValueListenableBuilder<String>(
+                    valueListenable: _dashboardService.selectedDateRangeNotifier,
+                    builder: (context, activeRange, _) {
+                      return Wrap(
+                        spacing: 8,
+                        runSpacing: 6,
+                        children: _dateRanges.map((range) {
+                          final isSelected = activeRange == range;
+                          return InkWell(
+                            onTap: () =>
+                                _dashboardService.changeDateRange(range),
+                            borderRadius: BorderRadius.circular(6),
+                            child: Container(
+                              padding: const EdgeInsets.symmetric(
+                                horizontal: 10,
+                                vertical: 5,
+                              ),
+                              decoration: BoxDecoration(
+                                color: isSelected
+                                    ? Colors.white
+                                    : Colors.white.withValues(alpha: 0.1),
+                                borderRadius: BorderRadius.circular(6),
+                              ),
+                              child: Text(
+                                range,
+                                style: GoogleFonts.inter(
+                                  color: isSelected
+                                      ? AppColors.darkNavy
+                                      : Colors.white,
+                                  fontSize: 11,
+                                  fontWeight: isSelected
+                                      ? FontWeight.bold
+                                      : FontWeight.normal,
+                                ),
+                              ),
+                            ),
+                          );
+                        }).toList(),
                       );
-                    }).toList(),
-                  );
-                },
+                    },
+                  ),
+                ],
               ),
             ],
           ),
-        ],
-      ),
+        );
+      },
     );
+  }
+
+  String _formatTrend(double pct) {
+    if (pct == 0) return '0.0%';
+    return pct > 0 ? '+$pct%' : '$pct%';
   }
 
   // 2. 7 Statistics Cards Grid
@@ -414,7 +478,6 @@ class _AdminDashboardScreenState extends State<AdminDashboardScreen> {
     return LayoutBuilder(
       builder: (context, constraints) {
         final double width = constraints.maxWidth;
-        // Responsive columns: 4 on large desktop, 2 on tablet, 1 on mobile
         int crossAxisCount = 4;
         if (width < 600) {
           crossAxisCount = 1;
@@ -426,12 +489,12 @@ class _AdminDashboardScreenState extends State<AdminDashboardScreen> {
           StatMetricCard(
             title: 'Total Students',
             value: '${stats.totalStudents}',
-            subtitle: 'Verified university students',
+            subtitle: 'Registered university students',
             icon: Icons.school_rounded,
             iconColor: AppColors.primary,
             iconBgColor: AppColors.lightIceBlue,
-            trendText: '+${stats.studentGrowth}%',
-            isPositiveTrend: true,
+            trendText: _formatTrend(stats.studentGrowth),
+            isPositiveTrend: stats.studentGrowth >= 0,
           ),
           StatMetricCard(
             title: 'Total Companies',
@@ -440,13 +503,13 @@ class _AdminDashboardScreenState extends State<AdminDashboardScreen> {
             icon: Icons.domain_rounded,
             iconColor: AppColors.accentTeal,
             iconBgColor: AppColors.accentTeal.withValues(alpha: 0.12),
-            trendText: '+${stats.companyGrowth}%',
-            isPositiveTrend: true,
+            trendText: _formatTrend(stats.companyGrowth),
+            isPositiveTrend: stats.companyGrowth >= 0,
           ),
           StatMetricCard(
             title: 'Pending Verifications',
             value: '${stats.pendingVerifications}',
-            subtitle: 'SECP & student reviews awaiting',
+            subtitle: 'Company & student reviews awaiting',
             icon: Icons.domain_verification_rounded,
             iconColor: AppColors.warning,
             iconBgColor: AppColors.warningBg,
@@ -458,10 +521,10 @@ class _AdminDashboardScreenState extends State<AdminDashboardScreen> {
             value: '${stats.totalProjects}',
             subtitle: 'All created collaboration sprints',
             icon: Icons.assignment_outlined,
-            iconColor: const Color(0xFF6366F1), // Indigo
+            iconColor: const Color(0xFF6366F1),
             iconBgColor: const Color(0xFF6366F1).withValues(alpha: 0.12),
-            trendText: '+${stats.projectGrowth}%',
-            isPositiveTrend: true,
+            trendText: _formatTrend(stats.projectGrowth),
+            isPositiveTrend: stats.projectGrowth >= 0,
           ),
           StatMetricCard(
             title: 'Active Projects',
@@ -470,7 +533,7 @@ class _AdminDashboardScreenState extends State<AdminDashboardScreen> {
             icon: Icons.pending_actions_rounded,
             iconColor: AppColors.primary,
             iconBgColor: AppColors.lightIceBlue,
-            trendText: 'Live',
+            trendText: stats.activeProjects > 0 ? 'Live' : 'None',
             isPositiveTrend: true,
           ),
           StatMetricCard(
@@ -486,11 +549,11 @@ class _AdminDashboardScreenState extends State<AdminDashboardScreen> {
           StatMetricCard(
             title: 'Pending Reports',
             value: '${stats.pendingReports}',
-            subtitle: 'Milestone deliverables to audit',
+            subtitle: 'Compliance & flagged queues',
             icon: Icons.analytics_outlined,
-            iconColor: const Color(0xFFEC4899), // Pink
+            iconColor: const Color(0xFFEC4899),
             iconBgColor: const Color(0xFFEC4899).withValues(alpha: 0.12),
-            trendText: 'Audit Queue',
+            trendText: stats.pendingReports > 0 ? 'Audit Queue' : 'Clear',
             isPositiveTrend: stats.pendingReports < 5,
           ),
         ];
@@ -503,7 +566,7 @@ class _AdminDashboardScreenState extends State<AdminDashboardScreen> {
             crossAxisCount: crossAxisCount,
             crossAxisSpacing: 16,
             mainAxisSpacing: 16,
-            childAspectRatio: crossAxisCount == 1 ? 2.8 : 1.65,
+            mainAxisExtent: crossAxisCount == 1 ? 168 : 172,
           ),
           itemBuilder: (context, index) => cards[index],
         );
@@ -549,28 +612,46 @@ class _AdminDashboardScreenState extends State<AdminDashboardScreen> {
   // Security audit footnote
   Widget _buildAuditFootnote() {
     return Container(
+      width: double.infinity,
       padding: const EdgeInsets.all(16),
       decoration: BoxDecoration(
         color: Colors.white,
         borderRadius: BorderRadius.circular(12),
         border: Border.all(color: AppColors.border),
       ),
-      child: const Row(
-        mainAxisAlignment: MainAxisAlignment.spaceBetween,
+      child: Wrap(
+        spacing: 12,
+        runSpacing: 8,
+        alignment: WrapAlignment.spaceBetween,
+        crossAxisAlignment: WrapCrossAlignment.center,
         children: [
           Row(
+            mainAxisSize: MainAxisSize.min,
             children: [
-              Icon(Icons.lock_clock_outlined, size: 16, color: AppColors.textSecondary),
-              SizedBox(width: 8),
-              Text(
-                'CampusConnect Administration & Governance Console • Strictly Non-Financial Academic Realm',
-                style: TextStyle(fontSize: 11.5, color: AppColors.textSecondary),
+              const Icon(
+                Icons.lock_clock_outlined,
+                size: 16,
+                color: AppColors.textSecondary,
+              ),
+              const SizedBox(width: 8),
+              Flexible(
+                child: Text(
+                  'CampusConnect Governance Console • Strictly Non-Financial Academic Realm',
+                  style: GoogleFonts.inter(
+                    fontSize: 11.5,
+                    color: AppColors.textSecondary,
+                  ),
+                ),
               ),
             ],
           ),
           Text(
-            'Cryptographic Audit Hash: FIPS-180-4 Verified',
-            style: TextStyle(fontSize: 11, color: AppColors.textMuted, fontWeight: FontWeight.bold),
+            'Role-Based Governance & Live Database Audit',
+            style: GoogleFonts.inter(
+              fontSize: 11,
+              color: AppColors.textMuted,
+              fontWeight: FontWeight.bold,
+            ),
           ),
         ],
       ),

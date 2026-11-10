@@ -87,6 +87,8 @@ class AdminApplicationModel {
   final String proposalSummary;
   final List<String> skills;
   final String resumeFileName;
+  final String? resumeUrl;
+  final String? submittedWorkUrl;
   final ApplicationReportDetail? reportDetail;
   final List<String> investigationNotes;
   final List<InvestigationRecord> investigationHistory;
@@ -117,7 +119,9 @@ class AdminApplicationModel {
     this.flagType = SuspiciousFlagType.none,
     required this.proposalSummary,
     required this.skills,
-    this.resumeFileName = 'Student_Official_Resume.pdf',
+    this.resumeFileName = '',
+    this.resumeUrl,
+    this.submittedWorkUrl,
     this.reportDetail,
     this.investigationNotes = const [],
     this.investigationHistory = const [],
@@ -150,6 +154,8 @@ class AdminApplicationModel {
     String? proposalSummary,
     List<String>? skills,
     String? resumeFileName,
+    String? resumeUrl,
+    String? submittedWorkUrl,
     ApplicationReportDetail? reportDetail,
     List<String>? investigationNotes,
     List<InvestigationRecord>? investigationHistory,
@@ -181,6 +187,8 @@ class AdminApplicationModel {
       proposalSummary: proposalSummary ?? this.proposalSummary,
       skills: skills ?? this.skills,
       resumeFileName: resumeFileName ?? this.resumeFileName,
+      resumeUrl: resumeUrl ?? this.resumeUrl,
+      submittedWorkUrl: submittedWorkUrl ?? this.submittedWorkUrl,
       reportDetail: reportDetail ?? this.reportDetail,
       investigationNotes: investigationNotes ?? this.investigationNotes,
       investigationHistory: investigationHistory ?? this.investigationHistory,

@@ -26,8 +26,8 @@ class CompanyProfileModel {
     required this.city,
     required this.completeAddress,
     this.logoUrl,
-    this.logoInitial = 'TV',
-    this.isVerified = true,
+    this.logoInitial = 'CO',
+    this.isVerified = false,
     this.lastUpdated = 'Recently',
   });
 
@@ -66,21 +66,32 @@ class CompanyProfileModel {
   }
 
   factory CompanyProfileModel.fromJson(Map<String, dynamic> json) {
+    final name = (json['company_name'] ?? '').toString();
+    final derivedInitial = name.trim().length >= 2
+        ? name.trim().substring(0, 2).toUpperCase()
+        : (name.trim().isNotEmpty ? name.trim().toUpperCase() : 'CO');
     return CompanyProfileModel(
-      id: json['id'] ?? 'comp_01',
-      companyName: json['company_name'] ?? '',
-      industry: json['industry'] ?? 'Software & Cloud Services',
-      description: json['description'] ?? '',
-      officialEmail: json['official_email'] ?? '',
-      websiteUrl: json['website_url'] ?? '',
-      contactPersonName: json['contact_person_name'] ?? '',
-      phoneNumber: json['phone_number'] ?? '',
-      city: json['city'] ?? '',
-      completeAddress: json['complete_address'] ?? '',
-      logoUrl: json['logo_url'],
-      logoInitial: json['logo_initial'] ?? 'TV',
-      isVerified: json['is_verified'] ?? true,
-      lastUpdated: json['last_updated'] ?? 'Recently',
+      id: (json['id'] ?? '').toString(),
+      companyName: name,
+      industry: (json['industry'] ?? 'Software & Cloud Services').toString(),
+      description: (json['description'] ?? '').toString(),
+      officialEmail: (json['official_email'] ?? json['email'] ?? '').toString(),
+      websiteUrl: (json['website_url'] ?? json['website'] ?? '').toString(),
+      contactPersonName:
+          (json['contact_person_name'] ?? json['contact_person'] ?? '')
+              .toString(),
+      phoneNumber: (json['phone_number'] ?? json['phone'] ?? '').toString(),
+      city: (json['city'] ?? json['location'] ?? '').toString(),
+      completeAddress:
+          (json['complete_address'] ?? json['address'] ?? '').toString(),
+      logoUrl: json['logo_url']?.toString(),
+      logoInitial: (json['logo_initial']?.toString().trim().isNotEmpty == true)
+          ? json['logo_initial'].toString()
+          : derivedInitial,
+      isVerified: json['is_verified'] ??
+          (json['verification_status']?.toString() == 'verified'),
+      lastUpdated: (json['last_updated'] ?? json['updated_at'] ?? 'Recently')
+          .toString(),
     );
   }
 

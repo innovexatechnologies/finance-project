@@ -1,26 +1,28 @@
 import 'package:flutter/material.dart';
+import 'package:google_fonts/google_fonts.dart';
 import 'package:link_vibe/core/constants/app_colors.dart';
+import 'package:link_vibe/core/widgets/app_empty_state.dart';
 import 'package:link_vibe/feature/admin/presentation/screens/company_management_screen.dart';
+import 'package:link_vibe/feature/admin/presentation/screens/company_verifications_screen.dart';
 import 'package:link_vibe/feature/admin/presentation/screens/project_management_screen.dart';
 import 'package:link_vibe/feature/admin/presentation/screens/reports_analytics_screen.dart';
 import 'package:link_vibe/feature/admin/presentation/screens/student_management_screen.dart';
-import 'package:link_vibe/feature/admin/services/admin_dashboard_service.dart';
+import 'package:link_vibe/feature/admin/services/admin_auth_service.dart';
+import 'package:link_vibe/feature/admin/services/admin_verification_service.dart';
 import 'package:link_vibe/feature/company/models/company_verification_model.dart';
-import 'package:link_vibe/feature/company/services/company_profile_service.dart';
-import 'package:link_vibe/feature/company/services/company_verification_service.dart';
 
 /// Interactive Enterprise Quick Actions Bar
 class QuickActionsBar extends StatelessWidget {
   const QuickActionsBar({super.key});
 
-  void _openManageStudentsModal(BuildContext context) {
+  void _openManageStudents(BuildContext context) {
     Navigator.push(
       context,
       MaterialPageRoute(builder: (_) => const StudentManagementScreen()),
     );
   }
 
-  void _openManageCompaniesModal(BuildContext context) {
+  void _openManageCompanies(BuildContext context) {
     Navigator.push(
       context,
       MaterialPageRoute(builder: (_) => const CompanyManagementScreen()),
@@ -28,8 +30,10 @@ class QuickActionsBar extends StatelessWidget {
   }
 
   void _openReviewVerificationsModal(BuildContext context) {
-    final verif = CompanyVerificationService().currentVerification;
-    final company = CompanyProfileService().currentProfile;
+    final pendingList = AdminVerificationService()
+        .allVerifications
+        .where((v) => v.status == VerificationStatus.pending)
+        .toList();
 
     showModalBottomSheet(
       context: context,
@@ -37,165 +41,273 @@ class QuickActionsBar extends StatelessWidget {
       shape: const RoundedRectangleBorder(
         borderRadius: BorderRadius.vertical(top: Radius.circular(20)),
       ),
-      builder: (ctx) => StatefulBuilder(
-        builder: (context, setModalState) {
-          return Container(
-            padding: const EdgeInsets.all(24),
-            child: Column(
-              mainAxisSize: MainAxisSize.min,
-              crossAxisAlignment: CrossAxisAlignment.start,
+      builder: (ctx) => Container(
+        padding: const EdgeInsets.all(24),
+        child: Column(
+          mainAxisSize: MainAxisSize.min,
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            Row(
+              mainAxisAlignment: MainAxisAlignment.spaceBetween,
               children: [
-                Row(
-                  mainAxisAlignment: MainAxisAlignment.spaceBetween,
-                  children: [
-                    Row(
-                      children: [
-                        Container(
-                          padding: const EdgeInsets.all(8),
-                          decoration: BoxDecoration(
-                            color: AppColors.warning.withValues(alpha: 0.12),
-                            borderRadius: BorderRadius.circular(10),
-                          ),
-                          child: const Icon(Icons.domain_verification_rounded, color: AppColors.warning, size: 22),
+                Expanded(
+                  child: Row(
+                    children: [
+                      Container(
+                        padding: const EdgeInsets.all(8),
+                        decoration: BoxDecoration(
+                          color: AppColors.warning.withValues(alpha: 0.12),
+                          borderRadius: BorderRadius.circular(10),
                         ),
-                        const SizedBox(width: 12),
-                        const Column(
+                        child: const Icon(
+                          Icons.domain_verification_rounded,
+                          color: AppColors.warning,
+                          size: 22,
+                        ),
+                      ),
+                      const SizedBox(width: 12),
+                      Expanded(
+                        child: Column(
                           crossAxisAlignment: CrossAxisAlignment.start,
                           children: [
                             Text(
                               'Corporate Verification Review Desk',
-                              style: TextStyle(
-                                fontSize: 18,
+                              style: GoogleFonts.poppins(
+                                fontSize: 17,
                                 fontWeight: FontWeight.bold,
                                 color: AppColors.darkNavy,
                               ),
                             ),
                             Text(
-                              'Authenticate submitted SECP & NTN documents',
-                              style: TextStyle(fontSize: 12, color: AppColors.textSecondary),
+                              'Authenticate submitted business & SECP documents',
+                              style: GoogleFonts.inter(
+                                fontSize: 12,
+                                color: AppColors.textSecondary,
+                              ),
                             ),
                           ],
                         ),
-                      ],
-                    ),
-                    IconButton(
-                      icon: const Icon(Icons.close_rounded),
-                      onPressed: () => Navigator.pop(ctx),
-                    ),
-                  ],
-                ),
-                const SizedBox(height: 16),
-                const Divider(),
-                const SizedBox(height: 12),
-
-                // Company Card
-                Container(
-                  padding: const EdgeInsets.all(16),
-                  decoration: BoxDecoration(
-                    color: AppColors.background,
-                    borderRadius: BorderRadius.circular(12),
-                    border: Border.all(color: AppColors.border),
+                      ),
+                    ],
                   ),
-                  child: Column(
+                ),
+                IconButton(
+                  icon: const Icon(Icons.close_rounded),
+                  onPressed: () => Navigator.pop(ctx),
+                ),
+              ],
+            ),
+            const SizedBox(height: 16),
+            const Divider(),
+            const SizedBox(height: 12),
+
+            if (pendingList.isEmpty) ...[
+              const AppEmptyState(
+                compact: true,
+                icon: Icons.verified_outlined,
+                iconColor: AppColors.success,
+                title: 'All Company Verifications Reviewed',
+                subtitle:
+                    'There are currently no pending corporate verification submissions awaiting sign-off.',
+              ),
+              const SizedBox(height: 16),
+              SizedBox(
+                width: double.infinity,
+                child: ElevatedButton.icon(
+                  onPressed: () {
+                    Navigator.pop(ctx);
+                    Navigator.push(
+                      context,
+                      MaterialPageRoute(
+                        builder: (_) => const CompanyVerificationsScreen(),
+                      ),
+                    );
+                  },
+                  icon: const Icon(Icons.list_alt_rounded, size: 18),
+                  label: const Text('Open Full Verification Desk'),
+                ),
+              ),
+            ] else ...[
+              Builder(
+                builder: (_) {
+                  final item = pendingList.first;
+                  final reviewer = AdminAuthService().currentAdmin?.fullName ??
+                      'Executive Administrator';
+
+                  return Column(
                     crossAxisAlignment: CrossAxisAlignment.start,
                     children: [
-                      Row(
-                        mainAxisAlignment: MainAxisAlignment.spaceBetween,
-                        children: [
-                          Text(
-                            company.companyName,
-                            style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 15),
-                          ),
-                          Container(
-                            padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 3),
-                            decoration: BoxDecoration(
-                              color: verif.status == VerificationStatus.verified
-                                  ? AppColors.successBg
-                                  : AppColors.warningBg,
-                              borderRadius: BorderRadius.circular(6),
+                      Container(
+                        padding: const EdgeInsets.all(16),
+                        decoration: BoxDecoration(
+                          color: AppColors.background,
+                          borderRadius: BorderRadius.circular(12),
+                          border: Border.all(color: AppColors.border),
+                        ),
+                        child: Column(
+                          crossAxisAlignment: CrossAxisAlignment.start,
+                          children: [
+                            Row(
+                              mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                              children: [
+                                Expanded(
+                                  child: Text(
+                                    item.companyName,
+                                    style: GoogleFonts.poppins(
+                                      fontWeight: FontWeight.bold,
+                                      fontSize: 15,
+                                      color: AppColors.darkNavy,
+                                    ),
+                                  ),
+                                ),
+                                Container(
+                                  padding: const EdgeInsets.symmetric(
+                                    horizontal: 8,
+                                    vertical: 3,
+                                  ),
+                                  decoration: BoxDecoration(
+                                    color: AppColors.warningBg,
+                                    borderRadius: BorderRadius.circular(6),
+                                  ),
+                                  child: const Text(
+                                    'PENDING REVIEW',
+                                    style: TextStyle(
+                                      fontSize: 11,
+                                      fontWeight: FontWeight.bold,
+                                      color: Color(0xFF92400E),
+                                    ),
+                                  ),
+                                ),
+                              ],
                             ),
-                            child: Text(
-                              verif.status == VerificationStatus.verified ? 'VERIFIED' : 'PENDING REVIEW',
-                              style: TextStyle(
-                                fontSize: 11,
-                                fontWeight: FontWeight.bold,
-                                color: verif.status == VerificationStatus.verified
-                                    ? const Color(0xFF166534)
-                                    : const Color(0xFF92400E),
+                            const SizedBox(height: 8),
+                            Text(
+                              'Official Email: ${item.officialEmail.isNotEmpty ? item.officialEmail : "Not provided"}',
+                              style: GoogleFonts.inter(fontSize: 12.5),
+                            ),
+                            Text(
+                              'Website: ${item.websiteUrl.isNotEmpty ? item.websiteUrl : "Not provided"}',
+                              style: GoogleFonts.inter(fontSize: 12.5),
+                            ),
+                            Text(
+                              'Attached Evidence: ${item.documentName.isNotEmpty ? item.documentName : "No evidence file attached"}',
+                              style: GoogleFonts.inter(
+                                fontSize: 12.5,
+                                fontWeight: FontWeight.w600,
+                                color: AppColors.primary,
                               ),
+                            ),
+                          ],
+                        ),
+                      ),
+                      const SizedBox(height: 20),
+                      Row(
+                        children: [
+                          Expanded(
+                            child: OutlinedButton.icon(
+                              style: OutlinedButton.styleFrom(
+                                foregroundColor: AppColors.error,
+                                side: const BorderSide(color: AppColors.error),
+                                padding:
+                                    const EdgeInsets.symmetric(vertical: 14),
+                              ),
+                              icon: const Icon(Icons.cancel_outlined, size: 18),
+                              label: const Text('Reject with Comments'),
+                              onPressed: () {
+                                Navigator.pop(ctx);
+                                _promptRejectFeedback(
+                                  context,
+                                  verificationId: item.id,
+                                  companyName: item.companyName,
+                                  reviewerName: reviewer,
+                                );
+                              },
+                            ),
+                          ),
+                          const SizedBox(width: 12),
+                          Expanded(
+                            child: ElevatedButton.icon(
+                              style: ElevatedButton.styleFrom(
+                                backgroundColor: AppColors.success,
+                                foregroundColor: Colors.white,
+                                padding:
+                                    const EdgeInsets.symmetric(vertical: 14),
+                              ),
+                              icon: const Icon(
+                                Icons.check_circle_outline,
+                                size: 18,
+                              ),
+                              label: const Text('Approve Partner'),
+                              onPressed: () async {
+                                final ok = await AdminVerificationService()
+                                    .approveCompany(
+                                  verificationId: item.id,
+                                  reviewerName: reviewer,
+                                );
+                                if (!context.mounted) return;
+                                Navigator.pop(ctx);
+                                ScaffoldMessenger.of(context).showSnackBar(
+                                  SnackBar(
+                                    content: Text(
+                                      ok
+                                          ? '${item.companyName} successfully verified!'
+                                          : 'Unable to approve verification.',
+                                    ),
+                                    backgroundColor: ok
+                                        ? AppColors.success
+                                        : AppColors.error,
+                                    behavior: SnackBarBehavior.floating,
+                                  ),
+                                );
+                              },
                             ),
                           ),
                         ],
                       ),
-                      const SizedBox(height: 6),
-                      Text('Official Email: ${verif.officialEmail}', style: const TextStyle(fontSize: 12)),
-                      Text('Website: ${verif.websiteUrl ?? 'https://techvistainnovations.com'}', style: const TextStyle(fontSize: 12)),
-                      Text('Attached Evidence: ${verif.businessEvidenceFileName ?? 'SECP_Certificate_2026.pdf'}', style: const TextStyle(fontSize: 12, fontWeight: FontWeight.w600, color: AppColors.primary)),
-                    ],
-                  ),
-                ),
-                const SizedBox(height: 24),
-
-                // Direct Action Buttons
-                Row(
-                  children: [
-                    Expanded(
-                      child: OutlinedButton.icon(
-                        style: OutlinedButton.styleFrom(
-                          foregroundColor: AppColors.error,
-                          side: const BorderSide(color: AppColors.error),
-                          padding: const EdgeInsets.symmetric(vertical: 14),
-                        ),
-                        icon: const Icon(Icons.cancel_outlined, size: 18),
-                        label: const Text('Reject with Comments'),
-                        onPressed: () async {
-                          Navigator.pop(ctx);
-                          _promptRejectFeedback(context);
-                        },
-                      ),
-                    ),
-                    const SizedBox(width: 12),
-                    Expanded(
-                      child: ElevatedButton.icon(
-                        style: ElevatedButton.styleFrom(
-                          backgroundColor: AppColors.success,
-                          foregroundColor: Colors.white,
-                          padding: const EdgeInsets.symmetric(vertical: 14),
-                        ),
-                        icon: const Icon(Icons.check_circle_outline, size: 18),
-                        label: const Text('Approve & Verify Partner'),
-                        onPressed: () async {
-                          await AdminDashboardService().quickApproveCompanyVerification();
-                          if (!context.mounted) return;
-                          Navigator.pop(ctx);
-                          ScaffoldMessenger.of(context).showSnackBar(
-                            const SnackBar(
-                              content: Text('Company successfully verified! Updated in platform directory.'),
-                              backgroundColor: AppColors.success,
-                              behavior: SnackBarBehavior.floating,
+                      if (pendingList.length > 1) ...[
+                        const SizedBox(height: 10),
+                        Center(
+                          child: TextButton(
+                            onPressed: () {
+                              Navigator.pop(ctx);
+                              Navigator.push(
+                                context,
+                                MaterialPageRoute(
+                                  builder: (_) =>
+                                      const CompanyVerificationsScreen(),
+                                ),
+                              );
+                            },
+                            child: Text(
+                              'View all ${pendingList.length} pending verifications →',
                             ),
-                          );
-                        },
-                      ),
-                    ),
-                  ],
-                ),
-                const SizedBox(height: 16),
-              ],
-            ),
-          );
-        },
+                          ),
+                        ),
+                      ],
+                    ],
+                  );
+                },
+              ),
+            ],
+            const SizedBox(height: 12),
+          ],
+        ),
       ),
     );
   }
 
-  void _promptRejectFeedback(BuildContext context) {
+  void _promptRejectFeedback(
+    BuildContext context, {
+    required String verificationId,
+    required String companyName,
+    required String reviewerName,
+  }) {
     final feedbackController = TextEditingController();
 
     showDialog(
       context: context,
       builder: (dialogCtx) => AlertDialog(
-        title: const Text('Provide Rejection Reason'),
+        title: Text('Reject Verification: $companyName'),
         content: TextField(
           controller: feedbackController,
           decoration: const InputDecoration(
@@ -210,17 +322,29 @@ class QuickActionsBar extends StatelessWidget {
             child: const Text('Cancel'),
           ),
           ElevatedButton(
-            style: ElevatedButton.styleFrom(backgroundColor: AppColors.error, foregroundColor: Colors.white),
+            style: ElevatedButton.styleFrom(
+              backgroundColor: AppColors.error,
+              foregroundColor: Colors.white,
+            ),
             onPressed: () async {
               final feedback = feedbackController.text.trim();
               if (feedback.isEmpty) return;
 
-              await AdminDashboardService().quickRejectCompanyVerification(feedback);
+              final ok = await AdminVerificationService().rejectCompany(
+                verificationId: verificationId,
+                feedback: feedback,
+                reviewerName: reviewerName,
+              );
               if (!dialogCtx.mounted) return;
               Navigator.pop(dialogCtx);
+              if (!context.mounted) return;
               ScaffoldMessenger.of(context).showSnackBar(
-                const SnackBar(
-                  content: Text('Verification rejected with feedback.'),
+                SnackBar(
+                  content: Text(
+                    ok
+                        ? 'Verification rejected with feedback.'
+                        : 'Unable to submit rejection.',
+                  ),
                   backgroundColor: AppColors.error,
                   behavior: SnackBarBehavior.floating,
                 ),
@@ -233,14 +357,14 @@ class QuickActionsBar extends StatelessWidget {
     );
   }
 
-  void _openManageProjectsModal(BuildContext context) {
+  void _openManageProjects(BuildContext context) {
     Navigator.push(
       context,
       MaterialPageRoute(builder: (_) => const ProjectManagementScreen()),
     );
   }
 
-  void _openViewReportsModal(BuildContext context) {
+  void _openViewReports(BuildContext context) {
     Navigator.push(
       context,
       MaterialPageRoute(builder: (_) => const ReportsAnalyticsScreen()),
@@ -255,33 +379,28 @@ class QuickActionsBar extends StatelessWidget {
         color: Colors.white,
         borderRadius: BorderRadius.circular(16),
         border: Border.all(color: AppColors.border),
-        boxShadow: [
-          BoxShadow(
-            color: Colors.black.withValues(alpha: 0.03),
-            blurRadius: 8,
-            offset: const Offset(0, 2),
-          ),
-        ],
+        boxShadow: AppColors.softShadow,
       ),
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
-          const Text(
+          Text(
             'Administrative Governance Actions',
-            style: TextStyle(
+            style: GoogleFonts.poppins(
               fontSize: 15,
               fontWeight: FontWeight.bold,
               color: AppColors.darkNavy,
             ),
           ),
           const SizedBox(height: 4),
-          const Text(
+          Text(
             'Direct access to platform registries, verification desks, and compliance logs',
-            style: TextStyle(fontSize: 12, color: AppColors.textSecondary),
+            style: GoogleFonts.inter(
+              fontSize: 12,
+              color: AppColors.textSecondary,
+            ),
           ),
           const SizedBox(height: 16),
-
-          // 5 Quick Action Buttons
           Wrap(
             spacing: 12,
             runSpacing: 12,
@@ -291,14 +410,14 @@ class QuickActionsBar extends StatelessWidget {
                 icon: Icons.school_outlined,
                 color: AppColors.primary,
                 bgColor: AppColors.lightIceBlue,
-                onTap: () => _openManageStudentsModal(context),
+                onTap: () => _openManageStudents(context),
               ),
               _buildActionButton(
                 label: 'Manage Companies',
                 icon: Icons.domain_outlined,
                 color: AppColors.accentTeal,
                 bgColor: AppColors.accentTeal.withValues(alpha: 0.12),
-                onTap: () => _openManageCompaniesModal(context),
+                onTap: () => _openManageCompanies(context),
               ),
               _buildActionButton(
                 label: 'Review Verifications',
@@ -310,16 +429,16 @@ class QuickActionsBar extends StatelessWidget {
               _buildActionButton(
                 label: 'Manage Projects',
                 icon: Icons.assignment_outlined,
-                color: const Color(0xFF6366F1), // Indigo
-                bgColor: const Color(0xFF6366F1).withValues(alpha: 0.12),
-                onTap: () => _openManageProjectsModal(context),
+                color: AppColors.indigoAccent,
+                bgColor: AppColors.indigoAccent.withValues(alpha: 0.12),
+                onTap: () => _openManageProjects(context),
               ),
               _buildActionButton(
                 label: 'View Reports',
                 icon: Icons.analytics_outlined,
                 color: AppColors.success,
                 bgColor: AppColors.successBg,
-                onTap: () => _openViewReportsModal(context),
+                onTap: () => _openViewReports(context),
               ),
             ],
           ),
@@ -348,12 +467,15 @@ class QuickActionsBar extends StatelessWidget {
       ),
       icon: Container(
         padding: const EdgeInsets.all(5),
-        decoration: BoxDecoration(color: bgColor, borderRadius: BorderRadius.circular(6)),
+        decoration: BoxDecoration(
+          color: bgColor,
+          borderRadius: BorderRadius.circular(6),
+        ),
         child: Icon(icon, size: 16, color: color),
       ),
       label: Text(
         label,
-        style: TextStyle(
+        style: GoogleFonts.inter(
           color: AppColors.darkNavy,
           fontSize: 12.5,
           fontWeight: FontWeight.w600,

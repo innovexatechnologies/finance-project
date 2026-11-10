@@ -1,17 +1,21 @@
 import 'dart:convert';
+import 'package:flutter/foundation.dart';
 import 'package:flutter/scheduler.dart';
-import 'package:flutter/widgets.dart';
 import 'package:shared_preferences/shared_preferences.dart';
-import 'package:supabase_flutter/supabase_flutter.dart';
+import 'package:link_vibe/core/services/supabase_helper.dart';
 
-/// Central Persistent Storage & Data Management Service for CampusConnect
+/// Central Persistent & Supabase-Synchronized Data Service for CampusConnect.
 class AppDataService extends ChangeNotifier {
   AppDataService._internal();
   static final AppDataService instance = AppDataService._internal();
 
+  /// Reactive counter incremented on sync/data updates for ValueListenableBuilder screens.
+  final ValueNotifier<int> dataVersion = ValueNotifier<int>(0);
+
   void _safeNotifyListeners() {
+    dataVersion.value++;
     try {
-      final binding = WidgetsBinding.instance;
+      final binding = SchedulerBinding.instance;
       if (binding.schedulerPhase != SchedulerPhase.idle) {
         binding.addPostFrameCallback((_) {
           notifyListeners();
@@ -26,22 +30,29 @@ class AppDataService extends ChangeNotifier {
 
   SharedPreferences? _prefs;
 
-  // Cache in memory for instant synchronous UI reads
+  // Session state
   bool _isLoggedIn = false;
   String _userRole = 'Student';
   String _userEmail = '';
   String _userName = '';
   String _userId = '';
+  bool _isSyncing = false;
+  String? _lastSyncError;
 
+  // Entity caches (empty until fetched from Supabase or created by user)
   List<Map<String, dynamic>> _savedProjects = [];
   List<Map<String, dynamic>> _applications = [];
-  List<Map<String, dynamic>> _customProjects = [];
+  List<Map<String, dynamic>> _projects = [];
   Map<String, Map<String, dynamic>> _workSubmissions = {};
   Map<String, dynamic> _profile = {};
   List<String> _skills = [];
   List<Map<String, dynamic>> _notifications = [];
   List<Map<String, dynamic>> _certificates = [];
-  final Map<String, bool> _notificationPreferences = {
+  List<Map<String, dynamic>> _conversations = [];
+  List<Map<String, dynamic>> _supportTickets = [];
+  Map<String, Map<String, dynamic>> _userAccounts = {};
+
+  static const Map<String, bool> _defaultNotificationPrefs = {
     'pushNotifications': true,
     'emailAlerts': true,
     'newProjectsAlert': true,
@@ -49,18 +60,22 @@ class AppDataService extends ChangeNotifier {
     'chatMessages': true,
     'deadlineReminders': true,
   };
-  final Map<String, bool> _privacySettings = {
+
+  static const Map<String, bool> _defaultPrivacySettings = {
     'profileVisibility': true,
     'showEmail': true,
     'showPhone': false,
     'publicPortfolio': true,
     'allowCompanyMessages': true,
   };
-  List<Map<String, dynamic>> _conversations = [];
-  List<Map<String, dynamic>> _supportTickets = [];
-  Map<String, Map<String, dynamic>> _userAccounts = {};
 
-  // Keys
+  final Map<String, bool> _notificationPreferences =
+      Map<String, bool>.from(_defaultNotificationPrefs);
+
+  final Map<String, bool> _privacySettings =
+      Map<String, bool>.from(_defaultPrivacySettings);
+
+  // SharedPreferences keys
   static const _kIsLoggedIn = 'cc_is_logged_in_v1';
   static const _kUserRole = 'cc_user_role_v1';
   static const _kUserEmail = 'cc_user_email_v1';
@@ -80,118 +95,10 @@ class AppDataService extends ChangeNotifier {
   static const _kSupportTickets = 'cc_support_tickets_v1';
   static const _kUserAccounts = 'cc_user_accounts_v1';
 
-  // Default seed projects matching user document and image
-  static final List<Map<String, dynamic>> defaultSeedProjects = [
-    {
-      'id': 'seed_1',
-      'title': 'Market Research on AI Tools',
-      'company': 'Google',
-      'category': 'Research',
-      'duration': '3-5 days',
-      'workMode': 'Remote',
-      'status': 'Open',
-      'stipend': '15-30K',
-      'description':
-          'Conduct comprehensive market research on the latest enterprise AI tools and compile an analytical executive summary.',
-      'skills': ['Research', 'Analysis', 'Report Writing'],
-      'isVerified': true,
-      'createdAt': '2026-11-06T10:00:00.000Z',
-    },
-    {
-      'id': 'seed_2',
-      'title': 'Social Media Content Creation',
-      'company': 'Meta',
-      'category': 'Marketing',
-      'duration': '2-4 days',
-      'workMode': 'Remote',
-      'status': 'Open',
-      'stipend': '12-25K',
-      'description':
-          'Design viral engaging banners and write creative copy for international developer community campaigns.',
-      'skills': ['Copywriting', 'Canva', 'Social Media'],
-      'isVerified': true,
-      'createdAt': '2026-11-05T12:00:00.000Z',
-    },
-    {
-      'id': 'seed_3',
-      'title': 'UI/UX Design for Web App',
-      'company': 'Microsoft',
-      'category': 'Design',
-      'duration': '5-7 days',
-      'workMode': 'Remote',
-      'status': 'Open',
-      'stipend': '20-40K',
-      'description':
-          'Create high-fidelity wireframes and prototype components using Figma for cloud service management portal.',
-      'skills': ['Figma', 'UI/UX', 'Wireframing'],
-      'isVerified': true,
-      'createdAt': '2026-11-04T08:00:00.000Z',
-    },
-    {
-      'id': 'seed_4',
-      'title': 'Flutter App Mobile UI Development',
-      'company': 'TechVista',
-      'category': 'Development',
-      'duration': '4-6 days',
-      'workMode': 'Remote',
-      'status': 'Open',
-      'stipend': '25-50K',
-      'description':
-          'Implement pixel-perfect responsive Flutter screens and integrate REST API endpoints with smooth state handling.',
-      'skills': ['Flutter', 'Dart', 'REST APIs'],
-      'isVerified': true,
-      'createdAt': '2026-11-03T15:00:00.000Z',
-    },
-    {
-      'id': 'seed_5',
-      'title': 'Product Analysis Report',
-      'company': 'Amazon',
-      'category': 'Research',
-      'duration': '3-6 days',
-      'workMode': 'Remote',
-      'status': 'Open',
-      'stipend': '18-35K',
-      'description':
-          'Analyze logistics bottlenecks and produce strategic operational efficiency recommendations for fulfillment hubs.',
-      'skills': ['Data Analysis', 'Excel', 'Problem Solving'],
-      'isVerified': true,
-      'createdAt': '2026-11-02T11:00:00.000Z',
-    },
-    {
-      'id': 'seed_6',
-      'title': 'Python Data Pipeline Optimization',
-      'company': 'CodeCraft',
-      'category': 'Data Analysis',
-      'duration': '3-5 days',
-      'workMode': 'Remote',
-      'status': 'Open',
-      'stipend': '20-35K',
-      'description':
-          'Clean, transform and process CSV datasets using Pandas and NumPy for automated reporting pipelines.',
-      'skills': ['Python', 'Pandas', 'Data Cleaning'],
-      'isVerified': true,
-      'createdAt': '2026-11-01T09:00:00.000Z',
-    },
-  ];
+  bool get isSyncing => _isSyncing;
+  String? get lastSyncError => _lastSyncError;
 
-  static final List<Map<String, dynamic>> defaultSeedCertificates = [
-    {
-      'id': 'CC-2026-8841',
-      'title': 'Project Completion Certificate',
-      'project': 'Barcode Scanning Mobile Utility',
-      'issuer': 'CampusConnect & CodeCraft Solutions',
-      'date': 'March 15, 2026',
-    },
-    {
-      'id': 'CC-2026-7732',
-      'title': 'Project Completion Certificate',
-      'project': 'Flutter App Mobile UI Development',
-      'issuer': 'CampusConnect & TechVista Corp',
-      'date': 'Feb 28, 2026',
-    },
-  ];
-
-  /// Initialize persistent storage and load cached data
+  /// Initialize persistent storage and load locally cached session state.
   Future<void> init() async {
     _prefs = await SharedPreferences.getInstance();
     _loadAllFromPrefs();
@@ -200,115 +107,37 @@ class AppDataService extends ChangeNotifier {
   void _loadAllFromPrefs() {
     if (_prefs == null) return;
 
-    // 0. Auth Session Persistence
     _isLoggedIn = _prefs!.getBool(_kIsLoggedIn) ?? false;
     _userRole = _prefs!.getString(_kUserRole) ?? 'Student';
     _userEmail = _prefs!.getString(_kUserEmail) ?? '';
     _userName = _prefs!.getString(_kUserName) ?? '';
     _userId = _prefs!.getString(_kUserId) ?? '';
 
-    // Check Supabase session
-    try {
-      final sbUser = Supabase.instance.client.auth.currentUser;
-      if (sbUser != null) {
-        _isLoggedIn = true;
-        _userId = sbUser.id;
-        if (sbUser.email != null && sbUser.email!.isNotEmpty) {
-          _userEmail = sbUser.email!;
-        }
-        final metaRole = sbUser.userMetadata?['user_type']?.toString();
-        if (metaRole != null && metaRole.isNotEmpty) {
-          _userRole = metaRole;
-        }
-        final metaName = sbUser.userMetadata?['name']?.toString();
-        if (metaName != null && metaName.isNotEmpty) {
-          _userName = metaName;
-          _profile['name'] = metaName;
-        }
-        final metaUni = sbUser.userMetadata?['university']?.toString();
-        if (metaUni != null && metaUni.isNotEmpty) {
-          _profile['university'] = metaUni;
-        }
-      }
-    } catch (_) {}
-
     // 1. Saved Projects
-    final savedJson = _prefs!.getString(_kSavedProjects);
-    if (savedJson != null) {
-      try {
-        final List decoded = jsonDecode(savedJson);
-        _savedProjects = decoded.map((e) => Map<String, dynamic>.from(e)).toList();
-      } catch (e) {
-        debugPrint('Error loading saved projects: $e');
-      }
-    }
+    _savedProjects = _decodeList(_prefs!.getString(_kSavedProjects));
 
     // 2. Applications
-    final appsJson = _prefs!.getString(_kApplications);
-    if (appsJson != null) {
-      try {
-        final List decoded = jsonDecode(appsJson);
-        _applications = decoded.map((e) => Map<String, dynamic>.from(e)).toList();
-      } catch (e) {
-        debugPrint('Error loading applications: $e');
-      }
-    } else {
-      // Default seed applications
-      _applications = [
-        {
-          'id': 'app_1',
-          'projectId': 'seed_4',
-          'title': 'Flutter App Mobile UI Development',
-          'company': 'TechVista',
-          'status': 'In Progress',
-          'appliedDate': 'Nov 04, 2026',
-          'timelineStep': 2,
-        },
-        {
-          'id': 'app_2',
-          'projectId': 'seed_1',
-          'title': 'Market Research on AI Tools',
-          'company': 'Google',
-          'status': 'Shortlisted',
-          'appliedDate': 'Nov 06, 2026',
-          'timelineStep': 2,
-        },
-        {
-          'id': 'app_3',
-          'projectId': 'seed_prev',
-          'title': 'Barcode Scanning Mobile Utility',
-          'company': 'CodeCraft Solutions',
-          'status': 'Completed',
-          'appliedDate': 'Nov 02, 2026',
-          'timelineStep': 3,
-        },
-      ];
-    }
+    _applications = _decodeList(_prefs!.getString(_kApplications));
 
-    // 3. Custom Projects added by user / company
-    final customProjectsJson = _prefs!.getString(_kCustomProjects);
-    if (customProjectsJson != null) {
-      try {
-        final List decoded = jsonDecode(customProjectsJson);
-        _customProjects = decoded.map((e) => Map<String, dynamic>.from(e)).toList();
-      } catch (e) {
-        debugPrint('Error loading custom projects: $e');
-      }
-    }
+    // 3. Projects
+    _projects = _decodeList(_prefs!.getString(_kCustomProjects));
 
     // 4. Submissions
+    _workSubmissions = {};
     final subJson = _prefs!.getString(_kSubmissions);
     if (subJson != null) {
       try {
         final Map decoded = jsonDecode(subJson);
-        _workSubmissions = decoded.map((k, v) =>
-            MapEntry(k.toString(), Map<String, dynamic>.from(v as Map)));
+        _workSubmissions = decoded.map(
+          (k, v) => MapEntry(k.toString(), Map<String, dynamic>.from(v as Map)),
+        );
       } catch (e) {
         debugPrint('Error loading submissions: $e');
       }
     }
 
     // 5. Profile
+    _profile = {};
     final profileJson = _prefs!.getString(_kProfile);
     if (profileJson != null) {
       try {
@@ -316,143 +145,77 @@ class AppDataService extends ChangeNotifier {
       } catch (e) {
         debugPrint('Error loading profile: $e');
       }
-    } else {
-      _profile = {
-        'name': 'Ahmed Khan',
-        'email': 'ahmed.khan@student.edu.pk',
-        'phone': '+92 300 1234567',
-        'university': 'National University of Computer & Emerging Sciences',
-        'department': 'Computer Science',
-        'degree': 'BS Computer Science',
-        'semester': '6th Semester',
-        'location': 'Lahore, Pakistan',
-        'bio':
-            'Passionate Computer Science student specializing in Flutter app development and responsive UI/UX architecture. Eager to solve real corporate challenges.',
-      };
+    }
+
+    // Check active Supabase session metadata
+    final sbUser = SupabaseHelper.currentUser;
+    if (sbUser != null) {
+      _isLoggedIn = true;
+      _userId = sbUser.id;
+      if (sbUser.email != null && sbUser.email!.isNotEmpty) {
+        _userEmail = sbUser.email!;
+        _profile['email'] ??= _userEmail;
+      }
+      final metaRole = sbUser.userMetadata?['user_type']?.toString();
+      if (metaRole != null && metaRole.isNotEmpty) {
+        _userRole = metaRole;
+      }
+      final metaName = sbUser.userMetadata?['name']?.toString();
+      if (metaName != null && metaName.isNotEmpty) {
+        _userName = metaName;
+        _profile['name'] ??= metaName;
+      }
+      final metaUni = sbUser.userMetadata?['university']?.toString();
+      if (metaUni != null && metaUni.isNotEmpty) {
+        _profile['university'] ??= metaUni;
+      }
     }
 
     // 6. Skills
     final skillsJson = _prefs!.getStringList(_kSkills);
-    if (skillsJson != null) {
-      _skills = List<String>.from(skillsJson);
-    } else {
-      _skills = [
-        'Flutter',
-        'Dart',
-        'UI/UX Design',
-        'REST APIs',
-        'Firebase',
-        'Git & GitHub',
-        'Python',
-        'Problem Solving',
-      ];
-    }
+    _skills = skillsJson != null ? List<String>.from(skillsJson) : [];
 
     // 7. Notifications
-    final notifJson = _prefs!.getString(_kNotifications);
-    if (notifJson != null) {
-      try {
-        final List decoded = jsonDecode(notifJson);
-        _notifications = decoded.map((e) => Map<String, dynamic>.from(e)).toList();
-      } catch (e) {
-        debugPrint('Error loading notifications: $e');
-      }
-    } else {
-      _notifications = [
-        {
-          'id': 'notif_1',
-          'title': 'Application Shortlisted!',
-          'subtitle': 'Google shortlisted your application for AI Market Research.',
-          'time': '2h ago',
-          'type': 'shortlisted',
-          'isRead': false,
-        },
-        {
-          'id': 'notif_2',
-          'title': 'New Project Assigned',
-          'subtitle': 'TechVista assigned you the Flutter App Mobile UI project.',
-          'time': '5h ago',
-          'type': 'assigned',
-          'isRead': false,
-        },
-        {
-          'id': 'notif_3',
-          'title': 'Work Approved & Points Earned',
-          'subtitle': 'CodeCraft approved your work! You earned 500 achievement points.',
-          'time': '1d ago',
-          'type': 'approved',
-          'isRead': true,
-        },
-        {
-          'id': 'notif_4',
-          'title': 'Certificate Issued',
-          'subtitle': 'Your certificate for Barcode Scanning Mobile Utility is now ready.',
-          'time': '2d ago',
-          'type': 'certificate',
-          'isRead': true,
-        },
-      ];
-    }
+    _notifications = _decodeList(_prefs!.getString(_kNotifications));
 
     // 8. Certificates
-    final certJson = _prefs!.getString(_kCertificates);
-    if (certJson != null) {
-      try {
-        final List decoded = jsonDecode(certJson);
-        _certificates = decoded.map((e) => Map<String, dynamic>.from(e)).toList();
-      } catch (e) {
-        debugPrint('Error loading certificates: $e');
-        _certificates = List.from(defaultSeedCertificates);
-      }
-    } else {
-      _certificates = List.from(defaultSeedCertificates);
-    }
+    _certificates = _decodeList(_prefs!.getString(_kCertificates));
 
     // 9. Notification Preferences
+    _notificationPreferences
+      ..clear()
+      ..addAll(_defaultNotificationPrefs);
     final notifPrefsJson = _prefs!.getString(_kNotificationPreferences);
     if (notifPrefsJson != null) {
       try {
         final Map decoded = jsonDecode(notifPrefsJson);
-        for (var entry in decoded.entries) {
+        for (final entry in decoded.entries) {
           _notificationPreferences[entry.key.toString()] =
-              (entry.value == true);
+              entry.value == true;
         }
       } catch (e) {
         debugPrint('Error loading notif prefs: $e');
       }
-    } else {
-      _notificationPreferences.addAll({
-        'pushNotifications': true,
-        'emailAlerts': true,
-        'newProjectsAlert': true,
-        'applicationUpdates': true,
-        'chatMessages': true,
-        'deadlineReminders': true,
-      });
     }
 
     // 10. Privacy Settings
+    _privacySettings
+      ..clear()
+      ..addAll(_defaultPrivacySettings);
     final privacyJson = _prefs!.getString(_kPrivacySettings);
     if (privacyJson != null) {
       try {
         final Map decoded = jsonDecode(privacyJson);
-        for (var entry in decoded.entries) {
-          _privacySettings[entry.key.toString()] = (entry.value == true);
+        for (final entry in decoded.entries) {
+          _privacySettings[entry.key.toString()] = entry.value == true;
         }
       } catch (e) {
         debugPrint('Error loading privacy settings: $e');
       }
-    } else {
-      _privacySettings.addAll({
-        'profileVisibility': true,
-        'showEmail': true,
-        'showPhone': false,
-        'publicPortfolio': true,
-        'allowCompanyMessages': true,
-      });
     }
 
     // 11. Chat Conversations
+    _conversations = [];
     final chatJson = _prefs!.getString(_kChatConversations);
     if (chatJson != null) {
       try {
@@ -470,111 +233,683 @@ class AppDataService extends ChangeNotifier {
         debugPrint('Error loading conversations: $e');
       }
     }
-    if (_conversations.isEmpty) {
-      _conversations = [
-        {
-          'id': 'conv_techvista',
-          'company': 'TechVista',
-          'supervisor': 'Sarah Jenkins (Project Lead)',
-          'lastMessage': 'The mockups look great! Please proceed to step 2.',
-          'time': '10:45 AM',
-          'unread': 0,
-          'messages': <Map<String, dynamic>>[
-            {
-              'id': 'msg_1',
-              'isMe': false,
-              'sender': 'Sarah Jenkins',
-              'text': 'Hello Ahmed! Welcome to the project workspace.',
-              'time': '10:30 AM',
-            },
-            {
-              'id': 'msg_2',
-              'isMe': true,
-              'sender': 'Me',
-              'text': 'Thank you! Excited to collaborate and get started.',
-              'time': '10:35 AM',
-            },
-            {
-              'id': 'msg_3',
-              'isMe': false,
-              'sender': 'Sarah Jenkins',
-              'text': 'The mockups look great! Please proceed to step 2.',
-              'time': '10:45 AM',
-            },
-          ],
-        },
-        {
-          'id': 'conv_google',
-          'company': 'Google Mentorship',
-          'supervisor': 'Dr. Arham (AI Team)',
-          'lastMessage': 'Meeting scheduled for tomorrow at 3 PM PKT.',
-          'time': 'Yesterday',
-          'unread': 0,
-          'messages': <Map<String, dynamic>>[
-            {
-              'id': 'msg_g1',
-              'isMe': false,
-              'sender': 'Dr. Arham',
-              'text': 'Meeting scheduled for tomorrow at 3 PM PKT.',
-              'time': 'Yesterday',
-            },
-          ],
-        },
-        {
-          'id': 'conv_codecraft',
-          'company': 'CodeCraft Solutions',
-          'supervisor': 'Usman Tariq',
-          'lastMessage': 'Certificate issued and uploaded to your portal.',
-          'time': 'Oct 26',
-          'unread': 0,
-          'messages': <Map<String, dynamic>>[
-            {
-              'id': 'msg_c1',
-              'isMe': false,
-              'sender': 'Usman Tariq',
-              'text': 'Certificate issued and uploaded to your portal.',
-              'time': 'Oct 26',
-            },
-          ],
-        },
-      ];
-    }
 
     // 12. Support Tickets
-    final ticketsJson = _prefs!.getString(_kSupportTickets);
-    if (ticketsJson != null) {
-      try {
-        final List decoded = jsonDecode(ticketsJson);
-        _supportTickets =
-            decoded.map((e) => Map<String, dynamic>.from(e)).toList();
-      } catch (e) {
-        debugPrint('Error loading support tickets: $e');
-      }
-    }
+    _supportTickets = _decodeList(_prefs!.getString(_kSupportTickets));
 
-    // 13. Registered User Accounts
+    // 13. Offline-test Local User Accounts Registry
+    _userAccounts = {};
     final accountsJson = _prefs!.getString(_kUserAccounts);
     if (accountsJson != null) {
       try {
         final Map decoded = jsonDecode(accountsJson);
-        _userAccounts = decoded.map((k, v) =>
-            MapEntry(k.toString(), Map<String, dynamic>.from(v as Map)));
+        _userAccounts = decoded.map(
+          (k, v) => MapEntry(k.toString(), Map<String, dynamic>.from(v as Map)),
+        );
       } catch (e) {
         debugPrint('Error loading user accounts: $e');
       }
     }
 
-    notifyListeners();
+    _safeNotifyListeners();
   }
 
-  // ==========================================
-  // SAVED / BOOKMARKED PROJECTS (FAVOURITES)
-  // ==========================================
+  List<Map<String, dynamic>> _decodeList(String? rawJson) {
+    if (rawJson == null || rawJson.isEmpty) return [];
+    try {
+      final List decoded = jsonDecode(rawJson);
+      return decoded.map((e) => Map<String, dynamic>.from(e as Map)).toList();
+    } catch (e) {
+      debugPrint('Error decoding list from prefs: $e');
+      return [];
+    }
+  }
 
-  List<Map<String, dynamic>> getSavedProjects() => List.unmodifiable(_savedProjects);
+  // ===========================================================================
+  // LIVE SUPABASE SYNCHRONIZATION
+  // ===========================================================================
+
+  /// Fetch real data from Supabase for the currently authenticated user & public catalog.
+  Future<void> syncFromSupabase({bool forceRefresh = false}) async {
+    final supabase = SupabaseHelper.clientOrNull;
+    if (supabase == null) return;
+    if (_isSyncing && !forceRefresh) return;
+
+    _isSyncing = true;
+    _lastSyncError = null;
+
+    try {
+      final user = supabase.auth.currentUser;
+
+      // 1. Fetch verified/partner companies map for enrichment
+      final Map<String, Map<String, dynamic>> companiesByUserId = {};
+      final Map<String, Map<String, dynamic>> companiesById = {};
+      try {
+        final compRows = await supabase
+            .from('companies')
+            .select(
+              'id, user_id, company_name, industry, location, verification_status, logo_initial',
+            );
+        for (final raw in compRows) {
+          final row = Map<String, dynamic>.from(raw);
+          final id = row['id']?.toString() ?? '';
+          final uid = row['user_id']?.toString() ?? '';
+          if (id.isNotEmpty) companiesById[id] = row;
+          if (uid.isNotEmpty) companiesByUserId[uid] = row;
+        }
+      } catch (e) {
+        debugPrint('Supabase companies lookup skipped: $e');
+      }
+
+      // 2. Fetch live projects catalog (exclude Removed/Flagged from Explore)
+      try {
+        final projectRows = await supabase
+            .from('projects')
+            .select()
+            .order('created_at', ascending: false);
+
+        final List<Map<String, dynamic>> mappedProjects = [];
+        for (final raw in projectRows) {
+          final p = Map<String, dynamic>.from(raw);
+          final status = p['status']?.toString() ?? 'Open';
+          if (status == 'Removed' || status == 'Flagged') continue;
+
+          final postedBy =
+              p['posted_by']?.toString() ?? p['user_id']?.toString() ?? '';
+          final compId = p['company_id']?.toString() ?? '';
+          final comp = companiesByUserId[postedBy] ?? companiesById[compId];
+
+          final skills = SupabaseHelper.parseStringList(p['skills']);
+          final stipend = (p['stipend']?.toString().trim().isNotEmpty == true)
+              ? p['stipend'].toString()
+              : (p['budget']?.toString().trim().isNotEmpty == true
+                  ? p['budget'].toString()
+                  : 'Academic Credit / Verified Certificate');
+
+          mappedProjects.add({
+            'id': p['id']?.toString() ?? '',
+            'title': p['title']?.toString() ?? 'Untitled Project',
+            'company': p['company_name']?.toString() ??
+                comp?['company_name']?.toString() ??
+                'Partner Company',
+            'companyId': comp?['id']?.toString() ?? compId,
+            'companyUserId': postedBy,
+            'category': p['category']?.toString() ?? 'Development',
+            'duration': p['duration']?.toString() ?? '3-4 Weeks',
+            'workMode': p['work_mode']?.toString() ?? 'Remote',
+            'deadline': p['deadline']?.toString() ?? 'Flexible',
+            'status': status,
+            'stipend': stipend,
+            'budget': p['budget']?.toString() ?? stipend,
+            'description': p['description']?.toString() ?? '',
+            'requirements': p['requirements']?.toString() ?? '',
+            'deliverables': p['deliverables']?.toString() ?? '',
+            'additionalInstructions':
+                p['additional_instructions']?.toString() ?? '',
+            'openings': p['openings'] ?? 1,
+            'skills': skills,
+            'isVerified':
+                (comp?['verification_status']?.toString() ?? '') == 'verified',
+            'attachmentUrl': p['attachment_url']?.toString(),
+            'createdAt': p['created_at']?.toString() ?? '',
+          });
+        }
+        _projects = mappedProjects;
+        await _prefs?.setString(_kCustomProjects, jsonEncode(_projects));
+      } catch (e) {
+        debugPrint('Error fetching projects: $e');
+        _lastSyncError = e.toString();
+      }
+
+      if (user != null) {
+        _isLoggedIn = true;
+        _userId = user.id;
+        _userEmail = user.email ?? _userEmail;
+
+        // 3. Profile row
+        try {
+          final prof = await supabase
+              .from('profiles')
+              .select()
+              .eq('id', user.id)
+              .maybeSingle();
+          if (prof != null) {
+            final name = prof['name']?.toString().trim() ?? '';
+            if (name.isNotEmpty) {
+              _userName = name;
+              _profile['name'] = name;
+            }
+            if (prof['email'] != null &&
+                prof['email'].toString().trim().isNotEmpty) {
+              _userEmail = prof['email'].toString().trim();
+              _profile['email'] = _userEmail;
+            }
+            if (prof['user_type'] != null &&
+                prof['user_type'].toString().trim().isNotEmpty) {
+              _userRole = prof['user_type'].toString().trim();
+            }
+            _profile['university'] =
+                prof['university']?.toString() ?? _profile['university'] ?? '';
+            _profile['department'] =
+                prof['department']?.toString() ?? _profile['department'] ?? '';
+            _profile['degree'] =
+                prof['degree']?.toString() ?? _profile['degree'] ?? '';
+            _profile['semester'] =
+                prof['semester']?.toString() ?? _profile['semester'] ?? '';
+            if (prof['cgpa'] != null) {
+              _profile['cgpa'] = (prof['cgpa'] as num).toDouble();
+            }
+            _profile['phone'] =
+                prof['phone']?.toString() ?? _profile['phone'] ?? '';
+            _profile['bio'] =
+                prof['bio']?.toString() ?? _profile['bio'] ?? '';
+            _profile['avatarUrl'] = prof['avatar_url']?.toString();
+            _profile['isVerified'] = prof['is_verified'] == true;
+            _profile['accountStatus'] =
+                prof['account_status']?.toString() ?? 'active';
+          }
+        } catch (e) {
+          debugPrint('Error fetching profile: $e');
+        }
+
+        // 4. Student record & skills
+        if (_userRole.toLowerCase() == 'student') {
+          try {
+            final stu = await supabase
+                .from('students')
+                .select()
+                .eq('user_id', user.id)
+                .maybeSingle();
+            if (stu != null) {
+              if (stu['full_name'] != null &&
+                  stu['full_name'].toString().trim().isNotEmpty) {
+                _userName = stu['full_name'].toString().trim();
+                _profile['name'] = _userName;
+              }
+              _profile['university'] = stu['university']?.toString() ??
+                  _profile['university'] ??
+                  '';
+              _profile['department'] = stu['department']?.toString() ??
+                  _profile['department'] ??
+                  '';
+              _profile['degree'] =
+                  stu['degree']?.toString() ?? _profile['degree'] ?? '';
+              _profile['semester'] =
+                  stu['semester']?.toString() ?? _profile['semester'] ?? '';
+              if (stu['cgpa'] != null) {
+                _profile['cgpa'] = (stu['cgpa'] as num).toDouble();
+              }
+              if (stu['phone'] != null && stu['phone'].toString().isNotEmpty) {
+                _profile['phone'] = stu['phone'].toString();
+              }
+              if (stu['bio'] != null && stu['bio'].toString().isNotEmpty) {
+                _profile['bio'] = stu['bio'].toString();
+              }
+              _profile['githubUrl'] = stu['github_url']?.toString() ?? '';
+              _profile['portfolioUrl'] =
+                  stu['portfolio_url']?.toString() ?? '';
+              _profile['resumeUrl'] = stu['resume_url']?.toString() ?? '';
+              _profile['verificationStatus'] =
+                  stu['verification_status']?.toString() ?? 'pending';
+              _profile['accountStatus'] =
+                  stu['account_status']?.toString() ?? 'active';
+
+              final parsedSkills =
+                  SupabaseHelper.parseStringList(stu['skills']);
+              if (parsedSkills.isNotEmpty) {
+                _skills = parsedSkills;
+              }
+            }
+          } catch (e) {
+            debugPrint('Error fetching student record: $e');
+          }
+
+          // 5. Saved projects
+          try {
+            final savedRows = await supabase
+                .from('saved_projects')
+                .select('project_id')
+                .eq('user_id', user.id);
+            final savedIds = savedRows
+                .map((r) => r['project_id']?.toString() ?? '')
+                .where((id) => id.isNotEmpty)
+                .toSet();
+            _savedProjects = _projects
+                .where((p) => savedIds.contains(p['id']?.toString()))
+                .toList();
+            await _prefs?.setString(_kSavedProjects, jsonEncode(_savedProjects));
+          } catch (e) {
+            debugPrint('Error fetching saved_projects: $e');
+          }
+
+          // 6. Applications & Submissions
+          try {
+            final appRows = await supabase
+                .from('applications')
+                .select()
+                .or('student_id.eq.${user.id},user_id.eq.${user.id}')
+                .order('submitted_at', ascending: false);
+
+            final List<Map<String, dynamic>> mappedApps = [];
+            final Map<String, Map<String, dynamic>> mappedSubs = {};
+
+            for (final raw in appRows) {
+              final row = Map<String, dynamic>.from(raw);
+              final projectId = row['project_id']?.toString() ?? '';
+              final matchingProject = _projects.firstWhere(
+                (p) => p['id']?.toString() == projectId,
+                orElse: () => {},
+              );
+
+              final status = row['status']?.toString() ?? 'Pending';
+              final feedback = row['company_feedback']?.toString() ?? '';
+              final workUrl = row['submitted_work_url']?.toString() ?? '';
+              final fileName = row['file_name']?.toString() ?? '';
+              final subNotes = row['submission_notes']?.toString() ?? '';
+              final subTitle = row['submission_title']?.toString() ?? '';
+
+              int timelineStep = 1;
+              if (status == 'Shortlisted') timelineStep = 2;
+              if (status == 'In Progress' ||
+                  status == 'Accepted' ||
+                  status == 'Under Review' ||
+                  status == 'Revision Requested') {
+                timelineStep = 2;
+              }
+              if (status == 'Completed') timelineStep = 3;
+
+              final title = row['project_title']?.toString() ??
+                  matchingProject['title']?.toString() ??
+                  'Project';
+              final company = row['company_name']?.toString() ??
+                  matchingProject['company']?.toString() ??
+                  'Company Partner';
+
+              mappedApps.add({
+                'id': row['id']?.toString() ?? '',
+                'projectId': projectId,
+                'title': title,
+                'company': company,
+                'companyUserId': matchingProject['companyUserId']?.toString() ?? '',
+                'status': status,
+                'appliedDate': _formatDbDate(row['submitted_at']),
+                'timelineStep': timelineStep,
+                'coverMessage': row['cover_letter']?.toString() ?? '',
+                'skills': SupabaseHelper.parseStringList(row['skills']).join(', '),
+                'availability': row['availability']?.toString() ?? '',
+                'portfolioLink': row['portfolio_link']?.toString() ?? '',
+                'companyFeedback': feedback,
+                'progress': (row['progress'] as num?)?.toDouble() ?? 0.0,
+                'deadline': matchingProject['deadline']?.toString() ?? 'Flexible',
+              });
+
+              if (workUrl.isNotEmpty ||
+                  fileName.isNotEmpty ||
+                  subNotes.isNotEmpty ||
+                  status == 'Under Review' ||
+                  status == 'Revision Requested' ||
+                  status == 'Completed') {
+                mappedSubs[projectId] = {
+                  'applicationId': row['id']?.toString() ?? '',
+                  'projectId': projectId,
+                  'projectTitle': title,
+                  'company': company,
+                  'submissionTitle': subTitle,
+                  'summary': subNotes,
+                  'workLink': workUrl,
+                  'fileName': fileName,
+                  'submittedAt': _formatDbDate(
+                    row['work_submitted_at'] ?? row['updated_at'],
+                  ),
+                  'status': status == 'Completed'
+                      ? 'Approved'
+                      : (status == 'Revision Requested'
+                          ? 'Revision Requested'
+                          : 'Under Review'),
+                  'feedback': feedback,
+                };
+              }
+            }
+
+            _applications = mappedApps;
+            _workSubmissions = mappedSubs;
+            await _prefs?.setString(_kApplications, jsonEncode(_applications));
+            await _prefs?.setString(
+              _kSubmissions,
+              jsonEncode(_workSubmissions),
+            );
+          } catch (e) {
+            debugPrint('Error fetching applications: $e');
+          }
+
+          // 7. Certificates
+          try {
+            final certRows = await supabase
+                .from('certificates')
+                .select()
+                .eq('student_id', user.id)
+                .order('created_at', ascending: false);
+
+            _certificates = certRows.map((raw) {
+              final c = Map<String, dynamic>.from(raw);
+              return {
+                'id': c['certificate_id']?.toString() ?? c['id']?.toString() ?? '',
+                'dbId': c['id']?.toString() ?? '',
+                'title': c['certificate_title']?.toString() ??
+                    'Certificate of Project Completion',
+                'project': c['project_title']?.toString() ?? 'Corporate Sprint',
+                'issuer': c['issuer']?.toString() ??
+                    c['company_name']?.toString() ??
+                    'CampusConnect Partner',
+                'companyName': c['company_name']?.toString() ?? '',
+                'date': c['issue_date']?.toString() ??
+                    _formatDbDate(c['created_at']),
+                'status': c['status']?.toString() ?? 'valid',
+                'rating': (c['overall_rating'] as num?)?.toDouble() ?? 5.0,
+                'recommendation': c['recommendation_letter']?.toString() ?? '',
+                'hash': c['cryptographic_hash']?.toString() ?? '',
+                'verificationUrl': c['verification_url']?.toString() ?? '',
+                'pdfUrl': c['pdf_url']?.toString() ?? '',
+              };
+            }).toList();
+            await _prefs?.setString(_kCertificates, jsonEncode(_certificates));
+          } catch (e) {
+            debugPrint('Error fetching certificates: $e');
+          }
+        }
+
+        // 8. Messages grouped into conversations
+        try {
+          final msgRows = await supabase
+              .from('messages')
+              .select()
+              .or('sender_id.eq.${user.id},receiver_id.eq.${user.id}')
+              .order('created_at', ascending: true);
+
+          final Map<String, Map<String, dynamic>> convMap = {};
+          for (final raw in msgRows) {
+            final m = Map<String, dynamic>.from(raw);
+            final senderId = m['sender_id']?.toString() ?? '';
+            final receiverId = m['receiver_id']?.toString() ?? '';
+            final isMe = senderId == user.id;
+            final peerId = isMe ? receiverId : senderId;
+            final convId = (m['conversation_id']?.toString().isNotEmpty == true)
+                ? m['conversation_id'].toString()
+                : 'conv_${peerId.isNotEmpty ? peerId : (m['company_name'] ?? 'general')}';
+
+            final peerName = isMe
+                ? (m['receiver_name']?.toString().trim() ?? '')
+                : (m['sender_name']?.toString().trim() ?? '');
+            final rawCompany = m['company_name']?.toString().trim() ?? '';
+            final isCompanyUser = _userRole.toLowerCase() == 'company';
+            final companyName = isCompanyUser
+                ? (peerName.isNotEmpty
+                    ? peerName
+                    : (rawCompany.isNotEmpty ? rawCompany : 'Student'))
+                : (rawCompany.isNotEmpty
+                    ? rawCompany
+                    : (peerName.isNotEmpty ? peerName : 'Partner'));
+            final supervisorName =
+                peerName.isNotEmpty ? peerName : companyName;
+
+            convMap.putIfAbsent(
+              convId,
+              () => {
+                'id': convId,
+                'peerUserId': peerId,
+                'company': companyName,
+                'supervisor': supervisorName,
+                'projectTitle': m['project_title']?.toString() ?? '',
+                'lastMessage': '',
+                'time': 'Recently',
+                'unread': 0,
+                'messages': <Map<String, dynamic>>[],
+              },
+            );
+
+            final entry = convMap[convId]!;
+            final text = m['message_text']?.toString() ?? '';
+            final relTime = SupabaseHelper.formatRelativeTime(m['created_at']);
+            final msgs = entry['messages'] as List<Map<String, dynamic>>;
+
+            msgs.add({
+              'id': m['id']?.toString() ?? '',
+              'isMe': isMe,
+              'sender': isMe ? 'Me' : supervisorName,
+              'text': text,
+              'time': relTime,
+            });
+            entry['lastMessage'] = text;
+            entry['time'] = relTime;
+            if (!isMe && m['is_read'] != true) {
+              entry['unread'] = (entry['unread'] as int) + 1;
+            }
+          }
+
+          _conversations = convMap.values.toList().reversed.toList();
+          await _prefs?.setString(
+            _kChatConversations,
+            jsonEncode(_conversations),
+          );
+        } catch (e) {
+          debugPrint('Error fetching messages: $e');
+        }
+
+        // 9. Notifications
+        try {
+          final notifRows = await supabase
+              .from('notifications')
+              .select()
+              .eq('user_id', user.id)
+              .order('created_at', ascending: false);
+
+          _notifications = notifRows.map((raw) {
+            final n = Map<String, dynamic>.from(raw);
+            return {
+              'id': n['id']?.toString() ?? '',
+              'title': n['title']?.toString() ?? 'Notification',
+              'subtitle': n['message']?.toString() ?? '',
+              'time': SupabaseHelper.formatRelativeTime(n['created_at']),
+              'type': n['type']?.toString() ?? 'general',
+              'isRead': n['is_read'] == true,
+              'projectId': n['project_id']?.toString(),
+              'actorName': n['actor_name']?.toString(),
+            };
+          }).toList();
+          await _prefs?.setString(_kNotifications, jsonEncode(_notifications));
+        } catch (e) {
+          debugPrint('Error fetching notifications: $e');
+        }
+
+        // 10. Support Tickets
+        try {
+          final ticketRows = await supabase
+              .from('support_tickets')
+              .select()
+              .eq('user_id', user.id)
+              .order('created_at', ascending: false);
+
+          _supportTickets = ticketRows.map((raw) {
+            final t = Map<String, dynamic>.from(raw);
+            return {
+              'id': t['ticket_number']?.toString() ?? t['id']?.toString() ?? '',
+              'dbId': t['id']?.toString() ?? '',
+              'category': t['category']?.toString() ?? 'General',
+              'subject': t['subject']?.toString() ?? '',
+              'message': t['message']?.toString() ?? '',
+              'email': t['user_email']?.toString() ?? _userEmail,
+              'createdAt': t['created_at']?.toString() ?? '',
+              'status': t['status']?.toString() ?? 'Open',
+              'adminResponse': t['admin_response']?.toString(),
+            };
+          }).toList();
+          await _prefs?.setString(
+            _kSupportTickets,
+            jsonEncode(_supportTickets),
+          );
+        } catch (e) {
+          debugPrint('Error fetching support_tickets: $e');
+        }
+
+        // 11. User Settings
+        try {
+          final settingsRow = await supabase
+              .from('user_settings')
+              .select()
+              .eq('user_id', user.id)
+              .maybeSingle();
+          if (settingsRow != null) {
+            final np = settingsRow['notification_prefs'];
+            if (np is Map) {
+              for (final e in np.entries) {
+                _notificationPreferences[e.key.toString()] = e.value == true;
+              }
+            }
+            final ps = settingsRow['privacy_settings'];
+            if (ps is Map) {
+              for (final e in ps.entries) {
+                _privacySettings[e.key.toString()] = e.value == true;
+              }
+            }
+            await _prefs?.setString(
+              _kNotificationPreferences,
+              jsonEncode(_notificationPreferences),
+            );
+            await _prefs?.setString(
+              _kPrivacySettings,
+              jsonEncode(_privacySettings),
+            );
+          }
+        } catch (e) {
+          debugPrint('Error fetching user_settings: $e');
+        }
+
+        // Persist refreshed profile/skills/session
+        await _prefs?.setString(_kProfile, jsonEncode(_profile));
+        await _prefs?.setStringList(_kSkills, _skills);
+        await _prefs?.setString(_kUserName, _userName);
+        await _prefs?.setString(_kUserEmail, _userEmail);
+        await _prefs?.setString(_kUserRole, _userRole);
+        await _prefs?.setString(_kUserId, _userId);
+        await _prefs?.setBool(_kIsLoggedIn, _isLoggedIn);
+      }
+    } finally {
+      _isSyncing = false;
+      _safeNotifyListeners();
+    }
+  }
+
+  /// Fetches active partner contacts for initiating real Supabase chats.
+  /// For students: lists registered companies & active application companies.
+  /// For companies: lists registered students & project applicants.
+  Future<List<Map<String, dynamic>>> fetchAvailableChatContacts() async {
+    final List<Map<String, dynamic>> contacts = [];
+    final Set<String> seenIds = {};
+    final isCompanyUser = _userRole.toLowerCase() == 'company';
+
+    final supabase = SupabaseHelper.clientOrNull;
+    if (supabase != null) {
+      if (isCompanyUser) {
+        try {
+          final rows = await supabase
+              .from('students')
+              .select(
+                'id, user_id, full_name, university, degree, department, verification_status',
+              )
+              .order('full_name');
+          for (final raw in rows) {
+            final row = Map<String, dynamic>.from(raw);
+            final uid = row['user_id']?.toString() ?? '';
+            if (uid.isEmpty || uid == _userId || seenIds.contains(uid)) continue;
+            seenIds.add(uid);
+            final fullName = (row['full_name']?.toString().trim().isNotEmpty == true)
+                ? row['full_name'].toString().trim()
+                : 'Student';
+            final university = row['university']?.toString().trim() ?? '';
+            final degree = row['degree']?.toString().trim() ?? '';
+            final department = row['department']?.toString().trim() ?? '';
+            contacts.add({
+              'userId': uid,
+              'companyName': fullName,
+              'supervisorName': [
+                if (degree.isNotEmpty) degree,
+                if (university.isNotEmpty) university,
+              ].join(' • '),
+              'industry': department.isNotEmpty ? department : university,
+              'isVerified': row['verification_status'] == 'verified',
+            });
+          }
+        } catch (e) {
+          debugPrint('Error fetching student chat contacts: $e');
+        }
+      } else {
+        try {
+          final rows = await supabase
+              .from('companies')
+              .select(
+                'id, user_id, company_name, contact_person, industry, verification_status',
+              )
+              .order('company_name');
+          for (final raw in rows) {
+            final row = Map<String, dynamic>.from(raw);
+            final uid = row['user_id']?.toString() ?? '';
+            if (uid.isEmpty || uid == _userId || seenIds.contains(uid)) continue;
+            seenIds.add(uid);
+            contacts.add({
+              'userId': uid,
+              'companyName': row['company_name']?.toString() ?? 'Company Partner',
+              'supervisorName':
+                  (row['contact_person']?.toString().trim().isNotEmpty == true)
+                      ? row['contact_person'].toString().trim()
+                      : (row['company_name']?.toString() ?? 'Team Lead'),
+              'industry': row['industry']?.toString() ?? '',
+              'isVerified': row['verification_status'] == 'verified',
+            });
+          }
+        } catch (e) {
+          debugPrint('Error fetching company chat contacts: $e');
+        }
+      }
+    }
+
+    if (!isCompanyUser) {
+      // Fallback to companies discovered on loaded applications if needed
+      for (final app in _applications) {
+        final uid = app['companyUserId']?.toString() ?? '';
+        final comp = app['company']?.toString() ?? '';
+        if (comp.isEmpty) continue;
+        final key = uid.isNotEmpty ? uid : comp.toLowerCase();
+        if (seenIds.contains(key)) continue;
+        seenIds.add(key);
+        contacts.add({
+          'userId': uid,
+          'companyName': comp,
+          'supervisorName': '$comp Team',
+          'industry': 'Active Application',
+          'isVerified': true,
+        });
+      }
+    }
+
+    return contacts;
+  }
+
+  String _formatDbDate(dynamic raw) {
+    final dt = SupabaseHelper.parseDate(raw);
+    if (dt == null) return SupabaseHelper.formatDate(DateTime.now());
+    return SupabaseHelper.formatDate(dt);
+  }
+
+  // ===========================================================================
+  // SAVED / BOOKMARKED PROJECTS
+  // ===========================================================================
+
+  List<Map<String, dynamic>> getSavedProjects() =>
+      List.unmodifiable(_savedProjects);
 
   bool isProjectSaved(String projectId) {
-    return _savedProjects.any((p) => p['id']?.toString() == projectId.toString());
+    return _savedProjects
+        .any((p) => p['id']?.toString() == projectId.toString());
   }
 
   Future<void> toggleSaveProject(Map<String, dynamic> project) async {
@@ -582,34 +917,74 @@ class AppDataService extends ChangeNotifier {
     if (id == null || id.isEmpty) return;
 
     final index = _savedProjects.indexWhere((p) => p['id']?.toString() == id);
-    if (index >= 0) {
+    final bool wasSaved = index >= 0;
+    if (wasSaved) {
       _savedProjects.removeAt(index);
     } else {
       _savedProjects.insert(0, Map<String, dynamic>.from(project));
     }
 
-    notifyListeners();
+    _safeNotifyListeners();
     if (_prefs != null) {
       await _prefs!.setString(_kSavedProjects, jsonEncode(_savedProjects));
+    }
+
+    final supabase = SupabaseHelper.clientOrNull;
+    final user = supabase?.auth.currentUser;
+    if (supabase != null && user != null && SupabaseHelper.isUuid(id)) {
+      try {
+        if (wasSaved) {
+          await supabase
+              .from('saved_projects')
+              .delete()
+              .eq('user_id', user.id)
+              .eq('project_id', id);
+        } else {
+          await supabase.from('saved_projects').upsert({
+            'user_id': user.id,
+            'project_id': id,
+          }, onConflict: 'user_id,project_id');
+        }
+      } catch (e) {
+        debugPrint('Supabase saved_projects sync error: $e');
+      }
     }
   }
 
   Future<void> removeSavedProject(String projectId) async {
-    _savedProjects.removeWhere((p) => p['id']?.toString() == projectId.toString());
-    notifyListeners();
+    _savedProjects.removeWhere((p) => p['id']?.toString() == projectId);
+    _safeNotifyListeners();
     if (_prefs != null) {
       await _prefs!.setString(_kSavedProjects, jsonEncode(_savedProjects));
     }
+
+    final supabase = SupabaseHelper.clientOrNull;
+    final user = supabase?.auth.currentUser;
+    if (supabase != null &&
+        user != null &&
+        SupabaseHelper.isUuid(projectId)) {
+      try {
+        await supabase
+            .from('saved_projects')
+            .delete()
+            .eq('user_id', user.id)
+            .eq('project_id', projectId);
+      } catch (e) {
+        debugPrint('Supabase remove saved_project error: $e');
+      }
+    }
   }
 
-  // ==========================================
+  // ===========================================================================
   // APPLICATIONS
-  // ==========================================
+  // ===========================================================================
 
-  List<Map<String, dynamic>> getApplications() => List.unmodifiable(_applications);
+  List<Map<String, dynamic>> getApplications() =>
+      List.unmodifiable(_applications);
 
   bool hasApplied(String projectId) {
-    return _applications.any((a) => a['projectId']?.toString() == projectId.toString());
+    return _applications
+        .any((a) => a['projectId']?.toString() == projectId.toString());
   }
 
   Future<void> addApplication({
@@ -619,11 +994,21 @@ class AppDataService extends ChangeNotifier {
     required String availability,
     String? portfolioLink,
   }) async {
+    final projectId = project['id']?.toString() ?? '';
+    if (projectId.isNotEmpty && hasApplied(projectId)) return;
+
+    final appId = SupabaseHelper.generateUuid();
+    final companyName =
+        project['company']?.toString() ?? project['company_name']?.toString() ?? 'Company';
+    final projectTitle = project['title']?.toString() ?? 'Untitled Project';
+    final companyUserId = project['companyUserId']?.toString() ?? '';
+
     final newApp = {
-      'id': 'app_${DateTime.now().millisecondsSinceEpoch}',
-      'projectId': project['id']?.toString() ?? '',
-      'title': project['title'] ?? 'Untitled Project',
-      'company': project['company'] ?? 'Company',
+      'id': appId,
+      'projectId': projectId,
+      'title': projectTitle,
+      'company': companyName,
+      'companyUserId': companyUserId,
       'status': 'Pending',
       'appliedDate': _formattedDate(DateTime.now()),
       'timelineStep': 1,
@@ -631,122 +1016,167 @@ class AppDataService extends ChangeNotifier {
       'skills': skills,
       'availability': availability,
       'portfolioLink': portfolioLink ?? '',
+      'companyFeedback': '',
+      'progress': 0.0,
+      'deadline': project['deadline']?.toString() ?? 'Flexible',
     };
 
     _applications.insert(0, newApp);
 
-    // Also add an automated in-app notification
-    addNotification(
+    await addNotification(
       title: 'Application Submitted',
-      subtitle: 'Your application for "${project['title']}" was sent to ${project['company']}.',
+      subtitle:
+          'Your application for "$projectTitle" was sent to $companyName.',
       time: 'Just now',
       type: 'submitted',
     );
 
-    notifyListeners();
+    _safeNotifyListeners();
 
     if (_prefs != null) {
       await _prefs!.setString(_kApplications, jsonEncode(_applications));
     }
 
-    // Background push to Supabase if available
-    _pushApplicationToSupabase(newApp, project);
+    await _pushApplicationToSupabase(newApp, project);
   }
 
   Future<void> _pushApplicationToSupabase(
-      Map<String, dynamic> app, Map<String, dynamic> project) async {
-    try {
-      final supabase = Supabase.instance.client;
-      final user = supabase.auth.currentUser;
-      final applicantId = user?.id ?? 'guest_student';
-      final studentName = user?.userMetadata?['name'] ?? _profile['name'] ?? 'Ahmed Khan';
+    Map<String, dynamic> app,
+    Map<String, dynamic> project,
+  ) async {
+    final supabase = SupabaseHelper.clientOrNull;
+    final user = supabase?.auth.currentUser;
+    if (supabase == null || user == null) return;
 
-      final pId = project['id'];
-      // Only insert if integer/valid id or string id
-      if (pId != null) {
-        await supabase.from('applications').insert({
-          'project_id': pId,
-          'applicant_id': applicantId,
-          'name': studentName,
-          'role': app['skills']?.toString().isNotEmpty == true
-              ? app['skills']
-              : 'Student Applicant',
-          'status': 'Pending',
+    try {
+      final studentName =
+          (_profile['name']?.toString().trim().isNotEmpty == true)
+              ? _profile['name'].toString().trim()
+              : (_userName.isNotEmpty
+                  ? _userName
+                  : (user.userMetadata?['name']?.toString() ?? 'Student'));
+      final university =
+          (_profile['university']?.toString().trim().isNotEmpty == true)
+              ? _profile['university'].toString().trim()
+              : (user.userMetadata?['university']?.toString() ?? '');
+      final skillsList = SupabaseHelper.parseStringList(app['skills']);
+      final projectId = project['id']?.toString();
+      final companyId = project['companyId']?.toString();
+
+      await supabase.from('applications').insert({
+        'id': app['id'],
+        if (SupabaseHelper.isUuid(projectId)) 'project_id': projectId,
+        'project_title': app['title'],
+        if (SupabaseHelper.isUuid(companyId)) 'company_id': companyId,
+        'company_name': app['company'],
+        'student_id': user.id,
+        'user_id': user.id,
+        'student_name': studentName,
+        'student_email': _userEmail.isNotEmpty ? _userEmail : user.email,
+        'university': university,
+        'student_degree': _profile['degree']?.toString() ?? 'BS Computer Science',
+        'student_department':
+            _profile['department']?.toString() ?? 'Computer Science',
+        'student_semester': _profile['semester']?.toString() ?? 'Senior',
+        'student_cgpa': (_profile['cgpa'] as num?)?.toDouble() ?? 0.0,
+        'skills': skillsList.isNotEmpty ? skillsList : _skills,
+        'availability': app['availability'],
+        'cover_letter': app['coverMessage'],
+        'portfolio_link': app['portfolioLink'] ?? '',
+        'resume_link': _profile['resumeUrl']?.toString() ?? '',
+        'github_link': _profile['githubUrl']?.toString() ?? '',
+        'status': 'Pending',
+        'progress': 0.0,
+      });
+
+      final companyOwnerId = project['companyUserId']?.toString() ?? '';
+      if (SupabaseHelper.isUuid(companyOwnerId)) {
+        await supabase.from('notifications').insert({
+          'user_id': companyOwnerId,
+          'title': 'New Applicant Received',
+          'message': '$studentName applied to "${app['title']}".',
+          'type': 'submitted',
+          if (SupabaseHelper.isUuid(projectId)) 'project_id': projectId,
+          'actor_name': studentName,
+          'is_read': false,
         });
       }
-    } catch (_) {
-      // Offline or uninitialized; local storage handles it smoothly
+    } catch (e) {
+      debugPrint('Supabase application insert failed: $e');
     }
   }
 
-  // ==========================================
-  // PROJECTS (ALL + CUSTOM ADDED)
-  // ==========================================
+  // ===========================================================================
+  // PROJECTS
+  // ===========================================================================
 
   List<Map<String, dynamic>> getAllProjects() {
-    // Combine custom projects first, then default seed projects (avoiding duplicate IDs)
-    final existingIds = <String>{};
-    final combined = <Map<String, dynamic>>[];
+    return List.unmodifiable(_projects);
+  }
 
-    for (var p in _customProjects) {
-      final id = p['id']?.toString() ?? '';
-      if (id.isNotEmpty && !existingIds.contains(id)) {
-        existingIds.add(id);
-        combined.add(p);
-      }
-    }
-
-    for (var p in defaultSeedProjects) {
-      final id = p['id']?.toString() ?? '';
-      if (!existingIds.contains(id)) {
-        existingIds.add(id);
-        combined.add(p);
-      }
-    }
-
-    return combined;
+  List<Map<String, dynamic>> getOpenProjects() {
+    return _projects
+        .where((p) {
+          final status = (p['status']?.toString() ?? 'Open').toLowerCase();
+          return status == 'open' || status == 'active';
+        })
+        .toList(growable: false);
   }
 
   Future<void> addProject(Map<String, dynamic> project) async {
-    final id = project['id']?.toString() ??
-        'proj_${DateTime.now().millisecondsSinceEpoch}';
+    final existingId = project['id']?.toString() ?? '';
+    final id = SupabaseHelper.isUuid(existingId)
+        ? existingId
+        : SupabaseHelper.generateUuid();
     final fullProject = {
       ...project,
       'id': id,
       'createdAt': DateTime.now().toIso8601String(),
     };
 
-    _customProjects.insert(0, fullProject);
-    notifyListeners();
+    _projects.insert(0, fullProject);
+    _safeNotifyListeners();
 
     if (_prefs != null) {
-      await _prefs!.setString(_kCustomProjects, jsonEncode(_customProjects));
+      await _prefs!.setString(_kCustomProjects, jsonEncode(_projects));
     }
 
-    // Background push to Supabase if available
-    _pushProjectToSupabase(fullProject);
+    await _pushProjectToSupabase(fullProject);
   }
 
   Future<void> _pushProjectToSupabase(Map<String, dynamic> p) async {
+    final supabase = SupabaseHelper.clientOrNull;
+    final user = supabase?.auth.currentUser;
+    if (supabase == null || user == null) return;
+
     try {
-      final supabase = Supabase.instance.client;
-      final user = supabase.auth.currentUser;
       await supabase.from('projects').insert({
+        'id': p['id'],
         'title': p['title'],
         'description': p['description'] ?? '',
-        'budget': p['stipend'] ?? p['budget'] ?? 'N/A',
+        'requirements': p['requirements'] ?? '',
+        'deliverables': p['deliverables'] ?? '',
+        'category': p['category'] ?? 'Development',
+        'work_mode': p['workMode'] ?? 'Remote',
+        'duration': p['duration'] ?? '3-4 Weeks',
+        'deadline': p['deadline'] ?? 'Flexible',
+        'openings': p['openings'] ?? 1,
+        'skills': SupabaseHelper.parseStringList(p['skills']),
+        'stipend': p['stipend'] ?? p['budget'] ?? 'Competitive',
+        'budget': p['budget'] ?? p['stipend'] ?? 'Competitive',
         'company_name': p['company'] ?? p['company_name'] ?? 'Company',
         'status': p['status'] ?? 'Open',
-        'user_id': user?.id,
+        'posted_by': user.id,
+        'user_id': user.id,
       });
-    } catch (_) {
-      // Offline or uninitialized; local storage handles it smoothly
+    } catch (e) {
+      debugPrint('Supabase addProject failed: $e');
     }
   }
 
-  // ==========================================
-  // SUBMISSIONS & ACTIVE PROJECTS
-  // ==========================================
+  // ===========================================================================
+  // WORK SUBMISSIONS
+  // ===========================================================================
 
   Map<String, dynamic>? getSubmission(String projectId) {
     return _workSubmissions[projectId];
@@ -773,30 +1203,71 @@ class AppDataService extends ChangeNotifier {
 
     _workSubmissions[projectId] = subData;
 
-    // Update application or project status if matching
+    String? companyUserId;
     final appIndex = _applications.indexWhere((a) => a['projectId'] == projectId);
     if (appIndex >= 0) {
       _applications[appIndex]['status'] = 'Under Review';
+      _applications[appIndex]['progress'] = 0.85;
+      companyUserId = _applications[appIndex]['companyUserId']?.toString();
     }
 
-    addNotification(
+    await addNotification(
       title: 'Work Submitted Successfully',
-      subtitle: 'Your submission for "$projectTitle" is now under review by $company.',
+      subtitle:
+          'Your deliverable for "$projectTitle" is now under review by $company.',
       time: 'Just now',
       type: 'submitted',
     );
 
-    notifyListeners();
+    _safeNotifyListeners();
 
     if (_prefs != null) {
       await _prefs!.setString(_kSubmissions, jsonEncode(_workSubmissions));
       await _prefs!.setString(_kApplications, jsonEncode(_applications));
     }
+
+    final supabase = SupabaseHelper.clientOrNull;
+    final user = supabase?.auth.currentUser;
+    if (supabase != null && user != null && SupabaseHelper.isUuid(projectId)) {
+      try {
+        await supabase
+            .from('applications')
+            .update({
+              'submission_title': 'Deliverable: $projectTitle',
+              'submission_notes': summary,
+              'submitted_work_url': workLink,
+              'file_name': fileName,
+              'status': 'Under Review',
+              'progress': 0.85,
+              'work_submitted_at': DateTime.now().toIso8601String(),
+              'updated_at': DateTime.now().toIso8601String(),
+            })
+            .eq('project_id', projectId)
+            .eq('student_id', user.id);
+
+        if (SupabaseHelper.isUuid(companyUserId)) {
+          final studentName =
+              _userName.isNotEmpty ? _userName : (_profile['name'] ?? 'Student');
+          await supabase.from('notifications').insert({
+            'user_id': companyUserId,
+            'title': 'Deliverable Submitted for Review',
+            'message':
+                '$studentName submitted work for "$projectTitle". Ready for review.',
+            'type': 'submitted',
+            'project_id': projectId,
+            'actor_name': studentName.toString(),
+            'is_read': false,
+          });
+        }
+      } catch (e) {
+        debugPrint('Supabase work submission sync failed: $e');
+      }
+    }
   }
 
-  // ==========================================
+  // ===========================================================================
   // PROFILE & SKILLS
-  // ==========================================
+  // ===========================================================================
 
   Map<String, dynamic> getProfile() => Map.unmodifiable(_profile);
 
@@ -811,24 +1282,86 @@ class AppDataService extends ChangeNotifier {
 
     if (!hasChanged) return;
 
+    if (updatedFields['name'] != null &&
+        updatedFields['name'].toString().trim().isNotEmpty) {
+      _userName = updatedFields['name'].toString().trim();
+    }
+    if (updatedFields['email'] != null &&
+        updatedFields['email'].toString().trim().isNotEmpty) {
+      _userEmail = updatedFields['email'].toString().trim();
+    }
+
     _safeNotifyListeners();
 
     if (_prefs != null) {
       await _prefs!.setString(_kProfile, jsonEncode(_profile));
+      if (_userName.isNotEmpty) await _prefs!.setString(_kUserName, _userName);
+      if (_userEmail.isNotEmpty) {
+        await _prefs!.setString(_kUserEmail, _userEmail);
+      }
     }
 
-    // Sync to Supabase profiles table if logged in
-    try {
-      final supabase = Supabase.instance.client;
-      final user = supabase.auth.currentUser;
-      if (user != null) {
+    final supabase = SupabaseHelper.clientOrNull;
+    final user = supabase?.auth.currentUser;
+    if (supabase != null && user != null) {
+      try {
         await supabase.from('profiles').upsert({
           'id': user.id,
-          'name': _profile['name'],
-          'email': _profile['email'],
+          'name': _profile['name'] ?? _userName,
+          'email': _profile['email'] ?? _userEmail,
+          'user_type': _userRole,
+          'university': _profile['university'] ?? '',
+          'department': _profile['department'] ?? '',
+          'degree': _profile['degree'] ?? '',
+          'semester': _profile['semester'] ?? '',
+          if (_profile['cgpa'] != null)
+            'cgpa': double.tryParse(_profile['cgpa'].toString()) ?? 0.0,
+          'phone': _profile['phone'] ?? '',
+          'bio': _profile['bio'] ?? '',
+          'updated_at': DateTime.now().toIso8601String(),
         });
+
+        if (_userRole.toLowerCase() == 'student') {
+          final existing = await supabase
+              .from('students')
+              .select('id')
+              .eq('user_id', user.id)
+              .maybeSingle();
+
+          final studentPayload = {
+            'full_name': _profile['name'] ?? _userName,
+            'email': _profile['email'] ?? _userEmail,
+            'phone': _profile['phone'] ?? '',
+            'university': _profile['university'] ?? '',
+            'department': _profile['department'] ?? '',
+            'degree': _profile['degree'] ?? '',
+            'semester': _profile['semester'] ?? '',
+            if (_profile['cgpa'] != null)
+              'cgpa': double.tryParse(_profile['cgpa'].toString()) ?? 0.0,
+            'bio': _profile['bio'] ?? '',
+            'github_url': _profile['githubUrl'] ?? '',
+            'portfolio_url': _profile['portfolioUrl'] ?? '',
+            'resume_url': _profile['resumeUrl'] ?? '',
+            'skills': _skills,
+            'updated_at': DateTime.now().toIso8601String(),
+          };
+
+          if (existing != null) {
+            await supabase
+                .from('students')
+                .update(studentPayload)
+                .eq('user_id', user.id);
+          } else {
+            await supabase.from('students').insert({
+              'user_id': user.id,
+              ...studentPayload,
+            });
+          }
+        }
+      } catch (e) {
+        debugPrint('Supabase profile update failed: $e');
       }
-    } catch (_) {}
+    }
   }
 
   List<String> getSkills() => List.unmodifiable(_skills);
@@ -838,25 +1371,41 @@ class AppDataService extends ChangeNotifier {
     if (trimmed.isEmpty || _skills.contains(trimmed)) return;
 
     _skills.add(trimmed);
-    notifyListeners();
+    _safeNotifyListeners();
 
     if (_prefs != null) {
       await _prefs!.setStringList(_kSkills, _skills);
     }
+    await _syncSkillsToSupabase();
   }
 
   Future<void> removeSkill(String skill) async {
     _skills.remove(skill);
-    notifyListeners();
+    _safeNotifyListeners();
 
     if (_prefs != null) {
       await _prefs!.setStringList(_kSkills, _skills);
     }
+    await _syncSkillsToSupabase();
   }
 
-  // ==========================================
+  Future<void> _syncSkillsToSupabase() async {
+    final supabase = SupabaseHelper.clientOrNull;
+    final user = supabase?.auth.currentUser;
+    if (supabase == null || user == null) return;
+    try {
+      await supabase.from('students').update({
+        'skills': _skills,
+        'updated_at': DateTime.now().toIso8601String(),
+      }).eq('user_id', user.id);
+    } catch (e) {
+      debugPrint('Supabase skills sync failed: $e');
+    }
+  }
+
+  // ===========================================================================
   // NOTIFICATIONS
-  // ==========================================
+  // ===========================================================================
 
   List<Map<String, dynamic>> getNotifications() {
     return _notifications.where((n) {
@@ -890,15 +1439,10 @@ class AppDataService extends ChangeNotifier {
     required String time,
     required String type,
   }) async {
-    // Check notification preferences set by the user
-    if (_notificationPreferences['pushNotifications'] == false) {
-      return;
-    }
-
+    if (_notificationPreferences['pushNotifications'] == false) return;
     if (type == 'chat' && _notificationPreferences['chatMessages'] == false) {
       return;
     }
-
     if ((type == 'submitted' ||
             type == 'shortlisted' ||
             type == 'assigned' ||
@@ -906,19 +1450,18 @@ class AppDataService extends ChangeNotifier {
         _notificationPreferences['applicationUpdates'] == false) {
       return;
     }
-
     if (type == 'recommendation' &&
         _notificationPreferences['newProjectsAlert'] == false) {
       return;
     }
-
     if (type == 'deadline' &&
         _notificationPreferences['deadlineReminders'] == false) {
       return;
     }
 
+    final notifId = SupabaseHelper.generateUuid();
     _notifications.insert(0, {
-      'id': 'notif_${DateTime.now().millisecondsSinceEpoch}',
+      'id': notifId,
       'title': title,
       'subtitle': subtitle,
       'time': time,
@@ -931,6 +1474,23 @@ class AppDataService extends ChangeNotifier {
     if (_prefs != null) {
       await _prefs!.setString(_kNotifications, jsonEncode(_notifications));
     }
+
+    final supabase = SupabaseHelper.clientOrNull;
+    final user = supabase?.auth.currentUser;
+    if (supabase != null && user != null) {
+      try {
+        await supabase.from('notifications').insert({
+          'id': notifId,
+          'user_id': user.id,
+          'title': title,
+          'message': subtitle,
+          'type': type,
+          'is_read': false,
+        });
+      } catch (e) {
+        debugPrint('Supabase insert notification failed: $e');
+      }
+    }
   }
 
   int get unreadNotificationsCount {
@@ -940,23 +1500,46 @@ class AppDataService extends ChangeNotifier {
   Future<void> markNotificationRead(dynamic id) async {
     final idx =
         _notifications.indexWhere((n) => n['id']?.toString() == id.toString());
-    if (idx >= 0) {
-      _notifications[idx]['isRead'] = true;
-      _safeNotifyListeners();
-      if (_prefs != null) {
-        await _prefs!.setString(_kNotifications, jsonEncode(_notifications));
-      }
+    if (idx < 0) return;
+    _notifications[idx]['isRead'] = true;
+    _safeNotifyListeners();
+    if (_prefs != null) {
+      await _prefs!.setString(_kNotifications, jsonEncode(_notifications));
+    }
+
+    final supabase = SupabaseHelper.clientOrNull;
+    final user = supabase?.auth.currentUser;
+    if (supabase != null &&
+        user != null &&
+        SupabaseHelper.isUuid(id?.toString())) {
+      try {
+        await supabase
+            .from('notifications')
+            .update({'is_read': true})
+            .eq('id', id.toString())
+            .eq('user_id', user.id);
+      } catch (_) {}
     }
   }
 
   Future<void> markNotificationsRead() async {
-    for (var n in _notifications) {
+    for (final n in _notifications) {
       n['isRead'] = true;
     }
     _safeNotifyListeners();
-
     if (_prefs != null) {
       await _prefs!.setString(_kNotifications, jsonEncode(_notifications));
+    }
+
+    final supabase = SupabaseHelper.clientOrNull;
+    final user = supabase?.auth.currentUser;
+    if (supabase != null && user != null) {
+      try {
+        await supabase
+            .from('notifications')
+            .update({'is_read': true})
+            .eq('user_id', user.id);
+      } catch (_) {}
     }
   }
 
@@ -964,9 +1547,22 @@ class AppDataService extends ChangeNotifier {
     _notifications
         .removeWhere((n) => n['id']?.toString() == id.toString());
     _safeNotifyListeners();
-
     if (_prefs != null) {
       await _prefs!.setString(_kNotifications, jsonEncode(_notifications));
+    }
+
+    final supabase = SupabaseHelper.clientOrNull;
+    final user = supabase?.auth.currentUser;
+    if (supabase != null &&
+        user != null &&
+        SupabaseHelper.isUuid(id?.toString())) {
+      try {
+        await supabase
+            .from('notifications')
+            .delete()
+            .eq('id', id.toString())
+            .eq('user_id', user.id);
+      } catch (_) {}
     }
   }
 
@@ -974,24 +1570,46 @@ class AppDataService extends ChangeNotifier {
     final strIds = ids.map((e) => e.toString()).toSet();
     _notifications.removeWhere((n) => strIds.contains(n['id']?.toString()));
     _safeNotifyListeners();
-
     if (_prefs != null) {
       await _prefs!.setString(_kNotifications, jsonEncode(_notifications));
+    }
+
+    final supabase = SupabaseHelper.clientOrNull;
+    final user = supabase?.auth.currentUser;
+    final uuidIds = strIds.where(SupabaseHelper.isUuid).toList();
+    if (supabase != null && user != null && uuidIds.isNotEmpty) {
+      try {
+        await supabase
+            .from('notifications')
+            .delete()
+            .inFilter('id', uuidIds)
+            .eq('user_id', user.id);
+      } catch (_) {}
     }
   }
 
   Future<void> clearAllNotifications() async {
     _notifications.clear();
     _safeNotifyListeners();
-
     if (_prefs != null) {
       await _prefs!.setString(_kNotifications, jsonEncode(_notifications));
     }
+
+    final supabase = SupabaseHelper.clientOrNull;
+    final user = supabase?.auth.currentUser;
+    if (supabase != null && user != null) {
+      try {
+        await supabase
+            .from('notifications')
+            .delete()
+            .eq('user_id', user.id);
+      } catch (_) {}
+    }
   }
 
-  // ==========================================
+  // ===========================================================================
   // NOTIFICATION & PRIVACY PREFERENCES
-  // ==========================================
+  // ===========================================================================
 
   Map<String, bool> getNotificationPreferences() =>
       Map.unmodifiable(_notificationPreferences);
@@ -1001,12 +1619,15 @@ class AppDataService extends ChangeNotifier {
     if (key == 'chatMessages' && !value) {
       _notifications.removeWhere((n) => n['type']?.toString() == 'chat');
     }
-    notifyListeners();
+    _safeNotifyListeners();
     if (_prefs != null) {
       await _prefs!.setString(
-          _kNotificationPreferences, jsonEncode(_notificationPreferences));
+        _kNotificationPreferences,
+        jsonEncode(_notificationPreferences),
+      );
       await _prefs!.setString(_kNotifications, jsonEncode(_notifications));
     }
+    await _syncSettingsToSupabase();
   }
 
   Map<String, bool> getPrivacySettings() =>
@@ -1014,16 +1635,32 @@ class AppDataService extends ChangeNotifier {
 
   Future<void> updatePrivacySetting(String key, bool value) async {
     _privacySettings[key] = value;
-    notifyListeners();
+    _safeNotifyListeners();
     if (_prefs != null) {
-      await _prefs!
-          .setString(_kPrivacySettings, jsonEncode(_privacySettings));
+      await _prefs!.setString(_kPrivacySettings, jsonEncode(_privacySettings));
+    }
+    await _syncSettingsToSupabase();
+  }
+
+  Future<void> _syncSettingsToSupabase() async {
+    final supabase = SupabaseHelper.clientOrNull;
+    final user = supabase?.auth.currentUser;
+    if (supabase == null || user == null) return;
+    try {
+      await supabase.from('user_settings').upsert({
+        'user_id': user.id,
+        'notification_prefs': _notificationPreferences,
+        'privacy_settings': _privacySettings,
+        'updated_at': DateTime.now().toIso8601String(),
+      });
+    } catch (e) {
+      debugPrint('Supabase user_settings upsert failed: $e');
     }
   }
 
-  // ==========================================
-  // CHAT & MESSAGING
-  // ==========================================
+  // ===========================================================================
+  // CHAT & MESSAGING (REAL PERSISTENCE ONLY — ZERO SIMULATED REPLIES)
+  // ===========================================================================
 
   List<Map<String, dynamic>> getConversations() =>
       List.unmodifiable(_conversations);
@@ -1036,6 +1673,58 @@ class AppDataService extends ChangeNotifier {
     }
   }
 
+  /// Opens an existing conversation thread with a company/peer or creates one cleanly.
+  Future<String> openOrCreateConversation({
+    required String companyName,
+    String? peerUserId,
+    String? supervisorName,
+    String? projectTitle,
+  }) async {
+    final cleanPeerId = (peerUserId ?? '').trim();
+    final existing = _conversations.firstWhere(
+      (c) {
+        if (cleanPeerId.isNotEmpty && c['peerUserId'] == cleanPeerId) {
+          return true;
+        }
+        return (c['company']?.toString().toLowerCase() ?? '') ==
+            companyName.trim().toLowerCase();
+      },
+      orElse: () => {},
+    );
+
+    if (existing.isNotEmpty) {
+      return existing['id'].toString();
+    }
+
+    final myId = SupabaseHelper.currentUserId ?? _userId;
+    final convId = (SupabaseHelper.isUuid(myId) &&
+            SupabaseHelper.isUuid(cleanPeerId))
+        ? 'conv_${myId}_$cleanPeerId'
+        : 'conv_${DateTime.now().millisecondsSinceEpoch}';
+
+    final newConv = <String, dynamic>{
+      'id': convId,
+      'peerUserId': cleanPeerId,
+      'company': companyName.trim().isNotEmpty ? companyName.trim() : 'Partner',
+      'supervisor':
+          (supervisorName != null && supervisorName.trim().isNotEmpty)
+              ? supervisorName.trim()
+              : companyName.trim(),
+      'projectTitle': projectTitle ?? '',
+      'lastMessage': 'No messages yet',
+      'time': 'Now',
+      'unread': 0,
+      'messages': <Map<String, dynamic>>[],
+    };
+
+    _conversations.insert(0, newConv);
+    _safeNotifyListeners();
+    if (_prefs != null) {
+      await _prefs!.setString(_kChatConversations, jsonEncode(_conversations));
+    }
+    return convId;
+  }
+
   Future<void> markConversationRead(String conversationId) async {
     final conv = _conversations.firstWhere(
       (c) => c['id'] == conversationId,
@@ -1043,10 +1732,24 @@ class AppDataService extends ChangeNotifier {
     );
     if (conv.isNotEmpty && ((conv['unread'] as int? ?? 0) > 0)) {
       conv['unread'] = 0;
-      notifyListeners();
+      _safeNotifyListeners();
       if (_prefs != null) {
         await _prefs!.setString(
-            _kChatConversations, jsonEncode(_conversations));
+          _kChatConversations,
+          jsonEncode(_conversations),
+        );
+      }
+
+      final supabase = SupabaseHelper.clientOrNull;
+      final user = supabase?.auth.currentUser;
+      if (supabase != null && user != null) {
+        try {
+          await supabase
+              .from('messages')
+              .update({'is_read': true})
+              .eq('conversation_id', conversationId)
+              .eq('receiver_id', user.id);
+        } catch (_) {}
       }
     }
   }
@@ -1055,6 +1758,9 @@ class AppDataService extends ChangeNotifier {
     required String conversationId,
     required String text,
   }) async {
+    final cleanText = text.trim();
+    if (cleanText.isEmpty) return;
+
     final conv = _conversations.firstWhere(
       (c) => c['id'] == conversationId,
       orElse: () => {},
@@ -1062,11 +1768,14 @@ class AppDataService extends ChangeNotifier {
     if (conv.isEmpty) return;
 
     const nowTime = 'Just now';
+    final senderName = _profile['name']?.toString().isNotEmpty == true
+        ? _profile['name'].toString()
+        : (_userName.isNotEmpty ? _userName : 'Me');
     final userMsg = {
-      'id': 'msg_${DateTime.now().millisecondsSinceEpoch}',
+      'id': SupabaseHelper.generateUuid(),
       'isMe': true,
-      'sender': _profile['name'] ?? (_userName.isNotEmpty ? _userName : 'Me'),
-      'text': text,
+      'sender': senderName,
+      'text': cleanText,
       'time': nowTime,
     };
 
@@ -1074,83 +1783,55 @@ class AppDataService extends ChangeNotifier {
         List<Map<String, dynamic>>.from(conv['messages'] as List? ?? []);
     msgs.add(userMsg);
     conv['messages'] = msgs;
-    conv['lastMessage'] = text;
+    conv['lastMessage'] = cleanText;
     conv['time'] = nowTime;
 
-    // Student in-app delivery notification
-    addNotification(
-      title: 'Message Delivered to ${conv['company']}',
-      subtitle: '${conv['supervisor']} received: "$text"',
-      time: 'Just now',
-      type: 'chat',
-    );
-
-    notifyListeners();
+    _safeNotifyListeners();
 
     if (_prefs != null) {
-      await _prefs!.setString(
-          _kChatConversations, jsonEncode(_conversations));
+      await _prefs!.setString(_kChatConversations, jsonEncode(_conversations));
     }
 
-    // Try to record in Supabase
-    try {
-      final user = Supabase.instance.client.auth.currentUser;
-      await Supabase.instance.client.from('messages').insert({
-        'conversation_id': conversationId,
-        'sender_id': user?.id ?? 'guest_student',
-        'content': text,
-        'company_name': conv['company'],
-        'created_at': DateTime.now().toIso8601String(),
-      });
-    } catch (_) {}
+    final supabase = SupabaseHelper.clientOrNull;
+    final user = supabase?.auth.currentUser;
+    if (supabase != null && user != null) {
+      final peerUserId = conv['peerUserId']?.toString();
+      try {
+        await supabase.from('messages').insert({
+          'id': userMsg['id'],
+          'conversation_id': conversationId,
+          'sender_id': user.id,
+          if (SupabaseHelper.isUuid(peerUserId)) 'receiver_id': peerUserId,
+          'sender_name': senderName,
+          'receiver_name': conv['supervisor'] ?? conv['company'] ?? 'Partner',
+          'company_name': _userRole.toLowerCase() == 'company'
+              ? senderName
+              : (conv['company'] ?? ''),
+          'project_title': conv['projectTitle'] ?? '',
+          'message_text': cleanText,
+          'is_read': false,
+          'created_at': DateTime.now().toIso8601String(),
+        });
 
-    // Simulated company supervisor reply after 1.5s
-    final supervisor = conv['supervisor']?.toString() ?? 'Supervisor';
-    final company = conv['company']?.toString() ?? 'Company';
-    final studentName = _profile['name'] ?? 'Ahmed';
-
-    Future.delayed(const Duration(milliseconds: 1400), () async {
-      final supervisorReplies = [
-        'Thanks for reaching out, $studentName! Received your message, looking into it now.',
-        'Great to hear from you, $studentName! Keep progressing on the tasks, will review shortly.',
-        'Got your note! Your submission and progress are on track.',
-        'Acknowledged. Our project engineering team has received your message.',
-      ];
-      final replyText =
-          supervisorReplies[DateTime.now().second % supervisorReplies.length];
-
-      final replyMsg = {
-        'id': 'msg_rep_${DateTime.now().millisecondsSinceEpoch}',
-        'isMe': false,
-        'sender': supervisor,
-        'text': replyText,
-        'time': 'Just now',
-      };
-
-      msgs.add(replyMsg);
-      conv['lastMessage'] = replyText;
-      conv['time'] = 'Just now';
-      conv['unread'] = (conv['unread'] as int? ?? 0) + 1;
-
-      addNotification(
-        title: 'New message from $supervisor ($company)',
-        subtitle: replyText,
-        time: 'Just now',
-        type: 'chat',
-      );
-
-      notifyListeners();
-
-      if (_prefs != null) {
-        await _prefs!.setString(
-            _kChatConversations, jsonEncode(_conversations));
+        if (SupabaseHelper.isUuid(peerUserId)) {
+          await supabase.from('notifications').insert({
+            'user_id': peerUserId,
+            'title': 'New Message from $senderName',
+            'message': cleanText,
+            'type': 'chat',
+            'actor_name': senderName,
+            'is_read': false,
+          });
+        }
+      } catch (e) {
+        debugPrint('Supabase message insert error: $e');
       }
-    });
+    }
   }
 
-  // ==========================================
+  // ===========================================================================
   // SUPPORT TICKETS
-  // ==========================================
+  // ===========================================================================
 
   List<Map<String, dynamic>> getSupportTickets() =>
       List.unmodifiable(_supportTickets);
@@ -1160,45 +1841,64 @@ class AppDataService extends ChangeNotifier {
     required String subject,
     required String message,
   }) async {
-    final ticketId = 'CC-${DateTime.now().millisecondsSinceEpoch % 100000}';
+    final ticketNumber = 'CC-${DateTime.now().millisecondsSinceEpoch % 100000}';
+    final ticketEmail =
+        _userEmail.isNotEmpty ? _userEmail : (_profile['email']?.toString() ?? '');
     final ticket = {
-      'id': ticketId,
+      'id': ticketNumber,
       'category': category,
       'subject': subject,
       'message': message,
-      'email': _userEmail.isNotEmpty ? _userEmail : (_profile['email'] ?? ''),
+      'email': ticketEmail,
       'createdAt': DateTime.now().toIso8601String(),
-      'status': 'Under Review',
+      'status': 'Open',
     };
 
     _supportTickets.insert(0, ticket);
 
-    addNotification(
-      title: 'Support Ticket #$ticketId Submitted',
-      subtitle: 'Our support team will respond to "$subject" via email soon.',
+    await addNotification(
+      title: 'Support Ticket #$ticketNumber Submitted',
+      subtitle: 'Our support team will review "$subject" shortly.',
       time: 'Just now',
       type: 'submitted',
     );
 
-    notifyListeners();
+    _safeNotifyListeners();
 
     if (_prefs != null) {
-      await _prefs!.setString(
-          _kSupportTickets, jsonEncode(_supportTickets));
+      await _prefs!.setString(_kSupportTickets, jsonEncode(_supportTickets));
+    }
+
+    final supabase = SupabaseHelper.clientOrNull;
+    final user = supabase?.auth.currentUser;
+    if (supabase != null && user != null) {
+      try {
+        await supabase.from('support_tickets').insert({
+          'ticket_number': ticketNumber,
+          'user_id': user.id,
+          'user_name': _userName.isNotEmpty
+              ? _userName
+              : (_profile['name']?.toString() ?? 'User'),
+          'user_email': ticketEmail,
+          'user_role': _userRole,
+          'category': category,
+          'subject': subject,
+          'message': message,
+          'status': 'Open',
+        });
+      } catch (e) {
+        debugPrint('Supabase support ticket sync error: $e');
+      }
     }
   }
 
-  // ==========================================
-  // AUTH SESSION PERSISTENCE
-  // ==========================================
+  // ===========================================================================
+  // AUTH SESSION MANAGEMENT
+  // ===========================================================================
 
   bool get isLoggedIn {
     if (_isLoggedIn) return true;
-    try {
-      return Supabase.instance.client.auth.currentUser != null;
-    } catch (_) {
-      return false;
-    }
+    return SupabaseHelper.currentUser != null;
   }
 
   String get userRole => _userRole;
@@ -1215,21 +1915,20 @@ class AppDataService extends ChangeNotifier {
   }) async {
     _isLoggedIn = true;
     _userRole = role;
-    if (email != null && email.isNotEmpty) _userEmail = email;
-    if (name != null && name.isNotEmpty) _userName = name;
-    if (userId != null && userId.isNotEmpty) _userId = userId;
-
-    if (name != null && name.isNotEmpty) {
-      _profile['name'] = name;
-    }
     if (email != null && email.isNotEmpty) {
+      _userEmail = email;
       _profile['email'] = email;
     }
+    if (name != null && name.isNotEmpty) {
+      _userName = name;
+      _profile['name'] = name;
+    }
+    if (userId != null && userId.isNotEmpty) _userId = userId;
     if (university != null && university.isNotEmpty) {
       _profile['university'] = university;
     }
 
-    notifyListeners();
+    _safeNotifyListeners();
 
     if (_prefs != null) {
       await _prefs!.setBool(_kIsLoggedIn, true);
@@ -1241,6 +1940,7 @@ class AppDataService extends ChangeNotifier {
     }
   }
 
+  /// Clears all user-scoped state & preferences so switching accounts never leaks data.
   Future<void> clearAuthSession() async {
     _isLoggedIn = false;
     _userRole = 'Student';
@@ -1248,7 +1948,23 @@ class AppDataService extends ChangeNotifier {
     _userName = '';
     _userId = '';
 
-    notifyListeners();
+    _savedProjects = [];
+    _applications = [];
+    _workSubmissions = {};
+    _profile = {};
+    _skills = [];
+    _notifications = [];
+    _certificates = [];
+    _conversations = [];
+    _supportTickets = [];
+    _notificationPreferences
+      ..clear()
+      ..addAll(_defaultNotificationPrefs);
+    _privacySettings
+      ..clear()
+      ..addAll(_defaultPrivacySettings);
+
+    _safeNotifyListeners();
 
     if (_prefs != null) {
       await _prefs!.setBool(_kIsLoggedIn, false);
@@ -1256,12 +1972,23 @@ class AppDataService extends ChangeNotifier {
       await _prefs!.remove(_kUserEmail);
       await _prefs!.remove(_kUserName);
       await _prefs!.remove(_kUserId);
+      await _prefs!.remove(_kSavedProjects);
+      await _prefs!.remove(_kApplications);
+      await _prefs!.remove(_kSubmissions);
+      await _prefs!.remove(_kProfile);
+      await _prefs!.remove(_kSkills);
+      await _prefs!.remove(_kNotifications);
+      await _prefs!.remove(_kCertificates);
+      await _prefs!.remove(_kChatConversations);
+      await _prefs!.remove(_kSupportTickets);
+      await _prefs!.remove(_kNotificationPreferences);
+      await _prefs!.remove(_kPrivacySettings);
     }
   }
 
-  // ==========================================
-  // REGISTERED ACCOUNTS & CREDENTIALS
-  // ==========================================
+  // ===========================================================================
+  // LOCAL OFFLINE USER REGISTRY (FOR UNIT TESTS / OFFLINE FORM PERSISTENCE)
+  // ===========================================================================
 
   Future<void> registerUserAccount({
     required String email,
@@ -1315,11 +2042,6 @@ class AppDataService extends ChangeNotifier {
     if (acc != null && acc['password'] == cleanPass) {
       return true;
     }
-
-    if (cleanEmail == 'rabia32pk@gmail.com' && cleanPass == '123456') {
-      return true;
-    }
-
     return false;
   }
 
@@ -1333,8 +2055,10 @@ class AppDataService extends ChangeNotifier {
       _userAccounts[cleanEmail] = {
         'email': cleanEmail,
         'password': cleanPass,
-        'name': _userName.isNotEmpty ? _userName : (_profile['name'] ?? 'Student'),
-        'university': _profile['university'] ?? 'National University',
+        'name': _userName.isNotEmpty
+            ? _userName
+            : (_profile['name']?.toString() ?? 'Student'),
+        'university': _profile['university']?.toString() ?? '',
         'role': _userRole,
       };
     }
@@ -1346,23 +2070,24 @@ class AppDataService extends ChangeNotifier {
     }
   }
 
-  // ==========================================
+  // ===========================================================================
   // CERTIFICATES
-  // ==========================================
+  // ===========================================================================
 
-  List<Map<String, dynamic>> getCertificates() => List.unmodifiable(_certificates);
+  List<Map<String, dynamic>> getCertificates() =>
+      List.unmodifiable(_certificates);
 
   Future<void> addCertificate(Map<String, dynamic> cert) async {
     _certificates.insert(0, cert);
-    notifyListeners();
+    _safeNotifyListeners();
     if (_prefs != null) {
       await _prefs!.setString(_kCertificates, jsonEncode(_certificates));
     }
   }
 
-  // ==========================================
+  // ===========================================================================
   // STATS
-  // ==========================================
+  // ===========================================================================
 
   int get totalApplicationsCount => _applications.length;
 
@@ -1380,17 +2105,8 @@ class AppDataService extends ChangeNotifier {
     return _applications.where((a) => a['status'] == 'Completed').length;
   }
 
-  int get certificatesCount => _certificates.length;
+  int get certificatesCount =>
+      _certificates.where((c) => c['status'] != 'revoked').length;
 
-  // Helper date formatter
-  String _formattedDate(DateTime dt) {
-    const months = [
-      'Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun',
-      'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec'
-    ];
-    final m = months[dt.month - 1];
-    final d = dt.day.toString().padLeft(2, '0');
-    final y = dt.year;
-    return '$m $d, $y';
-  }
+  String _formattedDate(DateTime dt) => SupabaseHelper.formatDate(dt);
 }

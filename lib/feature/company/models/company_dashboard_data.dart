@@ -48,8 +48,8 @@ class CompanyProfileInfo {
     required this.companyName,
     required this.tagline,
     required this.industry,
-    this.isVerified = true,
-    this.unreadNotificationsCount = 3,
+    this.isVerified = false,
+    this.unreadNotificationsCount = 0,
   });
 }
 

@@ -23,7 +23,7 @@ class DownloadService {
       final studentName =
           (AppDataService.instance.userName.isNotEmpty
               ? AppDataService.instance.userName
-              : (AppDataService.instance.getProfile()['name'] ?? 'Ahmed Khan'))
+              : (AppDataService.instance.getProfile()['name'] ?? 'Student'))
                   .toString();
 
       // 1. Generate real PDF binary bytes
@@ -110,7 +110,7 @@ class DownloadService {
       final studentName =
           (AppDataService.instance.userName.isNotEmpty
               ? AppDataService.instance.userName
-              : (AppDataService.instance.getProfile()['name'] ?? 'Ahmed Khan'))
+              : (AppDataService.instance.getProfile()['name'] ?? 'Student'))
                   .toString();
 
       final pdfBytes = await CertificatePdfService.generateCertificatePdf(

@@ -1,26 +1,23 @@
 import 'package:flutter/foundation.dart';
+import 'package:link_vibe/core/services/supabase_helper.dart';
 import 'package:link_vibe/feature/admin/models/admin_company_model.dart';
+import 'package:link_vibe/feature/admin/services/admin_verification_service.dart';
 import 'package:link_vibe/feature/company/models/company_verification_model.dart';
 import 'package:link_vibe/feature/company/services/company_profile_service.dart';
-import 'package:link_vibe/feature/company/services/company_project_service.dart';
 import 'package:link_vibe/feature/company/services/company_verification_service.dart';
 
-/// Enterprise Company Management Service for CampusConnect Admin Panel.
-/// Manages corporate registry, verification review, account regulation, and cross-panel sync.
+/// Enterprise Company Management Service backed by Supabase `companies` & `projects`.
 class AdminCompanyService {
   static final AdminCompanyService _instance = AdminCompanyService._internal();
   factory AdminCompanyService() => _instance;
 
-  AdminCompanyService._internal() {
-    _initCompanies();
-    _listenToCompanyUpdates();
-  }
+  AdminCompanyService._internal();
 
-  late final ValueNotifier<List<AdminCompanyModel>> companiesNotifier;
+  final ValueNotifier<List<AdminCompanyModel>> companiesNotifier =
+      ValueNotifier<List<AdminCompanyModel>>([]);
 
   List<AdminCompanyModel> get allCompanies => companiesNotifier.value;
 
-  // 1. Company Overview Metrics
   int get totalCount => companiesNotifier.value.length;
   int get verifiedCount => companiesNotifier.value
       .where((c) => c.verificationStatus == CompanyVerificationState.verified)
@@ -35,277 +32,200 @@ class AdminCompanyService {
       .where((c) => c.accountStatus == CompanyAccountState.suspended)
       .length;
 
-  void _initCompanies() {
-    final company = CompanyProfileService().currentProfile;
-    final verif = CompanyVerificationService().currentVerification;
-    final projectsCount = CompanyProjectService().getProjectsForCompany(company.id).length;
+  /// Fetches live corporate accounts, project counts, and audit records from Supabase.
+  Future<void> loadFromSupabase() async {
+    final supabase = SupabaseHelper.clientOrNull;
+    if (supabase == null) return;
 
-    CompanyVerificationState initialStatus = CompanyVerificationState.pending;
-    if (verif.status == VerificationStatus.verified) {
-      initialStatus = CompanyVerificationState.verified;
-    } else if (verif.status == VerificationStatus.rejected) {
-      initialStatus = CompanyVerificationState.rejected;
-    }
+    try {
+      final rows = await supabase
+          .from('companies')
+          .select()
+          .order('created_at', ascending: false);
 
-    companiesNotifier = ValueNotifier<List<AdminCompanyModel>>([
-      // 1. TechVista Innovations (comp_01 - Live company)
-      AdminCompanyModel(
-        id: company.id,
-        companyName: company.companyName,
-        logoInitial: company.logoInitial,
-        officialEmail: company.officialEmail,
-        isEmailVerified: verif.isEmailVerified,
-        industry: company.industry,
-        city: company.city,
-        completeAddress: company.completeAddress,
-        contactPersonName: company.contactPersonName,
-        phoneNumber: company.phoneNumber,
-        websiteUrl: company.websiteUrl,
-        description: company.description,
-        registrationNumber: 'SECP-ISB-2019-9481',
-        verificationStatus: initialStatus,
-        accountStatus: CompanyAccountState.active,
-        registrationDate: '2026-10-01',
-        registrationDateTime: DateTime(2026, 10, 1, 09, 30),
-        evidenceFileName: verif.businessEvidenceFileName ?? 'SECP_Registration_TechVista_2026.pdf',
-        evidenceFileType: verif.businessEvidenceType ?? 'SECP / Corporate Certificate',
-        evidenceFileSize: verif.businessEvidenceFileSize ?? '2.4 MB',
-        postedProjectsCount: projectsCount > 0 ? projectsCount : 4,
-        auditHistory: const [
-          CompanyAuditRecord(
-            id: 'aud_c01_1',
-            action: 'Account Provisioned',
-            adminName: 'Governance Gateway',
-            timestamp: '2026-10-01 09:30 AM',
-            note: 'Corporate partner initialized on platform.',
-          ),
-          CompanyAuditRecord(
-            id: 'aud_c01_2',
-            action: 'Official Email Verified',
-            adminName: 'Automated Mail Vault',
-            timestamp: '2026-10-01 10:15 AM',
-            note: 'Verified with official domain code dispatch.',
-          ),
-        ],
-      ),
+      // Count projects per company_id / posted_by
+      final Map<String, int> projectCountsByCompany = {};
+      final Map<String, int> projectCountsByUser = {};
+      try {
+        final projRows = await supabase
+            .from('projects')
+            .select('id, company_id, posted_by, user_id');
+        for (final raw in projRows) {
+          final p = Map<String, dynamic>.from(raw);
+          final cId = p['company_id']?.toString() ?? '';
+          final uId = p['posted_by']?.toString() ?? p['user_id']?.toString() ?? '';
+          if (cId.isNotEmpty) {
+            projectCountsByCompany[cId] = (projectCountsByCompany[cId] ?? 0) + 1;
+          }
+          if (uId.isNotEmpty) {
+            projectCountsByUser[uId] = (projectCountsByUser[uId] ?? 0) + 1;
+          }
+        }
+      } catch (e) {
+        debugPrint('AdminCompanyService projects count skipped: $e');
+      }
 
-      // 2. Innovexa Cloud Technologies (comp_02)
-      AdminCompanyModel(
-        id: 'comp_02',
-        companyName: 'Innovexa Cloud Technologies',
-        logoInitial: 'IN',
-        officialEmail: 'partnerships@innovexacloud.io',
-        isEmailVerified: true,
-        industry: 'Cloud Infrastructure & DevOps',
-        city: 'Lahore',
-        completeAddress: 'Arfa Software Technology Park, Ferozepur Road, Lahore',
-        contactPersonName: 'Khurram Shehzad',
-        phoneNumber: '+92 42 35889100',
-        websiteUrl: 'https://innovexacloud.io',
-        description: 'Specialized enterprise Kubernetes and multi-cloud infrastructure consultancy partnering with universities for open-source engineering sprints.',
-        registrationNumber: 'SECP-LHR-2021-3829',
-        verificationStatus: CompanyVerificationState.verified,
-        accountStatus: CompanyAccountState.active,
-        registrationDate: '2026-09-18',
-        registrationDateTime: DateTime(2026, 9, 18, 14, 20),
-        evidenceFileName: 'SECP_Form29_Innovexa.pdf',
-        evidenceFileType: 'SECP Certificate of Incorporation',
-        evidenceFileSize: '3.1 MB',
-        postedProjectsCount: 2,
-        auditHistory: const [
-          CompanyAuditRecord(
-            id: 'aud_c02',
-            action: 'Corporate Verification Approved',
-            adminName: 'Dr. Tariq Mahmood (SuperAdmin)',
-            timestamp: '2026-09-20 11:45 AM',
-            note: 'Verified against SECP active registry.',
-          ),
-        ],
-      ),
+      // Optional audit trail lookup
+      final List<Map<String, dynamic>> auditRows = [];
+      try {
+        final rawLogs = await supabase
+            .from('admin_audit_logs')
+            .select()
+            .order('created_at', ascending: false)
+            .limit(100);
+        for (final r in rawLogs) {
+          auditRows.add(Map<String, dynamic>.from(r));
+        }
+      } catch (_) {}
 
-      // 3. CodeCraft Mobile Systems (comp_03)
-      AdminCompanyModel(
-        id: 'comp_03',
-        companyName: 'CodeCraft Mobile Systems',
-        logoInitial: 'CC',
-        officialEmail: 'admin@codecraft.com.pk',
-        isEmailVerified: true,
-        industry: 'Mobile App Development',
-        city: 'Karachi',
-        completeAddress: 'Clifton Block 4, Corporate Tower 3, Karachi',
-        contactPersonName: 'Murtaza Hashmi',
-        phoneNumber: '+92 21 35824900',
-        websiteUrl: 'https://codecraft.com.pk',
-        description: 'Boutique cross-platform application engineering agency developing high-scale mobile products for national logistics providers.',
-        registrationNumber: 'NTN-FBR-7749201-9',
-        verificationStatus: CompanyVerificationState.pending,
-        accountStatus: CompanyAccountState.active,
-        registrationDate: '2026-11-02',
-        registrationDateTime: DateTime(2026, 11, 2, 11, 00),
-        evidenceFileName: 'FBR_ActiveTaxpayer_NTN.pdf',
-        evidenceFileType: 'FBR Active Taxpayer NTN Certificate',
-        evidenceFileSize: '1.8 MB',
-        postedProjectsCount: 1,
-        auditHistory: const [
-          CompanyAuditRecord(
-            id: 'aud_c03',
-            action: 'Evidence Uploaded',
-            adminName: 'System Gateway',
-            timestamp: '2026-11-02 11:00 AM',
-            note: 'NTN documentation submitted for verification.',
-          ),
-        ],
-      ),
+      final List<AdminCompanyModel> loaded = [];
+      for (final raw in rows) {
+        final row = Map<String, dynamic>.from(raw);
+        final id = row['id']?.toString() ?? '';
+        final userId = row['user_id']?.toString();
+        final name = (row['company_name']?.toString().trim().isNotEmpty == true)
+            ? row['company_name'].toString().trim()
+            : 'Corporate Partner';
 
-      // 4. ByteWorks Automation Labs (comp_04)
-      AdminCompanyModel(
-        id: 'comp_04',
-        companyName: 'ByteWorks Automation Labs',
-        logoInitial: 'BW',
-        officialEmail: 'info@byteworks.org',
-        isEmailVerified: false,
-        industry: 'IoT & Embedded Systems',
-        city: 'Peshawar',
-        completeAddress: 'Industrial Estate Hayatabad, Phase 7, Peshawar',
-        contactPersonName: 'Engr. Junaid Afridi',
-        phoneNumber: '+92 91 5892110',
-        websiteUrl: 'https://byteworks.org',
-        description: 'Hardware prototyping laboratory providing custom embedded sensors, firmware development, and IoT telemetry dashboards.',
-        registrationNumber: 'SECP-PEW-2022-1104',
-        verificationStatus: CompanyVerificationState.rejected,
-        accountStatus: CompanyAccountState.active,
-        registrationDate: '2026-10-24',
-        registrationDateTime: DateTime(2026, 10, 24, 16, 40),
-        evidenceFileName: 'Registration_Scan_LowRes.png',
-        evidenceFileType: 'Business Registration Document',
-        evidenceFileSize: '840 KB',
-        postedProjectsCount: 1,
-        auditHistory: const [
-          CompanyAuditRecord(
-            id: 'aud_c04',
-            action: 'Verification Rejected',
-            adminName: 'Syeda Fatima Noor (OpsAdmin)',
-            timestamp: '2026-10-26 03:30 PM',
-            note: 'Uploaded document was an illegible PNG scan missing official registrar seal.',
-          ),
-        ],
-      ),
-
-      // 5. Apex Distributed Technologies (comp_05 - Suspended)
-      AdminCompanyModel(
-        id: 'comp_05',
-        companyName: 'Apex Distributed Technologies',
-        logoInitial: 'AD',
-        officialEmail: 'legal@apexdistrib.tech',
-        isEmailVerified: true,
-        industry: 'Blockchain & Distributed Systems',
-        city: 'Islamabad',
-        completeAddress: 'Blue Area, Jinnah Avenue, Islamabad',
-        contactPersonName: 'Kamran Siddiqui',
-        phoneNumber: '+92 51 2801450',
-        websiteUrl: 'https://apexdistrib.tech',
-        description: 'Distributed ledger architecture firm researching zero-knowledge proofs and smart contract security verification.',
-        registrationNumber: 'SECP-ISB-2020-5519',
-        verificationStatus: CompanyVerificationState.verified,
-        accountStatus: CompanyAccountState.suspended,
-        registrationDate: '2026-08-10',
-        registrationDateTime: DateTime(2026, 8, 10, 10, 00),
-        suspensionReason: 'Company posted non-academic cryptocurrency promotional materials violating CampusConnect platform standards.',
-        evidenceFileName: 'Apex_Incorporation_Certificate.pdf',
-        evidenceFileType: 'SECP Certificate of Incorporation',
-        evidenceFileSize: '2.8 MB',
-        postedProjectsCount: 1,
-        auditHistory: const [
-          CompanyAuditRecord(
-            id: 'aud_c05_1',
-            action: 'Verified',
-            adminName: 'Dr. Tariq Mahmood (SuperAdmin)',
-            timestamp: '2026-08-12 12:00 PM',
-            note: 'SECP credentials verified.',
-          ),
-          CompanyAuditRecord(
-            id: 'aud_c05_2',
-            action: 'Account Suspended',
-            adminName: 'Dr. Tariq Mahmood (SuperAdmin)',
-            timestamp: '2026-11-01 04:20 PM',
-            note: 'Scope violation: commercial crypto advertising on student board.',
-          ),
-        ],
-      ),
-
-      // 6. DataPulse Analytics Pakistan (comp_06)
-      AdminCompanyModel(
-        id: 'comp_06',
-        companyName: 'DataPulse Analytics Pakistan',
-        logoInitial: 'DP',
-        officialEmail: 'careers@datapulse.pk',
-        isEmailVerified: true,
-        industry: 'AI / Machine Learning & Data',
-        city: 'Rawalpindi',
-        completeAddress: 'Civic Centre, Bahria Town Phase 4, Rawalpindi',
-        contactPersonName: 'Ayesha Nadeem',
-        phoneNumber: '+92 51 5732100',
-        websiteUrl: 'https://datapulse.pk',
-        description: 'Predictive analytics and business intelligence lab training computer vision models for clinical healthcare applications.',
-        registrationNumber: 'SECP-RWP-2023-8821',
-        verificationStatus: CompanyVerificationState.verified,
-        accountStatus: CompanyAccountState.active,
-        registrationDate: '2026-09-30',
-        registrationDateTime: DateTime(2026, 9, 30, 15, 10),
-        evidenceFileName: 'DataPulse_SECP_FormA.pdf',
-        evidenceFileType: 'SECP Form A Statutory Filing',
-        evidenceFileSize: '2.2 MB',
-        postedProjectsCount: 2,
-        auditHistory: const [
-          CompanyAuditRecord(
-            id: 'aud_c06',
-            action: 'Verification Approved',
-            adminName: 'Syeda Fatima Noor (OpsAdmin)',
-            timestamp: '2026-10-02 01:15 PM',
-            note: 'SECP incorporation matched.',
-          ),
-        ],
-      ),
-    ]);
-  }
-
-  void _listenToCompanyUpdates() {
-    // Listen to changes in CompanyVerificationService
-    CompanyVerificationService().verificationNotifier.addListener(() {
-      final updatedVerif = CompanyVerificationService().currentVerification;
-      final currentList = List<AdminCompanyModel>.from(companiesNotifier.value);
-      final idx = currentList.indexWhere((c) => c.id == updatedVerif.companyId);
-
-      if (idx != -1) {
-        CompanyVerificationState state = CompanyVerificationState.pending;
-        if (updatedVerif.status == VerificationStatus.verified) {
-          state = CompanyVerificationState.verified;
-        } else if (updatedVerif.status == VerificationStatus.rejected) {
-          state = CompanyVerificationState.rejected;
+        final rawVerif =
+            (row['verification_status']?.toString().toLowerCase() ?? 'not_submitted');
+        CompanyVerificationState verifState;
+        if (rawVerif == 'verified') {
+          verifState = CompanyVerificationState.verified;
+        } else if (rawVerif == 'rejected') {
+          verifState = CompanyVerificationState.rejected;
+        } else {
+          verifState = CompanyVerificationState.pending;
         }
 
-        currentList[idx] = currentList[idx].copyWith(
-          verificationStatus: state,
-          isEmailVerified: updatedVerif.isEmailVerified,
-          evidenceFileName: updatedVerif.businessEvidenceFileName,
+        final rawAcc = (row['account_status']?.toString().toLowerCase() ?? 'active');
+        final accState = rawAcc == 'suspended'
+            ? CompanyAccountState.suspended
+            : CompanyAccountState.active;
+
+        final createdDt =
+            SupabaseHelper.parseDate(row['created_at']) ?? DateTime.now();
+        final regDateStr =
+            '${createdDt.year}-${createdDt.month.toString().padLeft(2, '0')}-${createdDt.day.toString().padLeft(2, '0')}';
+
+        final matchingLogs = auditRows
+            .where((l) {
+              final target = l['target']?.toString() ?? '';
+              return target == id ||
+                  target.toLowerCase() == name.toLowerCase() ||
+                  target.toLowerCase() ==
+                      (row['email']?.toString().toLowerCase() ?? '');
+            })
+            .map((l) => CompanyAuditRecord(
+                  id: l['id']?.toString() ?? '',
+                  action: l['action']?.toString() ?? 'Audit Event',
+                  adminName: l['admin_email']?.toString() ?? 'Administrator',
+                  timestamp: SupabaseHelper.formatRelativeTime(l['created_at']),
+                  note: l['details']?.toString(),
+                ))
+            .toList();
+
+        final projCount = projectCountsByCompany[id] ??
+            (userId != null ? (projectCountsByUser[userId] ?? 0) : 0);
+
+        final evidenceFileName = row['evidence_file_name']?.toString() ?? '';
+
+        loaded.add(
+          AdminCompanyModel(
+            id: id,
+            userId: userId,
+            companyName: name,
+            logoInitial: (row['logo_initial']?.toString().trim().isNotEmpty == true)
+                ? row['logo_initial'].toString().trim()
+                : SupabaseHelper.initialsFor(name, fallback: 'CO'),
+            officialEmail: row['email']?.toString() ?? '',
+            isEmailVerified: row['is_email_verified'] == true,
+            industry: (row['industry']?.toString().trim().isNotEmpty == true)
+                ? row['industry'].toString().trim()
+                : 'General Technology',
+            city: (row['city']?.toString().trim().isNotEmpty == true)
+                ? row['city'].toString().trim()
+                : (row['location']?.toString().trim() ?? ''),
+            completeAddress: row['address']?.toString() ?? '',
+            contactPersonName: row['contact_person']?.toString() ?? '',
+            phoneNumber: row['phone']?.toString() ?? '',
+            websiteUrl: row['website']?.toString() ?? '',
+            description: row['description']?.toString() ?? '',
+            registrationNumber: row['registration_number']?.toString() ?? '',
+            verificationStatus: verifState,
+            accountStatus: accState,
+            registrationDate: regDateStr,
+            registrationDateTime: createdDt,
+            suspensionReason: row['suspension_reason']?.toString(),
+            evidenceFileName: evidenceFileName,
+            evidenceFileType: row['evidence_file_type']?.toString() ??
+                (evidenceFileName.isNotEmpty
+                    ? 'Corporate Evidence'
+                    : 'Not Uploaded'),
+            evidenceFileSize: row['evidence_file_size']?.toString() ?? '',
+            evidenceUrl: row['evidence_url']?.toString(),
+            postedProjectsCount: projCount,
+            auditHistory: matchingLogs,
+          ),
         );
-        companiesNotifier.value = currentList;
       }
-    });
+
+      companiesNotifier.value = loaded;
+    } catch (e) {
+      debugPrint('AdminCompanyService loadFromSupabase error: $e');
+    }
   }
 
-  /// 5. Approve Company Verification
+  /// Approve Company Verification in Supabase & synchronize Verification Desk cleanly.
   Future<bool> approveCompanyVerification({
     required String companyId,
     required String adminName,
   }) async {
-    await Future.delayed(const Duration(milliseconds: 300));
-
     final list = List<AdminCompanyModel>.from(companiesNotifier.value);
     final idx = list.indexWhere((c) => c.id == companyId);
     if (idx == -1) return false;
 
     final company = list[idx];
+    final nowIso = DateTime.now().toIso8601String();
+    final supabase = SupabaseHelper.clientOrNull;
+
+    if (supabase != null && SupabaseHelper.isUuid(companyId)) {
+      try {
+        await supabase.from('companies').update({
+          'verification_status': 'verified',
+          'reviewer_name': adminName,
+          'reviewed_at': nowIso,
+          'admin_feedback': null,
+          'updated_at': nowIso,
+        }).eq('id', companyId);
+
+        if (SupabaseHelper.isUuid(company.userId)) {
+          await supabase.from('profiles').update({
+            'is_verified': true,
+            'updated_at': nowIso,
+          }).eq('id', company.userId!);
+
+          await _notifyUser(
+            userId: company.userId!,
+            title: 'Company Verification Approved',
+            message:
+                '${company.companyName} has been verified by CampusConnect Administration.',
+            type: 'verification',
+            actorName: adminName,
+          );
+        }
+
+        await _writeAuditLog(
+          action: 'COMPANY_VERIFICATION_APPROVED',
+          target: company.companyName,
+          details: 'Corporate entity approved by $adminName.',
+        );
+      } catch (e) {
+        debugPrint('AdminCompanyService approveCompanyVerification error: $e');
+        return false;
+      }
+    }
+
     final history = List<CompanyAuditRecord>.from(company.auditHistory);
     history.insert(
       0,
@@ -313,8 +233,8 @@ class AdminCompanyService {
         id: 'aud_${DateTime.now().millisecondsSinceEpoch}',
         action: 'Verification Approved',
         adminName: adminName,
-        timestamp: 'Today at ${DateTime.now().hour}:${DateTime.now().minute.toString().padLeft(2, '0')}',
-        note: 'SECP registration certificate validated and approved.',
+        timestamp: 'Just now',
+        note: 'Corporate credentials authenticated and approved.',
       ),
     );
 
@@ -324,30 +244,77 @@ class AdminCompanyService {
     );
     companiesNotifier.value = list;
 
-    // Cross-Panel Synchronization
-    if (companyId == CompanyProfileService().currentProfile.id) {
-      CompanyVerificationService().simulateAdminApproval();
-      CompanyProfileService().updateProfile(
-        CompanyProfileService().currentProfile.copyWith(isVerified: true),
+    AdminVerificationService().syncVerificationStateLocal(
+      companyId: companyId,
+      status: VerificationStatus.verified,
+      reviewerName: adminName,
+      adminFeedback: null,
+    );
+
+    if (companyId.isNotEmpty &&
+        companyId == CompanyProfileService().currentProfile.id) {
+      CompanyVerificationService().applyAdminDecision(
+        status: VerificationStatus.verified,
+        feedback: null,
+        reviewerName: adminName,
       );
+      CompanyProfileService().currentProfileNotifier.value =
+          CompanyProfileService().currentProfile.copyWith(isVerified: true);
     }
 
     return true;
   }
 
-  /// 5. Reject Company Verification with Mandatory Reason
+  /// Reject Company Verification with Mandatory Reason.
   Future<bool> rejectCompanyVerification({
     required String companyId,
     required String reason,
     required String adminName,
   }) async {
-    await Future.delayed(const Duration(milliseconds: 300));
-
     final list = List<AdminCompanyModel>.from(companiesNotifier.value);
     final idx = list.indexWhere((c) => c.id == companyId);
     if (idx == -1) return false;
 
     final company = list[idx];
+    final nowIso = DateTime.now().toIso8601String();
+    final supabase = SupabaseHelper.clientOrNull;
+
+    if (supabase != null && SupabaseHelper.isUuid(companyId)) {
+      try {
+        await supabase.from('companies').update({
+          'verification_status': 'rejected',
+          'reviewer_name': adminName,
+          'reviewed_at': nowIso,
+          'admin_feedback': reason.trim(),
+          'updated_at': nowIso,
+        }).eq('id', companyId);
+
+        if (SupabaseHelper.isUuid(company.userId)) {
+          await supabase.from('profiles').update({
+            'is_verified': false,
+            'updated_at': nowIso,
+          }).eq('id', company.userId!);
+
+          await _notifyUser(
+            userId: company.userId!,
+            title: 'Company Verification Rejected',
+            message: reason.trim(),
+            type: 'verification',
+            actorName: adminName,
+          );
+        }
+
+        await _writeAuditLog(
+          action: 'COMPANY_VERIFICATION_REJECTED',
+          target: company.companyName,
+          details: reason.trim(),
+        );
+      } catch (e) {
+        debugPrint('AdminCompanyService rejectCompanyVerification error: $e');
+        return false;
+      }
+    }
+
     final history = List<CompanyAuditRecord>.from(company.auditHistory);
     history.insert(
       0,
@@ -355,8 +322,8 @@ class AdminCompanyService {
         id: 'aud_${DateTime.now().millisecondsSinceEpoch}',
         action: 'Verification Rejected',
         adminName: adminName,
-        timestamp: 'Today',
-        note: reason,
+        timestamp: 'Just now',
+        note: reason.trim(),
       ),
     );
 
@@ -366,27 +333,71 @@ class AdminCompanyService {
     );
     companiesNotifier.value = list;
 
-    // Cross-Panel Synchronization
-    if (companyId == CompanyProfileService().currentProfile.id) {
-      CompanyVerificationService().simulateAdminRejection(reason);
+    AdminVerificationService().syncVerificationStateLocal(
+      companyId: companyId,
+      status: VerificationStatus.rejected,
+      reviewerName: adminName,
+      adminFeedback: reason.trim(),
+    );
+
+    if (companyId.isNotEmpty &&
+        companyId == CompanyProfileService().currentProfile.id) {
+      CompanyVerificationService().applyAdminDecision(
+        status: VerificationStatus.rejected,
+        feedback: reason.trim(),
+        reviewerName: adminName,
+      );
+      CompanyProfileService().currentProfileNotifier.value =
+          CompanyProfileService().currentProfile.copyWith(isVerified: false);
     }
 
     return true;
   }
 
-  /// 5. Request Additional Verification Documents
+  /// Request Additional Verification Documents.
   Future<bool> requestAdditionalDocuments({
     required String companyId,
     required String instructions,
     required String adminName,
   }) async {
-    await Future.delayed(const Duration(milliseconds: 300));
-
     final list = List<AdminCompanyModel>.from(companiesNotifier.value);
     final idx = list.indexWhere((c) => c.id == companyId);
     if (idx == -1) return false;
 
     final company = list[idx];
+    final nowIso = DateTime.now().toIso8601String();
+    final supabase = SupabaseHelper.clientOrNull;
+
+    if (supabase != null && SupabaseHelper.isUuid(companyId)) {
+      try {
+        await supabase.from('companies').update({
+          'verification_status': 'pending',
+          'admin_feedback': instructions.trim(),
+          'reviewer_name': adminName,
+          'updated_at': nowIso,
+        }).eq('id', companyId);
+
+        if (SupabaseHelper.isUuid(company.userId)) {
+          await _notifyUser(
+            userId: company.userId!,
+            title: 'Additional Verification Documents Requested',
+            message: instructions.trim(),
+            type: 'verification',
+            actorName: adminName,
+          );
+        }
+
+        await _writeAuditLog(
+          action: 'COMPANY_DOCS_REQUESTED',
+          target: company.companyName,
+          details: instructions.trim(),
+        );
+      } catch (e) {
+        debugPrint('AdminCompanyService requestAdditionalDocuments error: $e');
+        return false;
+      }
+    }
+
     final history = List<CompanyAuditRecord>.from(company.auditHistory);
     history.insert(
       0,
@@ -394,8 +405,8 @@ class AdminCompanyService {
         id: 'aud_${DateTime.now().millisecondsSinceEpoch}',
         action: 'Additional Documents Requested',
         adminName: adminName,
-        timestamp: 'Today',
-        note: instructions,
+        timestamp: 'Just now',
+        note: instructions.trim(),
       ),
     );
 
@@ -404,22 +415,65 @@ class AdminCompanyService {
       auditHistory: history,
     );
     companiesNotifier.value = list;
+
+    AdminVerificationService().syncVerificationStateLocal(
+      companyId: companyId,
+      status: VerificationStatus.pending,
+      reviewerName: adminName,
+      adminFeedback: instructions.trim(),
+    );
+
     return true;
   }
 
-  /// 6. Suspend Company Account with Mandatory Reason
+  /// Suspend Company Account with Mandatory Reason.
   Future<bool> suspendCompanyAccount({
     required String companyId,
     required String reason,
     required String adminName,
   }) async {
-    await Future.delayed(const Duration(milliseconds: 300));
-
     final list = List<AdminCompanyModel>.from(companiesNotifier.value);
     final idx = list.indexWhere((c) => c.id == companyId);
     if (idx == -1) return false;
 
     final company = list[idx];
+    final nowIso = DateTime.now().toIso8601String();
+    final supabase = SupabaseHelper.clientOrNull;
+
+    if (supabase != null && SupabaseHelper.isUuid(companyId)) {
+      try {
+        await supabase.from('companies').update({
+          'account_status': 'suspended',
+          'suspension_reason': reason.trim(),
+          'updated_at': nowIso,
+        }).eq('id', companyId);
+
+        if (SupabaseHelper.isUuid(company.userId)) {
+          await supabase.from('profiles').update({
+            'account_status': 'suspended',
+            'updated_at': nowIso,
+          }).eq('id', company.userId!);
+
+          await _notifyUser(
+            userId: company.userId!,
+            title: 'Corporate Account Suspended',
+            message: reason.trim(),
+            type: 'governance',
+            actorName: adminName,
+          );
+        }
+
+        await _writeAuditLog(
+          action: 'COMPANY_SUSPENDED',
+          target: company.companyName,
+          details: reason.trim(),
+        );
+      } catch (e) {
+        debugPrint('AdminCompanyService suspendCompanyAccount error: $e');
+        return false;
+      }
+    }
+
     final history = List<CompanyAuditRecord>.from(company.auditHistory);
     history.insert(
       0,
@@ -427,32 +481,67 @@ class AdminCompanyService {
         id: 'aud_${DateTime.now().millisecondsSinceEpoch}',
         action: 'Account Suspended',
         adminName: adminName,
-        timestamp: 'Today',
-        note: reason,
+        timestamp: 'Just now',
+        note: reason.trim(),
       ),
     );
 
     list[idx] = company.copyWith(
       accountStatus: CompanyAccountState.suspended,
-      suspensionReason: reason,
+      suspensionReason: reason.trim(),
       auditHistory: history,
     );
     companiesNotifier.value = list;
     return true;
   }
 
-  /// 6. Reactivate Suspended Company Account
+  /// Reactivate Suspended Company Account.
   Future<bool> reactivateCompanyAccount({
     required String companyId,
     required String adminName,
   }) async {
-    await Future.delayed(const Duration(milliseconds: 300));
-
     final list = List<AdminCompanyModel>.from(companiesNotifier.value);
     final idx = list.indexWhere((c) => c.id == companyId);
     if (idx == -1) return false;
 
     final company = list[idx];
+    final nowIso = DateTime.now().toIso8601String();
+    final supabase = SupabaseHelper.clientOrNull;
+
+    if (supabase != null && SupabaseHelper.isUuid(companyId)) {
+      try {
+        await supabase.from('companies').update({
+          'account_status': 'active',
+          'suspension_reason': null,
+          'updated_at': nowIso,
+        }).eq('id', companyId);
+
+        if (SupabaseHelper.isUuid(company.userId)) {
+          await supabase.from('profiles').update({
+            'account_status': 'active',
+            'updated_at': nowIso,
+          }).eq('id', company.userId!);
+
+          await _notifyUser(
+            userId: company.userId!,
+            title: 'Corporate Account Reactivated',
+            message: 'Your corporate account has been restored to active standing.',
+            type: 'governance',
+            actorName: adminName,
+          );
+        }
+
+        await _writeAuditLog(
+          action: 'COMPANY_REACTIVATED',
+          target: company.companyName,
+          details: 'Account reactivated by $adminName.',
+        );
+      } catch (e) {
+        debugPrint('AdminCompanyService reactivateCompanyAccount error: $e');
+        return false;
+      }
+    }
+
     final history = List<CompanyAuditRecord>.from(company.auditHistory);
     history.insert(
       0,
@@ -460,24 +549,79 @@ class AdminCompanyService {
         id: 'aud_${DateTime.now().millisecondsSinceEpoch}',
         action: 'Account Reactivated',
         adminName: adminName,
-        timestamp: 'Today',
+        timestamp: 'Just now',
         note: 'Corporate account reactivated by administrative governance sign-off.',
       ),
     );
 
     list[idx] = company.copyWith(
       accountStatus: CompanyAccountState.active,
-      suspensionReason: null,
+      clearSuspensionReason: true,
       auditHistory: history,
     );
     companiesNotifier.value = list;
     return true;
   }
 
-  /// 7. Export Permitted Company Records to CSV
+  void syncLocalVerificationStatus({
+    required String companyId,
+    required CompanyVerificationState state,
+    String? feedback,
+  }) {
+    final list = List<AdminCompanyModel>.from(companiesNotifier.value);
+    final idx = list.indexWhere((c) => c.id == companyId);
+    if (idx == -1) return;
+    list[idx] = list[idx].copyWith(verificationStatus: state);
+    companiesNotifier.value = list;
+  }
+
+  Future<void> _notifyUser({
+    required String userId,
+    required String title,
+    required String message,
+    required String type,
+    required String actorName,
+  }) async {
+    final supabase = SupabaseHelper.clientOrNull;
+    if (supabase == null || !SupabaseHelper.isUuid(userId)) return;
+    try {
+      await supabase.from('notifications').insert({
+        'user_id': userId,
+        'title': title,
+        'message': message,
+        'type': type,
+        'actor_name': actorName,
+      });
+    } catch (e) {
+      debugPrint('AdminCompanyService notify error: $e');
+    }
+  }
+
+  Future<void> _writeAuditLog({
+    required String action,
+    required String target,
+    required String details,
+  }) async {
+    final supabase = SupabaseHelper.clientOrNull;
+    if (supabase == null) return;
+    try {
+      await supabase.from('admin_audit_logs').insert({
+        'admin_email': SupabaseHelper.currentUser?.email ?? 'admin@campusconnect.edu.pk',
+        'action': action,
+        'target': target,
+        'details': details,
+      });
+    } catch (e) {
+      debugPrint('AdminCompanyService audit error: $e');
+    }
+  }
+
+  /// Export Permitted Company Records to CSV
   String exportCompaniesCsv(List<AdminCompanyModel> companies) {
     final buffer = StringBuffer();
-    buffer.writeln('ID,Company Name,Email,Industry,City,Address,Registration Number,Verification Status,Account Status,Registration Date,Projects Count');
+    buffer.writeln(
+      'ID,Company Name,Email,Industry,City,Address,Registration Number,Verification Status,Account Status,Registration Date,Projects Count',
+    );
 
     for (final c in companies) {
       buffer.writeln(
@@ -485,5 +629,9 @@ class AdminCompanyService {
       );
     }
     return buffer.toString();
+  }
+
+  void reset() {
+    companiesNotifier.value = [];
   }
 }

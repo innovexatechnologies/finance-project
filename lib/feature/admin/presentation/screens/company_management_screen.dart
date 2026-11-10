@@ -1,21 +1,25 @@
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
+import 'package:google_fonts/google_fonts.dart';
 import 'package:link_vibe/core/constants/app_colors.dart';
+import 'package:link_vibe/core/widgets/app_empty_state.dart';
 import 'package:link_vibe/feature/admin/models/admin_company_model.dart';
+import 'package:link_vibe/feature/admin/models/admin_project_model.dart';
 import 'package:link_vibe/feature/admin/presentation/screens/admin_dashboard_screen.dart';
 import 'package:link_vibe/feature/admin/presentation/screens/admin_login_screen.dart';
-import 'package:link_vibe/feature/admin/presentation/screens/student_management_screen.dart';
-import 'package:link_vibe/feature/admin/presentation/screens/project_management_screen.dart';
+import 'package:link_vibe/feature/admin/presentation/screens/admin_settings_screen.dart';
 import 'package:link_vibe/feature/admin/presentation/screens/application_monitoring_screen.dart';
 import 'package:link_vibe/feature/admin/presentation/screens/certificate_management_screen.dart';
+import 'package:link_vibe/feature/admin/presentation/screens/company_verifications_screen.dart';
+import 'package:link_vibe/feature/admin/presentation/screens/project_management_screen.dart';
 import 'package:link_vibe/feature/admin/presentation/screens/reports_analytics_screen.dart';
-import 'package:link_vibe/feature/admin/presentation/screens/admin_settings_screen.dart';
+import 'package:link_vibe/feature/admin/presentation/screens/student_management_screen.dart';
 import 'package:link_vibe/feature/admin/presentation/widgets/admin_sidebar.dart';
 import 'package:link_vibe/feature/admin/presentation/widgets/admin_top_navbar.dart';
 import 'package:link_vibe/feature/admin/services/admin_auth_service.dart';
 import 'package:link_vibe/feature/admin/services/admin_company_service.dart';
-import 'package:link_vibe/feature/company/models/project_model.dart';
-import 'package:link_vibe/feature/company/services/company_project_service.dart';
+import 'package:link_vibe/feature/admin/services/admin_project_service.dart';
+import 'package:url_launcher/url_launcher.dart';
 
 /// Enterprise Company Management Module for CampusConnect Admin Panel (Screen 36)
 /// Provides corporate registry overview, advanced multi-parameter filtering,
@@ -45,24 +49,6 @@ class _CompanyManagementScreenState extends State<CompanyManagementScreen> {
   int _currentPage = 1;
   final int _itemsPerPage = 5;
 
-  final List<String> _industries = [
-    'All Industries',
-    'Information Technology & Software',
-    'Cloud Infrastructure & DevOps',
-    'HealthTech & BioInformatics',
-    'Cybersecurity & Threat Intelligence',
-    'Blockchain & Distributed Systems',
-    'AI / Machine Learning & Data',
-  ];
-
-  final List<String> _locations = [
-    'All Locations',
-    'Islamabad',
-    'Lahore',
-    'Karachi',
-    'Rawalpindi',
-  ];
-
   final List<String> _verificationFilters = ['All', 'Verified', 'Pending', 'Rejected'];
   final List<String> _accountFilters = ['All', 'Active', 'Suspended'];
   final List<String> _sortOptions = [
@@ -71,6 +57,24 @@ class _CompanyManagementScreenState extends State<CompanyManagementScreen> {
     'Most Projects',
     'Company Name (A-Z)',
   ];
+
+  List<String> _buildIndustryOptions(List<AdminCompanyModel> companies) {
+    final set = <String>{'All Industries'};
+    for (final c in companies) {
+      final ind = c.industry.trim();
+      if (ind.isNotEmpty) set.add(ind);
+    }
+    return set.toList();
+  }
+
+  List<String> _buildLocationOptions(List<AdminCompanyModel> companies) {
+    final set = <String>{'All Locations'};
+    for (final c in companies) {
+      final city = c.city.trim();
+      if (city.isNotEmpty) set.add(city);
+    }
+    return set.toList();
+  }
 
   Future<void> _handleSignOut() async {
     final confirmed = await showDialog<bool>(
@@ -116,48 +120,96 @@ class _CompanyManagementScreenState extends State<CompanyManagementScreen> {
     }
   }
 
-  void _onRouteSelected(String routeId) {
-    if (routeId == 'dashboard') {
-      Navigator.pushReplacement(
-        context,
-        MaterialPageRoute(builder: (_) => const AdminDashboardScreen()),
+  Future<void> _refreshCompanies() async {
+    await Future.wait([
+      _companyService.loadFromSupabase(),
+      AdminProjectService().loadFromSupabase(),
+    ]);
+    if (!mounted) return;
+    ScaffoldMessenger.of(context).showSnackBar(
+      const SnackBar(
+        content: Text('Company registry refreshed from Supabase.'),
+        backgroundColor: AppColors.primary,
+        behavior: SnackBarBehavior.floating,
+      ),
+    );
+  }
+
+  Future<void> _launchExternalUrl(String rawUrl) async {
+    final trimmed = rawUrl.trim();
+    if (trimmed.isEmpty) return;
+    final uri = Uri.tryParse(trimmed);
+    if (uri == null || !uri.hasScheme) {
+      if (!mounted) return;
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(
+          content: Text('Invalid or incomplete document URL.'),
+          behavior: SnackBarBehavior.floating,
+        ),
       );
-    } else if (routeId == 'student_verifications') {
-      Navigator.pushReplacement(
-        context,
-        MaterialPageRoute(builder: (_) => const StudentManagementScreen()),
-      );
-    } else if (routeId == 'projects_audit' || routeId == 'projects') {
-      Navigator.pushReplacement(
-        context,
-        MaterialPageRoute(builder: (_) => const ProjectManagementScreen()),
-      );
-    } else if (routeId == 'compliance' || routeId == 'application_monitoring') {
-      Navigator.pushReplacement(
-        context,
-        MaterialPageRoute(builder: (_) => const ApplicationMonitoringScreen()),
-      );
-    } else if (routeId == 'audit_logs' || routeId == 'certificates') {
-      Navigator.pushReplacement(
-        context,
-        MaterialPageRoute(builder: (_) => const CertificateManagementScreen()),
-      );
-    } else if (routeId == 'analytics' || routeId == 'reports') {
-      Navigator.pushReplacement(
-        context,
-        MaterialPageRoute(builder: (_) => const ReportsAnalyticsScreen()),
-      );
-    } else if (routeId == 'settings') {
-      Navigator.pushReplacement(
-        context,
-        MaterialPageRoute(builder: (_) => const AdminSettingsScreen()),
+      return;
+    }
+    try {
+      final launched =
+          await launchUrl(uri, mode: LaunchMode.externalApplication);
+      if (!launched && mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(
+            content: Text('Could not open the uploaded document.'),
+            behavior: SnackBarBehavior.floating,
+          ),
+        );
+      }
+    } catch (_) {
+      if (!mounted) return;
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(
+          content: Text('Failed to launch document link.'),
+          behavior: SnackBarBehavior.floating,
+        ),
       );
     }
-    // If routeId is 'company_verifications' or 'company_management', we are already on this screen.
+  }
+
+  void _onRouteSelected(String routeId) {
+    if (_scaffoldKey.currentState?.isDrawerOpen ?? false) {
+      Navigator.pop(context);
+    }
+    if (routeId == 'company_management') return;
+
+    Widget? target;
+    if (routeId == 'dashboard') {
+      target = const AdminDashboardScreen();
+    } else if (routeId == 'company_verifications') {
+      target = const CompanyVerificationsScreen();
+    } else if (routeId == 'student_verifications') {
+      target = const StudentManagementScreen();
+    } else if (routeId == 'projects_audit' || routeId == 'projects') {
+      target = const ProjectManagementScreen();
+    } else if (routeId == 'compliance' || routeId == 'application_monitoring') {
+      target = const ApplicationMonitoringScreen();
+    } else if (routeId == 'audit_logs' || routeId == 'certificates') {
+      target = const CertificateManagementScreen();
+    } else if (routeId == 'analytics' || routeId == 'reports') {
+      target = const ReportsAnalyticsScreen();
+    } else if (routeId == 'settings') {
+      target = const AdminSettingsScreen();
+    }
+
+    if (target != null) {
+      Navigator.pushReplacement(
+        context,
+        MaterialPageRoute(builder: (_) => target!),
+      );
+    }
   }
 
   // Filter & Sort Logic
-  List<AdminCompanyModel> _getFilteredCompanies(List<AdminCompanyModel> companies) {
+  List<AdminCompanyModel> _getFilteredCompanies(
+    List<AdminCompanyModel> companies, {
+    required String effectiveIndustry,
+    required String effectiveLocation,
+  }) {
     return companies.where((c) {
       // 1. Search query
       if (_searchQuery.isNotEmpty) {
@@ -172,12 +224,12 @@ class _CompanyManagementScreenState extends State<CompanyManagementScreen> {
       }
 
       // 2. Industry filter
-      if (_selectedIndustry != 'All Industries' && c.industry != _selectedIndustry) {
+      if (effectiveIndustry != 'All Industries' && c.industry != effectiveIndustry) {
         return false;
       }
 
       // 3. Location filter
-      if (_selectedLocation != 'All Locations' && c.city != _selectedLocation) {
+      if (effectiveLocation != 'All Locations' && c.city != effectiveLocation) {
         return false;
       }
 
@@ -226,9 +278,10 @@ class _CompanyManagementScreenState extends State<CompanyManagementScreen> {
 
   // 4. Company Profile Detailed Drawer
   void _openCompanyProfileDrawer(AdminCompanyModel company) {
-    // Fetch live projects posted by this company
-    final List<ProjectModel> postedProjects =
-        CompanyProjectService().getProjectsForCompany(company.id);
+    final List<AdminProjectModel> postedProjects = AdminProjectService()
+        .allProjects
+        .where((p) => p.companyId == company.id)
+        .toList();
 
     showModalBottomSheet(
       context: context,
@@ -249,69 +302,78 @@ class _CompanyManagementScreenState extends State<CompanyManagementScreen> {
               // Header Row
               Row(
                 mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                crossAxisAlignment: CrossAxisAlignment.start,
                 children: [
-                  Row(
-                    children: [
-                      Container(
-                        width: 52,
-                        height: 52,
-                        decoration: BoxDecoration(
-                          color: AppColors.darkNavy,
-                          borderRadius: BorderRadius.circular(12),
-                          boxShadow: [
-                            BoxShadow(
-                              color: AppColors.darkNavy.withValues(alpha: 0.18),
-                              blurRadius: 8,
-                              offset: const Offset(0, 3),
-                            ),
-                          ],
-                        ),
-                        child: Center(
-                          child: Text(
-                            company.logoInitial,
-                            style: const TextStyle(
-                              color: Colors.white,
-                              fontWeight: FontWeight.bold,
-                              fontSize: 18,
-                              letterSpacing: 1,
-                            ),
-                          ),
-                        ),
-                      ),
-                      const SizedBox(width: 14),
-                      Column(
-                        crossAxisAlignment: CrossAxisAlignment.start,
-                        children: [
-                          Row(
-                            children: [
-                              Text(
-                                company.companyName,
-                                style: const TextStyle(
-                                  fontSize: 18,
-                                  fontWeight: FontWeight.bold,
-                                  color: AppColors.darkNavy,
-                                ),
+                  Expanded(
+                    child: Row(
+                      children: [
+                        Container(
+                          width: 52,
+                          height: 52,
+                          decoration: BoxDecoration(
+                            color: AppColors.darkNavy,
+                            borderRadius: BorderRadius.circular(12),
+                            boxShadow: [
+                              BoxShadow(
+                                color: AppColors.darkNavy.withValues(alpha: 0.18),
+                                blurRadius: 8,
+                                offset: const Offset(0, 3),
                               ),
-                              if (company.isEmailVerified) ...[
-                                const SizedBox(width: 6),
-                                const Icon(
-                                  Icons.verified_rounded,
-                                  color: AppColors.accentTeal,
-                                  size: 16,
-                                ),
-                              ],
                             ],
                           ),
-                          Text(
-                            'Reg No: ${company.registrationNumber} • ${company.city}',
-                            style: const TextStyle(
-                              fontSize: 12,
-                              color: AppColors.textSecondary,
+                          child: Center(
+                            child: Text(
+                              company.logoInitial,
+                              style: GoogleFonts.poppins(
+                                color: Colors.white,
+                                fontWeight: FontWeight.bold,
+                                fontSize: 18,
+                                letterSpacing: 1,
+                              ),
                             ),
                           ),
-                        ],
-                      ),
-                    ],
+                        ),
+                        const SizedBox(width: 14),
+                        Expanded(
+                          child: Column(
+                            crossAxisAlignment: CrossAxisAlignment.start,
+                            children: [
+                              Row(
+                                children: [
+                                  Flexible(
+                                    child: Text(
+                                      company.companyName,
+                                      style: GoogleFonts.poppins(
+                                        fontSize: 18,
+                                        fontWeight: FontWeight.bold,
+                                        color: AppColors.darkNavy,
+                                      ),
+                                      overflow: TextOverflow.ellipsis,
+                                    ),
+                                  ),
+                                  if (company.isEmailVerified) ...[
+                                    const SizedBox(width: 6),
+                                    const Icon(
+                                      Icons.verified_rounded,
+                                      color: AppColors.accentTeal,
+                                      size: 16,
+                                    ),
+                                  ],
+                                ],
+                              ),
+                              Text(
+                                'Reg No: ${company.registrationNumber} • ${company.city}',
+                                style: GoogleFonts.inter(
+                                  fontSize: 12,
+                                  color: AppColors.textSecondary,
+                                ),
+                                overflow: TextOverflow.ellipsis,
+                              ),
+                            ],
+                          ),
+                        ),
+                      ],
+                    ),
                   ),
                   IconButton(
                     icon: const Icon(Icons.close_rounded),
@@ -324,11 +386,13 @@ class _CompanyManagementScreenState extends State<CompanyManagementScreen> {
               const SizedBox(height: 12),
 
               // Status Summary Badges
-              Row(
+              Wrap(
+                spacing: 8,
+                runSpacing: 8,
                 children: [
                   _buildStatusPill(
                     label: company.verificationStatus == CompanyVerificationState.verified
-                        ? 'SECP Verified'
+                        ? 'Verified Partner'
                         : company.verificationStatus == CompanyVerificationState.pending
                             ? 'Verification Pending'
                             : 'Verification Rejected',
@@ -343,7 +407,6 @@ class _CompanyManagementScreenState extends State<CompanyManagementScreen> {
                             ? AppColors.warningBg
                             : AppColors.errorBg,
                   ),
-                  const SizedBox(width: 8),
                   _buildStatusPill(
                     label: company.accountStatus == CompanyAccountState.active
                         ? 'Account Active'
@@ -355,7 +418,6 @@ class _CompanyManagementScreenState extends State<CompanyManagementScreen> {
                         ? AppColors.lightIceBlue
                         : AppColors.errorBg,
                   ),
-                  const SizedBox(width: 8),
                   _buildStatusPill(
                     label: '${company.postedProjectsCount} Projects Posted',
                     color: AppColors.darkNavy,
@@ -376,8 +438,10 @@ class _CompanyManagementScreenState extends State<CompanyManagementScreen> {
                   border: Border.all(color: AppColors.border),
                 ),
                 child: Text(
-                  company.description,
-                  style: const TextStyle(
+                  company.description.isEmpty
+                      ? 'No company description provided.'
+                      : company.description,
+                  style: GoogleFonts.inter(
                     fontSize: 13,
                     color: AppColors.textPrimary,
                     height: 1.45,
@@ -390,7 +454,7 @@ class _CompanyManagementScreenState extends State<CompanyManagementScreen> {
               _buildSectionHeader('2. Corporate Registry & Address'),
               const SizedBox(height: 8),
               _buildInfoRow(Icons.business_rounded, 'Industry Vertical', company.industry),
-              _buildInfoRow(Icons.numbers_rounded, 'SECP Registry Number', company.registrationNumber),
+              _buildInfoRow(Icons.numbers_rounded, 'Registration Number', company.registrationNumber),
               _buildInfoRow(Icons.location_on_rounded, 'City', company.city),
               _buildInfoRow(Icons.home_work_rounded, 'Physical Headquarters', company.completeAddress),
               _buildInfoRow(Icons.link_rounded, 'Official Website', company.websiteUrl),
@@ -406,7 +470,7 @@ class _CompanyManagementScreenState extends State<CompanyManagementScreen> {
               const SizedBox(height: 20),
 
               // 4. Verification Evidence Document
-              _buildSectionHeader('4. Submitted SECP Verification Document'),
+              _buildSectionHeader('4. Submitted Verification Document'),
               const SizedBox(height: 8),
               Container(
                 padding: const EdgeInsets.all(14),
@@ -415,41 +479,51 @@ class _CompanyManagementScreenState extends State<CompanyManagementScreen> {
                   borderRadius: BorderRadius.circular(12),
                   border: Border.all(color: AppColors.border),
                 ),
-                child: Row(
+                child: Wrap(
+                  spacing: 12,
+                  runSpacing: 12,
+                  alignment: WrapAlignment.spaceBetween,
+                  crossAxisAlignment: WrapCrossAlignment.center,
                   children: [
-                    Container(
-                      padding: const EdgeInsets.all(10),
-                      decoration: BoxDecoration(
-                        color: AppColors.primary.withValues(alpha: 0.12),
-                        borderRadius: BorderRadius.circular(8),
-                      ),
-                      child: const Icon(
-                        Icons.picture_as_pdf_rounded,
-                        color: AppColors.primary,
-                        size: 24,
-                      ),
-                    ),
-                    const SizedBox(width: 14),
-                    Expanded(
-                      child: Column(
-                        crossAxisAlignment: CrossAxisAlignment.start,
-                        children: [
-                          Text(
-                            company.evidenceFileName,
-                            style: const TextStyle(
-                              fontWeight: FontWeight.bold,
-                              fontSize: 13,
-                            ),
+                    Row(
+                      mainAxisSize: MainAxisSize.min,
+                      children: [
+                        Container(
+                          padding: const EdgeInsets.all(10),
+                          decoration: BoxDecoration(
+                            color: AppColors.primary.withValues(alpha: 0.12),
+                            borderRadius: BorderRadius.circular(8),
                           ),
-                          Text(
-                            '${company.evidenceFileType} • ${company.evidenceFileSize}',
-                            style: const TextStyle(
-                              fontSize: 11,
-                              color: AppColors.textMuted,
-                            ),
+                          child: const Icon(
+                            Icons.picture_as_pdf_rounded,
+                            color: AppColors.primary,
+                            size: 24,
                           ),
-                        ],
-                      ),
+                        ),
+                        const SizedBox(width: 14),
+                        Flexible(
+                          child: Column(
+                            crossAxisAlignment: CrossAxisAlignment.start,
+                            children: [
+                              Text(
+                                company.evidenceFileName,
+                                style: GoogleFonts.inter(
+                                  fontWeight: FontWeight.bold,
+                                  fontSize: 13,
+                                ),
+                                overflow: TextOverflow.ellipsis,
+                              ),
+                              Text(
+                                '${company.evidenceFileType} • ${company.evidenceFileSize}',
+                                style: GoogleFonts.inter(
+                                  fontSize: 11,
+                                  color: AppColors.textMuted,
+                                ),
+                              ),
+                            ],
+                          ),
+                        ),
+                      ],
                     ),
                     ElevatedButton.icon(
                       style: ElevatedButton.styleFrom(
@@ -489,6 +563,9 @@ class _CompanyManagementScreenState extends State<CompanyManagementScreen> {
                 )
               else
                 ...postedProjects.map((project) {
+                  final isOpen = project.status == AdminProjectStatus.published ||
+                      project.status == AdminProjectStatus.active;
+                  final isPendingReview = project.status == AdminProjectStatus.pendingReview;
                   return Container(
                     margin: const EdgeInsets.only(bottom: 10),
                     padding: const EdgeInsets.all(12),
@@ -506,7 +583,7 @@ class _CompanyManagementScreenState extends State<CompanyManagementScreen> {
                             children: [
                               Text(
                                 project.title,
-                                style: const TextStyle(
+                                style: GoogleFonts.inter(
                                   fontWeight: FontWeight.bold,
                                   fontSize: 13,
                                   color: AppColors.darkNavy,
@@ -515,7 +592,7 @@ class _CompanyManagementScreenState extends State<CompanyManagementScreen> {
                               const SizedBox(height: 2),
                               Text(
                                 '${project.category} • ${project.projectType} • Duration: ${project.duration}',
-                                style: const TextStyle(
+                                style: GoogleFonts.inter(
                                   fontSize: 11.5,
                                   color: AppColors.textSecondary,
                                 ),
@@ -523,30 +600,33 @@ class _CompanyManagementScreenState extends State<CompanyManagementScreen> {
                             ],
                           ),
                         ),
+                        const SizedBox(width: 8),
                         Container(
                           padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 4),
                           decoration: BoxDecoration(
-                            color: project.status == 'Open'
+                            color: isOpen
                                 ? AppColors.successBg
-                                : project.status == 'In Progress'
-                                    ? AppColors.lightIceBlue
+                                : isPendingReview
+                                    ? AppColors.warningBg
                                     : AppColors.background,
                             borderRadius: BorderRadius.circular(6),
                             border: Border.all(
-                              color: project.status == 'Open'
+                              color: isOpen
                                   ? AppColors.success.withValues(alpha: 0.3)
-                                  : AppColors.border,
+                                  : isPendingReview
+                                      ? AppColors.warning.withValues(alpha: 0.3)
+                                      : AppColors.border,
                             ),
                           ),
                           child: Text(
-                            project.status,
+                            project.statusDisplay,
                             style: TextStyle(
                               fontSize: 11,
                               fontWeight: FontWeight.bold,
-                              color: project.status == 'Open'
+                              color: isOpen
                                   ? AppColors.success
-                                  : project.status == 'In Progress'
-                                      ? AppColors.primary
+                                  : isPendingReview
+                                      ? AppColors.warning
                                       : AppColors.textSecondary,
                             ),
                           ),
@@ -643,105 +723,107 @@ class _CompanyManagementScreenState extends State<CompanyManagementScreen> {
               const SizedBox(height: 24),
 
               // Primary Action Buttons
-              Row(
-                children: [
-                  // Verification Decision Buttons
-                  if (company.verificationStatus == CompanyVerificationState.pending) ...[
-                    Expanded(
+              LayoutBuilder(
+                builder: (context, constraints) {
+                  if (company.verificationStatus == CompanyVerificationState.pending) {
+                    return Wrap(
+                      spacing: 8,
+                      runSpacing: 8,
+                      children: [
+                        OutlinedButton.icon(
+                          style: OutlinedButton.styleFrom(
+                            foregroundColor: AppColors.error,
+                            side: const BorderSide(color: AppColors.error),
+                            padding: const EdgeInsets.symmetric(
+                                horizontal: 14, vertical: 12),
+                          ),
+                          icon: const Icon(Icons.cancel_outlined, size: 16),
+                          label: const Text('Reject Verification'),
+                          onPressed: () {
+                            Navigator.pop(ctx);
+                            _promptRejectCompanyVerification(company);
+                          },
+                        ),
+                        OutlinedButton.icon(
+                          style: OutlinedButton.styleFrom(
+                            foregroundColor: AppColors.warning,
+                            side: const BorderSide(color: AppColors.warning),
+                            padding: const EdgeInsets.symmetric(
+                                horizontal: 14, vertical: 12),
+                          ),
+                          icon: const Icon(Icons.contact_support_outlined, size: 16),
+                          label: const Text('Request Docs'),
+                          onPressed: () {
+                            Navigator.pop(ctx);
+                            _promptRequestAdditionalDocs(company);
+                          },
+                        ),
+                        ElevatedButton.icon(
+                          style: ElevatedButton.styleFrom(
+                            backgroundColor: AppColors.success,
+                            foregroundColor: Colors.white,
+                            padding: const EdgeInsets.symmetric(
+                                horizontal: 16, vertical: 12),
+                          ),
+                          icon: const Icon(Icons.check_circle_outline, size: 16),
+                          label: const Text('Approve Verification'),
+                          onPressed: () async {
+                            final admin = _authService.currentAdmin?.fullName ??
+                                'Executive Administrator';
+                            await _companyService.approveCompanyVerification(
+                              companyId: company.id,
+                              adminName: admin,
+                            );
+                            if (ctx.mounted) Navigator.pop(ctx);
+                            if (!mounted) return;
+                            ScaffoldMessenger.of(this.context).showSnackBar(
+                              SnackBar(
+                                content: Text(
+                                    'Verification approved for ${company.companyName}!'),
+                                backgroundColor: AppColors.success,
+                                behavior: SnackBarBehavior.floating,
+                              ),
+                            );
+                          },
+                        ),
+                      ],
+                    );
+                  }
+                  if (company.accountStatus == CompanyAccountState.active) {
+                    return SizedBox(
+                      width: double.infinity,
                       child: OutlinedButton.icon(
                         style: OutlinedButton.styleFrom(
                           foregroundColor: AppColors.error,
                           side: const BorderSide(color: AppColors.error),
                           padding: const EdgeInsets.symmetric(vertical: 12),
                         ),
-                        icon: const Icon(Icons.cancel_outlined, size: 16),
-                        label: const Text('Reject Verification'),
+                        icon: const Icon(Icons.block_rounded, size: 16),
+                        label: const Text('Suspend Account'),
                         onPressed: () {
                           Navigator.pop(ctx);
-                          _promptRejectCompanyVerification(company);
+                          _promptSuspendCompany(company);
                         },
                       ),
-                    ),
-                    const SizedBox(width: 8),
-                    Expanded(
-                      child: OutlinedButton.icon(
-                        style: OutlinedButton.styleFrom(
-                          foregroundColor: AppColors.warning,
-                          side: const BorderSide(color: AppColors.warning),
-                          padding: const EdgeInsets.symmetric(vertical: 12),
-                        ),
-                        icon: const Icon(Icons.contact_support_outlined, size: 16),
-                        label: const Text('Request Docs'),
-                        onPressed: () {
-                          Navigator.pop(ctx);
-                          _promptRequestAdditionalDocs(company);
-                        },
+                    );
+                  }
+                  return SizedBox(
+                    width: double.infinity,
+                    child: ElevatedButton.icon(
+                      style: ElevatedButton.styleFrom(
+                        backgroundColor: AppColors.success,
+                        foregroundColor: Colors.white,
+                        padding: const EdgeInsets.symmetric(vertical: 12),
                       ),
+                      icon: const Icon(Icons.lock_open_rounded, size: 16),
+                      label: const Text('Reactivate Account'),
+                      onPressed: () {
+                        Navigator.pop(ctx);
+                        _promptReactivateCompany(company);
+                      },
                     ),
-                    const SizedBox(width: 8),
-                    Expanded(
-                      child: ElevatedButton.icon(
-                        style: ElevatedButton.styleFrom(
-                          backgroundColor: AppColors.success,
-                          foregroundColor: Colors.white,
-                          padding: const EdgeInsets.symmetric(vertical: 12),
-                        ),
-                        icon: const Icon(Icons.check_circle_outline, size: 16),
-                        label: const Text('Approve SECP'),
-                        onPressed: () async {
-                          final admin = _authService.currentAdmin?.fullName ?? 'Executive SuperAdmin';
-                          await _companyService.approveCompanyVerification(
-                            companyId: company.id,
-                            adminName: admin,
-                          );
-                          if (ctx.mounted) Navigator.pop(ctx);
-                          if (!mounted) return;
-                          ScaffoldMessenger.of(context).showSnackBar(
-                            SnackBar(
-                              content: Text('SECP verification approved for ${company.companyName}!'),
-                              backgroundColor: AppColors.success,
-                              behavior: SnackBarBehavior.floating,
-                            ),
-                          );
-                        },
-                      ),
-                    ),
-                  ] else ...[
-                    // Account Suspension / Reactivation Buttons
-                    if (company.accountStatus == CompanyAccountState.active)
-                      Expanded(
-                        child: OutlinedButton.icon(
-                          style: OutlinedButton.styleFrom(
-                            foregroundColor: AppColors.error,
-                            side: const BorderSide(color: AppColors.error),
-                            padding: const EdgeInsets.symmetric(vertical: 12),
-                          ),
-                          icon: const Icon(Icons.block_rounded, size: 16),
-                          label: const Text('Suspend Account'),
-                          onPressed: () {
-                            Navigator.pop(ctx);
-                            _promptSuspendCompany(company);
-                          },
-                        ),
-                      )
-                    else
-                      Expanded(
-                        child: ElevatedButton.icon(
-                          style: ElevatedButton.styleFrom(
-                            backgroundColor: AppColors.success,
-                            foregroundColor: Colors.white,
-                            padding: const EdgeInsets.symmetric(vertical: 12),
-                          ),
-                          icon: const Icon(Icons.lock_open_rounded, size: 16),
-                          label: const Text('Reactivate Account'),
-                          onPressed: () {
-                            Navigator.pop(ctx);
-                            _promptReactivateCompany(company);
-                          },
-                        ),
-                      ),
-                  ],
-                ],
+                  );
+                },
               ),
             ],
           ),
@@ -752,6 +834,8 @@ class _CompanyManagementScreenState extends State<CompanyManagementScreen> {
 
   // 5. Document Inspection Modal
   void _openDocumentPreviewModal(AdminCompanyModel company) {
+    final evidenceUrl = (company.evidenceUrl ?? '').trim();
+
     showDialog(
       context: context,
       builder: (ctx) => AlertDialog(
@@ -762,178 +846,110 @@ class _CompanyManagementScreenState extends State<CompanyManagementScreen> {
             const SizedBox(width: 10),
             Expanded(
               child: Text(
-                'Document Authentication: ${company.companyName}',
-                style: const TextStyle(fontSize: 16, fontWeight: FontWeight.bold),
+                'Verification Evidence: ${company.companyName}',
+                style: GoogleFonts.poppins(
+                  fontSize: 16,
+                  fontWeight: FontWeight.bold,
+                  color: AppColors.darkNavy,
+                ),
                 overflow: TextOverflow.ellipsis,
               ),
             ),
           ],
         ),
-        content: SizedBox(
-          width: 580,
-          child: Column(
-            mainAxisSize: MainAxisSize.min,
-            crossAxisAlignment: CrossAxisAlignment.start,
-            children: [
-              Container(
-                padding: const EdgeInsets.all(12),
-                decoration: BoxDecoration(
-                  color: AppColors.lightIceBlue,
-                  borderRadius: BorderRadius.circular(8),
-                  border: Border.all(color: AppColors.primary.withValues(alpha: 0.3)),
-                ),
-                child: const Row(
-                  children: [
-                    Icon(Icons.shield_outlined, color: AppColors.primary, size: 20),
-                    SizedBox(width: 10),
-                    Expanded(
-                      child: Text(
-                        'SECP Electronic Corporate Registry Verification Document (Cryptographically Signed)',
-                        style: TextStyle(
-                          fontSize: 12,
-                          color: AppColors.darkNavy,
-                          fontWeight: FontWeight.w600,
-                        ),
-                      ),
+        content: ConstrainedBox(
+          constraints: const BoxConstraints(maxWidth: 560),
+          child: SingleChildScrollView(
+            child: Column(
+              mainAxisSize: MainAxisSize.min,
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Container(
+                  padding: const EdgeInsets.all(12),
+                  decoration: BoxDecoration(
+                    color: AppColors.lightIceBlue,
+                    borderRadius: BorderRadius.circular(10),
+                    border: Border.all(
+                      color: AppColors.primary.withValues(alpha: 0.3),
                     ),
-                  ],
-                ),
-              ),
-              const SizedBox(height: 16),
-
-              // Mock Certificate Digital View
-              Container(
-                height: 280,
-                width: double.infinity,
-                padding: const EdgeInsets.all(20),
-                decoration: BoxDecoration(
-                  color: Colors.white,
-                  borderRadius: BorderRadius.circular(12),
-                  border: Border.all(color: AppColors.darkNavy, width: 2),
-                  boxShadow: [
-                    BoxShadow(
-                      color: Colors.black.withValues(alpha: 0.06),
-                      blurRadius: 10,
-                      offset: const Offset(0, 4),
-                    ),
-                  ],
-                ),
-                child: Column(
-                  mainAxisAlignment: MainAxisAlignment.spaceBetween,
-                  children: [
-                    Column(
-                      children: [
-                        const Icon(
-                          Icons.account_balance_rounded,
-                          size: 36,
-                          color: AppColors.darkNavy,
-                        ),
-                        const SizedBox(height: 6),
-                        const Text(
-                          'SECURITIES AND EXCHANGE COMMISSION OF PAKISTAN',
-                          style: TextStyle(
-                            fontFamily: 'serif',
-                            fontWeight: FontWeight.bold,
+                  ),
+                  child: Row(
+                    children: [
+                      const Icon(Icons.description_outlined,
+                          color: AppColors.primary, size: 20),
+                      const SizedBox(width: 10),
+                      Expanded(
+                        child: Text(
+                          'Submitted Corporate Registration & Compliance Metadata',
+                          style: GoogleFonts.inter(
                             fontSize: 12,
-                            letterSpacing: 0.5,
                             color: AppColors.darkNavy,
-                          ),
-                          textAlign: TextAlign.center,
-                        ),
-                        const Text(
-                          'CERTIFICATE OF INCORPORATION & GOOD STANDING',
-                          style: TextStyle(
-                            fontSize: 10.5,
-                            letterSpacing: 1,
-                            color: AppColors.textSecondary,
                             fontWeight: FontWeight.w600,
                           ),
                         ),
-                        const SizedBox(height: 8),
-                        const Divider(),
-                      ],
-                    ),
-                    Column(
-                      children: [
-                        Text(
-                          company.companyName.toUpperCase(),
-                          style: const TextStyle(
-                            fontWeight: FontWeight.bold,
-                            fontSize: 15,
-                            color: AppColors.primary,
-                          ),
-                        ),
-                        const SizedBox(height: 4),
-                        Text(
-                          'SECP Registration Number: ${company.registrationNumber}',
-                          style: const TextStyle(fontSize: 11.5, color: AppColors.textSecondary),
-                        ),
-                        Text(
-                          'Sector: ${company.industry} • Location: ${company.city}, Pakistan',
-                          style: const TextStyle(fontSize: 11, color: AppColors.textSecondary),
-                        ),
-                        Text(
-                          'Registered Liaison: ${company.contactPersonName} (${company.officialEmail})',
-                          style: const TextStyle(fontSize: 11, color: AppColors.textSecondary),
-                        ),
-                      ],
-                    ),
-                    Row(
-                      mainAxisAlignment: MainAxisAlignment.spaceBetween,
-                      children: [
-                        Column(
-                          crossAxisAlignment: CrossAxisAlignment.start,
-                          children: [
-                            const Text(
-                              'VERIFIED SECP SEAL',
-                              style: TextStyle(
-                                fontSize: 9.5,
-                                fontWeight: FontWeight.bold,
-                                color: AppColors.textMuted,
-                              ),
-                            ),
-                            Text(
-                              'Issued: ${company.registrationDate}',
-                              style: const TextStyle(fontSize: 9.5, color: AppColors.textMuted),
-                            ),
-                          ],
-                        ),
-                        Container(
-                          padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 4),
-                          decoration: BoxDecoration(
-                            color: AppColors.successBg,
-                            borderRadius: BorderRadius.circular(4),
-                            border: Border.all(color: AppColors.success),
-                          ),
-                          child: const Text(
-                            'SECP REGISTRY MATCH',
-                            style: TextStyle(
-                              fontSize: 9.5,
-                              fontWeight: FontWeight.bold,
-                              color: AppColors.success,
-                            ),
-                          ),
-                        ),
-                      ],
-                    ),
-                  ],
+                      ),
+                    ],
+                  ),
                 ),
-              ),
-              const SizedBox(height: 14),
-              Row(
-                mainAxisAlignment: MainAxisAlignment.spaceBetween,
-                children: [
-                  Text(
-                    'File Name: ${company.evidenceFileName}',
-                    style: const TextStyle(fontSize: 11, color: AppColors.textMuted),
+                const SizedBox(height: 16),
+                Container(
+                  width: double.infinity,
+                  padding: const EdgeInsets.all(18),
+                  decoration: BoxDecoration(
+                    color: AppColors.background,
+                    borderRadius: BorderRadius.circular(12),
+                    border: Border.all(color: AppColors.border),
                   ),
-                  Text(
-                    'Size: ${company.evidenceFileSize}',
-                    style: const TextStyle(fontSize: 11, color: AppColors.textMuted),
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      _buildInfoRow(
+                        Icons.apartment_rounded,
+                        'Company',
+                        company.companyName,
+                      ),
+                      _buildInfoRow(
+                        Icons.numbers_rounded,
+                        'Registration No',
+                        company.registrationNumber,
+                      ),
+                      _buildInfoRow(
+                        Icons.business_center_outlined,
+                        'Sector & City',
+                        '${company.industry} • ${company.city}',
+                      ),
+                      _buildInfoRow(
+                        Icons.person_outline_rounded,
+                        'Liaison',
+                        '${company.contactPersonName} (${company.officialEmail})',
+                      ),
+                      _buildInfoRow(
+                        Icons.attach_file_rounded,
+                        'Uploaded File',
+                        company.evidenceFileName,
+                      ),
+                      _buildInfoRow(
+                        Icons.sd_storage_outlined,
+                        'Format & Size',
+                        '${company.evidenceFileType} • ${company.evidenceFileSize}',
+                      ),
+                      _buildInfoRow(
+                        Icons.calendar_today_rounded,
+                        'Submitted On',
+                        company.registrationDate,
+                      ),
+                      _buildInfoRow(
+                        Icons.cloud_done_outlined,
+                        'Storage Link',
+                        evidenceUrl.isNotEmpty
+                            ? 'Uploaded file attached in cloud storage'
+                            : 'No external file URL attached yet',
+                      ),
+                    ],
                   ),
-                ],
-              ),
-            ],
+                ),
+              ],
+            ),
           ),
         ),
         actions: [
@@ -941,11 +957,7 @@ class _CompanyManagementScreenState extends State<CompanyManagementScreen> {
             onPressed: () => Navigator.pop(ctx),
             child: const Text('Close Preview'),
           ),
-          ElevatedButton.icon(
-            style: ElevatedButton.styleFrom(
-              backgroundColor: AppColors.primary,
-              foregroundColor: Colors.white,
-            ),
+          OutlinedButton.icon(
             icon: const Icon(Icons.copy_rounded, size: 16),
             label: const Text('Copy Reg Number'),
             onPressed: () {
@@ -960,6 +972,16 @@ class _CompanyManagementScreenState extends State<CompanyManagementScreen> {
               );
             },
           ),
+          if (evidenceUrl.isNotEmpty)
+            ElevatedButton.icon(
+              style: ElevatedButton.styleFrom(
+                backgroundColor: AppColors.primary,
+                foregroundColor: Colors.white,
+              ),
+              icon: const Icon(Icons.open_in_new_rounded, size: 16),
+              label: const Text('Open Uploaded File'),
+              onPressed: () => _launchExternalUrl(evidenceUrl),
+            ),
         ],
       ),
     );
@@ -979,32 +1001,36 @@ class _CompanyManagementScreenState extends State<CompanyManagementScreen> {
             const SizedBox(width: 10),
             Expanded(
               child: Text(
-                'Reject SECP: ${company.companyName}',
-                style: const TextStyle(fontSize: 16, fontWeight: FontWeight.bold),
+                'Reject Verification: ${company.companyName}',
+                style: GoogleFonts.poppins(fontSize: 16, fontWeight: FontWeight.bold),
                 overflow: TextOverflow.ellipsis,
               ),
             ),
           ],
         ),
-        content: Column(
-          mainAxisSize: MainAxisSize.min,
-          crossAxisAlignment: CrossAxisAlignment.start,
-          children: [
-            const Text(
-              'A mandatory rejection reason is required so corporate liaisons can rectify their SECP filing.',
-              style: TextStyle(fontSize: 12.5, color: AppColors.textSecondary),
-            ),
-            const SizedBox(height: 14),
-            TextField(
-              controller: reasonController,
-              decoration: const InputDecoration(
-                labelText: 'Rejection Reason *',
-                hintText: 'e.g. Uploaded SECP certificate has expired or registration number mismatch...',
-                border: OutlineInputBorder(),
+        content: ConstrainedBox(
+          constraints: const BoxConstraints(maxWidth: 460),
+          child: Column(
+            mainAxisSize: MainAxisSize.min,
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              const Text(
+                'A mandatory rejection reason is required so corporate liaisons can rectify their registration filing.',
+                style: TextStyle(fontSize: 12.5, color: AppColors.textSecondary),
               ),
-              maxLines: 3,
-            ),
-          ],
+              const SizedBox(height: 14),
+              TextField(
+                controller: reasonController,
+                decoration: const InputDecoration(
+                  labelText: 'Rejection Reason *',
+                  hintText:
+                      'e.g. Uploaded registration certificate has expired or number mismatch...',
+                  border: OutlineInputBorder(),
+                ),
+                maxLines: 3,
+              ),
+            ],
+          ),
         ),
         actions: [
           TextButton(
@@ -1020,7 +1046,8 @@ class _CompanyManagementScreenState extends State<CompanyManagementScreen> {
               final reason = reasonController.text.trim();
               if (reason.isEmpty) return;
 
-              final admin = _authService.currentAdmin?.fullName ?? 'Executive SuperAdmin';
+              final admin =
+                  _authService.currentAdmin?.fullName ?? 'Executive Administrator';
               await _companyService.rejectCompanyVerification(
                 companyId: company.id,
                 reason: reason,
@@ -1031,7 +1058,8 @@ class _CompanyManagementScreenState extends State<CompanyManagementScreen> {
               if (!mounted) return;
               ScaffoldMessenger.of(context).showSnackBar(
                 SnackBar(
-                  content: Text('SECP verification rejected for ${company.companyName}. Reason recorded.'),
+                  content: Text(
+                      'Verification rejected for ${company.companyName}. Reason recorded.'),
                   backgroundColor: AppColors.error,
                   behavior: SnackBarBehavior.floating,
                 ),
@@ -1059,31 +1087,35 @@ class _CompanyManagementScreenState extends State<CompanyManagementScreen> {
             Expanded(
               child: Text(
                 'Request Documents: ${company.companyName}',
-                style: const TextStyle(fontSize: 16, fontWeight: FontWeight.bold),
+                style: GoogleFonts.poppins(fontSize: 16, fontWeight: FontWeight.bold),
                 overflow: TextOverflow.ellipsis,
               ),
             ),
           ],
         ),
-        content: Column(
-          mainAxisSize: MainAxisSize.min,
-          crossAxisAlignment: CrossAxisAlignment.start,
-          children: [
-            const Text(
-              'Specify what supplementary filings or documents the company must submit to satisfy verification.',
-              style: TextStyle(fontSize: 12.5, color: AppColors.textSecondary),
-            ),
-            const SizedBox(height: 14),
-            TextField(
-              controller: instructionsController,
-              decoration: const InputDecoration(
-                labelText: 'Document Instructions *',
-                hintText: 'e.g. Please provide SECP Form 29 alongside official board resolution...',
-                border: OutlineInputBorder(),
+        content: ConstrainedBox(
+          constraints: const BoxConstraints(maxWidth: 460),
+          child: Column(
+            mainAxisSize: MainAxisSize.min,
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              const Text(
+                'Specify what supplementary filings or documents the company must submit to satisfy verification.',
+                style: TextStyle(fontSize: 12.5, color: AppColors.textSecondary),
               ),
-              maxLines: 3,
-            ),
-          ],
+              const SizedBox(height: 14),
+              TextField(
+                controller: instructionsController,
+                decoration: const InputDecoration(
+                  labelText: 'Document Instructions *',
+                  hintText:
+                      'e.g. Please provide Incorporation Certificate alongside official letterhead confirmation...',
+                  border: OutlineInputBorder(),
+                ),
+                maxLines: 3,
+              ),
+            ],
+          ),
         ),
         actions: [
           TextButton(
@@ -1099,7 +1131,8 @@ class _CompanyManagementScreenState extends State<CompanyManagementScreen> {
               final instructions = instructionsController.text.trim();
               if (instructions.isEmpty) return;
 
-              final admin = _authService.currentAdmin?.fullName ?? 'Executive SuperAdmin';
+              final admin =
+                  _authService.currentAdmin?.fullName ?? 'Executive Administrator';
               await _companyService.requestAdditionalDocuments(
                 companyId: company.id,
                 instructions: instructions,
@@ -1110,7 +1143,8 @@ class _CompanyManagementScreenState extends State<CompanyManagementScreen> {
               if (!mounted) return;
               ScaffoldMessenger.of(context).showSnackBar(
                 SnackBar(
-                  content: Text('Additional document request dispatched to ${company.companyName}.'),
+                  content: Text(
+                      'Additional document request dispatched to ${company.companyName}.'),
                   backgroundColor: AppColors.warning,
                   behavior: SnackBarBehavior.floating,
                 ),
@@ -1138,31 +1172,35 @@ class _CompanyManagementScreenState extends State<CompanyManagementScreen> {
             Expanded(
               child: Text(
                 'Suspend Account: ${company.companyName}',
-                style: const TextStyle(fontSize: 16, fontWeight: FontWeight.bold),
+                style: GoogleFonts.poppins(fontSize: 16, fontWeight: FontWeight.bold),
                 overflow: TextOverflow.ellipsis,
               ),
             ),
           ],
         ),
-        content: Column(
-          mainAxisSize: MainAxisSize.min,
-          crossAxisAlignment: CrossAxisAlignment.start,
-          children: [
-            const Text(
-              'Suspending this corporate partner will immediately unlist their active projects and prevent student hiring.',
-              style: TextStyle(fontSize: 12.5, color: AppColors.textSecondary),
-            ),
-            const SizedBox(height: 14),
-            TextField(
-              controller: reasonController,
-              decoration: const InputDecoration(
-                labelText: 'Mandatory Suspension Reason *',
-                hintText: 'e.g. Commercial cryptocurrency solicitation violating platform guidelines...',
-                border: OutlineInputBorder(),
+        content: ConstrainedBox(
+          constraints: const BoxConstraints(maxWidth: 460),
+          child: Column(
+            mainAxisSize: MainAxisSize.min,
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              const Text(
+                'Suspending this corporate partner will immediately unlist their active projects and prevent student hiring.',
+                style: TextStyle(fontSize: 12.5, color: AppColors.textSecondary),
               ),
-              maxLines: 3,
-            ),
-          ],
+              const SizedBox(height: 14),
+              TextField(
+                controller: reasonController,
+                decoration: const InputDecoration(
+                  labelText: 'Mandatory Suspension Reason *',
+                  hintText:
+                      'e.g. Policy breach or commercial solicitation violating platform guidelines...',
+                  border: OutlineInputBorder(),
+                ),
+                maxLines: 3,
+              ),
+            ],
+          ),
         ),
         actions: [
           TextButton(
@@ -1178,7 +1216,8 @@ class _CompanyManagementScreenState extends State<CompanyManagementScreen> {
               final reason = reasonController.text.trim();
               if (reason.isEmpty) return;
 
-              final admin = _authService.currentAdmin?.fullName ?? 'Executive SuperAdmin';
+              final admin =
+                  _authService.currentAdmin?.fullName ?? 'Executive Administrator';
               await _companyService.suspendCompanyAccount(
                 companyId: company.id,
                 reason: reason,
@@ -1189,7 +1228,8 @@ class _CompanyManagementScreenState extends State<CompanyManagementScreen> {
               if (!mounted) return;
               ScaffoldMessenger.of(context).showSnackBar(
                 SnackBar(
-                  content: Text('${company.companyName} corporate account has been suspended.'),
+                  content: Text(
+                      '${company.companyName} corporate account has been suspended.'),
                   backgroundColor: AppColors.error,
                   behavior: SnackBarBehavior.floating,
                 ),
@@ -1215,7 +1255,7 @@ class _CompanyManagementScreenState extends State<CompanyManagementScreen> {
             Expanded(
               child: Text(
                 'Reactivate Account: ${company.companyName}',
-                style: const TextStyle(fontSize: 16, fontWeight: FontWeight.bold),
+                style: GoogleFonts.poppins(fontSize: 16, fontWeight: FontWeight.bold),
                 overflow: TextOverflow.ellipsis,
               ),
             ),
@@ -1236,7 +1276,8 @@ class _CompanyManagementScreenState extends State<CompanyManagementScreen> {
               foregroundColor: Colors.white,
             ),
             onPressed: () async {
-              final admin = _authService.currentAdmin?.fullName ?? 'Executive SuperAdmin';
+              final admin =
+                  _authService.currentAdmin?.fullName ?? 'Executive Administrator';
               await _companyService.reactivateCompanyAccount(
                 companyId: company.id,
                 adminName: admin,
@@ -1271,34 +1312,43 @@ class _CompanyManagementScreenState extends State<CompanyManagementScreen> {
           children: [
             Icon(Icons.file_download_outlined, color: AppColors.primary),
             SizedBox(width: 10),
-            Text('Export Permitted Corporate Records'),
+            Expanded(
+              child: Text(
+                'Export Permitted Corporate Records',
+                overflow: TextOverflow.ellipsis,
+              ),
+            ),
           ],
         ),
-        content: Column(
-          mainAxisSize: MainAxisSize.min,
-          crossAxisAlignment: CrossAxisAlignment.start,
-          children: [
-            const Text(
-              'The authorized corporate roster has been generated in CSV format per platform data governance:',
-              style: TextStyle(fontSize: 12.5, color: AppColors.textSecondary),
-            ),
-            const SizedBox(height: 12),
-            Container(
-              height: 160,
-              padding: const EdgeInsets.all(12),
-              decoration: BoxDecoration(
-                color: AppColors.background,
-                borderRadius: BorderRadius.circular(8),
-                border: Border.all(color: AppColors.border),
+        content: ConstrainedBox(
+          constraints: const BoxConstraints(maxWidth: 540),
+          child: Column(
+            mainAxisSize: MainAxisSize.min,
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              const Text(
+                'The authorized corporate roster has been generated in CSV format per platform data governance:',
+                style: TextStyle(fontSize: 12.5, color: AppColors.textSecondary),
               ),
-              child: SingleChildScrollView(
-                child: Text(
-                  csv,
-                  style: const TextStyle(fontFamily: 'monospace', fontSize: 11),
+              const SizedBox(height: 12),
+              Container(
+                height: 160,
+                width: double.infinity,
+                padding: const EdgeInsets.all(12),
+                decoration: BoxDecoration(
+                  color: AppColors.background,
+                  borderRadius: BorderRadius.circular(8),
+                  border: Border.all(color: AppColors.border),
+                ),
+                child: SingleChildScrollView(
+                  child: Text(
+                    csv,
+                    style: const TextStyle(fontFamily: 'monospace', fontSize: 11),
+                  ),
                 ),
               ),
-            ),
-          ],
+            ],
+          ),
         ),
         actions: [
           TextButton(
@@ -1445,30 +1495,59 @@ class _CompanyManagementScreenState extends State<CompanyManagementScreen> {
                       child: ValueListenableBuilder<List<AdminCompanyModel>>(
                         valueListenable: _companyService.companiesNotifier,
                         builder: (context, companies, _) {
-                          final filtered = _getFilteredCompanies(companies);
+                          final industries = _buildIndustryOptions(companies);
+                          final effectiveIndustry =
+                              industries.contains(_selectedIndustry)
+                                  ? _selectedIndustry
+                                  : 'All Industries';
+                          final locations = _buildLocationOptions(companies);
+                          final effectiveLocation =
+                              locations.contains(_selectedLocation)
+                                  ? _selectedLocation
+                                  : 'All Locations';
 
-                          // Pagination slice
+                          final filtered = _getFilteredCompanies(
+                            companies,
+                            effectiveIndustry: effectiveIndustry,
+                            effectiveLocation: effectiveLocation,
+                          );
+
                           final totalPages =
                               (filtered.length / _itemsPerPage).ceil().clamp(1, 999);
-                          final startIndex = (_currentPage - 1) * _itemsPerPage;
-                          final pageItems =
-                              filtered.skip(startIndex).take(_itemsPerPage).toList();
+                          final safePage = _currentPage.clamp(1, totalPages);
+                          final startIndex = (safePage - 1) * _itemsPerPage;
+                          final pageItems = filtered
+                              .skip(startIndex)
+                              .take(_itemsPerPage)
+                              .toList();
 
                           return SingleChildScrollView(
-                            padding: const EdgeInsets.all(24),
+                            padding: EdgeInsets.all(isDesktop ? 24 : 16),
                             child: Column(
                               crossAxisAlignment: CrossAxisAlignment.start,
                               children: [
-                                // 1. 5 Overview Metric Cards
+                                // 1. Overview Metric Cards
                                 _buildCompanyOverviewMetrics(),
                                 const SizedBox(height: 20),
 
                                 // 2. Search, Multi-Filter & Action Bar
-                                _buildFilterAndActionCard(filtered),
+                                _buildFilterAndActionCard(
+                                  industries: industries,
+                                  selectedIndustry: effectiveIndustry,
+                                  locations: locations,
+                                  selectedLocation: effectiveLocation,
+                                  filteredCompanies: filtered,
+                                ),
                                 const SizedBox(height: 20),
 
                                 // 3. Company Data Table Card with Pagination
-                                _buildCompanyTableCard(pageItems, filtered.length, totalPages),
+                                _buildCompanyTableCard(
+                                  pageCompanies: pageItems,
+                                  totalCount: filtered.length,
+                                  safePage: safePage,
+                                  totalPages: totalPages,
+                                  hasAnyCompanies: companies.isNotEmpty,
+                                ),
                               ],
                             ),
                           );
@@ -1502,7 +1581,7 @@ class _CompanyManagementScreenState extends State<CompanyManagementScreen> {
           physics: const NeverScrollableScrollPhysics(),
           crossAxisSpacing: 14,
           mainAxisSpacing: 14,
-          childAspectRatio: count == 1 ? 3.0 : 1.7,
+          childAspectRatio: count == 1 ? 2.7 : 1.55,
           children: [
             _buildMetricTile(
               title: 'Total Companies',
@@ -1515,7 +1594,7 @@ class _CompanyManagementScreenState extends State<CompanyManagementScreen> {
             _buildMetricTile(
               title: 'Verified Companies',
               value: '${_companyService.verifiedCount}',
-              subtitle: 'SECP registration authenticated',
+              subtitle: 'Corporate registration authenticated',
               icon: Icons.verified_rounded,
               color: AppColors.success,
               bgColor: AppColors.successBg,
@@ -1523,7 +1602,7 @@ class _CompanyManagementScreenState extends State<CompanyManagementScreen> {
             _buildMetricTile(
               title: 'Pending Verification',
               value: '${_companyService.pendingCount}',
-              subtitle: 'Awaiting SECP credentials review',
+              subtitle: 'Awaiting registration review',
               icon: Icons.hourglass_top_rounded,
               color: AppColors.warning,
               bgColor: AppColors.warningBg,
@@ -1579,14 +1658,18 @@ class _CompanyManagementScreenState extends State<CompanyManagementScreen> {
           Row(
             mainAxisAlignment: MainAxisAlignment.spaceBetween,
             children: [
-              Text(
-                title,
-                style: const TextStyle(
-                  fontSize: 12,
-                  fontWeight: FontWeight.w600,
-                  color: AppColors.textSecondary,
+              Expanded(
+                child: Text(
+                  title,
+                  style: GoogleFonts.inter(
+                    fontSize: 12,
+                    fontWeight: FontWeight.w600,
+                    color: AppColors.textSecondary,
+                  ),
+                  overflow: TextOverflow.ellipsis,
                 ),
               ),
+              const SizedBox(width: 8),
               Container(
                 padding: const EdgeInsets.all(7),
                 decoration: BoxDecoration(
@@ -1599,7 +1682,7 @@ class _CompanyManagementScreenState extends State<CompanyManagementScreen> {
           ),
           Text(
             value,
-            style: const TextStyle(
+            style: GoogleFonts.poppins(
               fontSize: 22,
               fontWeight: FontWeight.bold,
               color: AppColors.darkNavy,
@@ -1607,7 +1690,7 @@ class _CompanyManagementScreenState extends State<CompanyManagementScreen> {
           ),
           Text(
             subtitle,
-            style: const TextStyle(fontSize: 10.5, color: AppColors.textMuted),
+            style: GoogleFonts.inter(fontSize: 10.5, color: AppColors.textMuted),
             maxLines: 1,
             overflow: TextOverflow.ellipsis,
           ),
@@ -1617,7 +1700,13 @@ class _CompanyManagementScreenState extends State<CompanyManagementScreen> {
   }
 
   // 2. Search, Multi-Filter & Action Bar
-  Widget _buildFilterAndActionCard(List<AdminCompanyModel> filteredCompanies) {
+  Widget _buildFilterAndActionCard({
+    required List<String> industries,
+    required String selectedIndustry,
+    required List<String> locations,
+    required String selectedLocation,
+    required List<AdminCompanyModel> filteredCompanies,
+  }) {
     return Container(
       padding: const EdgeInsets.all(20),
       decoration: BoxDecoration(
@@ -1628,128 +1717,186 @@ class _CompanyManagementScreenState extends State<CompanyManagementScreen> {
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
-          // Top Row: Title, Summary & CSV Export
-          Row(
-            mainAxisAlignment: MainAxisAlignment.spaceBetween,
-            children: [
-              const Column(
-                crossAxisAlignment: CrossAxisAlignment.start,
+          // Top Row: Title, Summary & Quick Actions
+          LayoutBuilder(
+            builder: (context, constraints) {
+              return Wrap(
+                spacing: 12,
+                runSpacing: 12,
+                alignment: WrapAlignment.spaceBetween,
+                crossAxisAlignment: WrapCrossAlignment.center,
                 children: [
-                  Text(
-                    'Corporate Registry & Verification Management',
-                    style: TextStyle(
-                      fontSize: 16,
-                      fontWeight: FontWeight.bold,
-                      color: AppColors.darkNavy,
+                  ConstrainedBox(
+                    constraints: BoxConstraints(
+                      maxWidth: constraints.maxWidth > 680
+                          ? constraints.maxWidth - 460
+                          : constraints.maxWidth,
+                    ),
+                    child: Column(
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      children: [
+                        Text(
+                          'Corporate Registry & Verification Directory',
+                          style: GoogleFonts.poppins(
+                            fontSize: 16,
+                            fontWeight: FontWeight.bold,
+                            color: AppColors.darkNavy,
+                          ),
+                        ),
+                        const SizedBox(height: 2),
+                        Text(
+                          'Search, filter, inspect registration credentials, and regulate company account status',
+                          style: GoogleFonts.inter(
+                            fontSize: 12,
+                            color: AppColors.textSecondary,
+                          ),
+                        ),
+                      ],
                     ),
                   ),
-                  SizedBox(height: 2),
-                  Text(
-                    'Search, filter, authenticate SECP credentials, and regulate company account status',
-                    style: TextStyle(fontSize: 12, color: AppColors.textSecondary),
+                  Wrap(
+                    spacing: 8,
+                    runSpacing: 8,
+                    children: [
+                      OutlinedButton.icon(
+                        style: OutlinedButton.styleFrom(
+                          foregroundColor: AppColors.primary,
+                          side: const BorderSide(color: AppColors.border),
+                        ),
+                        icon: const Icon(Icons.refresh_rounded, size: 16),
+                        label: const Text('Refresh'),
+                        onPressed: _refreshCompanies,
+                      ),
+                      OutlinedButton.icon(
+                        style: OutlinedButton.styleFrom(
+                          foregroundColor: AppColors.darkNavy,
+                          side: const BorderSide(color: AppColors.border),
+                        ),
+                        icon: const Icon(Icons.fact_check_outlined, size: 16),
+                        label: const Text('Verification Queue'),
+                        onPressed: () => _onRouteSelected('company_verifications'),
+                      ),
+                      OutlinedButton.icon(
+                        style: OutlinedButton.styleFrom(
+                          foregroundColor: AppColors.darkNavy,
+                          side: const BorderSide(color: AppColors.border),
+                        ),
+                        icon: const Icon(Icons.file_download_outlined, size: 16),
+                        label: const Text('Export CSV'),
+                        onPressed: () => _exportCsvRecords(filteredCompanies),
+                      ),
+                    ],
                   ),
                 ],
-              ),
-              OutlinedButton.icon(
-                style: OutlinedButton.styleFrom(
-                  foregroundColor: AppColors.darkNavy,
-                  side: const BorderSide(color: AppColors.border),
-                ),
-                icon: const Icon(Icons.file_download_outlined, size: 16),
-                label: const Text('Export Records (CSV)'),
-                onPressed: () => _exportCsvRecords(filteredCompanies),
-              ),
-            ],
+              );
+            },
           ),
           const SizedBox(height: 16),
           const Divider(),
           const SizedBox(height: 12),
 
           // Filters Row 1: Industry Dropdown & Location Dropdown & Sort
-          Wrap(
-            spacing: 12,
-            runSpacing: 12,
-            children: [
-              // Industry Selector
-              SizedBox(
-                width: 260,
-                child: DropdownButtonFormField<String>(
-                  initialValue: _selectedIndustry,
-                  decoration: InputDecoration(
-                    labelText: 'Industry Sector',
-                    contentPadding: const EdgeInsets.symmetric(horizontal: 12, vertical: 10),
-                    border: OutlineInputBorder(borderRadius: BorderRadius.circular(10)),
+          LayoutBuilder(
+            builder: (context, constraints) {
+              final compact = constraints.maxWidth < 680;
+              return Wrap(
+                spacing: 12,
+                runSpacing: 12,
+                children: [
+                  SizedBox(
+                    width: compact ? constraints.maxWidth : 240,
+                    child: DropdownButtonFormField<String>(
+                      initialValue: selectedIndustry,
+                      isExpanded: true,
+                      decoration: InputDecoration(
+                        labelText: 'Industry Sector',
+                        contentPadding: const EdgeInsets.symmetric(
+                            horizontal: 12, vertical: 10),
+                        border: OutlineInputBorder(
+                            borderRadius: BorderRadius.circular(10)),
+                      ),
+                      items: industries
+                          .map((ind) => DropdownMenuItem(
+                                value: ind,
+                                child: Text(
+                                  ind,
+                                  style: const TextStyle(fontSize: 12.5),
+                                  overflow: TextOverflow.ellipsis,
+                                ),
+                              ))
+                          .toList(),
+                      onChanged: (val) {
+                        if (val != null) {
+                          setState(() {
+                            _selectedIndustry = val;
+                            _currentPage = 1;
+                          });
+                        }
+                      },
+                    ),
                   ),
-                  items: _industries
-                      .map((ind) => DropdownMenuItem(
-                            value: ind,
-                            child: Text(
-                              ind,
-                              style: const TextStyle(fontSize: 12.5),
-                              overflow: TextOverflow.ellipsis,
-                            ),
-                          ))
-                      .toList(),
-                  onChanged: (val) {
-                    if (val != null) {
-                      setState(() {
-                        _selectedIndustry = val;
-                        _currentPage = 1;
-                      });
-                    }
-                  },
-                ),
-              ),
-
-              // Location Selector
-              SizedBox(
-                width: 200,
-                child: DropdownButtonFormField<String>(
-                  initialValue: _selectedLocation,
-                  decoration: InputDecoration(
-                    labelText: 'Headquarters Location',
-                    contentPadding: const EdgeInsets.symmetric(horizontal: 12, vertical: 10),
-                    border: OutlineInputBorder(borderRadius: BorderRadius.circular(10)),
+                  SizedBox(
+                    width: compact ? constraints.maxWidth : 200,
+                    child: DropdownButtonFormField<String>(
+                      initialValue: selectedLocation,
+                      isExpanded: true,
+                      decoration: InputDecoration(
+                        labelText: 'Headquarters Location',
+                        contentPadding: const EdgeInsets.symmetric(
+                            horizontal: 12, vertical: 10),
+                        border: OutlineInputBorder(
+                            borderRadius: BorderRadius.circular(10)),
+                      ),
+                      items: locations
+                          .map((loc) => DropdownMenuItem(
+                                value: loc,
+                                child: Text(
+                                  loc,
+                                  style: const TextStyle(fontSize: 12.5),
+                                  overflow: TextOverflow.ellipsis,
+                                ),
+                              ))
+                          .toList(),
+                      onChanged: (val) {
+                        if (val != null) {
+                          setState(() {
+                            _selectedLocation = val;
+                            _currentPage = 1;
+                          });
+                        }
+                      },
+                    ),
                   ),
-                  items: _locations
-                      .map((loc) => DropdownMenuItem(
-                            value: loc,
-                            child: Text(loc, style: const TextStyle(fontSize: 12.5)),
-                          ))
-                      .toList(),
-                  onChanged: (val) {
-                    if (val != null) {
-                      setState(() {
-                        _selectedLocation = val;
-                        _currentPage = 1;
-                      });
-                    }
-                  },
-                ),
-              ),
-
-              // Sort Dropdown
-              SizedBox(
-                width: 200,
-                child: DropdownButtonFormField<String>(
-                  initialValue: _sortBy,
-                  decoration: InputDecoration(
-                    labelText: 'Sort By',
-                    contentPadding: const EdgeInsets.symmetric(horizontal: 12, vertical: 10),
-                    border: OutlineInputBorder(borderRadius: BorderRadius.circular(10)),
+                  SizedBox(
+                    width: compact ? constraints.maxWidth : 200,
+                    child: DropdownButtonFormField<String>(
+                      initialValue: _sortBy,
+                      isExpanded: true,
+                      decoration: InputDecoration(
+                        labelText: 'Sort By',
+                        contentPadding: const EdgeInsets.symmetric(
+                            horizontal: 12, vertical: 10),
+                        border: OutlineInputBorder(
+                            borderRadius: BorderRadius.circular(10)),
+                      ),
+                      items: _sortOptions
+                          .map((s) => DropdownMenuItem(
+                                value: s,
+                                child: Text(
+                                  s,
+                                  style: const TextStyle(fontSize: 12.5),
+                                  overflow: TextOverflow.ellipsis,
+                                ),
+                              ))
+                          .toList(),
+                      onChanged: (val) {
+                        if (val != null) setState(() => _sortBy = val);
+                      },
+                    ),
                   ),
-                  items: _sortOptions
-                      .map((s) => DropdownMenuItem(
-                            value: s,
-                            child: Text(s, style: const TextStyle(fontSize: 12.5)),
-                          ))
-                      .toList(),
-                  onChanged: (val) {
-                    if (val != null) setState(() => _sortBy = val);
-                  },
-                ),
-              ),
-            ],
+                ],
+              );
+            },
           ),
           const SizedBox(height: 14),
 
@@ -1759,82 +1906,82 @@ class _CompanyManagementScreenState extends State<CompanyManagementScreen> {
             runSpacing: 10,
             crossAxisAlignment: WrapCrossAlignment.center,
             children: [
-              Row(
-                mainAxisSize: MainAxisSize.min,
+              Wrap(
+                spacing: 6,
+                runSpacing: 6,
+                crossAxisAlignment: WrapCrossAlignment.center,
                 children: [
-                  const Text(
-                    'Verification: ',
-                    style: TextStyle(
+                  Text(
+                    'Verification:',
+                    style: GoogleFonts.inter(
                       fontSize: 12,
                       fontWeight: FontWeight.bold,
                       color: AppColors.darkNavy,
                     ),
                   ),
-                  Wrap(
-                    spacing: 6,
-                    children: _verificationFilters.map((vf) {
-                      final isSel = _selectedVerificationStatus == vf;
-                      return ChoiceChip(
-                        label: Text(vf),
-                        selected: isSel,
-                        selectedColor: AppColors.darkNavy,
-                        backgroundColor: AppColors.background,
-                        labelStyle: TextStyle(
-                          fontSize: 11,
-                          color: isSel ? Colors.white : AppColors.textSecondary,
-                          fontWeight: isSel ? FontWeight.bold : FontWeight.normal,
-                        ),
-                        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(6)),
-                        onSelected: (val) {
-                          if (val) {
-                            setState(() {
-                              _selectedVerificationStatus = vf;
-                              _currentPage = 1;
-                            });
-                          }
-                        },
-                      );
-                    }).toList(),
-                  ),
+                  ..._verificationFilters.map((vf) {
+                    final isSel = _selectedVerificationStatus == vf;
+                    return ChoiceChip(
+                      label: Text(vf),
+                      selected: isSel,
+                      selectedColor: AppColors.darkNavy,
+                      backgroundColor: AppColors.background,
+                      labelStyle: TextStyle(
+                        fontSize: 11,
+                        color: isSel ? Colors.white : AppColors.textSecondary,
+                        fontWeight: isSel ? FontWeight.bold : FontWeight.normal,
+                      ),
+                      shape: RoundedRectangleBorder(
+                          borderRadius: BorderRadius.circular(6)),
+                      onSelected: (val) {
+                        if (val) {
+                          setState(() {
+                            _selectedVerificationStatus = vf;
+                            _currentPage = 1;
+                          });
+                        }
+                      },
+                    );
+                  }),
                 ],
               ),
-              Row(
-                mainAxisSize: MainAxisSize.min,
+              Wrap(
+                spacing: 6,
+                runSpacing: 6,
+                crossAxisAlignment: WrapCrossAlignment.center,
                 children: [
-                  const Text(
-                    'Account: ',
-                    style: TextStyle(
+                  Text(
+                    'Account:',
+                    style: GoogleFonts.inter(
                       fontSize: 12,
                       fontWeight: FontWeight.bold,
                       color: AppColors.darkNavy,
                     ),
                   ),
-                  Wrap(
-                    spacing: 6,
-                    children: _accountFilters.map((af) {
-                      final isSel = _selectedAccountStatus == af;
-                      return ChoiceChip(
-                        label: Text(af),
-                        selected: isSel,
-                        selectedColor: AppColors.darkNavy,
-                        backgroundColor: AppColors.background,
-                        labelStyle: TextStyle(
-                          fontSize: 11,
-                          color: isSel ? Colors.white : AppColors.textSecondary,
-                          fontWeight: isSel ? FontWeight.bold : FontWeight.normal,
-                        ),
-                        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(6)),
-                        onSelected: (val) {
-                          if (val) {
-                            setState(() {
-                              _selectedAccountStatus = af;
-                              _currentPage = 1;
-                            });
-                          }
-                        },
-                      );
-                    }).toList(),
-                  ),
+                  ..._accountFilters.map((af) {
+                    final isSel = _selectedAccountStatus == af;
+                    return ChoiceChip(
+                      label: Text(af),
+                      selected: isSel,
+                      selectedColor: AppColors.darkNavy,
+                      backgroundColor: AppColors.background,
+                      labelStyle: TextStyle(
+                        fontSize: 11,
+                        color: isSel ? Colors.white : AppColors.textSecondary,
+                        fontWeight: isSel ? FontWeight.bold : FontWeight.normal,
+                      ),
+                      shape: RoundedRectangleBorder(
+                          borderRadius: BorderRadius.circular(6)),
+                      onSelected: (val) {
+                        if (val) {
+                          setState(() {
+                            _selectedAccountStatus = af;
+                            _currentPage = 1;
+                          });
+                        }
+                      },
+                    );
+                  }),
                 ],
               ),
             ],
@@ -1844,41 +1991,219 @@ class _CompanyManagementScreenState extends State<CompanyManagementScreen> {
     );
   }
 
+  Widget _buildVerificationChip(AdminCompanyModel company) {
+    final isVerified =
+        company.verificationStatus == CompanyVerificationState.verified;
+    final isPending =
+        company.verificationStatus == CompanyVerificationState.pending;
+    return Container(
+      padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 4),
+      decoration: BoxDecoration(
+        color: isVerified
+            ? AppColors.successBg
+            : isPending
+                ? AppColors.warningBg
+                : AppColors.errorBg,
+        borderRadius: BorderRadius.circular(6),
+      ),
+      child: Row(
+        mainAxisSize: MainAxisSize.min,
+        children: [
+          Icon(
+            isVerified
+                ? Icons.verified_rounded
+                : isPending
+                    ? Icons.hourglass_top_rounded
+                    : Icons.cancel_outlined,
+            size: 13,
+            color: isVerified
+                ? AppColors.success
+                : isPending
+                    ? AppColors.warning
+                    : AppColors.error,
+          ),
+          const SizedBox(width: 5),
+          Text(
+            isVerified
+                ? 'Verified'
+                : isPending
+                    ? 'Pending'
+                    : 'Rejected',
+            style: TextStyle(
+              fontSize: 11,
+              fontWeight: FontWeight.bold,
+              color: isVerified
+                  ? const Color(0xFF166534)
+                  : isPending
+                      ? const Color(0xFF92400E)
+                      : const Color(0xFF991B1B),
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+
+  Widget _buildAccountChip(bool isSuspended) {
+    return Container(
+      padding: const EdgeInsets.symmetric(horizontal: 9, vertical: 4),
+      decoration: BoxDecoration(
+        color: isSuspended ? AppColors.errorBg : AppColors.lightIceBlue,
+        borderRadius: BorderRadius.circular(6),
+      ),
+      child: Text(
+        isSuspended ? 'Suspended' : 'Active',
+        style: TextStyle(
+          fontSize: 11,
+          fontWeight: FontWeight.bold,
+          color: isSuspended ? AppColors.error : AppColors.primary,
+        ),
+      ),
+    );
+  }
+
+  Widget _buildCompanyActionMenu(
+    AdminCompanyModel company, {
+    required bool isPending,
+    required bool isSuspended,
+  }) {
+    return PopupMenuButton<String>(
+      icon: const Icon(Icons.more_vert_rounded, size: 20),
+      onSelected: (val) {
+        if (val == 'inspect_doc') {
+          _openDocumentPreviewModal(company);
+        } else if (val == 'approve') {
+          final admin =
+              _authService.currentAdmin?.fullName ?? 'Executive Administrator';
+          _companyService.approveCompanyVerification(
+            companyId: company.id,
+            adminName: admin,
+          );
+        } else if (val == 'reject') {
+          _promptRejectCompanyVerification(company);
+        } else if (val == 'request_docs') {
+          _promptRequestAdditionalDocs(company);
+        } else if (val == 'suspend') {
+          _promptSuspendCompany(company);
+        } else if (val == 'reactivate') {
+          _promptReactivateCompany(company);
+        }
+      },
+      itemBuilder: (context) => [
+        const PopupMenuItem(
+          value: 'inspect_doc',
+          child: Row(
+            children: [
+              Icon(Icons.shield_outlined, size: 16),
+              SizedBox(width: 8),
+              Text('Inspect Evidence Document', style: TextStyle(fontSize: 12)),
+            ],
+          ),
+        ),
+        if (isPending) ...[
+          const PopupMenuItem(
+            value: 'approve',
+            child: Row(
+              children: [
+                Icon(Icons.check_circle_outline,
+                    size: 16, color: AppColors.success),
+                SizedBox(width: 8),
+                Text('Approve Verification',
+                    style: TextStyle(fontSize: 12, color: AppColors.success)),
+              ],
+            ),
+          ),
+          const PopupMenuItem(
+            value: 'reject',
+            child: Row(
+              children: [
+                Icon(Icons.cancel_outlined, size: 16, color: AppColors.error),
+                SizedBox(width: 8),
+                Text('Reject Verification',
+                    style: TextStyle(fontSize: 12, color: AppColors.error)),
+              ],
+            ),
+          ),
+          const PopupMenuItem(
+            value: 'request_docs',
+            child: Row(
+              children: [
+                Icon(Icons.contact_support_outlined,
+                    size: 16, color: AppColors.warning),
+                SizedBox(width: 8),
+                Text('Request Additional Docs',
+                    style: TextStyle(fontSize: 12, color: AppColors.warning)),
+              ],
+            ),
+          ),
+        ],
+        if (!isSuspended)
+          const PopupMenuItem(
+            value: 'suspend',
+            child: Row(
+              children: [
+                Icon(Icons.block_rounded, size: 16, color: AppColors.error),
+                SizedBox(width: 8),
+                Text('Suspend Account',
+                    style: TextStyle(fontSize: 12, color: AppColors.error)),
+              ],
+            ),
+          )
+        else
+          const PopupMenuItem(
+            value: 'reactivate',
+            child: Row(
+              children: [
+                Icon(Icons.lock_open_rounded,
+                    size: 16, color: AppColors.success),
+                SizedBox(width: 8),
+                Text('Reactivate Account',
+                    style: TextStyle(fontSize: 12, color: AppColors.success)),
+              ],
+            ),
+          ),
+      ],
+    );
+  }
+
   // 3. Company Data Table Card with Pagination
-  Widget _buildCompanyTableCard(
-    List<AdminCompanyModel> pageCompanies,
-    int totalCount,
-    int totalPages,
-  ) {
+  Widget _buildCompanyTableCard({
+    required List<AdminCompanyModel> pageCompanies,
+    required int totalCount,
+    required int safePage,
+    required int totalPages,
+    required bool hasAnyCompanies,
+  }) {
     if (pageCompanies.isEmpty) {
       return Container(
         width: double.infinity,
-        padding: const EdgeInsets.symmetric(vertical: 48),
+        padding: const EdgeInsets.symmetric(vertical: 40, horizontal: 20),
         decoration: BoxDecoration(
           color: Colors.white,
           borderRadius: BorderRadius.circular(16),
           border: Border.all(color: AppColors.border),
         ),
-        child: const Center(
-          child: Column(
-            children: [
-              Icon(Icons.domain_disabled_rounded, size: 44, color: AppColors.textMuted),
-              SizedBox(height: 12),
-              Text(
-                'No corporate partners match the active criteria',
-                style: TextStyle(
-                  fontSize: 14,
-                  fontWeight: FontWeight.bold,
-                  color: AppColors.darkNavy,
-                ),
-              ),
-              SizedBox(height: 4),
-              Text(
-                'Try adjusting the sector, location, or verification status filter.',
-                style: TextStyle(fontSize: 12, color: AppColors.textSecondary),
-              ),
-            ],
-          ),
+        child: AppEmptyState(
+          icon: Icons.domain_disabled_rounded,
+          title: hasAnyCompanies
+              ? 'No corporate partners match the active criteria'
+              : 'No corporate partners registered yet',
+          subtitle: hasAnyCompanies
+              ? 'Try adjusting the sector, location, or verification status filter.'
+              : 'Registered companies from Supabase will appear here automatically once onboarded.',
+          actionLabel: hasAnyCompanies ? 'Reset Filters' : 'Refresh',
+          onAction: hasAnyCompanies
+              ? () {
+                  setState(() {
+                    _searchQuery = '';
+                    _selectedIndustry = 'All Industries';
+                    _selectedLocation = 'All Locations';
+                    _selectedVerificationStatus = 'All';
+                    _selectedAccountStatus = 'All';
+                    _currentPage = 1;
+                  });
+                }
+              : _refreshCompanies,
         ),
       );
     }
@@ -1896,349 +2221,309 @@ class _CompanyManagementScreenState extends State<CompanyManagementScreen> {
           ),
         ],
       ),
-      child: Column(
-        children: [
-          // Table Rows
-          ListView.separated(
-            shrinkWrap: true,
-            physics: const NeverScrollableScrollPhysics(),
-            itemCount: pageCompanies.length,
-            separatorBuilder: (_, index) => const Divider(height: 1),
-            itemBuilder: (context, index) {
-              final company = pageCompanies[index];
-              final isVerified =
-                  company.verificationStatus == CompanyVerificationState.verified;
-              final isPending =
-                  company.verificationStatus == CompanyVerificationState.pending;
-              final isSuspended =
-                  company.accountStatus == CompanyAccountState.suspended;
+      child: LayoutBuilder(
+        builder: (context, constraints) {
+          final isCompact = constraints.maxWidth < 820;
 
-              return Container(
-                padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 14),
-                child: Row(
-                  children: [
-                    // Company Logo
-                    Container(
-                      width: 44,
-                      height: 44,
-                      decoration: BoxDecoration(
-                        color: AppColors.darkNavy,
-                        borderRadius: BorderRadius.circular(10),
-                      ),
-                      child: Center(
-                        child: Text(
-                          company.logoInitial,
-                          style: const TextStyle(
-                            color: Colors.white,
-                            fontWeight: FontWeight.bold,
-                            fontSize: 15,
-                          ),
-                        ),
-                      ),
-                    ),
-                    const SizedBox(width: 14),
+          return Column(
+            children: [
+              ListView.separated(
+                shrinkWrap: true,
+                physics: const NeverScrollableScrollPhysics(),
+                itemCount: pageCompanies.length,
+                separatorBuilder: (_, index) => const Divider(height: 1),
+                itemBuilder: (context, index) {
+                  final company = pageCompanies[index];
+                  final isPending = company.verificationStatus ==
+                      CompanyVerificationState.pending;
+                  final isSuspended =
+                      company.accountStatus == CompanyAccountState.suspended;
 
-                    // Name, Reg & Email
-                    Expanded(
-                      flex: 3,
+                  if (isCompact) {
+                    return Padding(
+                      padding: const EdgeInsets.all(16),
                       child: Column(
                         crossAxisAlignment: CrossAxisAlignment.start,
                         children: [
                           Row(
                             children: [
-                              Flexible(
-                                child: Text(
-                                  company.companyName,
-                                  style: const TextStyle(
-                                    fontWeight: FontWeight.bold,
-                                    fontSize: 13.5,
-                                    color: AppColors.darkNavy,
+                              Container(
+                                width: 42,
+                                height: 42,
+                                decoration: BoxDecoration(
+                                  color: AppColors.darkNavy,
+                                  borderRadius: BorderRadius.circular(10),
+                                ),
+                                child: Center(
+                                  child: Text(
+                                    company.logoInitial,
+                                    style: const TextStyle(
+                                      color: Colors.white,
+                                      fontWeight: FontWeight.bold,
+                                      fontSize: 15,
+                                    ),
                                   ),
-                                  overflow: TextOverflow.ellipsis,
                                 ),
                               ),
-                              if (company.isEmailVerified) ...[
-                                const SizedBox(width: 5),
-                                const Icon(
-                                  Icons.verified_rounded,
-                                  color: AppColors.accentTeal,
-                                  size: 15,
+                              const SizedBox(width: 12),
+                              Expanded(
+                                child: Column(
+                                  crossAxisAlignment: CrossAxisAlignment.start,
+                                  children: [
+                                    Row(
+                                      children: [
+                                        Flexible(
+                                          child: Text(
+                                            company.companyName,
+                                            style: GoogleFonts.poppins(
+                                              fontWeight: FontWeight.bold,
+                                              fontSize: 14,
+                                              color: AppColors.darkNavy,
+                                            ),
+                                            overflow: TextOverflow.ellipsis,
+                                          ),
+                                        ),
+                                        if (company.isEmailVerified) ...[
+                                          const SizedBox(width: 5),
+                                          const Icon(
+                                            Icons.verified_rounded,
+                                            color: AppColors.accentTeal,
+                                            size: 15,
+                                          ),
+                                        ],
+                                      ],
+                                    ),
+                                    Text(
+                                      '${company.officialEmail} • Reg: ${company.registrationNumber}',
+                                      style: GoogleFonts.inter(
+                                        fontSize: 11.5,
+                                        color: AppColors.textSecondary,
+                                      ),
+                                      overflow: TextOverflow.ellipsis,
+                                    ),
+                                  ],
                                 ),
-                              ],
+                              ),
+                              _buildCompanyActionMenu(
+                                company,
+                                isPending: isPending,
+                                isSuspended: isSuspended,
+                              ),
                             ],
                           ),
-                          const SizedBox(height: 2),
+                          const SizedBox(height: 10),
                           Text(
-                            '${company.officialEmail} • Reg: ${company.registrationNumber}',
-                            style: const TextStyle(
-                              fontSize: 11.5,
+                            '${company.industry} • ${company.city} • ${company.registrationDate}',
+                            style: GoogleFonts.inter(
+                              fontSize: 12,
                               color: AppColors.textSecondary,
                             ),
-                            overflow: TextOverflow.ellipsis,
                           ),
-                        ],
-                      ),
-                    ),
-
-                    // Industry & City
-                    Expanded(
-                      flex: 2,
-                      child: Column(
-                        crossAxisAlignment: CrossAxisAlignment.start,
-                        children: [
-                          Text(
-                            company.industry,
-                            style: const TextStyle(
-                              fontSize: 12,
-                              fontWeight: FontWeight.w600,
-                              color: AppColors.darkNavy,
-                            ),
-                            overflow: TextOverflow.ellipsis,
-                          ),
-                          Text(
-                            company.city,
-                            style: const TextStyle(
-                              fontSize: 11,
-                              color: AppColors.textMuted,
-                            ),
-                          ),
-                        ],
-                      ),
-                    ),
-
-                    // Verification Badge
-                    Container(
-                      padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 4),
-                      decoration: BoxDecoration(
-                        color: isVerified
-                            ? AppColors.successBg
-                            : isPending
-                                ? AppColors.warningBg
-                                : AppColors.errorBg,
-                        borderRadius: BorderRadius.circular(6),
-                      ),
-                      child: Row(
-                        mainAxisSize: MainAxisSize.min,
-                        children: [
-                          Icon(
-                            isVerified
-                                ? Icons.verified_rounded
-                                : isPending
-                                    ? Icons.hourglass_top_rounded
-                                    : Icons.cancel_outlined,
-                            size: 13,
-                            color: isVerified
-                                ? AppColors.success
-                                : isPending
-                                    ? AppColors.warning
-                                    : AppColors.error,
-                          ),
-                          const SizedBox(width: 5),
-                          Text(
-                            isVerified
-                                ? 'Verified'
-                                : isPending
-                                    ? 'Pending'
-                                    : 'Rejected',
-                            style: TextStyle(
-                              fontSize: 11,
-                              fontWeight: FontWeight.bold,
-                              color: isVerified
-                                  ? const Color(0xFF166534)
-                                  : isPending
-                                      ? const Color(0xFF92400E)
-                                      : const Color(0xFF991B1B),
-                            ),
-                          ),
-                        ],
-                      ),
-                    ),
-                    const SizedBox(width: 12),
-
-                    // Account Status Badge
-                    Container(
-                      padding: const EdgeInsets.symmetric(horizontal: 9, vertical: 4),
-                      decoration: BoxDecoration(
-                        color: isSuspended ? AppColors.errorBg : AppColors.lightIceBlue,
-                        borderRadius: BorderRadius.circular(6),
-                      ),
-                      child: Text(
-                        isSuspended ? 'Suspended' : 'Active',
-                        style: TextStyle(
-                          fontSize: 11,
-                          fontWeight: FontWeight.bold,
-                          color: isSuspended ? AppColors.error : AppColors.primary,
-                        ),
-                      ),
-                    ),
-                    const SizedBox(width: 12),
-
-                    // Registration Date
-                    Text(
-                      company.registrationDate,
-                      style: const TextStyle(fontSize: 11.5, color: AppColors.textSecondary),
-                    ),
-                    const SizedBox(width: 14),
-
-                    // Action: View Profile
-                    ElevatedButton.icon(
-                      style: ElevatedButton.styleFrom(
-                        backgroundColor: AppColors.darkNavy,
-                        foregroundColor: Colors.white,
-                        padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
-                      ),
-                      icon: const Icon(Icons.assignment_ind_outlined, size: 15),
-                      label: const Text('View Profile', style: TextStyle(fontSize: 11.5)),
-                      onPressed: () => _openCompanyProfileDrawer(company),
-                    ),
-                    const SizedBox(width: 6),
-
-                    // Action: Context Menu for Quick Operations
-                    PopupMenuButton<String>(
-                      icon: const Icon(Icons.more_vert_rounded, size: 20),
-                      onSelected: (val) {
-                        if (val == 'inspect_doc') {
-                          _openDocumentPreviewModal(company);
-                        } else if (val == 'approve') {
-                          final admin =
-                              _authService.currentAdmin?.fullName ?? 'Executive SuperAdmin';
-                          _companyService.approveCompanyVerification(
-                            companyId: company.id,
-                            adminName: admin,
-                          );
-                        } else if (val == 'reject') {
-                          _promptRejectCompanyVerification(company);
-                        } else if (val == 'request_docs') {
-                          _promptRequestAdditionalDocs(company);
-                        } else if (val == 'suspend') {
-                          _promptSuspendCompany(company);
-                        } else if (val == 'reactivate') {
-                          _promptReactivateCompany(company);
-                        }
-                      },
-                      itemBuilder: (context) => [
-                        const PopupMenuItem(
-                          value: 'inspect_doc',
-                          child: Row(
+                          const SizedBox(height: 10),
+                          Wrap(
+                            spacing: 8,
+                            runSpacing: 8,
+                            crossAxisAlignment: WrapCrossAlignment.center,
                             children: [
-                              Icon(Icons.shield_outlined, size: 16),
-                              SizedBox(width: 8),
-                              Text('Inspect SECP Document', style: TextStyle(fontSize: 12)),
+                              _buildVerificationChip(company),
+                              _buildAccountChip(isSuspended),
+                              ElevatedButton.icon(
+                                style: ElevatedButton.styleFrom(
+                                  backgroundColor: AppColors.darkNavy,
+                                  foregroundColor: Colors.white,
+                                  padding: const EdgeInsets.symmetric(
+                                      horizontal: 12, vertical: 8),
+                                ),
+                                icon: const Icon(Icons.assignment_ind_outlined,
+                                    size: 15),
+                                label: const Text('View Profile',
+                                    style: TextStyle(fontSize: 11.5)),
+                                onPressed: () =>
+                                    _openCompanyProfileDrawer(company),
+                              ),
+                            ],
+                          ),
+                        ],
+                      ),
+                    );
+                  }
+
+                  return Container(
+                    padding: const EdgeInsets.symmetric(
+                        horizontal: 16, vertical: 14),
+                    child: Row(
+                      children: [
+                        Container(
+                          width: 44,
+                          height: 44,
+                          decoration: BoxDecoration(
+                            color: AppColors.darkNavy,
+                            borderRadius: BorderRadius.circular(10),
+                          ),
+                          child: Center(
+                            child: Text(
+                              company.logoInitial,
+                              style: const TextStyle(
+                                color: Colors.white,
+                                fontWeight: FontWeight.bold,
+                                fontSize: 15,
+                              ),
+                            ),
+                          ),
+                        ),
+                        const SizedBox(width: 14),
+                        Expanded(
+                          flex: 3,
+                          child: Column(
+                            crossAxisAlignment: CrossAxisAlignment.start,
+                            children: [
+                              Row(
+                                children: [
+                                  Flexible(
+                                    child: Text(
+                                      company.companyName,
+                                      style: GoogleFonts.poppins(
+                                        fontWeight: FontWeight.bold,
+                                        fontSize: 13.5,
+                                        color: AppColors.darkNavy,
+                                      ),
+                                      overflow: TextOverflow.ellipsis,
+                                    ),
+                                  ),
+                                  if (company.isEmailVerified) ...[
+                                    const SizedBox(width: 5),
+                                    const Icon(
+                                      Icons.verified_rounded,
+                                      color: AppColors.accentTeal,
+                                      size: 15,
+                                    ),
+                                  ],
+                                ],
+                              ),
+                              const SizedBox(height: 2),
+                              Text(
+                                '${company.officialEmail} • Reg: ${company.registrationNumber}',
+                                style: GoogleFonts.inter(
+                                  fontSize: 11.5,
+                                  color: AppColors.textSecondary,
+                                ),
+                                overflow: TextOverflow.ellipsis,
+                              ),
                             ],
                           ),
                         ),
-                        if (isPending) ...[
-                          const PopupMenuItem(
-                            value: 'approve',
-                            child: Row(
-                              children: [
-                                Icon(Icons.check_circle_outline,
-                                    size: 16, color: AppColors.success),
-                                SizedBox(width: 8),
-                                Text('Approve SECP',
-                                    style: TextStyle(fontSize: 12, color: AppColors.success)),
-                              ],
-                            ),
+                        Expanded(
+                          flex: 2,
+                          child: Column(
+                            crossAxisAlignment: CrossAxisAlignment.start,
+                            children: [
+                              Text(
+                                company.industry,
+                                style: GoogleFonts.inter(
+                                  fontSize: 12,
+                                  fontWeight: FontWeight.w600,
+                                  color: AppColors.darkNavy,
+                                ),
+                                overflow: TextOverflow.ellipsis,
+                              ),
+                              Text(
+                                company.city,
+                                style: GoogleFonts.inter(
+                                  fontSize: 11,
+                                  color: AppColors.textMuted,
+                                ),
+                              ),
+                            ],
                           ),
-                          const PopupMenuItem(
-                            value: 'reject',
-                            child: Row(
-                              children: [
-                                Icon(Icons.cancel_outlined,
-                                    size: 16, color: AppColors.error),
-                                SizedBox(width: 8),
-                                Text('Reject Verification',
-                                    style: TextStyle(fontSize: 12, color: AppColors.error)),
-                              ],
-                            ),
+                        ),
+                        _buildVerificationChip(company),
+                        const SizedBox(width: 12),
+                        _buildAccountChip(isSuspended),
+                        const SizedBox(width: 12),
+                        Text(
+                          company.registrationDate,
+                          style: GoogleFonts.inter(
+                            fontSize: 11.5,
+                            color: AppColors.textSecondary,
                           ),
-                          const PopupMenuItem(
-                            value: 'request_docs',
-                            child: Row(
-                              children: [
-                                Icon(Icons.contact_support_outlined,
-                                    size: 16, color: AppColors.warning),
-                                SizedBox(width: 8),
-                                Text('Request Additional Docs',
-                                    style: TextStyle(fontSize: 12, color: AppColors.warning)),
-                              ],
-                            ),
+                        ),
+                        const SizedBox(width: 14),
+                        ElevatedButton.icon(
+                          style: ElevatedButton.styleFrom(
+                            backgroundColor: AppColors.darkNavy,
+                            foregroundColor: Colors.white,
+                            padding: const EdgeInsets.symmetric(
+                                horizontal: 12, vertical: 8),
                           ),
-                        ],
-                        if (!isSuspended)
-                          const PopupMenuItem(
-                            value: 'suspend',
-                            child: Row(
-                              children: [
-                                Icon(Icons.block_rounded,
-                                    size: 16, color: AppColors.error),
-                                SizedBox(width: 8),
-                                Text('Suspend Account',
-                                    style: TextStyle(fontSize: 12, color: AppColors.error)),
-                              ],
-                            ),
-                          )
-                        else
-                          const PopupMenuItem(
-                            value: 'reactivate',
-                            child: Row(
-                              children: [
-                                Icon(Icons.lock_open_rounded,
-                                    size: 16, color: AppColors.success),
-                                SizedBox(width: 8),
-                                Text('Reactivate Account',
-                                    style: TextStyle(fontSize: 12, color: AppColors.success)),
-                              ],
-                            ),
+                          icon: const Icon(Icons.assignment_ind_outlined,
+                              size: 15),
+                          label: const Text('View Profile',
+                              style: TextStyle(fontSize: 11.5)),
+                          onPressed: () => _openCompanyProfileDrawer(company),
+                        ),
+                        const SizedBox(width: 6),
+                        _buildCompanyActionMenu(
+                          company,
+                          isPending: isPending,
+                          isSuspended: isSuspended,
+                        ),
+                      ],
+                    ),
+                  );
+                },
+              ),
+
+              // Pagination Bar
+              Container(
+                width: double.infinity,
+                padding:
+                    const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
+                decoration: const BoxDecoration(
+                  border: Border(top: BorderSide(color: AppColors.border)),
+                ),
+                child: Wrap(
+                  spacing: 12,
+                  runSpacing: 8,
+                  alignment: WrapAlignment.spaceBetween,
+                  crossAxisAlignment: WrapCrossAlignment.center,
+                  children: [
+                    Text(
+                      'Showing ${pageCompanies.length} of $totalCount companies (Page $safePage of $totalPages)',
+                      style: GoogleFonts.inter(
+                        fontSize: 12,
+                        color: AppColors.textSecondary,
+                      ),
+                    ),
+                    Row(
+                      mainAxisSize: MainAxisSize.min,
+                      children: [
+                        IconButton(
+                          icon: const Icon(Icons.chevron_left_rounded),
+                          onPressed: safePage > 1
+                              ? () => setState(() => _currentPage = safePage - 1)
+                              : null,
+                        ),
+                        Text(
+                          '$safePage',
+                          style: GoogleFonts.poppins(
+                            fontWeight: FontWeight.bold,
+                            color: AppColors.darkNavy,
                           ),
+                        ),
+                        IconButton(
+                          icon: const Icon(Icons.chevron_right_rounded),
+                          onPressed: safePage < totalPages
+                              ? () => setState(() => _currentPage = safePage + 1)
+                              : null,
+                        ),
                       ],
                     ),
                   ],
                 ),
-              );
-            },
-          ),
-
-          // Pagination Bar
-          Container(
-            padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
-            decoration: const BoxDecoration(
-              border: Border(top: BorderSide(color: AppColors.border)),
-            ),
-            child: Row(
-              mainAxisAlignment: MainAxisAlignment.spaceBetween,
-              children: [
-                Text(
-                  'Showing ${pageCompanies.length} of $totalCount companies (Page $_currentPage of $totalPages)',
-                  style: const TextStyle(fontSize: 12, color: AppColors.textSecondary),
-                ),
-                Row(
-                  children: [
-                    IconButton(
-                      icon: const Icon(Icons.chevron_left_rounded),
-                      onPressed: _currentPage > 1
-                          ? () => setState(() => _currentPage--)
-                          : null,
-                    ),
-                    Text(
-                      '$_currentPage',
-                      style: const TextStyle(
-                        fontWeight: FontWeight.bold,
-                        color: AppColors.darkNavy,
-                      ),
-                    ),
-                    IconButton(
-                      icon: const Icon(Icons.chevron_right_rounded),
-                      onPressed: _currentPage < totalPages
-                          ? () => setState(() => _currentPage++)
-                          : null,
-                    ),
-                  ],
-                ),
-              ],
-            ),
-          ),
-        ],
+              ),
+            ],
+          );
+        },
       ),
     );
   }

@@ -1,19 +1,23 @@
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
+import 'package:google_fonts/google_fonts.dart';
 import 'package:link_vibe/core/constants/app_colors.dart';
+import 'package:link_vibe/core/widgets/app_empty_state.dart';
 import 'package:link_vibe/feature/admin/models/admin_project_model.dart';
 import 'package:link_vibe/feature/admin/presentation/screens/admin_dashboard_screen.dart';
 import 'package:link_vibe/feature/admin/presentation/screens/admin_login_screen.dart';
+import 'package:link_vibe/feature/admin/presentation/screens/admin_settings_screen.dart';
 import 'package:link_vibe/feature/admin/presentation/screens/application_monitoring_screen.dart';
 import 'package:link_vibe/feature/admin/presentation/screens/certificate_management_screen.dart';
-import 'package:link_vibe/feature/admin/presentation/screens/reports_analytics_screen.dart';
-import 'package:link_vibe/feature/admin/presentation/screens/admin_settings_screen.dart';
 import 'package:link_vibe/feature/admin/presentation/screens/company_management_screen.dart';
+import 'package:link_vibe/feature/admin/presentation/screens/company_verifications_screen.dart';
+import 'package:link_vibe/feature/admin/presentation/screens/reports_analytics_screen.dart';
 import 'package:link_vibe/feature/admin/presentation/screens/student_management_screen.dart';
 import 'package:link_vibe/feature/admin/presentation/widgets/admin_sidebar.dart';
 import 'package:link_vibe/feature/admin/presentation/widgets/admin_top_navbar.dart';
 import 'package:link_vibe/feature/admin/services/admin_auth_service.dart';
 import 'package:link_vibe/feature/admin/services/admin_project_service.dart';
+import 'package:link_vibe/feature/admin/services/admin_settings_service.dart';
 
 /// Enterprise Project Management & Moderation Screen for CampusConnect Admin Panel (Screen 37)
 /// Features project listing grid, multi-parameter filtering, full project inspection drawer,
@@ -28,6 +32,7 @@ class ProjectManagementScreen extends StatefulWidget {
 class _ProjectManagementScreenState extends State<ProjectManagementScreen> {
   final AdminAuthService _authService = AdminAuthService();
   final AdminProjectService _projectService = AdminProjectService();
+  final AdminSettingsService _settingsService = AdminSettingsService();
   final GlobalKey<ScaffoldState> _scaffoldKey = GlobalKey<ScaffoldState>();
 
   String _searchQuery = '';
@@ -42,16 +47,6 @@ class _ProjectManagementScreenState extends State<ProjectManagementScreen> {
   // Pagination controls
   int _currentPage = 1;
   final int _itemsPerPage = 5;
-
-  final List<String> _categories = [
-    'All Categories',
-    'Mobile App Development',
-    'Web Development',
-    'AI / Machine Learning & Data',
-    'Cloud Infrastructure & DevOps',
-    'IoT & Embedded Systems',
-    'Blockchain & Distributed Systems',
-  ];
 
   final List<String> _projectStatusFilters = [
     'All Statuses',
@@ -81,6 +76,31 @@ class _ProjectManagementScreenState extends State<ProjectManagementScreen> {
     'Title (A-Z)',
     'Deadline (Nearest)',
   ];
+
+  List<String> _buildCategoryOptions(List<AdminProjectModel> projects) {
+    final set = <String>{'All Categories'};
+    for (final cat in _settingsService.categoriesNotifier.value) {
+      final name = cat.name.trim();
+      if (name.isNotEmpty) set.add(name);
+    }
+    for (final p in projects) {
+      final cat = p.category.trim();
+      if (cat.isNotEmpty) set.add(cat);
+    }
+    return set.toList();
+  }
+
+  Future<void> _refreshProjects() async {
+    await _projectService.loadFromSupabase();
+    if (!mounted) return;
+    ScaffoldMessenger.of(context).showSnackBar(
+      const SnackBar(
+        content: Text('Project catalog synced from Supabase.'),
+        backgroundColor: AppColors.primary,
+        behavior: SnackBarBehavior.floating,
+      ),
+    );
+  }
 
   Future<void> _handleSignOut() async {
     final confirmed = await showDialog<bool>(
@@ -127,47 +147,43 @@ class _ProjectManagementScreenState extends State<ProjectManagementScreen> {
   }
 
   void _onRouteSelected(String routeId) {
+    if (_scaffoldKey.currentState?.isDrawerOpen ?? false) {
+      Navigator.pop(context);
+    }
+    if (routeId == 'projects_audit' || routeId == 'projects') return;
+
+    Widget? target;
     if (routeId == 'dashboard') {
-      Navigator.pushReplacement(
-        context,
-        MaterialPageRoute(builder: (_) => const AdminDashboardScreen()),
-      );
+      target = const AdminDashboardScreen();
     } else if (routeId == 'student_verifications') {
-      Navigator.pushReplacement(
-        context,
-        MaterialPageRoute(builder: (_) => const StudentManagementScreen()),
-      );
-    } else if (routeId == 'company_verifications' || routeId == 'company_management') {
-      Navigator.pushReplacement(
-        context,
-        MaterialPageRoute(builder: (_) => const CompanyManagementScreen()),
-      );
+      target = const StudentManagementScreen();
+    } else if (routeId == 'company_verifications') {
+      target = const CompanyVerificationsScreen();
+    } else if (routeId == 'company_management') {
+      target = const CompanyManagementScreen();
     } else if (routeId == 'compliance' || routeId == 'application_monitoring') {
-      Navigator.pushReplacement(
-        context,
-        MaterialPageRoute(builder: (_) => const ApplicationMonitoringScreen()),
-      );
+      target = const ApplicationMonitoringScreen();
     } else if (routeId == 'audit_logs' || routeId == 'certificates') {
-      Navigator.pushReplacement(
-        context,
-        MaterialPageRoute(builder: (_) => const CertificateManagementScreen()),
-      );
+      target = const CertificateManagementScreen();
     } else if (routeId == 'analytics' || routeId == 'reports') {
-      Navigator.pushReplacement(
-        context,
-        MaterialPageRoute(builder: (_) => const ReportsAnalyticsScreen()),
-      );
+      target = const ReportsAnalyticsScreen();
     } else if (routeId == 'settings') {
+      target = const AdminSettingsScreen();
+    }
+
+    if (target != null) {
       Navigator.pushReplacement(
         context,
-        MaterialPageRoute(builder: (_) => const AdminSettingsScreen()),
+        MaterialPageRoute(builder: (_) => target!),
       );
     }
-    // If routeId is 'projects_audit', we are already on this screen.
   }
 
   // Filter & Sort Logic
-  List<AdminProjectModel> _getFilteredProjects(List<AdminProjectModel> projects) {
+  List<AdminProjectModel> _getFilteredProjects(
+    List<AdminProjectModel> projects, {
+    required String effectiveCategory,
+  }) {
     return projects.where((p) {
       // 1. Search Query
       if (_searchQuery.isNotEmpty) {
@@ -182,7 +198,7 @@ class _ProjectManagementScreenState extends State<ProjectManagementScreen> {
       }
 
       // 2. Category Filter
-      if (_selectedCategory != 'All Categories' && p.category != _selectedCategory) {
+      if (effectiveCategory != 'All Categories' && p.category != effectiveCategory) {
         return false;
       }
 
@@ -236,43 +252,50 @@ class _ProjectManagementScreenState extends State<ProjectManagementScreen> {
               // Header Row
               Row(
                 mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                crossAxisAlignment: CrossAxisAlignment.start,
                 children: [
-                  Row(
-                    children: [
-                      Container(
-                        padding: const EdgeInsets.all(12),
-                        decoration: BoxDecoration(
-                          color: _getStatusColor(project.status).withValues(alpha: 0.12),
-                          borderRadius: BorderRadius.circular(12),
-                        ),
-                        child: Icon(
-                          _getStatusIcon(project.status),
-                          color: _getStatusColor(project.status),
-                          size: 26,
-                        ),
-                      ),
-                      const SizedBox(width: 14),
-                      Column(
-                        crossAxisAlignment: CrossAxisAlignment.start,
-                        children: [
-                          Text(
-                            project.title,
-                            style: const TextStyle(
-                              fontSize: 18,
-                              fontWeight: FontWeight.bold,
-                              color: AppColors.darkNavy,
-                            ),
+                  Expanded(
+                    child: Row(
+                      children: [
+                        Container(
+                          padding: const EdgeInsets.all(12),
+                          decoration: BoxDecoration(
+                            color: _getStatusColor(project.status).withValues(alpha: 0.12),
+                            borderRadius: BorderRadius.circular(12),
                           ),
-                          Text(
-                            'Sponsored by: ${project.companyName} • ID: ${project.id}',
-                            style: const TextStyle(
-                              fontSize: 12,
-                              color: AppColors.textSecondary,
-                            ),
+                          child: Icon(
+                            _getStatusIcon(project.status),
+                            color: _getStatusColor(project.status),
+                            size: 26,
                           ),
-                        ],
-                      ),
-                    ],
+                        ),
+                        const SizedBox(width: 14),
+                        Expanded(
+                          child: Column(
+                            crossAxisAlignment: CrossAxisAlignment.start,
+                            children: [
+                              Text(
+                                project.title,
+                                style: GoogleFonts.poppins(
+                                  fontSize: 18,
+                                  fontWeight: FontWeight.bold,
+                                  color: AppColors.darkNavy,
+                                ),
+                                overflow: TextOverflow.ellipsis,
+                              ),
+                              Text(
+                                'Sponsored by: ${project.companyName} • ID: ${project.id}',
+                                style: GoogleFonts.inter(
+                                  fontSize: 12,
+                                  color: AppColors.textSecondary,
+                                ),
+                                overflow: TextOverflow.ellipsis,
+                              ),
+                            ],
+                          ),
+                        ),
+                      ],
+                    ),
                   ),
                   IconButton(
                     icon: const Icon(Icons.close_rounded),
@@ -285,14 +308,15 @@ class _ProjectManagementScreenState extends State<ProjectManagementScreen> {
               const SizedBox(height: 12),
 
               // Status Summary Badges
-              Row(
+              Wrap(
+                spacing: 8,
+                runSpacing: 8,
                 children: [
                   _buildStatusPill(
                     label: project.statusDisplay,
                     color: _getStatusColor(project.status),
                     bgColor: _getStatusBgColor(project.status),
                   ),
-                  const SizedBox(width: 8),
                   _buildStatusPill(
                     label: 'Pub: ${project.publicationStatusDisplay}',
                     color: project.publicationStatus == AdminPublicationStatus.published
@@ -302,13 +326,11 @@ class _ProjectManagementScreenState extends State<ProjectManagementScreen> {
                         ? AppColors.lightIceBlue
                         : AppColors.background,
                   ),
-                  const SizedBox(width: 8),
                   _buildStatusPill(
                     label: '${project.applicantsCount} Applicants',
                     color: AppColors.darkNavy,
                     bgColor: AppColors.background,
                   ),
-                  const SizedBox(width: 8),
                   _buildStatusPill(
                     label: project.projectType,
                     color: AppColors.darkNavy,
@@ -329,8 +351,10 @@ class _ProjectManagementScreenState extends State<ProjectManagementScreen> {
                   border: Border.all(color: AppColors.border),
                 ),
                 child: Text(
-                  project.description,
-                  style: const TextStyle(
+                  project.description.isEmpty
+                      ? 'No project description provided.'
+                      : project.description,
+                  style: GoogleFonts.inter(
                     fontSize: 13,
                     color: AppColors.textPrimary,
                     height: 1.45,
@@ -351,28 +375,34 @@ class _ProjectManagementScreenState extends State<ProjectManagementScreen> {
               // 3. Required Skills
               _buildSectionHeader('3. Required Technical Skillset'),
               const SizedBox(height: 8),
-              Wrap(
-                spacing: 8,
-                runSpacing: 8,
-                children: project.skillsRequired.map((skill) {
-                  return Container(
-                    padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 5),
-                    decoration: BoxDecoration(
-                      color: AppColors.lightIceBlue,
-                      borderRadius: BorderRadius.circular(6),
-                      border: Border.all(color: AppColors.primary.withValues(alpha: 0.3)),
-                    ),
-                    child: Text(
-                      skill,
-                      style: const TextStyle(
-                        fontSize: 12,
-                        fontWeight: FontWeight.bold,
-                        color: AppColors.primary,
+              if (project.skillsRequired.isEmpty)
+                Text(
+                  'No specific skills listed.',
+                  style: GoogleFonts.inter(fontSize: 12, color: AppColors.textMuted),
+                )
+              else
+                Wrap(
+                  spacing: 8,
+                  runSpacing: 8,
+                  children: project.skillsRequired.map((skill) {
+                    return Container(
+                      padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 5),
+                      decoration: BoxDecoration(
+                        color: AppColors.lightIceBlue,
+                        borderRadius: BorderRadius.circular(6),
+                        border: Border.all(color: AppColors.primary.withValues(alpha: 0.3)),
                       ),
-                    ),
-                  );
-                }).toList(),
-              ),
+                      child: Text(
+                        skill,
+                        style: GoogleFonts.inter(
+                          fontSize: 12,
+                          fontWeight: FontWeight.bold,
+                          color: AppColors.primary,
+                        ),
+                      ),
+                    );
+                  }).toList(),
+                ),
               const SizedBox(height: 20),
 
               // 4. Expected Deliverables & Requirements
@@ -488,12 +518,14 @@ class _ProjectManagementScreenState extends State<ProjectManagementScreen> {
                         Row(
                           mainAxisAlignment: MainAxisAlignment.spaceBetween,
                           children: [
-                            Text(
-                              audit.action,
-                              style: const TextStyle(
-                                fontWeight: FontWeight.bold,
-                                fontSize: 12.5,
-                                color: AppColors.darkNavy,
+                            Expanded(
+                              child: Text(
+                                audit.action,
+                                style: const TextStyle(
+                                  fontWeight: FontWeight.bold,
+                                  fontSize: 12.5,
+                                  color: AppColors.darkNavy,
+                                ),
                               ),
                             ),
                             Text(
@@ -525,131 +557,117 @@ class _ProjectManagementScreenState extends State<ProjectManagementScreen> {
               const SizedBox(height: 24),
 
               // Primary Action Buttons
-              Row(
+              Wrap(
+                spacing: 8,
+                runSpacing: 8,
                 children: [
-                  // Review Pending Project
                   if (project.status == AdminProjectStatus.pendingReview) ...[
-                    Expanded(
-                      child: OutlinedButton.icon(
-                        style: OutlinedButton.styleFrom(
-                          foregroundColor: AppColors.error,
-                          side: const BorderSide(color: AppColors.error),
-                          padding: const EdgeInsets.symmetric(vertical: 12),
-                        ),
-                        icon: const Icon(Icons.cancel_outlined, size: 16),
-                        label: const Text('Reject Submission'),
-                        onPressed: () {
-                          Navigator.pop(ctx);
-                          _promptRejectProject(project);
-                        },
+                    OutlinedButton.icon(
+                      style: OutlinedButton.styleFrom(
+                        foregroundColor: AppColors.error,
+                        side: const BorderSide(color: AppColors.error),
+                        padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 12),
                       ),
+                      icon: const Icon(Icons.cancel_outlined, size: 16),
+                      label: const Text('Reject Submission'),
+                      onPressed: () {
+                        Navigator.pop(ctx);
+                        _promptRejectProject(project);
+                      },
                     ),
-                    const SizedBox(width: 10),
-                    Expanded(
-                      child: ElevatedButton.icon(
-                        style: ElevatedButton.styleFrom(
-                          backgroundColor: AppColors.success,
-                          foregroundColor: Colors.white,
-                          padding: const EdgeInsets.symmetric(vertical: 12),
-                        ),
-                        icon: const Icon(Icons.check_circle_outline, size: 16),
-                        label: const Text('Approve & Publish'),
-                        onPressed: () async {
-                          final admin =
-                              _authService.currentAdmin?.fullName ?? 'Executive SuperAdmin';
-                          await _projectService.publishProject(
-                            projectId: project.id,
-                            moderatorName: admin,
-                          );
-                          if (ctx.mounted) Navigator.pop(ctx);
-                          if (!mounted) return;
-                          ScaffoldMessenger.of(context).showSnackBar(
-                            SnackBar(
-                              content: Text('"${project.title}" has been published for students!'),
-                              backgroundColor: AppColors.success,
-                              behavior: SnackBarBehavior.floating,
-                            ),
-                          );
-                        },
+                    ElevatedButton.icon(
+                      style: ElevatedButton.styleFrom(
+                        backgroundColor: AppColors.success,
+                        foregroundColor: Colors.white,
+                        padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
                       ),
+                      icon: const Icon(Icons.check_circle_outline, size: 16),
+                      label: const Text('Approve & Publish'),
+                      onPressed: () async {
+                        final admin =
+                            _authService.currentAdmin?.fullName ?? 'Executive Administrator';
+                        await _projectService.publishProject(
+                          projectId: project.id,
+                          moderatorName: admin,
+                        );
+                        if (ctx.mounted) Navigator.pop(ctx);
+                        if (!mounted) return;
+                        ScaffoldMessenger.of(context).showSnackBar(
+                          SnackBar(
+                            content: Text('"${project.title}" has been published for students!'),
+                            backgroundColor: AppColors.success,
+                            behavior: SnackBarBehavior.floating,
+                          ),
+                        );
+                      },
                     ),
                   ] else if (project.status == AdminProjectStatus.published ||
                       project.status == AdminProjectStatus.active) ...[
-                    Expanded(
-                      child: OutlinedButton.icon(
-                        style: OutlinedButton.styleFrom(
-                          foregroundColor: const Color(0xFF64748B),
-                          side: const BorderSide(color: AppColors.border),
-                          padding: const EdgeInsets.symmetric(vertical: 12),
-                        ),
-                        icon: const Icon(Icons.lock_clock_outlined, size: 16),
-                        label: const Text('Close Project'),
-                        onPressed: () {
-                          Navigator.pop(ctx);
-                          _promptCloseProject(project);
-                        },
+                    OutlinedButton.icon(
+                      style: OutlinedButton.styleFrom(
+                        foregroundColor: const Color(0xFF64748B),
+                        side: const BorderSide(color: AppColors.border),
+                        padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 12),
                       ),
+                      icon: const Icon(Icons.lock_clock_outlined, size: 16),
+                      label: const Text('Close Project'),
+                      onPressed: () {
+                        Navigator.pop(ctx);
+                        _promptCloseProject(project);
+                      },
                     ),
-                    const SizedBox(width: 8),
-                    Expanded(
-                      child: OutlinedButton.icon(
-                        style: OutlinedButton.styleFrom(
-                          foregroundColor: AppColors.warning,
-                          side: const BorderSide(color: AppColors.warning),
-                          padding: const EdgeInsets.symmetric(vertical: 12),
-                        ),
-                        icon: const Icon(Icons.visibility_off_outlined, size: 16),
-                        label: const Text('Unpublish'),
-                        onPressed: () {
-                          Navigator.pop(ctx);
-                          _promptUnpublishProject(project);
-                        },
+                    OutlinedButton.icon(
+                      style: OutlinedButton.styleFrom(
+                        foregroundColor: AppColors.warning,
+                        side: const BorderSide(color: AppColors.warning),
+                        padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 12),
                       ),
+                      icon: const Icon(Icons.visibility_off_outlined, size: 16),
+                      label: const Text('Unpublish'),
+                      onPressed: () {
+                        Navigator.pop(ctx);
+                        _promptUnpublishProject(project);
+                      },
                     ),
-                    const SizedBox(width: 8),
-                    Expanded(
-                      child: ElevatedButton.icon(
-                        style: ElevatedButton.styleFrom(
-                          backgroundColor: AppColors.error,
-                          foregroundColor: Colors.white,
-                          padding: const EdgeInsets.symmetric(vertical: 12),
-                        ),
-                        icon: const Icon(Icons.delete_forever_outlined, size: 16),
-                        label: const Text('Remove (Policy)'),
-                        onPressed: () {
-                          Navigator.pop(ctx);
-                          _promptRemoveProject(project);
-                        },
+                    ElevatedButton.icon(
+                      style: ElevatedButton.styleFrom(
+                        backgroundColor: AppColors.error,
+                        foregroundColor: Colors.white,
+                        padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 12),
                       ),
+                      icon: const Icon(Icons.delete_forever_outlined, size: 16),
+                      label: const Text('Remove (Policy)'),
+                      onPressed: () {
+                        Navigator.pop(ctx);
+                        _promptRemoveProject(project);
+                      },
                     ),
                   ] else if (project.status == AdminProjectStatus.removed) ...[
-                    Expanded(
-                      child: ElevatedButton.icon(
-                        style: ElevatedButton.styleFrom(
-                          backgroundColor: AppColors.success,
-                          foregroundColor: Colors.white,
-                          padding: const EdgeInsets.symmetric(vertical: 12),
-                        ),
-                        icon: const Icon(Icons.restore_from_trash_rounded, size: 16),
-                        label: const Text('Restore Removed Listing'),
-                        onPressed: () async {
-                          final admin =
-                              _authService.currentAdmin?.fullName ?? 'Executive SuperAdmin';
-                          await _projectService.restoreRemovedProject(
-                            projectId: project.id,
-                            moderatorName: admin,
-                          );
-                          if (ctx.mounted) Navigator.pop(ctx);
-                          if (!mounted) return;
-                          ScaffoldMessenger.of(context).showSnackBar(
-                            SnackBar(
-                              content: Text('"${project.title}" listing has been restored.'),
-                              backgroundColor: AppColors.success,
-                              behavior: SnackBarBehavior.floating,
-                            ),
-                          );
-                        },
+                    ElevatedButton.icon(
+                      style: ElevatedButton.styleFrom(
+                        backgroundColor: AppColors.success,
+                        foregroundColor: Colors.white,
+                        padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
                       ),
+                      icon: const Icon(Icons.restore_from_trash_rounded, size: 16),
+                      label: const Text('Restore Removed Listing'),
+                      onPressed: () async {
+                        final admin =
+                            _authService.currentAdmin?.fullName ?? 'Executive Administrator';
+                        await _projectService.restoreRemovedProject(
+                          projectId: project.id,
+                          moderatorName: admin,
+                        );
+                        if (ctx.mounted) Navigator.pop(ctx);
+                        if (!mounted) return;
+                        ScaffoldMessenger.of(context).showSnackBar(
+                          SnackBar(
+                            content: Text('"${project.title}" listing has been restored.'),
+                            backgroundColor: AppColors.success,
+                            behavior: SnackBarBehavior.floating,
+                          ),
+                        );
+                      },
                     ),
                   ],
                 ],
@@ -676,31 +694,34 @@ class _ProjectManagementScreenState extends State<ProjectManagementScreen> {
             Expanded(
               child: Text(
                 'Reject Submission: ${project.title}',
-                style: const TextStyle(fontSize: 16, fontWeight: FontWeight.bold),
+                style: GoogleFonts.poppins(fontSize: 16, fontWeight: FontWeight.bold),
                 overflow: TextOverflow.ellipsis,
               ),
             ),
           ],
         ),
-        content: Column(
-          mainAxisSize: MainAxisSize.min,
-          crossAxisAlignment: CrossAxisAlignment.start,
-          children: [
-            const Text(
-              'A mandatory reason is required so corporate liaisons can rectify project prerequisites.',
-              style: TextStyle(fontSize: 12.5, color: AppColors.textSecondary),
-            ),
-            const SizedBox(height: 14),
-            TextField(
-              controller: reasonController,
-              decoration: const InputDecoration(
-                labelText: 'Mandatory Rejection Reason *',
-                hintText: 'e.g. Scope missing academic learning deliverables or requirements vague...',
-                border: OutlineInputBorder(),
+        content: ConstrainedBox(
+          constraints: const BoxConstraints(maxWidth: 460),
+          child: Column(
+            mainAxisSize: MainAxisSize.min,
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              const Text(
+                'A mandatory reason is required so corporate liaisons can rectify project prerequisites.',
+                style: TextStyle(fontSize: 12.5, color: AppColors.textSecondary),
               ),
-              maxLines: 3,
-            ),
-          ],
+              const SizedBox(height: 14),
+              TextField(
+                controller: reasonController,
+                decoration: const InputDecoration(
+                  labelText: 'Mandatory Rejection Reason *',
+                  hintText: 'e.g. Scope missing academic learning deliverables or requirements vague...',
+                  border: OutlineInputBorder(),
+                ),
+                maxLines: 3,
+              ),
+            ],
+          ),
         ),
         actions: [
           TextButton(
@@ -716,7 +737,8 @@ class _ProjectManagementScreenState extends State<ProjectManagementScreen> {
               final reason = reasonController.text.trim();
               if (reason.isEmpty) return;
 
-              final admin = _authService.currentAdmin?.fullName ?? 'Executive SuperAdmin';
+              final admin =
+                  _authService.currentAdmin?.fullName ?? 'Executive Administrator';
               await _projectService.rejectProject(
                 projectId: project.id,
                 reason: reason,
@@ -726,7 +748,7 @@ class _ProjectManagementScreenState extends State<ProjectManagementScreen> {
               if (ctx.mounted) Navigator.pop(ctx);
               if (!mounted) return;
               ScaffoldMessenger.of(context).showSnackBar(
-                SnackBar(
+                const SnackBar(
                   content: Text('Project rejected. Reason logged in audit vault.'),
                   backgroundColor: AppColors.error,
                   behavior: SnackBarBehavior.floating,
@@ -755,31 +777,34 @@ class _ProjectManagementScreenState extends State<ProjectManagementScreen> {
             Expanded(
               child: Text(
                 'De-list Listing: ${project.title}',
-                style: const TextStyle(fontSize: 16, fontWeight: FontWeight.bold),
+                style: GoogleFonts.poppins(fontSize: 16, fontWeight: FontWeight.bold),
                 overflow: TextOverflow.ellipsis,
               ),
             ),
           ],
         ),
-        content: Column(
-          mainAxisSize: MainAxisSize.min,
-          crossAxisAlignment: CrossAxisAlignment.start,
-          children: [
-            const Text(
-              'De-listing soft-archives this project per platform retention policy. It will be removed from student discovery.',
-              style: TextStyle(fontSize: 12.5, color: AppColors.textSecondary),
-            ),
-            const SizedBox(height: 14),
-            TextField(
-              controller: reasonController,
-              decoration: const InputDecoration(
-                labelText: 'Policy Infraction / Removal Reason *',
-                hintText: 'e.g. Commercial crypto speculation or prohibited financial activity...',
-                border: OutlineInputBorder(),
+        content: ConstrainedBox(
+          constraints: const BoxConstraints(maxWidth: 460),
+          child: Column(
+            mainAxisSize: MainAxisSize.min,
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              const Text(
+                'De-listing soft-archives this project per platform retention policy. It will be removed from student discovery.',
+                style: TextStyle(fontSize: 12.5, color: AppColors.textSecondary),
               ),
-              maxLines: 3,
-            ),
-          ],
+              const SizedBox(height: 14),
+              TextField(
+                controller: reasonController,
+                decoration: const InputDecoration(
+                  labelText: 'Policy Infraction / Removal Reason *',
+                  hintText: 'e.g. Commercial crypto speculation or prohibited financial activity...',
+                  border: OutlineInputBorder(),
+                ),
+                maxLines: 3,
+              ),
+            ],
+          ),
         ),
         actions: [
           TextButton(
@@ -795,7 +820,8 @@ class _ProjectManagementScreenState extends State<ProjectManagementScreen> {
               final reason = reasonController.text.trim();
               if (reason.isEmpty) return;
 
-              final admin = _authService.currentAdmin?.fullName ?? 'Executive SuperAdmin';
+              final admin =
+                  _authService.currentAdmin?.fullName ?? 'Executive Administrator';
               await _projectService.removePolicyViolatingProject(
                 projectId: project.id,
                 reason: reason,
@@ -805,7 +831,7 @@ class _ProjectManagementScreenState extends State<ProjectManagementScreen> {
               if (ctx.mounted) Navigator.pop(ctx);
               if (!mounted) return;
               ScaffoldMessenger.of(context).showSnackBar(
-                SnackBar(
+                const SnackBar(
                   content: Text('Project de-listed and archived for retention compliance.'),
                   backgroundColor: AppColors.error,
                   behavior: SnackBarBehavior.floating,
@@ -834,31 +860,34 @@ class _ProjectManagementScreenState extends State<ProjectManagementScreen> {
             Expanded(
               child: Text(
                 'Unpublish: ${project.title}',
-                style: const TextStyle(fontSize: 16, fontWeight: FontWeight.bold),
+                style: GoogleFonts.poppins(fontSize: 16, fontWeight: FontWeight.bold),
                 overflow: TextOverflow.ellipsis,
               ),
             ),
           ],
         ),
-        content: Column(
-          mainAxisSize: MainAxisSize.min,
-          crossAxisAlignment: CrossAxisAlignment.start,
-          children: [
-            const Text(
-              'Unpublishing hides the project from student feeds while allowing the company to revise parameters.',
-              style: TextStyle(fontSize: 12.5, color: AppColors.textSecondary),
-            ),
-            const SizedBox(height: 14),
-            TextField(
-              controller: reasonController,
-              decoration: const InputDecoration(
-                labelText: 'Unpublish Reason *',
-                hintText: 'e.g. Prerequisite clarification requested by company sponsor...',
-                border: OutlineInputBorder(),
+        content: ConstrainedBox(
+          constraints: const BoxConstraints(maxWidth: 460),
+          child: Column(
+            mainAxisSize: MainAxisSize.min,
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              const Text(
+                'Unpublishing hides the project from student feeds while allowing the company to revise parameters.',
+                style: TextStyle(fontSize: 12.5, color: AppColors.textSecondary),
               ),
-              maxLines: 3,
-            ),
-          ],
+              const SizedBox(height: 14),
+              TextField(
+                controller: reasonController,
+                decoration: const InputDecoration(
+                  labelText: 'Unpublish Reason *',
+                  hintText: 'e.g. Prerequisite clarification requested by company sponsor...',
+                  border: OutlineInputBorder(),
+                ),
+                maxLines: 3,
+              ),
+            ],
+          ),
         ),
         actions: [
           TextButton(
@@ -874,7 +903,8 @@ class _ProjectManagementScreenState extends State<ProjectManagementScreen> {
               final reason = reasonController.text.trim();
               if (reason.isEmpty) return;
 
-              final admin = _authService.currentAdmin?.fullName ?? 'Executive SuperAdmin';
+              final admin =
+                  _authService.currentAdmin?.fullName ?? 'Executive Administrator';
               await _projectService.unpublishProject(
                 projectId: project.id,
                 reason: reason,
@@ -884,7 +914,7 @@ class _ProjectManagementScreenState extends State<ProjectManagementScreen> {
               if (ctx.mounted) Navigator.pop(ctx);
               if (!mounted) return;
               ScaffoldMessenger.of(context).showSnackBar(
-                SnackBar(
+                const SnackBar(
                   content: Text('Project unpublished from public discovery.'),
                   backgroundColor: AppColors.warning,
                   behavior: SnackBarBehavior.floating,
@@ -911,7 +941,7 @@ class _ProjectManagementScreenState extends State<ProjectManagementScreen> {
             Expanded(
               child: Text(
                 'Close Project: ${project.title}',
-                style: const TextStyle(fontSize: 16, fontWeight: FontWeight.bold),
+                style: GoogleFonts.poppins(fontSize: 16, fontWeight: FontWeight.bold),
                 overflow: TextOverflow.ellipsis,
               ),
             ),
@@ -932,7 +962,8 @@ class _ProjectManagementScreenState extends State<ProjectManagementScreen> {
               foregroundColor: Colors.white,
             ),
             onPressed: () async {
-              final admin = _authService.currentAdmin?.fullName ?? 'Executive SuperAdmin';
+              final admin =
+                  _authService.currentAdmin?.fullName ?? 'Executive Administrator';
               await _projectService.closeProject(
                 projectId: project.id,
                 moderatorName: admin,
@@ -941,7 +972,7 @@ class _ProjectManagementScreenState extends State<ProjectManagementScreen> {
               if (ctx.mounted) Navigator.pop(ctx);
               if (!mounted) return;
               ScaffoldMessenger.of(context).showSnackBar(
-                SnackBar(
+                const SnackBar(
                   content: Text('Project closed successfully.'),
                   backgroundColor: AppColors.primary,
                   behavior: SnackBarBehavior.floating,
@@ -988,7 +1019,7 @@ class _ProjectManagementScreenState extends State<ProjectManagementScreen> {
     );
 
     if (confirmed == true && mounted) {
-      final admin = _authService.currentAdmin?.fullName ?? 'Executive SuperAdmin';
+      final admin = _authService.currentAdmin?.fullName ?? 'Executive Administrator';
       await _projectService.bulkModerateProjects(
         projectIds: _selectedProjectIds.toList(),
         newStatus: newStatus,
@@ -1018,34 +1049,43 @@ class _ProjectManagementScreenState extends State<ProjectManagementScreen> {
           children: [
             Icon(Icons.file_download_outlined, color: AppColors.primary),
             SizedBox(width: 10),
-            Text('Export Project Roster (CSV)'),
+            Expanded(
+              child: Text(
+                'Export Project Roster (CSV)',
+                overflow: TextOverflow.ellipsis,
+              ),
+            ),
           ],
         ),
-        content: Column(
-          mainAxisSize: MainAxisSize.min,
-          crossAxisAlignment: CrossAxisAlignment.start,
-          children: [
-            const Text(
-              'The authorized project moderation registry has been generated in CSV format per platform retention standards:',
-              style: TextStyle(fontSize: 12.5, color: AppColors.textSecondary),
-            ),
-            const SizedBox(height: 12),
-            Container(
-              height: 160,
-              padding: const EdgeInsets.all(12),
-              decoration: BoxDecoration(
-                color: AppColors.background,
-                borderRadius: BorderRadius.circular(8),
-                border: Border.all(color: AppColors.border),
+        content: ConstrainedBox(
+          constraints: const BoxConstraints(maxWidth: 540),
+          child: Column(
+            mainAxisSize: MainAxisSize.min,
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              const Text(
+                'The authorized project moderation registry has been generated in CSV format per platform retention standards:',
+                style: TextStyle(fontSize: 12.5, color: AppColors.textSecondary),
               ),
-              child: SingleChildScrollView(
-                child: Text(
-                  csv,
-                  style: const TextStyle(fontFamily: 'monospace', fontSize: 11),
+              const SizedBox(height: 12),
+              Container(
+                height: 160,
+                width: double.infinity,
+                padding: const EdgeInsets.all(12),
+                decoration: BoxDecoration(
+                  color: AppColors.background,
+                  borderRadius: BorderRadius.circular(8),
+                  border: Border.all(color: AppColors.border),
+                ),
+                child: SingleChildScrollView(
+                  child: Text(
+                    csv,
+                    style: const TextStyle(fontFamily: 'monospace', fontSize: 11),
+                  ),
                 ),
               ),
-            ),
-          ],
+            ],
+          ),
         ),
         actions: [
           TextButton(
@@ -1255,30 +1295,47 @@ class _ProjectManagementScreenState extends State<ProjectManagementScreen> {
                       child: ValueListenableBuilder<List<AdminProjectModel>>(
                         valueListenable: _projectService.projectsNotifier,
                         builder: (context, projects, _) {
-                          final filtered = _getFilteredProjects(projects);
+                          final categories = _buildCategoryOptions(projects);
+                          final effectiveCategory =
+                              categories.contains(_selectedCategory)
+                                  ? _selectedCategory
+                                  : 'All Categories';
+
+                          final filtered = _getFilteredProjects(
+                            projects,
+                            effectiveCategory: effectiveCategory,
+                          );
 
                           // Pagination slice
                           final totalPages =
                               (filtered.length / _itemsPerPage).ceil().clamp(1, 999);
-                          final startIndex = (_currentPage - 1) * _itemsPerPage;
-                          final pageItems =
-                              filtered.skip(startIndex).take(_itemsPerPage).toList();
+                          final safePage = _currentPage.clamp(1, totalPages);
+                          final startIndex = (safePage - 1) * _itemsPerPage;
+                          final pageItems = filtered
+                              .skip(startIndex)
+                              .take(_itemsPerPage)
+                              .toList();
 
                           return SingleChildScrollView(
-                            padding: const EdgeInsets.all(24),
+                            padding: EdgeInsets.all(isDesktop ? 24 : 16),
                             child: Column(
                               crossAxisAlignment: CrossAxisAlignment.start,
                               children: [
-                                // 1. 7 Overview Metric Cards
                                 _buildProjectOverviewMetrics(),
                                 const SizedBox(height: 20),
-
-                                // 2. Search, Multi-Filter & Action Bar
-                                _buildFilterAndActionCard(filtered),
+                                _buildFilterAndActionCard(
+                                  categories: categories,
+                                  selectedCategory: effectiveCategory,
+                                  filteredProjects: filtered,
+                                ),
                                 const SizedBox(height: 20),
-
-                                // 3. Project Data Table Card with Pagination
-                                _buildProjectTableCard(pageItems, filtered.length, totalPages),
+                                _buildProjectTableCard(
+                                  pageProjects: pageItems,
+                                  totalCount: filtered.length,
+                                  safePage: safePage,
+                                  totalPages: totalPages,
+                                  hasAnyProjects: projects.isNotEmpty,
+                                ),
                               ],
                             ),
                           );
@@ -1373,7 +1430,7 @@ class _ProjectManagementScreenState extends State<ProjectManagementScreen> {
             crossAxisCount: count,
             crossAxisSpacing: 14,
             mainAxisSpacing: 14,
-            childAspectRatio: count == 1 ? 3.0 : 1.75,
+            childAspectRatio: count == 1 ? 2.7 : 1.6,
           ),
           itemBuilder: (context, index) => cards[index],
         );
@@ -1410,14 +1467,18 @@ class _ProjectManagementScreenState extends State<ProjectManagementScreen> {
           Row(
             mainAxisAlignment: MainAxisAlignment.spaceBetween,
             children: [
-              Text(
-                title,
-                style: const TextStyle(
-                  fontSize: 12,
-                  fontWeight: FontWeight.w600,
-                  color: AppColors.textSecondary,
+              Expanded(
+                child: Text(
+                  title,
+                  style: GoogleFonts.inter(
+                    fontSize: 12,
+                    fontWeight: FontWeight.w600,
+                    color: AppColors.textSecondary,
+                  ),
+                  overflow: TextOverflow.ellipsis,
                 ),
               ),
+              const SizedBox(width: 8),
               Container(
                 padding: const EdgeInsets.all(7),
                 decoration: BoxDecoration(
@@ -1430,7 +1491,7 @@ class _ProjectManagementScreenState extends State<ProjectManagementScreen> {
           ),
           Text(
             value,
-            style: const TextStyle(
+            style: GoogleFonts.poppins(
               fontSize: 22,
               fontWeight: FontWeight.bold,
               color: AppColors.darkNavy,
@@ -1438,7 +1499,7 @@ class _ProjectManagementScreenState extends State<ProjectManagementScreen> {
           ),
           Text(
             subtitle,
-            style: const TextStyle(fontSize: 10.5, color: AppColors.textMuted),
+            style: GoogleFonts.inter(fontSize: 10.5, color: AppColors.textMuted),
             maxLines: 1,
             overflow: TextOverflow.ellipsis,
           ),
@@ -1448,7 +1509,11 @@ class _ProjectManagementScreenState extends State<ProjectManagementScreen> {
   }
 
   // 2. Search, Multi-Filter & Action Bar
-  Widget _buildFilterAndActionCard(List<AdminProjectModel> filteredProjects) {
+  Widget _buildFilterAndActionCard({
+    required List<String> categories,
+    required String selectedCategory,
+    required List<AdminProjectModel> filteredProjects,
+  }) {
     return Container(
       padding: const EdgeInsets.all(20),
       decoration: BoxDecoration(
@@ -1460,220 +1525,446 @@ class _ProjectManagementScreenState extends State<ProjectManagementScreen> {
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
           // Top Row: Title, Bulk Actions & CSV Export
-          Row(
-            mainAxisAlignment: MainAxisAlignment.spaceBetween,
-            children: [
-              const Column(
-                crossAxisAlignment: CrossAxisAlignment.start,
+          LayoutBuilder(
+            builder: (context, constraints) {
+              return Wrap(
+                spacing: 12,
+                runSpacing: 12,
+                alignment: WrapAlignment.spaceBetween,
+                crossAxisAlignment: WrapCrossAlignment.center,
                 children: [
-                  Text(
-                    'Project Moderation & Sprints Governance',
-                    style: TextStyle(
-                      fontSize: 16,
-                      fontWeight: FontWeight.bold,
-                      color: AppColors.darkNavy,
+                  ConstrainedBox(
+                    constraints: BoxConstraints(
+                      maxWidth: constraints.maxWidth > 720
+                          ? constraints.maxWidth - 460
+                          : constraints.maxWidth,
+                    ),
+                    child: Column(
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      children: [
+                        Text(
+                          'Project Moderation & Sprints Governance',
+                          style: GoogleFonts.poppins(
+                            fontSize: 16,
+                            fontWeight: FontWeight.bold,
+                            color: AppColors.darkNavy,
+                          ),
+                        ),
+                        const SizedBox(height: 2),
+                        Text(
+                          'Review newly submitted sprints, regulate publication status, and enforce academic compliance',
+                          style: GoogleFonts.inter(
+                            fontSize: 12,
+                            color: AppColors.textSecondary,
+                          ),
+                        ),
+                      ],
                     ),
                   ),
-                  SizedBox(height: 2),
-                  Text(
-                    'Review newly submitted sprints, regulate publication status, and enforce academic compliance',
-                    style: TextStyle(fontSize: 12, color: AppColors.textSecondary),
+                  Wrap(
+                    spacing: 8,
+                    runSpacing: 8,
+                    children: [
+                      OutlinedButton.icon(
+                        style: OutlinedButton.styleFrom(
+                          foregroundColor: AppColors.primary,
+                          side: const BorderSide(color: AppColors.border),
+                        ),
+                        icon: const Icon(Icons.refresh_rounded, size: 16),
+                        label: const Text('Refresh'),
+                        onPressed: _refreshProjects,
+                      ),
+                      if (_selectedProjectIds.isNotEmpty) ...[
+                        ElevatedButton.icon(
+                          style: ElevatedButton.styleFrom(
+                            backgroundColor: AppColors.success,
+                            foregroundColor: Colors.white,
+                          ),
+                          icon: const Icon(Icons.done_all_rounded, size: 16),
+                          label:
+                              Text('Bulk Publish (${_selectedProjectIds.length})'),
+                          onPressed: () =>
+                              _handleBulkModerate(AdminProjectStatus.published),
+                        ),
+                        ElevatedButton.icon(
+                          style: ElevatedButton.styleFrom(
+                            backgroundColor: const Color(0xFF64748B),
+                            foregroundColor: Colors.white,
+                          ),
+                          icon: const Icon(Icons.lock_clock_outlined, size: 16),
+                          label:
+                              Text('Bulk Close (${_selectedProjectIds.length})'),
+                          onPressed: () =>
+                              _handleBulkModerate(AdminProjectStatus.closed),
+                        ),
+                      ],
+                      OutlinedButton.icon(
+                        style: OutlinedButton.styleFrom(
+                          foregroundColor: AppColors.darkNavy,
+                          side: const BorderSide(color: AppColors.border),
+                        ),
+                        icon: const Icon(Icons.file_download_outlined, size: 16),
+                        label: const Text('Export CSV'),
+                        onPressed: () => _exportCsvRecords(filteredProjects),
+                      ),
+                    ],
                   ),
                 ],
-              ),
-              Wrap(
-                spacing: 8,
-                children: [
-                  if (_selectedProjectIds.isNotEmpty) ...[
-                    ElevatedButton.icon(
-                      style: ElevatedButton.styleFrom(
-                        backgroundColor: AppColors.success,
-                        foregroundColor: Colors.white,
-                      ),
-                      icon: const Icon(Icons.done_all_rounded, size: 16),
-                      label: Text('Bulk Publish (${_selectedProjectIds.length})'),
-                      onPressed: () => _handleBulkModerate(AdminProjectStatus.published),
-                    ),
-                    ElevatedButton.icon(
-                      style: ElevatedButton.styleFrom(
-                        backgroundColor: const Color(0xFF64748B),
-                        foregroundColor: Colors.white,
-                      ),
-                      icon: const Icon(Icons.lock_clock_outlined, size: 16),
-                      label: Text('Bulk Close (${_selectedProjectIds.length})'),
-                      onPressed: () => _handleBulkModerate(AdminProjectStatus.closed),
-                    ),
-                  ],
-                  OutlinedButton.icon(
-                    style: OutlinedButton.styleFrom(
-                      foregroundColor: AppColors.darkNavy,
-                      side: const BorderSide(color: AppColors.border),
-                    ),
-                    icon: const Icon(Icons.file_download_outlined, size: 16),
-                    label: const Text('Export Records (CSV)'),
-                    onPressed: () => _exportCsvRecords(filteredProjects),
-                  ),
-                ],
-              ),
-            ],
+              );
+            },
           ),
           const SizedBox(height: 16),
           const Divider(),
           const SizedBox(height: 12),
 
           // Filters Row 1: Category, Status, Publication, and Sort
-          Wrap(
-            spacing: 12,
-            runSpacing: 12,
-            children: [
-              // Category Dropdown
-              SizedBox(
-                width: 250,
-                child: DropdownButtonFormField<String>(
-                  initialValue: _selectedCategory,
-                  decoration: InputDecoration(
-                    labelText: 'Category Vertical',
-                    contentPadding: const EdgeInsets.symmetric(horizontal: 12, vertical: 10),
-                    border: OutlineInputBorder(borderRadius: BorderRadius.circular(10)),
+          LayoutBuilder(
+            builder: (context, constraints) {
+              final compact = constraints.maxWidth < 680;
+              return Wrap(
+                spacing: 12,
+                runSpacing: 12,
+                children: [
+                  SizedBox(
+                    width: compact ? constraints.maxWidth : 240,
+                    child: DropdownButtonFormField<String>(
+                      initialValue: selectedCategory,
+                      isExpanded: true,
+                      decoration: InputDecoration(
+                        labelText: 'Category Vertical',
+                        contentPadding: const EdgeInsets.symmetric(
+                            horizontal: 12, vertical: 10),
+                        border: OutlineInputBorder(
+                            borderRadius: BorderRadius.circular(10)),
+                      ),
+                      items: categories
+                          .map((cat) => DropdownMenuItem(
+                                value: cat,
+                                child: Text(
+                                  cat,
+                                  style: const TextStyle(fontSize: 12.5),
+                                  overflow: TextOverflow.ellipsis,
+                                ),
+                              ))
+                          .toList(),
+                      onChanged: (val) {
+                        if (val != null) {
+                          setState(() {
+                            _selectedCategory = val;
+                            _currentPage = 1;
+                          });
+                        }
+                      },
+                    ),
                   ),
-                  items: _categories
-                      .map((cat) => DropdownMenuItem(
-                            value: cat,
-                            child: Text(
-                              cat,
-                              style: const TextStyle(fontSize: 12.5),
-                              overflow: TextOverflow.ellipsis,
-                            ),
-                          ))
-                      .toList(),
-                  onChanged: (val) {
-                    if (val != null) {
-                      setState(() {
-                        _selectedCategory = val;
-                        _currentPage = 1;
-                      });
-                    }
-                  },
-                ),
-              ),
-
-              // Project Status Dropdown
-              SizedBox(
-                width: 190,
-                child: DropdownButtonFormField<String>(
-                  initialValue: _selectedProjectStatus,
-                  decoration: InputDecoration(
-                    labelText: 'Project Status',
-                    contentPadding: const EdgeInsets.symmetric(horizontal: 12, vertical: 10),
-                    border: OutlineInputBorder(borderRadius: BorderRadius.circular(10)),
+                  SizedBox(
+                    width: compact ? constraints.maxWidth : 190,
+                    child: DropdownButtonFormField<String>(
+                      initialValue: _selectedProjectStatus,
+                      isExpanded: true,
+                      decoration: InputDecoration(
+                        labelText: 'Project Status',
+                        contentPadding: const EdgeInsets.symmetric(
+                            horizontal: 12, vertical: 10),
+                        border: OutlineInputBorder(
+                            borderRadius: BorderRadius.circular(10)),
+                      ),
+                      items: _projectStatusFilters
+                          .map((st) => DropdownMenuItem(
+                                value: st,
+                                child: Text(
+                                  st,
+                                  style: const TextStyle(fontSize: 12.5),
+                                  overflow: TextOverflow.ellipsis,
+                                ),
+                              ))
+                          .toList(),
+                      onChanged: (val) {
+                        if (val != null) {
+                          setState(() {
+                            _selectedProjectStatus = val;
+                            _currentPage = 1;
+                          });
+                        }
+                      },
+                    ),
                   ),
-                  items: _projectStatusFilters
-                      .map((st) => DropdownMenuItem(
-                            value: st,
-                            child: Text(st, style: const TextStyle(fontSize: 12.5)),
-                          ))
-                      .toList(),
-                  onChanged: (val) {
-                    if (val != null) {
-                      setState(() {
-                        _selectedProjectStatus = val;
-                        _currentPage = 1;
-                      });
-                    }
-                  },
-                ),
-              ),
-
-              // Publication Status Dropdown
-              SizedBox(
-                width: 200,
-                child: DropdownButtonFormField<String>(
-                  initialValue: _selectedPublicationStatus,
-                  decoration: InputDecoration(
-                    labelText: 'Publication Status',
-                    contentPadding: const EdgeInsets.symmetric(horizontal: 12, vertical: 10),
-                    border: OutlineInputBorder(borderRadius: BorderRadius.circular(10)),
+                  SizedBox(
+                    width: compact ? constraints.maxWidth : 200,
+                    child: DropdownButtonFormField<String>(
+                      initialValue: _selectedPublicationStatus,
+                      isExpanded: true,
+                      decoration: InputDecoration(
+                        labelText: 'Publication Status',
+                        contentPadding: const EdgeInsets.symmetric(
+                            horizontal: 12, vertical: 10),
+                        border: OutlineInputBorder(
+                            borderRadius: BorderRadius.circular(10)),
+                      ),
+                      items: _publicationStatusFilters
+                          .map((pub) => DropdownMenuItem(
+                                value: pub,
+                                child: Text(
+                                  pub,
+                                  style: const TextStyle(fontSize: 12.5),
+                                  overflow: TextOverflow.ellipsis,
+                                ),
+                              ))
+                          .toList(),
+                      onChanged: (val) {
+                        if (val != null) {
+                          setState(() {
+                            _selectedPublicationStatus = val;
+                            _currentPage = 1;
+                          });
+                        }
+                      },
+                    ),
                   ),
-                  items: _publicationStatusFilters
-                      .map((pub) => DropdownMenuItem(
-                            value: pub,
-                            child: Text(pub, style: const TextStyle(fontSize: 12.5)),
-                          ))
-                      .toList(),
-                  onChanged: (val) {
-                    if (val != null) {
-                      setState(() {
-                        _selectedPublicationStatus = val;
-                        _currentPage = 1;
-                      });
-                    }
-                  },
-                ),
-              ),
-
-              // Sort Dropdown
-              SizedBox(
-                width: 190,
-                child: DropdownButtonFormField<String>(
-                  initialValue: _sortBy,
-                  decoration: InputDecoration(
-                    labelText: 'Sort By',
-                    contentPadding: const EdgeInsets.symmetric(horizontal: 12, vertical: 10),
-                    border: OutlineInputBorder(borderRadius: BorderRadius.circular(10)),
+                  SizedBox(
+                    width: compact ? constraints.maxWidth : 190,
+                    child: DropdownButtonFormField<String>(
+                      initialValue: _sortBy,
+                      isExpanded: true,
+                      decoration: InputDecoration(
+                        labelText: 'Sort By',
+                        contentPadding: const EdgeInsets.symmetric(
+                            horizontal: 12, vertical: 10),
+                        border: OutlineInputBorder(
+                            borderRadius: BorderRadius.circular(10)),
+                      ),
+                      items: _sortOptions
+                          .map((s) => DropdownMenuItem(
+                                value: s,
+                                child: Text(
+                                  s,
+                                  style: const TextStyle(fontSize: 12.5),
+                                  overflow: TextOverflow.ellipsis,
+                                ),
+                              ))
+                          .toList(),
+                      onChanged: (val) {
+                        if (val != null) setState(() => _sortBy = val);
+                      },
+                    ),
                   ),
-                  items: _sortOptions
-                      .map((s) => DropdownMenuItem(
-                            value: s,
-                            child: Text(s, style: const TextStyle(fontSize: 12.5)),
-                          ))
-                      .toList(),
-                  onChanged: (val) {
-                    if (val != null) setState(() => _sortBy = val);
-                  },
-                ),
-              ),
-            ],
+                ],
+              );
+            },
           ),
         ],
       ),
     );
   }
 
+  Widget _buildProjectStatusBadge(AdminProjectModel project) {
+    return Container(
+      padding: const EdgeInsets.symmetric(horizontal: 9, vertical: 4),
+      decoration: BoxDecoration(
+        color: _getStatusBgColor(project.status),
+        borderRadius: BorderRadius.circular(6),
+      ),
+      child: Row(
+        mainAxisSize: MainAxisSize.min,
+        children: [
+          Icon(
+            _getStatusIcon(project.status),
+            size: 13,
+            color: _getStatusColor(project.status),
+          ),
+          const SizedBox(width: 5),
+          Text(
+            project.statusDisplay,
+            style: TextStyle(
+              fontSize: 11,
+              fontWeight: FontWeight.bold,
+              color: _getStatusColor(project.status),
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+
+  Widget _buildPublicationBadge(AdminProjectModel project) {
+    final isPub = project.publicationStatus == AdminPublicationStatus.published;
+    return Container(
+      padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
+      decoration: BoxDecoration(
+        color: isPub ? AppColors.lightIceBlue : AppColors.background,
+        borderRadius: BorderRadius.circular(6),
+        border: Border.all(
+          color: isPub ? AppColors.primary.withValues(alpha: 0.3) : AppColors.border,
+        ),
+      ),
+      child: Text(
+        project.publicationStatusDisplay,
+        style: TextStyle(
+          fontSize: 10.5,
+          fontWeight: FontWeight.bold,
+          color: isPub ? AppColors.primary : AppColors.textSecondary,
+        ),
+      ),
+    );
+  }
+
+  Widget _buildProjectActionMenu(AdminProjectModel project) {
+    return PopupMenuButton<String>(
+      icon: const Icon(Icons.more_vert_rounded, size: 20),
+      onSelected: (val) {
+        if (val == 'details') {
+          _openProjectDetailsDrawer(project);
+        } else if (val == 'publish') {
+          final admin =
+              _authService.currentAdmin?.fullName ?? 'Executive Administrator';
+          _projectService.publishProject(
+            projectId: project.id,
+            moderatorName: admin,
+          );
+        } else if (val == 'unpublish') {
+          _promptUnpublishProject(project);
+        } else if (val == 'reject') {
+          _promptRejectProject(project);
+        } else if (val == 'close') {
+          _promptCloseProject(project);
+        } else if (val == 'remove') {
+          _promptRemoveProject(project);
+        } else if (val == 'restore') {
+          final admin =
+              _authService.currentAdmin?.fullName ?? 'Executive Administrator';
+          _projectService.restoreRemovedProject(
+            projectId: project.id,
+            moderatorName: admin,
+          );
+        }
+      },
+      itemBuilder: (context) => [
+        const PopupMenuItem(
+          value: 'details',
+          child: Row(
+            children: [
+              Icon(Icons.visibility_outlined, size: 16),
+              SizedBox(width: 8),
+              Text('View Full Details', style: TextStyle(fontSize: 12)),
+            ],
+          ),
+        ),
+        if (project.status == AdminProjectStatus.pendingReview) ...[
+          const PopupMenuItem(
+            value: 'publish',
+            child: Row(
+              children: [
+                Icon(Icons.check_circle_outline,
+                    size: 16, color: AppColors.success),
+                SizedBox(width: 8),
+                Text('Approve & Publish',
+                    style: TextStyle(fontSize: 12, color: AppColors.success)),
+              ],
+            ),
+          ),
+          const PopupMenuItem(
+            value: 'reject',
+            child: Row(
+              children: [
+                Icon(Icons.cancel_outlined, size: 16, color: AppColors.error),
+                SizedBox(width: 8),
+                Text('Reject Submission',
+                    style: TextStyle(fontSize: 12, color: AppColors.error)),
+              ],
+            ),
+          ),
+        ],
+        if (project.status == AdminProjectStatus.published) ...[
+          const PopupMenuItem(
+            value: 'unpublish',
+            child: Row(
+              children: [
+                Icon(Icons.visibility_off_outlined,
+                    size: 16, color: AppColors.warning),
+                SizedBox(width: 8),
+                Text('Unpublish Listing',
+                    style: TextStyle(fontSize: 12, color: AppColors.warning)),
+              ],
+            ),
+          ),
+          const PopupMenuItem(
+            value: 'close',
+            child: Row(
+              children: [
+                Icon(Icons.lock_clock_outlined, size: 16),
+                SizedBox(width: 8),
+                Text('Close Project', style: TextStyle(fontSize: 12)),
+              ],
+            ),
+          ),
+          const PopupMenuItem(
+            value: 'remove',
+            child: Row(
+              children: [
+                Icon(Icons.delete_forever_outlined,
+                    size: 16, color: AppColors.error),
+                SizedBox(width: 8),
+                Text('Remove (Policy Non-Compliance)',
+                    style: TextStyle(fontSize: 12, color: AppColors.error)),
+              ],
+            ),
+          ),
+        ],
+        if (project.status == AdminProjectStatus.removed) ...[
+          const PopupMenuItem(
+            value: 'restore',
+            child: Row(
+              children: [
+                Icon(Icons.restore_from_trash_rounded,
+                    size: 16, color: AppColors.success),
+                SizedBox(width: 8),
+                Text('Restore Listing',
+                    style: TextStyle(fontSize: 12, color: AppColors.success)),
+              ],
+            ),
+          ),
+        ],
+      ],
+    );
+  }
+
   // 3. Project Data Table Card with Pagination
-  Widget _buildProjectTableCard(
-    List<AdminProjectModel> pageProjects,
-    int totalCount,
-    int totalPages,
-  ) {
+  Widget _buildProjectTableCard({
+    required List<AdminProjectModel> pageProjects,
+    required int totalCount,
+    required int safePage,
+    required int totalPages,
+    required bool hasAnyProjects,
+  }) {
     if (pageProjects.isEmpty) {
       return Container(
         width: double.infinity,
-        padding: const EdgeInsets.symmetric(vertical: 48),
+        padding: const EdgeInsets.symmetric(vertical: 40, horizontal: 20),
         decoration: BoxDecoration(
           color: Colors.white,
           borderRadius: BorderRadius.circular(16),
           border: Border.all(color: AppColors.border),
         ),
-        child: const Center(
-          child: Column(
-            children: [
-              Icon(Icons.assignment_late_outlined, size: 44, color: AppColors.textMuted),
-              SizedBox(height: 12),
-              Text(
-                'No projects match the active criteria',
-                style: TextStyle(
-                  fontSize: 14,
-                  fontWeight: FontWeight.bold,
-                  color: AppColors.darkNavy,
-                ),
-              ),
-              SizedBox(height: 4),
-              Text(
-                'Try adjusting the search query, category, or project status filter.',
-                style: TextStyle(fontSize: 12, color: AppColors.textSecondary),
-              ),
-            ],
-          ),
+        child: AppEmptyState(
+          icon: Icons.assignment_late_outlined,
+          title: hasAnyProjects
+              ? 'No projects match the active criteria'
+              : 'No company projects submitted yet',
+          subtitle: hasAnyProjects
+              ? 'Try adjusting the search query, category, or project status filter.'
+              : 'Company sprint listings submitted in Supabase will appear here automatically.',
+          actionLabel: hasAnyProjects ? 'Reset Filters' : 'Refresh',
+          onAction: hasAnyProjects
+              ? () {
+                  setState(() {
+                    _searchQuery = '';
+                    _selectedCategory = 'All Categories';
+                    _selectedProjectStatus = 'All Statuses';
+                    _selectedPublicationStatus = 'All Publications';
+                    _currentPage = 1;
+                  });
+                }
+              : _refreshProjects,
         ),
       );
     }
@@ -1691,370 +1982,320 @@ class _ProjectManagementScreenState extends State<ProjectManagementScreen> {
           ),
         ],
       ),
-      child: Column(
-        children: [
-          // Table Rows
-          ListView.separated(
-            shrinkWrap: true,
-            physics: const NeverScrollableScrollPhysics(),
-            itemCount: pageProjects.length,
-            separatorBuilder: (_, index) => const Divider(height: 1),
-            itemBuilder: (context, index) {
-              final project = pageProjects[index];
-              final isChecked = _selectedProjectIds.contains(project.id);
+      child: LayoutBuilder(
+        builder: (context, constraints) {
+          final isCompact = constraints.maxWidth < 860;
 
-              return Container(
-                padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 14),
-                child: Row(
-                  children: [
-                    // Checkbox
-                    Checkbox(
-                      value: isChecked,
-                      activeColor: AppColors.primary,
-                      shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(4)),
-                      onChanged: (val) {
-                        setState(() {
-                          if (val == true) {
-                            _selectedProjectIds.add(project.id);
-                          } else {
-                            _selectedProjectIds.remove(project.id);
-                          }
-                        });
-                      },
-                    ),
+          return Column(
+            children: [
+              ListView.separated(
+                shrinkWrap: true,
+                physics: const NeverScrollableScrollPhysics(),
+                itemCount: pageProjects.length,
+                separatorBuilder: (_, index) => const Divider(height: 1),
+                itemBuilder: (context, index) {
+                  final project = pageProjects[index];
+                  final isChecked = _selectedProjectIds.contains(project.id);
 
-                    // Project Title & ID
-                    Expanded(
-                      flex: 3,
+                  if (isCompact) {
+                    return Padding(
+                      padding: const EdgeInsets.all(16),
                       child: Column(
                         crossAxisAlignment: CrossAxisAlignment.start,
                         children: [
-                          Text(
-                            project.title,
-                            style: const TextStyle(
-                              fontWeight: FontWeight.bold,
-                              fontSize: 13.5,
-                              color: AppColors.darkNavy,
-                            ),
-                            overflow: TextOverflow.ellipsis,
+                          Row(
+                            children: [
+                              Checkbox(
+                                value: isChecked,
+                                activeColor: AppColors.primary,
+                                shape: RoundedRectangleBorder(
+                                    borderRadius: BorderRadius.circular(4)),
+                                onChanged: (val) {
+                                  setState(() {
+                                    if (val == true) {
+                                      _selectedProjectIds.add(project.id);
+                                    } else {
+                                      _selectedProjectIds.remove(project.id);
+                                    }
+                                  });
+                                },
+                              ),
+                              Expanded(
+                                child: Column(
+                                  crossAxisAlignment: CrossAxisAlignment.start,
+                                  children: [
+                                    Text(
+                                      project.title,
+                                      style: GoogleFonts.poppins(
+                                        fontWeight: FontWeight.bold,
+                                        fontSize: 14,
+                                        color: AppColors.darkNavy,
+                                      ),
+                                      overflow: TextOverflow.ellipsis,
+                                    ),
+                                    Text(
+                                      '${project.companyName} • ${project.category}',
+                                      style: GoogleFonts.inter(
+                                        fontSize: 11.5,
+                                        color: AppColors.textSecondary,
+                                      ),
+                                      overflow: TextOverflow.ellipsis,
+                                    ),
+                                  ],
+                                ),
+                              ),
+                              _buildProjectActionMenu(project),
+                            ],
                           ),
-                          const SizedBox(height: 2),
+                          const SizedBox(height: 8),
                           Text(
-                            '${project.category} • ${project.openings} Opening(s) • ${project.id}',
-                            style: const TextStyle(
-                              fontSize: 11.5,
+                            '${project.projectType} • ${project.duration} • Deadline: ${project.deadline}',
+                            style: GoogleFonts.inter(
+                              fontSize: 12,
                               color: AppColors.textSecondary,
                             ),
-                            overflow: TextOverflow.ellipsis,
                           ),
-                        ],
-                      ),
-                    ),
-
-                    // Company Name
-                    Expanded(
-                      flex: 2,
-                      child: Column(
-                        crossAxisAlignment: CrossAxisAlignment.start,
-                        children: [
-                          Text(
-                            project.companyName,
-                            style: const TextStyle(
-                              fontSize: 12.5,
-                              fontWeight: FontWeight.w600,
-                              color: AppColors.darkNavy,
+                          if (project.skillsRequired.isNotEmpty) ...[
+                            const SizedBox(height: 8),
+                            Wrap(
+                              spacing: 4,
+                              runSpacing: 4,
+                              children: project.skillsRequired.take(3).map((skill) {
+                                return Container(
+                                  padding: const EdgeInsets.symmetric(
+                                      horizontal: 7, vertical: 2),
+                                  decoration: BoxDecoration(
+                                    color: AppColors.lightIceBlue,
+                                    borderRadius: BorderRadius.circular(4),
+                                  ),
+                                  child: Text(
+                                    skill,
+                                    style: const TextStyle(
+                                      fontSize: 10.5,
+                                      fontWeight: FontWeight.bold,
+                                      color: AppColors.primary,
+                                    ),
+                                  ),
+                                );
+                              }).toList(),
                             ),
-                            overflow: TextOverflow.ellipsis,
-                          ),
-                          Text(
-                            'Created: ${project.createdAt}',
-                            style: const TextStyle(
-                              fontSize: 11,
-                              color: AppColors.textMuted,
-                            ),
-                          ),
-                        ],
-                      ),
-                    ),
-
-                    // Skills Required Preview (First 2 pills)
-                    Expanded(
-                      flex: 2,
-                      child: Wrap(
-                        spacing: 4,
-                        runSpacing: 4,
-                        children: project.skillsRequired.take(2).map((skill) {
-                          return Container(
-                            padding: const EdgeInsets.symmetric(horizontal: 7, vertical: 2),
-                            decoration: BoxDecoration(
-                              color: AppColors.lightIceBlue,
-                              borderRadius: BorderRadius.circular(4),
-                            ),
-                            child: Text(
-                              skill,
-                              style: const TextStyle(
-                                fontSize: 10.5,
-                                fontWeight: FontWeight.bold,
-                                color: AppColors.primary,
-                              ),
-                            ),
-                          );
-                        }).toList(),
-                      ),
-                    ),
-
-                    // Project Type & Duration
-                    Expanded(
-                      flex: 2,
-                      child: Column(
-                        crossAxisAlignment: CrossAxisAlignment.start,
-                        children: [
-                          Text(
-                            '${project.projectType} • ${project.duration}',
-                            style: const TextStyle(fontSize: 12, color: AppColors.darkNavy),
-                          ),
-                          Text(
-                            'Deadline: ${project.deadline}',
-                            style: const TextStyle(fontSize: 11, color: AppColors.textSecondary),
-                          ),
-                        ],
-                      ),
-                    ),
-
-                    // Project Status Badge
-                    Container(
-                      padding: const EdgeInsets.symmetric(horizontal: 9, vertical: 4),
-                      decoration: BoxDecoration(
-                        color: _getStatusBgColor(project.status),
-                        borderRadius: BorderRadius.circular(6),
-                      ),
-                      child: Row(
-                        mainAxisSize: MainAxisSize.min,
-                        children: [
-                          Icon(
-                            _getStatusIcon(project.status),
-                            size: 13,
-                            color: _getStatusColor(project.status),
-                          ),
-                          const SizedBox(width: 5),
-                          Text(
-                            project.statusDisplay,
-                            style: TextStyle(
-                              fontSize: 11,
-                              fontWeight: FontWeight.bold,
-                              color: _getStatusColor(project.status),
-                            ),
-                          ),
-                        ],
-                      ),
-                    ),
-                    const SizedBox(width: 10),
-
-                    // Publication Status Badge
-                    Container(
-                      padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
-                      decoration: BoxDecoration(
-                        color: project.publicationStatus == AdminPublicationStatus.published
-                            ? AppColors.lightIceBlue
-                            : AppColors.background,
-                        borderRadius: BorderRadius.circular(6),
-                        border: Border.all(
-                          color: project.publicationStatus == AdminPublicationStatus.published
-                              ? AppColors.primary.withValues(alpha: 0.3)
-                              : AppColors.border,
-                        ),
-                      ),
-                      child: Text(
-                        project.publicationStatusDisplay,
-                        style: TextStyle(
-                          fontSize: 10.5,
-                          fontWeight: FontWeight.bold,
-                          color: project.publicationStatus == AdminPublicationStatus.published
-                              ? AppColors.primary
-                              : AppColors.textSecondary,
-                        ),
-                      ),
-                    ),
-                    const SizedBox(width: 14),
-
-                    // Action: View Details
-                    ElevatedButton.icon(
-                      style: ElevatedButton.styleFrom(
-                        backgroundColor: AppColors.darkNavy,
-                        foregroundColor: Colors.white,
-                        padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
-                      ),
-                      icon: const Icon(Icons.assignment_outlined, size: 15),
-                      label: const Text('View Details', style: TextStyle(fontSize: 11.5)),
-                      onPressed: () => _openProjectDetailsDrawer(project),
-                    ),
-                    const SizedBox(width: 6),
-
-                    // Action: Context Popup Menu for Quick Moderation
-                    PopupMenuButton<String>(
-                      icon: const Icon(Icons.more_vert_rounded, size: 20),
-                      onSelected: (val) {
-                        if (val == 'details') {
-                          _openProjectDetailsDrawer(project);
-                        } else if (val == 'publish') {
-                          final admin =
-                              _authService.currentAdmin?.fullName ?? 'Executive SuperAdmin';
-                          _projectService.publishProject(
-                            projectId: project.id,
-                            moderatorName: admin,
-                          );
-                        } else if (val == 'unpublish') {
-                          _promptUnpublishProject(project);
-                        } else if (val == 'reject') {
-                          _promptRejectProject(project);
-                        } else if (val == 'close') {
-                          _promptCloseProject(project);
-                        } else if (val == 'remove') {
-                          _promptRemoveProject(project);
-                        } else if (val == 'restore') {
-                          final admin =
-                              _authService.currentAdmin?.fullName ?? 'Executive SuperAdmin';
-                          _projectService.restoreRemovedProject(
-                            projectId: project.id,
-                            moderatorName: admin,
-                          );
-                        }
-                      },
-                      itemBuilder: (context) => [
-                        const PopupMenuItem(
-                          value: 'details',
-                          child: Row(
+                          ],
+                          const SizedBox(height: 10),
+                          Wrap(
+                            spacing: 8,
+                            runSpacing: 8,
+                            crossAxisAlignment: WrapCrossAlignment.center,
                             children: [
-                              Icon(Icons.visibility_outlined, size: 16),
-                              SizedBox(width: 8),
-                              Text('View Full Details', style: TextStyle(fontSize: 12)),
+                              _buildProjectStatusBadge(project),
+                              _buildPublicationBadge(project),
+                              ElevatedButton.icon(
+                                style: ElevatedButton.styleFrom(
+                                  backgroundColor: AppColors.darkNavy,
+                                  foregroundColor: Colors.white,
+                                  padding: const EdgeInsets.symmetric(
+                                      horizontal: 12, vertical: 8),
+                                ),
+                                icon: const Icon(Icons.assignment_outlined,
+                                    size: 15),
+                                label: const Text('View Details',
+                                    style: TextStyle(fontSize: 11.5)),
+                                onPressed: () =>
+                                    _openProjectDetailsDrawer(project),
+                              ),
+                            ],
+                          ),
+                        ],
+                      ),
+                    );
+                  }
+
+                  return Container(
+                    padding: const EdgeInsets.symmetric(
+                        horizontal: 16, vertical: 14),
+                    child: Row(
+                      children: [
+                        Checkbox(
+                          value: isChecked,
+                          activeColor: AppColors.primary,
+                          shape: RoundedRectangleBorder(
+                              borderRadius: BorderRadius.circular(4)),
+                          onChanged: (val) {
+                            setState(() {
+                              if (val == true) {
+                                _selectedProjectIds.add(project.id);
+                              } else {
+                                _selectedProjectIds.remove(project.id);
+                              }
+                            });
+                          },
+                        ),
+                        Expanded(
+                          flex: 3,
+                          child: Column(
+                            crossAxisAlignment: CrossAxisAlignment.start,
+                            children: [
+                              Text(
+                                project.title,
+                                style: GoogleFonts.poppins(
+                                  fontWeight: FontWeight.bold,
+                                  fontSize: 13.5,
+                                  color: AppColors.darkNavy,
+                                ),
+                                overflow: TextOverflow.ellipsis,
+                              ),
+                              const SizedBox(height: 2),
+                              Text(
+                                '${project.category} • ${project.openings} Opening(s) • ${project.id}',
+                                style: GoogleFonts.inter(
+                                  fontSize: 11.5,
+                                  color: AppColors.textSecondary,
+                                ),
+                                overflow: TextOverflow.ellipsis,
+                              ),
                             ],
                           ),
                         ),
-                        if (project.status == AdminProjectStatus.pendingReview) ...[
-                          const PopupMenuItem(
-                            value: 'publish',
-                            child: Row(
-                              children: [
-                                Icon(Icons.check_circle_outline,
-                                    size: 16, color: AppColors.success),
-                                SizedBox(width: 8),
-                                Text('Approve & Publish',
-                                    style: TextStyle(fontSize: 12, color: AppColors.success)),
-                              ],
-                            ),
+                        Expanded(
+                          flex: 2,
+                          child: Column(
+                            crossAxisAlignment: CrossAxisAlignment.start,
+                            children: [
+                              Text(
+                                project.companyName,
+                                style: GoogleFonts.inter(
+                                  fontSize: 12.5,
+                                  fontWeight: FontWeight.w600,
+                                  color: AppColors.darkNavy,
+                                ),
+                                overflow: TextOverflow.ellipsis,
+                              ),
+                              Text(
+                                'Created: ${project.createdAt}',
+                                style: GoogleFonts.inter(
+                                  fontSize: 11,
+                                  color: AppColors.textMuted,
+                                ),
+                              ),
+                            ],
                           ),
-                          const PopupMenuItem(
-                            value: 'reject',
-                            child: Row(
-                              children: [
-                                Icon(Icons.cancel_outlined,
-                                    size: 16, color: AppColors.error),
-                                SizedBox(width: 8),
-                                Text('Reject Submission',
-                                    style: TextStyle(fontSize: 12, color: AppColors.error)),
-                              ],
-                            ),
+                        ),
+                        Expanded(
+                          flex: 2,
+                          child: Wrap(
+                            spacing: 4,
+                            runSpacing: 4,
+                            children: project.skillsRequired.take(2).map((skill) {
+                              return Container(
+                                padding: const EdgeInsets.symmetric(
+                                    horizontal: 7, vertical: 2),
+                                decoration: BoxDecoration(
+                                  color: AppColors.lightIceBlue,
+                                  borderRadius: BorderRadius.circular(4),
+                                ),
+                                child: Text(
+                                  skill,
+                                  style: const TextStyle(
+                                    fontSize: 10.5,
+                                    fontWeight: FontWeight.bold,
+                                    color: AppColors.primary,
+                                  ),
+                                ),
+                              );
+                            }).toList(),
                           ),
-                        ],
-                        if (project.status == AdminProjectStatus.published) ...[
-                          const PopupMenuItem(
-                            value: 'unpublish',
-                            child: Row(
-                              children: [
-                                Icon(Icons.visibility_off_outlined,
-                                    size: 16, color: AppColors.warning),
-                                SizedBox(width: 8),
-                                Text('Unpublish Listing',
-                                    style: TextStyle(fontSize: 12, color: AppColors.warning)),
-                              ],
-                            ),
+                        ),
+                        Expanded(
+                          flex: 2,
+                          child: Column(
+                            crossAxisAlignment: CrossAxisAlignment.start,
+                            children: [
+                              Text(
+                                '${project.projectType} • ${project.duration}',
+                                style: GoogleFonts.inter(
+                                    fontSize: 12, color: AppColors.darkNavy),
+                              ),
+                              Text(
+                                'Deadline: ${project.deadline}',
+                                style: GoogleFonts.inter(
+                                    fontSize: 11,
+                                    color: AppColors.textSecondary),
+                              ),
+                            ],
                           ),
-                          const PopupMenuItem(
-                            value: 'close',
-                            child: Row(
-                              children: [
-                                Icon(Icons.lock_clock_outlined, size: 16),
-                                SizedBox(width: 8),
-                                Text('Close Project', style: TextStyle(fontSize: 12)),
-                              ],
-                            ),
+                        ),
+                        _buildProjectStatusBadge(project),
+                        const SizedBox(width: 10),
+                        _buildPublicationBadge(project),
+                        const SizedBox(width: 14),
+                        ElevatedButton.icon(
+                          style: ElevatedButton.styleFrom(
+                            backgroundColor: AppColors.darkNavy,
+                            foregroundColor: Colors.white,
+                            padding: const EdgeInsets.symmetric(
+                                horizontal: 12, vertical: 8),
                           ),
-                          const PopupMenuItem(
-                            value: 'remove',
-                            child: Row(
-                              children: [
-                                Icon(Icons.delete_forever_outlined,
-                                    size: 16, color: AppColors.error),
-                                SizedBox(width: 8),
-                                Text('Remove (Policy Non-Compliance)',
-                                    style: TextStyle(fontSize: 12, color: AppColors.error)),
-                              ],
-                            ),
+                          icon: const Icon(Icons.assignment_outlined, size: 15),
+                          label: const Text('View Details',
+                              style: TextStyle(fontSize: 11.5)),
+                          onPressed: () => _openProjectDetailsDrawer(project),
+                        ),
+                        const SizedBox(width: 6),
+                        _buildProjectActionMenu(project),
+                      ],
+                    ),
+                  );
+                },
+              ),
+
+              // Pagination Bar
+              Container(
+                width: double.infinity,
+                padding:
+                    const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
+                decoration: const BoxDecoration(
+                  border: Border(top: BorderSide(color: AppColors.border)),
+                ),
+                child: Wrap(
+                  spacing: 12,
+                  runSpacing: 8,
+                  alignment: WrapAlignment.spaceBetween,
+                  crossAxisAlignment: WrapCrossAlignment.center,
+                  children: [
+                    Text(
+                      'Showing ${pageProjects.length} of $totalCount projects (Page $safePage of $totalPages)',
+                      style: GoogleFonts.inter(
+                          fontSize: 12, color: AppColors.textSecondary),
+                    ),
+                    Row(
+                      mainAxisSize: MainAxisSize.min,
+                      children: [
+                        IconButton(
+                          icon: const Icon(Icons.chevron_left_rounded),
+                          onPressed: safePage > 1
+                              ? () => setState(() => _currentPage = safePage - 1)
+                              : null,
+                        ),
+                        Text(
+                          '$safePage',
+                          style: GoogleFonts.poppins(
+                            fontWeight: FontWeight.bold,
+                            color: AppColors.darkNavy,
                           ),
-                        ],
-                        if (project.status == AdminProjectStatus.removed) ...[
-                          const PopupMenuItem(
-                            value: 'restore',
-                            child: Row(
-                              children: [
-                                Icon(Icons.restore_from_trash_rounded,
-                                    size: 16, color: AppColors.success),
-                                SizedBox(width: 8),
-                                Text('Restore Listing',
-                                    style: TextStyle(fontSize: 12, color: AppColors.success)),
-                              ],
-                            ),
-                          ),
-                        ],
+                        ),
+                        IconButton(
+                          icon: const Icon(Icons.chevron_right_rounded),
+                          onPressed: safePage < totalPages
+                              ? () => setState(() => _currentPage = safePage + 1)
+                              : null,
+                        ),
                       ],
                     ),
                   ],
                 ),
-              );
-            },
-          ),
-
-          // Pagination Bar
-          Container(
-            padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
-            decoration: const BoxDecoration(
-              border: Border(top: BorderSide(color: AppColors.border)),
-            ),
-            child: Row(
-              mainAxisAlignment: MainAxisAlignment.spaceBetween,
-              children: [
-                Text(
-                  'Showing ${pageProjects.length} of $totalCount projects (Page $_currentPage of $totalPages)',
-                  style: const TextStyle(fontSize: 12, color: AppColors.textSecondary),
-                ),
-                Row(
-                  children: [
-                    IconButton(
-                      icon: const Icon(Icons.chevron_left_rounded),
-                      onPressed: _currentPage > 1
-                          ? () => setState(() => _currentPage--)
-                          : null,
-                    ),
-                    Text(
-                      '$_currentPage',
-                      style: const TextStyle(
-                        fontWeight: FontWeight.bold,
-                        color: AppColors.darkNavy,
-                      ),
-                    ),
-                    IconButton(
-                      icon: const Icon(Icons.chevron_right_rounded),
-                      onPressed: _currentPage < totalPages
-                          ? () => setState(() => _currentPage++)
-                          : null,
-                    ),
-                  ],
-                ),
-              ],
-            ),
-          ),
-        ],
+              ),
+            ],
+          );
+        },
       ),
     );
   }

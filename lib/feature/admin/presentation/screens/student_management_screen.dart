@@ -1,19 +1,24 @@
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
+import 'package:google_fonts/google_fonts.dart';
 import 'package:link_vibe/core/constants/app_colors.dart';
+import 'package:link_vibe/core/widgets/app_empty_state.dart';
 import 'package:link_vibe/feature/admin/models/admin_student_model.dart';
 import 'package:link_vibe/feature/admin/presentation/screens/admin_dashboard_screen.dart';
 import 'package:link_vibe/feature/admin/presentation/screens/admin_login_screen.dart';
+import 'package:link_vibe/feature/admin/presentation/screens/admin_settings_screen.dart';
 import 'package:link_vibe/feature/admin/presentation/screens/application_monitoring_screen.dart';
 import 'package:link_vibe/feature/admin/presentation/screens/certificate_management_screen.dart';
 import 'package:link_vibe/feature/admin/presentation/screens/company_management_screen.dart';
+import 'package:link_vibe/feature/admin/presentation/screens/company_verifications_screen.dart';
 import 'package:link_vibe/feature/admin/presentation/screens/project_management_screen.dart';
 import 'package:link_vibe/feature/admin/presentation/screens/reports_analytics_screen.dart';
-import 'package:link_vibe/feature/admin/presentation/screens/admin_settings_screen.dart';
 import 'package:link_vibe/feature/admin/presentation/widgets/admin_sidebar.dart';
 import 'package:link_vibe/feature/admin/presentation/widgets/admin_top_navbar.dart';
 import 'package:link_vibe/feature/admin/services/admin_auth_service.dart';
+import 'package:link_vibe/feature/admin/services/admin_settings_service.dart';
 import 'package:link_vibe/feature/admin/services/admin_student_service.dart';
+import 'package:url_launcher/url_launcher.dart';
 
 /// Enterprise Student Management Screen (Screen 35)
 /// Features student registry overview, multi-tier filters, detailed profile inspection,
@@ -28,6 +33,7 @@ class StudentManagementScreen extends StatefulWidget {
 class _StudentManagementScreenState extends State<StudentManagementScreen> {
   final AdminAuthService _authService = AdminAuthService();
   final AdminStudentService _studentService = AdminStudentService();
+  final AdminSettingsService _settingsService = AdminSettingsService();
   final GlobalKey<ScaffoldState> _scaffoldKey = GlobalKey<ScaffoldState>();
 
   String _searchQuery = '';
@@ -44,29 +50,79 @@ class _StudentManagementScreenState extends State<StudentManagementScreen> {
   int _currentPage = 1;
   final int _itemsPerPage = 5;
 
-  final List<String> _universities = [
-    'All Universities',
-    'FAST-NUCES Islamabad',
-    'GIKI Swabi',
-    'UET Taxila',
-    'PUCIT Lahore',
-    'NUST Islamabad',
-    'COMSATS Islamabad',
-    'LUMS Lahore',
-  ];
-
-  final List<String> _departments = [
-    'All Departments',
-    'Department of Computer Science',
-    'Department of Computer Engineering',
-    'Department of Data Science & AI',
-    'School of Electrical Engineering & CS',
-    'Syed Babar Ali School of Science & Eng',
-  ];
-
   final List<String> _verificationFilters = ['All', 'Verified', 'Pending', 'Rejected'];
   final List<String> _accountFilters = ['All', 'Active', 'Suspended'];
   final List<String> _sortOptions = ['Newest First', 'Oldest First', 'Highest CGPA'];
+
+  List<String> _buildUniversityOptions(List<AdminStudentModel> students) {
+    final set = <String>{'All Universities'};
+    for (final uni in _settingsService.universitiesNotifier.value) {
+      final name = uni.name.trim();
+      if (name.isNotEmpty) set.add(name);
+    }
+    for (final s in students) {
+      final name = s.university.trim();
+      if (name.isNotEmpty) set.add(name);
+    }
+    return set.toList();
+  }
+
+  List<String> _buildDepartmentOptions(List<AdminStudentModel> students) {
+    final set = <String>{'All Departments'};
+    for (final s in students) {
+      final dept = s.department.trim();
+      if (dept.isNotEmpty) set.add(dept);
+    }
+    return set.toList();
+  }
+
+  Future<void> _refreshStudents() async {
+    await _studentService.loadFromSupabase();
+    if (!mounted) return;
+    ScaffoldMessenger.of(context).showSnackBar(
+      const SnackBar(
+        content: Text('Student directory synced from Supabase.'),
+        backgroundColor: AppColors.primary,
+        behavior: SnackBarBehavior.floating,
+      ),
+    );
+  }
+
+  Future<void> _launchExternalUrl(String rawUrl) async {
+    final trimmed = rawUrl.trim();
+    if (trimmed.isEmpty) return;
+    final uri = Uri.tryParse(trimmed);
+    if (uri == null || !uri.hasScheme) {
+      if (!mounted) return;
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(
+          content: Text('Invalid or incomplete document URL.'),
+          behavior: SnackBarBehavior.floating,
+        ),
+      );
+      return;
+    }
+    try {
+      final launched =
+          await launchUrl(uri, mode: LaunchMode.externalApplication);
+      if (!launched && mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(
+            content: Text('Could not open the uploaded document.'),
+            behavior: SnackBarBehavior.floating,
+          ),
+        );
+      }
+    } catch (_) {
+      if (!mounted) return;
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(
+          content: Text('Failed to launch document link.'),
+          behavior: SnackBarBehavior.floating,
+        ),
+      );
+    }
+  }
 
   Future<void> _handleSignOut() async {
     final confirmed = await showDialog<bool>(
@@ -113,40 +169,34 @@ class _StudentManagementScreenState extends State<StudentManagementScreen> {
   }
 
   void _onRouteSelected(String routeId) {
+    if (_scaffoldKey.currentState?.isDrawerOpen ?? false) {
+      Navigator.pop(context);
+    }
+    if (routeId == 'student_verifications') return;
+
+    Widget? target;
     if (routeId == 'dashboard') {
-      Navigator.pushReplacement(
-        context,
-        MaterialPageRoute(builder: (_) => const AdminDashboardScreen()),
-      );
-    } else if (routeId == 'company_verifications' || routeId == 'company_management') {
-      Navigator.pushReplacement(
-        context,
-        MaterialPageRoute(builder: (_) => const CompanyManagementScreen()),
-      );
+      target = const AdminDashboardScreen();
+    } else if (routeId == 'company_verifications') {
+      target = const CompanyVerificationsScreen();
+    } else if (routeId == 'company_management') {
+      target = const CompanyManagementScreen();
     } else if (routeId == 'projects_audit' || routeId == 'projects') {
-      Navigator.pushReplacement(
-        context,
-        MaterialPageRoute(builder: (_) => const ProjectManagementScreen()),
-      );
+      target = const ProjectManagementScreen();
     } else if (routeId == 'compliance' || routeId == 'application_monitoring') {
-      Navigator.pushReplacement(
-        context,
-        MaterialPageRoute(builder: (_) => const ApplicationMonitoringScreen()),
-      );
+      target = const ApplicationMonitoringScreen();
     } else if (routeId == 'audit_logs' || routeId == 'certificates') {
-      Navigator.pushReplacement(
-        context,
-        MaterialPageRoute(builder: (_) => const CertificateManagementScreen()),
-      );
+      target = const CertificateManagementScreen();
     } else if (routeId == 'analytics' || routeId == 'reports') {
-      Navigator.pushReplacement(
-        context,
-        MaterialPageRoute(builder: (_) => const ReportsAnalyticsScreen()),
-      );
+      target = const ReportsAnalyticsScreen();
     } else if (routeId == 'settings') {
+      target = const AdminSettingsScreen();
+    }
+
+    if (target != null) {
       Navigator.pushReplacement(
         context,
-        MaterialPageRoute(builder: (_) => const AdminSettingsScreen()),
+        MaterialPageRoute(builder: (_) => target!),
       );
     }
   }
@@ -171,40 +221,50 @@ class _StudentManagementScreenState extends State<StudentManagementScreen> {
               // Header Row
               Row(
                 mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                crossAxisAlignment: CrossAxisAlignment.start,
                 children: [
-                  Row(
-                    children: [
-                      CircleAvatar(
-                        radius: 24,
-                        backgroundColor: AppColors.primary,
-                        child: Text(
-                          student.avatarInitial,
-                          style: const TextStyle(
-                            color: Colors.white,
-                            fontWeight: FontWeight.bold,
-                            fontSize: 16,
-                          ),
-                        ),
-                      ),
-                      const SizedBox(width: 14),
-                      Column(
-                        crossAxisAlignment: CrossAxisAlignment.start,
-                        children: [
-                          Text(
-                            student.name,
+                  Expanded(
+                    child: Row(
+                      children: [
+                        CircleAvatar(
+                          radius: 24,
+                          backgroundColor: AppColors.primary,
+                          child: Text(
+                            student.avatarInitial,
                             style: const TextStyle(
-                              fontSize: 18,
+                              color: Colors.white,
                               fontWeight: FontWeight.bold,
-                              color: AppColors.darkNavy,
+                              fontSize: 16,
                             ),
                           ),
-                          Text(
-                            student.email,
-                            style: const TextStyle(fontSize: 12, color: AppColors.textSecondary),
+                        ),
+                        const SizedBox(width: 14),
+                        Expanded(
+                          child: Column(
+                            crossAxisAlignment: CrossAxisAlignment.start,
+                            children: [
+                              Text(
+                                student.name,
+                                style: GoogleFonts.poppins(
+                                  fontSize: 18,
+                                  fontWeight: FontWeight.bold,
+                                  color: AppColors.darkNavy,
+                                ),
+                                overflow: TextOverflow.ellipsis,
+                              ),
+                              Text(
+                                student.email,
+                                style: GoogleFonts.inter(
+                                  fontSize: 12,
+                                  color: AppColors.textSecondary,
+                                ),
+                                overflow: TextOverflow.ellipsis,
+                              ),
+                            ],
                           ),
-                        ],
-                      ),
-                    ],
+                        ),
+                      ],
+                    ),
                   ),
                   IconButton(
                     icon: const Icon(Icons.close_rounded),
@@ -217,7 +277,9 @@ class _StudentManagementScreenState extends State<StudentManagementScreen> {
               const SizedBox(height: 12),
 
               // Status Summary Badges
-              Row(
+              Wrap(
+                spacing: 8,
+                runSpacing: 8,
                 children: [
                   _buildStatusPill(
                     label: student.verificationStatus == StudentVerificationStatus.verified
@@ -236,7 +298,6 @@ class _StudentManagementScreenState extends State<StudentManagementScreen> {
                             ? AppColors.warningBg
                             : AppColors.errorBg,
                   ),
-                  const SizedBox(width: 8),
                   _buildStatusPill(
                     label: student.accountStatus == StudentAccountStatus.active
                         ? 'Account Active'
@@ -248,7 +309,6 @@ class _StudentManagementScreenState extends State<StudentManagementScreen> {
                         ? AppColors.lightIceBlue
                         : AppColors.errorBg,
                   ),
-                  const SizedBox(width: 8),
                   _buildStatusPill(
                     label: 'CGPA: ${student.cgpa}',
                     color: AppColors.darkNavy,
@@ -269,8 +329,12 @@ class _StudentManagementScreenState extends State<StudentManagementScreen> {
                   border: Border.all(color: AppColors.border),
                 ),
                 child: Text(
-                  student.bio,
-                  style: const TextStyle(fontSize: 13, color: AppColors.textPrimary, height: 1.4),
+                  student.bio.isEmpty ? 'No biography provided yet.' : student.bio,
+                  style: GoogleFonts.inter(
+                    fontSize: 13,
+                    color: AppColors.textPrimary,
+                    height: 1.4,
+                  ),
                 ),
               ),
               const SizedBox(height: 20),
@@ -286,30 +350,36 @@ class _StudentManagementScreenState extends State<StudentManagementScreen> {
               const SizedBox(height: 20),
 
               // 3. Technical Skills
-              _buildSectionHeader('3. Verified Technical Skillset'),
+              _buildSectionHeader('3. Technical Skillset'),
               const SizedBox(height: 8),
-              Wrap(
-                spacing: 8,
-                runSpacing: 8,
-                children: student.skills.map((skill) {
-                  return Container(
-                    padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 5),
-                    decoration: BoxDecoration(
-                      color: AppColors.lightIceBlue,
-                      borderRadius: BorderRadius.circular(6),
-                      border: Border.all(color: AppColors.primary.withValues(alpha: 0.3)),
-                    ),
-                    child: Text(
-                      skill,
-                      style: const TextStyle(
-                        fontSize: 12,
-                        fontWeight: FontWeight.bold,
-                        color: AppColors.primary,
+              if (student.skills.isEmpty)
+                Text(
+                  'No skills listed by student.',
+                  style: GoogleFonts.inter(fontSize: 12, color: AppColors.textMuted),
+                )
+              else
+                Wrap(
+                  spacing: 8,
+                  runSpacing: 8,
+                  children: student.skills.map((skill) {
+                    return Container(
+                      padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 5),
+                      decoration: BoxDecoration(
+                        color: AppColors.lightIceBlue,
+                        borderRadius: BorderRadius.circular(6),
+                        border: Border.all(color: AppColors.primary.withValues(alpha: 0.3)),
                       ),
-                    ),
-                  );
-                }).toList(),
-              ),
+                      child: Text(
+                        skill,
+                        style: GoogleFonts.inter(
+                          fontSize: 12,
+                          fontWeight: FontWeight.bold,
+                          color: AppColors.primary,
+                        ),
+                      ),
+                    );
+                  }).toList(),
+                ),
               const SizedBox(height: 20),
 
               // 4. Portfolio & Online Profiles
@@ -334,31 +404,51 @@ class _StudentManagementScreenState extends State<StudentManagementScreen> {
                   borderRadius: BorderRadius.circular(12),
                   border: Border.all(color: AppColors.border),
                 ),
-                child: Row(
+                child: Wrap(
+                  spacing: 12,
+                  runSpacing: 12,
+                  alignment: WrapAlignment.spaceBetween,
+                  crossAxisAlignment: WrapCrossAlignment.center,
                   children: [
-                    Container(
-                      padding: const EdgeInsets.all(10),
-                      decoration: BoxDecoration(
-                        color: AppColors.primary.withValues(alpha: 0.12),
-                        borderRadius: BorderRadius.circular(8),
-                      ),
-                      child: const Icon(Icons.picture_as_pdf_rounded, color: AppColors.primary, size: 24),
-                    ),
-                    const SizedBox(width: 14),
-                    Expanded(
-                      child: Column(
-                        crossAxisAlignment: CrossAxisAlignment.start,
-                        children: [
-                          Text(
-                            student.verificationDocumentName,
-                            style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 13),
+                    Row(
+                      mainAxisSize: MainAxisSize.min,
+                      children: [
+                        Container(
+                          padding: const EdgeInsets.all(10),
+                          decoration: BoxDecoration(
+                            color: AppColors.primary.withValues(alpha: 0.12),
+                            borderRadius: BorderRadius.circular(8),
                           ),
-                          Text(
-                            '${student.verificationDocumentType} • ${student.verificationDocumentSize}',
-                            style: const TextStyle(fontSize: 11, color: AppColors.textMuted),
+                          child: const Icon(
+                            Icons.picture_as_pdf_rounded,
+                            color: AppColors.primary,
+                            size: 24,
                           ),
-                        ],
-                      ),
+                        ),
+                        const SizedBox(width: 14),
+                        Flexible(
+                          child: Column(
+                            crossAxisAlignment: CrossAxisAlignment.start,
+                            children: [
+                              Text(
+                                student.verificationDocumentName,
+                                style: GoogleFonts.inter(
+                                  fontWeight: FontWeight.bold,
+                                  fontSize: 13,
+                                ),
+                                overflow: TextOverflow.ellipsis,
+                              ),
+                              Text(
+                                '${student.verificationDocumentType} • ${student.verificationDocumentSize}',
+                                style: GoogleFonts.inter(
+                                  fontSize: 11,
+                                  color: AppColors.textMuted,
+                                ),
+                              ),
+                            ],
+                          ),
+                        ),
+                      ],
                     ),
                     ElevatedButton.icon(
                       style: ElevatedButton.styleFrom(
@@ -390,7 +480,11 @@ class _StudentManagementScreenState extends State<StudentManagementScreen> {
                   ),
                   child: Text(
                     'Suspension Reason: "${student.suspensionReason}"',
-                    style: const TextStyle(fontSize: 12.5, color: Color(0xFF991B1B), fontStyle: FontStyle.italic),
+                    style: const TextStyle(
+                      fontSize: 12.5,
+                      color: Color(0xFF991B1B),
+                      fontStyle: FontStyle.italic,
+                    ),
                   ),
                 ),
                 const SizedBox(height: 20),
@@ -400,7 +494,10 @@ class _StudentManagementScreenState extends State<StudentManagementScreen> {
               _buildSectionHeader('6. Administrative Audit History'),
               const SizedBox(height: 8),
               if (student.auditHistory.isEmpty)
-                const Text('No prior administrative actions recorded.', style: TextStyle(fontSize: 12, color: AppColors.textMuted))
+                const Text(
+                  'No prior administrative actions recorded.',
+                  style: TextStyle(fontSize: 12, color: AppColors.textMuted),
+                )
               else
                 ...student.auditHistory.map((audit) {
                   return Container(
@@ -417,9 +514,15 @@ class _StudentManagementScreenState extends State<StudentManagementScreen> {
                         Row(
                           mainAxisAlignment: MainAxisAlignment.spaceBetween,
                           children: [
-                            Text(
-                              audit.action,
-                              style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 12.5, color: AppColors.darkNavy),
+                            Expanded(
+                              child: Text(
+                                audit.action,
+                                style: const TextStyle(
+                                  fontWeight: FontWeight.bold,
+                                  fontSize: 12.5,
+                                  color: AppColors.darkNavy,
+                                ),
+                              ),
                             ),
                             Text(
                               audit.timestamp,
@@ -436,7 +539,11 @@ class _StudentManagementScreenState extends State<StudentManagementScreen> {
                           const SizedBox(height: 4),
                           Text(
                             'Note: "${audit.note}"',
-                            style: const TextStyle(fontSize: 11.5, fontStyle: FontStyle.italic, color: AppColors.darkNavy),
+                            style: const TextStyle(
+                              fontSize: 11.5,
+                              fontStyle: FontStyle.italic,
+                              color: AppColors.darkNavy,
+                            ),
                           ),
                         ],
                       ],
@@ -446,86 +553,78 @@ class _StudentManagementScreenState extends State<StudentManagementScreen> {
               const SizedBox(height: 24),
 
               // Primary Action Buttons
-              Row(
+              Wrap(
+                spacing: 10,
+                runSpacing: 10,
                 children: [
-                  // Verification Decision
                   if (student.verificationStatus == StudentVerificationStatus.pending) ...[
-                    Expanded(
-                      child: OutlinedButton.icon(
-                        style: OutlinedButton.styleFrom(
-                          foregroundColor: AppColors.error,
-                          side: const BorderSide(color: AppColors.error),
-                          padding: const EdgeInsets.symmetric(vertical: 12),
-                        ),
-                        icon: const Icon(Icons.cancel_outlined, size: 16),
-                        label: const Text('Reject Verification'),
-                        onPressed: () {
-                          Navigator.pop(ctx);
-                          _promptRejectStudentVerification(student);
-                        },
+                    OutlinedButton.icon(
+                      style: OutlinedButton.styleFrom(
+                        foregroundColor: AppColors.error,
+                        side: const BorderSide(color: AppColors.error),
+                        padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 12),
                       ),
-                    ),
-                    const SizedBox(width: 10),
-                    Expanded(
-                      child: ElevatedButton.icon(
-                        style: ElevatedButton.styleFrom(
-                          backgroundColor: AppColors.success,
-                          foregroundColor: Colors.white,
-                          padding: const EdgeInsets.symmetric(vertical: 12),
-                        ),
-                        icon: const Icon(Icons.check_circle_outline, size: 16),
-                        label: const Text('Approve Credentials'),
-                        onPressed: () async {
-                          final admin = _authService.currentAdmin?.fullName ?? 'Executive SuperAdmin';
-                          await _studentService.approveStudentVerification(
-                            studentId: student.id,
-                            adminName: admin,
-                          );
-                          if (!mounted || !ctx.mounted) return;
-                          Navigator.pop(ctx);
-                          ScaffoldMessenger.of(context).showSnackBar(
-                            SnackBar(
-                              content: Text('${student.name} is now university-verified!'),
-                              backgroundColor: AppColors.success,
-                              behavior: SnackBarBehavior.floating,
-                            ),
-                          );
-                        },
-                      ),
-                    ),
-                    const SizedBox(width: 10),
-                  ],
-
-                  // Account Suspension / Reactivation Button
-                  Expanded(
-                    child: ElevatedButton.icon(
-                      style: ElevatedButton.styleFrom(
-                        backgroundColor: student.accountStatus == StudentAccountStatus.active
-                            ? AppColors.error
-                            : AppColors.primary,
-                        foregroundColor: Colors.white,
-                        padding: const EdgeInsets.symmetric(vertical: 12),
-                      ),
-                      icon: Icon(
-                        student.accountStatus == StudentAccountStatus.active
-                            ? Icons.block_rounded
-                            : Icons.lock_open_rounded,
-                        size: 16,
-                      ),
-                      label: Text(
-                        student.accountStatus == StudentAccountStatus.active
-                            ? 'Suspend Account'
-                            : 'Reactivate Account',
-                      ),
+                      icon: const Icon(Icons.cancel_outlined, size: 16),
+                      label: const Text('Reject Verification'),
                       onPressed: () {
                         Navigator.pop(ctx);
-                        if (student.accountStatus == StudentAccountStatus.active) {
-                          _promptSuspendStudent(student);
-                        } else {
-                          _promptReactivateStudent(student);
-                        }
+                        _promptRejectStudentVerification(student);
                       },
                     ),
+                    ElevatedButton.icon(
+                      style: ElevatedButton.styleFrom(
+                        backgroundColor: AppColors.success,
+                        foregroundColor: Colors.white,
+                        padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 12),
+                      ),
+                      icon: const Icon(Icons.check_circle_outline, size: 16),
+                      label: const Text('Approve Credentials'),
+                      onPressed: () async {
+                        final admin =
+                            _authService.currentAdmin?.fullName ?? 'Executive Administrator';
+                        await _studentService.approveStudentVerification(
+                          studentId: student.id,
+                          adminName: admin,
+                        );
+                        if (!mounted || !ctx.mounted) return;
+                        Navigator.pop(ctx);
+                        ScaffoldMessenger.of(context).showSnackBar(
+                          SnackBar(
+                            content: Text('${student.name} is now verified!'),
+                            backgroundColor: AppColors.success,
+                            behavior: SnackBarBehavior.floating,
+                          ),
+                        );
+                      },
+                    ),
+                  ],
+                  ElevatedButton.icon(
+                    style: ElevatedButton.styleFrom(
+                      backgroundColor: student.accountStatus == StudentAccountStatus.active
+                          ? AppColors.error
+                          : AppColors.primary,
+                      foregroundColor: Colors.white,
+                      padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
+                    ),
+                    icon: Icon(
+                      student.accountStatus == StudentAccountStatus.active
+                          ? Icons.block_rounded
+                          : Icons.lock_open_rounded,
+                      size: 16,
+                    ),
+                    label: Text(
+                      student.accountStatus == StudentAccountStatus.active
+                          ? 'Suspend Account'
+                          : 'Reactivate Account',
+                    ),
+                    onPressed: () {
+                      Navigator.pop(ctx);
+                      if (student.accountStatus == StudentAccountStatus.active) {
+                        _promptSuspendStudent(student);
+                      } else {
+                        _promptReactivateStudent(student);
+                      }
+                    },
                   ),
                 ],
               ),
@@ -538,6 +637,8 @@ class _StudentManagementScreenState extends State<StudentManagementScreen> {
   }
 
   void _openDocumentPreviewModal(AdminStudentModel student) {
+    final docUrl = (student.verificationDocumentUrl ?? '').trim();
+
     showDialog(
       context: context,
       builder: (dialogCtx) => AlertDialog(
@@ -545,12 +646,24 @@ class _StudentManagementScreenState extends State<StudentManagementScreen> {
         title: Row(
           mainAxisAlignment: MainAxisAlignment.spaceBetween,
           children: [
-            Row(
-              children: [
-                const Icon(Icons.verified_user_rounded, color: AppColors.primary),
-                const SizedBox(width: 8),
-                Text(student.verificationDocumentName, style: const TextStyle(fontSize: 14)),
-              ],
+            Expanded(
+              child: Row(
+                children: [
+                  const Icon(Icons.description_outlined, color: AppColors.primary),
+                  const SizedBox(width: 8),
+                  Expanded(
+                    child: Text(
+                      student.verificationDocumentName,
+                      style: GoogleFonts.poppins(
+                        fontSize: 15,
+                        fontWeight: FontWeight.bold,
+                        color: AppColors.darkNavy,
+                      ),
+                      overflow: TextOverflow.ellipsis,
+                    ),
+                  ),
+                ],
+              ),
             ),
             IconButton(
               icon: const Icon(Icons.close_rounded),
@@ -558,58 +671,56 @@ class _StudentManagementScreenState extends State<StudentManagementScreen> {
             ),
           ],
         ),
-        content: Container(
-          width: 480,
-          height: 340,
-          padding: const EdgeInsets.all(20),
-          decoration: BoxDecoration(
-            color: AppColors.background,
-            borderRadius: BorderRadius.circular(12),
-            border: Border.all(color: AppColors.border),
-          ),
-          child: Column(
-            mainAxisAlignment: MainAxisAlignment.center,
-            children: [
-              Container(
-                padding: const EdgeInsets.all(16),
-                decoration: const BoxDecoration(color: Colors.white, shape: BoxShape.circle),
-                child: const Icon(Icons.document_scanner_rounded, color: AppColors.primary, size: 44),
+        content: ConstrainedBox(
+          constraints: const BoxConstraints(maxWidth: 500),
+          child: SingleChildScrollView(
+            child: Container(
+              width: double.infinity,
+              padding: const EdgeInsets.all(18),
+              decoration: BoxDecoration(
+                color: AppColors.background,
+                borderRadius: BorderRadius.circular(12),
+                border: Border.all(color: AppColors.border),
               ),
-              const SizedBox(height: 16),
-              Text(
-                student.verificationDocumentType,
-                style: const TextStyle(fontSize: 15, fontWeight: FontWeight.bold),
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                mainAxisSize: MainAxisSize.min,
+                children: [
+                  _buildInfoRow(
+                    Icons.person_outline_rounded,
+                    'Student',
+                    student.name,
+                  ),
+                  _buildInfoRow(
+                    Icons.school_rounded,
+                    'Institution',
+                    student.university,
+                  ),
+                  _buildInfoRow(
+                    Icons.workspace_premium_outlined,
+                    'Degree',
+                    '${student.degree} (${student.semester})',
+                  ),
+                  _buildInfoRow(
+                    Icons.attach_file_rounded,
+                    'Document Name',
+                    student.verificationDocumentName,
+                  ),
+                  _buildInfoRow(
+                    Icons.insert_drive_file_outlined,
+                    'Type & Size',
+                    '${student.verificationDocumentType} • ${student.verificationDocumentSize}',
+                  ),
+                  _buildInfoRow(
+                    Icons.cloud_done_outlined,
+                    'Cloud Attachment',
+                    docUrl.isNotEmpty
+                        ? 'Document URL available in storage'
+                        : 'No uploaded file URL attached yet',
+                  ),
+                ],
               ),
-              const SizedBox(height: 6),
-              Text(
-                'Institution: ${student.university}\nStudent: ${student.name} • ${student.degree}\nRoll / Reg Identifier: ${student.id.toUpperCase()}',
-                textAlign: TextAlign.center,
-                style: const TextStyle(fontSize: 12.5, color: AppColors.textSecondary, height: 1.4),
-              ),
-              const SizedBox(height: 18),
-              Container(
-                padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 5),
-                decoration: BoxDecoration(
-                  color: AppColors.successBg,
-                  borderRadius: BorderRadius.circular(6),
-                ),
-                child: const Row(
-                  mainAxisSize: MainAxisSize.min,
-                  children: [
-                    Icon(Icons.check_circle_outline, color: AppColors.success, size: 15),
-                    SizedBox(width: 6),
-                    Text(
-                      'University Registrar Digital Signature Authenticated',
-                      style: TextStyle(
-                        fontSize: 11,
-                        fontWeight: FontWeight.bold,
-                        color: Color(0xFF166534),
-                      ),
-                    ),
-                  ],
-                ),
-              ),
-            ],
+            ),
           ),
         ),
         actions: [
@@ -617,6 +728,16 @@ class _StudentManagementScreenState extends State<StudentManagementScreen> {
             onPressed: () => Navigator.pop(dialogCtx),
             child: const Text('Close'),
           ),
+          if (docUrl.isNotEmpty)
+            ElevatedButton.icon(
+              style: ElevatedButton.styleFrom(
+                backgroundColor: AppColors.primary,
+                foregroundColor: Colors.white,
+              ),
+              icon: const Icon(Icons.open_in_new_rounded, size: 16),
+              label: const Text('Open Uploaded File'),
+              onPressed: () => _launchExternalUrl(docUrl),
+            ),
         ],
       ),
     );
@@ -633,28 +754,36 @@ class _StudentManagementScreenState extends State<StudentManagementScreen> {
           children: [
             const Icon(Icons.cancel_outlined, color: AppColors.error),
             const SizedBox(width: 10),
-            Text('Reject Verification: ${student.name}'),
+            Expanded(
+              child: Text(
+                'Reject Verification: ${student.name}',
+                overflow: TextOverflow.ellipsis,
+              ),
+            ),
           ],
         ),
-        content: Column(
-          mainAxisSize: MainAxisSize.min,
-          crossAxisAlignment: CrossAxisAlignment.start,
-          children: [
-            const Text(
-              'A mandatory reason is required to notify the student why their credential could not be authenticated.',
-              style: TextStyle(fontSize: 12.5, color: AppColors.textSecondary),
-            ),
-            const SizedBox(height: 14),
-            TextField(
-              controller: reasonController,
-              decoration: const InputDecoration(
-                labelText: 'Rejection Reason *',
-                hintText: 'e.g. Uploaded card is expired or university name is not visible...',
-                border: OutlineInputBorder(),
+        content: ConstrainedBox(
+          constraints: const BoxConstraints(maxWidth: 460),
+          child: Column(
+            mainAxisSize: MainAxisSize.min,
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              const Text(
+                'A mandatory reason is required to notify the student why their credential could not be authenticated.',
+                style: TextStyle(fontSize: 12.5, color: AppColors.textSecondary),
               ),
-              maxLines: 3,
-            ),
-          ],
+              const SizedBox(height: 14),
+              TextField(
+                controller: reasonController,
+                decoration: const InputDecoration(
+                  labelText: 'Rejection Reason *',
+                  hintText: 'e.g. Uploaded card is expired or university name is not visible...',
+                  border: OutlineInputBorder(),
+                ),
+                maxLines: 3,
+              ),
+            ],
+          ),
         ),
         actions: [
           TextButton(
@@ -670,7 +799,8 @@ class _StudentManagementScreenState extends State<StudentManagementScreen> {
               final reason = reasonController.text.trim();
               if (reason.isEmpty) return;
 
-              final admin = _authService.currentAdmin?.fullName ?? 'Executive SuperAdmin';
+              final admin =
+                  _authService.currentAdmin?.fullName ?? 'Executive Administrator';
               await _studentService.rejectStudentVerification(
                 studentId: student.id,
                 reason: reason,
@@ -705,28 +835,36 @@ class _StudentManagementScreenState extends State<StudentManagementScreen> {
           children: [
             const Icon(Icons.block_rounded, color: AppColors.error),
             const SizedBox(width: 10),
-            Text('Suspend Student: ${student.name}'),
+            Expanded(
+              child: Text(
+                'Suspend Student: ${student.name}',
+                overflow: TextOverflow.ellipsis,
+              ),
+            ),
           ],
         ),
-        content: Column(
-          mainAxisSize: MainAxisSize.min,
-          crossAxisAlignment: CrossAxisAlignment.start,
-          children: [
-            const Text(
-              'Suspending an account revokes the student\'s ability to apply for company projects or submit work.',
-              style: TextStyle(fontSize: 12.5, color: AppColors.textSecondary),
-            ),
-            const SizedBox(height: 14),
-            TextField(
-              controller: reasonController,
-              decoration: const InputDecoration(
-                labelText: 'Mandatory Suspension Reason *',
-                hintText: 'e.g. Plagiarism infraction reported by corporate sponsor...',
-                border: OutlineInputBorder(),
+        content: ConstrainedBox(
+          constraints: const BoxConstraints(maxWidth: 460),
+          child: Column(
+            mainAxisSize: MainAxisSize.min,
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              const Text(
+                'Suspending an account revokes the student\'s ability to apply for company projects or submit work.',
+                style: TextStyle(fontSize: 12.5, color: AppColors.textSecondary),
               ),
-              maxLines: 3,
-            ),
-          ],
+              const SizedBox(height: 14),
+              TextField(
+                controller: reasonController,
+                decoration: const InputDecoration(
+                  labelText: 'Mandatory Suspension Reason *',
+                  hintText: 'e.g. Plagiarism infraction reported by corporate sponsor...',
+                  border: OutlineInputBorder(),
+                ),
+                maxLines: 3,
+              ),
+            ],
+          ),
         ),
         actions: [
           TextButton(
@@ -742,7 +880,8 @@ class _StudentManagementScreenState extends State<StudentManagementScreen> {
               final reason = reasonController.text.trim();
               if (reason.isEmpty) return;
 
-              final admin = _authService.currentAdmin?.fullName ?? 'Executive SuperAdmin';
+              final admin =
+                  _authService.currentAdmin?.fullName ?? 'Executive Administrator';
               await _studentService.suspendStudentAccount(
                 studentId: student.id,
                 reason: reason,
@@ -775,7 +914,12 @@ class _StudentManagementScreenState extends State<StudentManagementScreen> {
           children: [
             const Icon(Icons.lock_open_rounded, color: AppColors.success),
             const SizedBox(width: 10),
-            Text('Reactivate Account: ${student.name}'),
+            Expanded(
+              child: Text(
+                'Reactivate Account: ${student.name}',
+                overflow: TextOverflow.ellipsis,
+              ),
+            ),
           ],
         ),
         content: const Text(
@@ -793,7 +937,8 @@ class _StudentManagementScreenState extends State<StudentManagementScreen> {
               foregroundColor: Colors.white,
             ),
             onPressed: () async {
-              final admin = _authService.currentAdmin?.fullName ?? 'Executive SuperAdmin';
+              final admin =
+                  _authService.currentAdmin?.fullName ?? 'Executive Administrator';
               await _studentService.reactivateStudentAccount(
                 studentId: student.id,
                 adminName: admin,
@@ -840,7 +985,7 @@ class _StudentManagementScreenState extends State<StudentManagementScreen> {
     );
 
     if (confirmed == true && mounted) {
-      final admin = _authService.currentAdmin?.fullName ?? 'Executive SuperAdmin';
+      final admin = _authService.currentAdmin?.fullName ?? 'Executive Administrator';
       await _studentService.bulkApproveStudents(
         studentIds: _selectedStudentIds.toList(),
         adminName: admin,
@@ -868,34 +1013,43 @@ class _StudentManagementScreenState extends State<StudentManagementScreen> {
           children: [
             Icon(Icons.file_download_outlined, color: AppColors.primary),
             SizedBox(width: 10),
-            Text('Export Permitted Student Records'),
+            Expanded(
+              child: Text(
+                'Export Permitted Student Records',
+                overflow: TextOverflow.ellipsis,
+              ),
+            ),
           ],
         ),
-        content: Column(
-          mainAxisSize: MainAxisSize.min,
-          crossAxisAlignment: CrossAxisAlignment.start,
-          children: [
-            const Text(
-              'The authorized student roster has been compiled in CSV format according to institutional compliance policies:',
-              style: TextStyle(fontSize: 12.5, color: AppColors.textSecondary),
-            ),
-            const SizedBox(height: 12),
-            Container(
-              height: 160,
-              padding: const EdgeInsets.all(12),
-              decoration: BoxDecoration(
-                color: AppColors.background,
-                borderRadius: BorderRadius.circular(8),
-                border: Border.all(color: AppColors.border),
+        content: ConstrainedBox(
+          constraints: const BoxConstraints(maxWidth: 540),
+          child: Column(
+            mainAxisSize: MainAxisSize.min,
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              const Text(
+                'The authorized student roster has been compiled in CSV format according to institutional compliance policies:',
+                style: TextStyle(fontSize: 12.5, color: AppColors.textSecondary),
               ),
-              child: SingleChildScrollView(
-                child: Text(
-                  csv,
-                  style: const TextStyle(fontFamily: 'monospace', fontSize: 11),
+              const SizedBox(height: 12),
+              Container(
+                height: 160,
+                width: double.infinity,
+                padding: const EdgeInsets.all(12),
+                decoration: BoxDecoration(
+                  color: AppColors.background,
+                  borderRadius: BorderRadius.circular(8),
+                  border: Border.all(color: AppColors.border),
+                ),
+                child: SingleChildScrollView(
+                  child: Text(
+                    csv,
+                    style: const TextStyle(fontFamily: 'monospace', fontSize: 11),
+                  ),
                 ),
               ),
-            ),
-          ],
+            ],
+          ),
         ),
         actions: [
           TextButton(
@@ -1023,32 +1177,49 @@ class _StudentManagementScreenState extends State<StudentManagementScreen> {
                       breadcrumb: 'Governance',
                       onOpenDrawer: () => _scaffoldKey.currentState?.openDrawer(),
                       onSignOut: _handleSignOut,
-                      onSearch: (q) => setState(() => _searchQuery = q),
+                      onSearch: (q) => setState(() {
+                        _searchQuery = q;
+                        _currentPage = 1;
+                      }),
                     ),
                     Expanded(
                       child: ValueListenableBuilder<List<AdminStudentModel>>(
                         valueListenable: _studentService.studentsNotifier,
                         builder: (context, students, _) {
+                          final universities = _buildUniversityOptions(students);
+                          final effectiveUniversity =
+                              universities.contains(_selectedUniversity)
+                                  ? _selectedUniversity
+                                  : 'All Universities';
+                          final departments = _buildDepartmentOptions(students);
+                          final effectiveDepartment =
+                              departments.contains(_selectedDepartment)
+                                  ? _selectedDepartment
+                                  : 'All Departments';
+
                           // Filter Logic
                           var filtered = students.where((s) {
-                            if (_selectedUniversity != 'All Universities' &&
-                                s.university != _selectedUniversity) {
+                            if (effectiveUniversity != 'All Universities' &&
+                                s.university != effectiveUniversity) {
                               return false;
                             }
-                            if (_selectedDepartment != 'All Departments' &&
-                                s.department != _selectedDepartment) {
+                            if (effectiveDepartment != 'All Departments' &&
+                                s.department != effectiveDepartment) {
                               return false;
                             }
                             if (_selectedVerificationStatus == 'Verified' &&
-                                s.verificationStatus != StudentVerificationStatus.verified) {
+                                s.verificationStatus !=
+                                    StudentVerificationStatus.verified) {
                               return false;
                             }
                             if (_selectedVerificationStatus == 'Pending' &&
-                                s.verificationStatus != StudentVerificationStatus.pending) {
+                                s.verificationStatus !=
+                                    StudentVerificationStatus.pending) {
                               return false;
                             }
                             if (_selectedVerificationStatus == 'Rejected' &&
-                                s.verificationStatus != StudentVerificationStatus.rejected) {
+                                s.verificationStatus !=
+                                    StudentVerificationStatus.rejected) {
                               return false;
                             }
                             if (_selectedAccountStatus == 'Active' &&
@@ -1056,7 +1227,8 @@ class _StudentManagementScreenState extends State<StudentManagementScreen> {
                               return false;
                             }
                             if (_selectedAccountStatus == 'Suspended' &&
-                                s.accountStatus != StudentAccountStatus.suspended) {
+                                s.accountStatus !=
+                                    StudentAccountStatus.suspended) {
                               return false;
                             }
 
@@ -1072,33 +1244,47 @@ class _StudentManagementScreenState extends State<StudentManagementScreen> {
 
                           // Sorting Logic
                           if (_sortBy == 'Newest First') {
-                            filtered.sort((a, b) => b.registrationDateTime.compareTo(a.registrationDateTime));
+                            filtered.sort((a, b) => b.registrationDateTime
+                                .compareTo(a.registrationDateTime));
                           } else if (_sortBy == 'Oldest First') {
-                            filtered.sort((a, b) => a.registrationDateTime.compareTo(b.registrationDateTime));
+                            filtered.sort((a, b) => a.registrationDateTime
+                                .compareTo(b.registrationDateTime));
                           } else if (_sortBy == 'Highest CGPA') {
                             filtered.sort((a, b) => b.cgpa.compareTo(a.cgpa));
                           }
 
                           // Pagination slice
-                          final totalPages = (filtered.length / _itemsPerPage).ceil().clamp(1, 999);
-                          final startIndex = (_currentPage - 1) * _itemsPerPage;
-                          final pageItems = filtered.skip(startIndex).take(_itemsPerPage).toList();
+                          final totalPages =
+                              (filtered.length / _itemsPerPage).ceil().clamp(1, 999);
+                          final safePage = _currentPage.clamp(1, totalPages);
+                          final startIndex = (safePage - 1) * _itemsPerPage;
+                          final pageItems = filtered
+                              .skip(startIndex)
+                              .take(_itemsPerPage)
+                              .toList();
 
                           return SingleChildScrollView(
-                            padding: const EdgeInsets.all(24),
+                            padding: EdgeInsets.all(isDesktop ? 24 : 16),
                             child: Column(
                               crossAxisAlignment: CrossAxisAlignment.start,
                               children: [
-                                // 1. 5 Overview Metric Cards
                                 _buildStudentOverviewMetrics(),
                                 const SizedBox(height: 20),
-
-                                // 2. Search, Multi-Filter & Action Bar
-                                _buildFilterAndActionCard(filtered),
+                                _buildFilterAndActionCard(
+                                  universities: universities,
+                                  selectedUniversity: effectiveUniversity,
+                                  departments: departments,
+                                  selectedDepartment: effectiveDepartment,
+                                  filteredStudents: filtered,
+                                ),
                                 const SizedBox(height: 20),
-
-                                // 3. Student Data Table Card with Pagination
-                                _buildStudentTableCard(pageItems, filtered.length, totalPages),
+                                _buildStudentTableCard(
+                                  pageStudents: pageItems,
+                                  totalCount: filtered.length,
+                                  safePage: safePage,
+                                  totalPages: totalPages,
+                                  hasAnyStudents: students.isNotEmpty,
+                                ),
                               ],
                             ),
                           );
@@ -1132,7 +1318,7 @@ class _StudentManagementScreenState extends State<StudentManagementScreen> {
           physics: const NeverScrollableScrollPhysics(),
           crossAxisSpacing: 14,
           mainAxisSpacing: 14,
-          childAspectRatio: count == 1 ? 3.0 : 1.7,
+          childAspectRatio: count == 1 ? 2.7 : 1.55,
           children: [
             _buildMetricTile(
               title: 'Total Students',
@@ -1209,24 +1395,39 @@ class _StudentManagementScreenState extends State<StudentManagementScreen> {
           Row(
             mainAxisAlignment: MainAxisAlignment.spaceBetween,
             children: [
-              Text(
-                title,
-                style: const TextStyle(fontSize: 12, fontWeight: FontWeight.w600, color: AppColors.textSecondary),
+              Expanded(
+                child: Text(
+                  title,
+                  style: GoogleFonts.inter(
+                    fontSize: 12,
+                    fontWeight: FontWeight.w600,
+                    color: AppColors.textSecondary,
+                  ),
+                  overflow: TextOverflow.ellipsis,
+                ),
               ),
+              const SizedBox(width: 8),
               Container(
                 padding: const EdgeInsets.all(7),
-                decoration: BoxDecoration(color: bgColor, borderRadius: BorderRadius.circular(8)),
+                decoration: BoxDecoration(
+                  color: bgColor,
+                  borderRadius: BorderRadius.circular(8),
+                ),
                 child: Icon(icon, color: color, size: 18),
               ),
             ],
           ),
           Text(
             value,
-            style: const TextStyle(fontSize: 22, fontWeight: FontWeight.bold, color: AppColors.darkNavy),
+            style: GoogleFonts.poppins(
+              fontSize: 22,
+              fontWeight: FontWeight.bold,
+              color: AppColors.darkNavy,
+            ),
           ),
           Text(
             subtitle,
-            style: const TextStyle(fontSize: 10.5, color: AppColors.textMuted),
+            style: GoogleFonts.inter(fontSize: 10.5, color: AppColors.textMuted),
             maxLines: 1,
             overflow: TextOverflow.ellipsis,
           ),
@@ -1236,7 +1437,13 @@ class _StudentManagementScreenState extends State<StudentManagementScreen> {
   }
 
   // 2. Search, Multi-Filter & Action Bar
-  Widget _buildFilterAndActionCard(List<AdminStudentModel> filteredStudents) {
+  Widget _buildFilterAndActionCard({
+    required List<String> universities,
+    required String selectedUniversity,
+    required List<String> departments,
+    required String selectedDepartment,
+    required List<AdminStudentModel> filteredStudents,
+  }) {
     return Container(
       padding: const EdgeInsets.all(20),
       decoration: BoxDecoration(
@@ -1248,154 +1455,273 @@ class _StudentManagementScreenState extends State<StudentManagementScreen> {
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
           // Top Row: Title, Bulk Actions & Export
-          Row(
-            mainAxisAlignment: MainAxisAlignment.spaceBetween,
-            children: [
-              const Column(
-                crossAxisAlignment: CrossAxisAlignment.start,
+          LayoutBuilder(
+            builder: (context, constraints) {
+              return Wrap(
+                spacing: 12,
+                runSpacing: 12,
+                alignment: WrapAlignment.spaceBetween,
+                crossAxisAlignment: WrapCrossAlignment.center,
                 children: [
-                  Text(
-                    'Student Roster & Verification Management',
-                    style: TextStyle(fontSize: 16, fontWeight: FontWeight.bold, color: AppColors.darkNavy),
+                  ConstrainedBox(
+                    constraints: BoxConstraints(
+                      maxWidth: constraints.maxWidth > 680
+                          ? constraints.maxWidth - 440
+                          : constraints.maxWidth,
+                    ),
+                    child: Column(
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      children: [
+                        Text(
+                          'Student Roster & Verification Management',
+                          style: GoogleFonts.poppins(
+                            fontSize: 16,
+                            fontWeight: FontWeight.bold,
+                            color: AppColors.darkNavy,
+                          ),
+                        ),
+                        const SizedBox(height: 2),
+                        Text(
+                          'Search, filter, authenticate credentials, and regulate student account states',
+                          style: GoogleFonts.inter(
+                            fontSize: 12,
+                            color: AppColors.textSecondary,
+                          ),
+                        ),
+                      ],
+                    ),
                   ),
-                  SizedBox(height: 2),
-                  Text(
-                    'Search, filter, authenticate credentials, and regulate student account states',
-                    style: TextStyle(fontSize: 12, color: AppColors.textSecondary),
+                  Wrap(
+                    spacing: 8,
+                    runSpacing: 8,
+                    children: [
+                      OutlinedButton.icon(
+                        style: OutlinedButton.styleFrom(
+                          foregroundColor: AppColors.primary,
+                          side: const BorderSide(color: AppColors.border),
+                        ),
+                        icon: const Icon(Icons.refresh_rounded, size: 16),
+                        label: const Text('Refresh'),
+                        onPressed: _refreshStudents,
+                      ),
+                      if (_selectedStudentIds.isNotEmpty)
+                        ElevatedButton.icon(
+                          style: ElevatedButton.styleFrom(
+                            backgroundColor: AppColors.success,
+                            foregroundColor: Colors.white,
+                          ),
+                          icon: const Icon(Icons.done_all_rounded, size: 16),
+                          label:
+                              Text('Bulk Verify (${_selectedStudentIds.length})'),
+                          onPressed: _handleBulkVerify,
+                        ),
+                      OutlinedButton.icon(
+                        style: OutlinedButton.styleFrom(
+                          foregroundColor: AppColors.darkNavy,
+                          side: const BorderSide(color: AppColors.border),
+                        ),
+                        icon: const Icon(Icons.file_download_outlined, size: 16),
+                        label: const Text('Export CSV'),
+                        onPressed: () => _exportCsvRecords(filteredStudents),
+                      ),
+                    ],
                   ),
                 ],
-              ),
-              Wrap(
-                spacing: 8,
-                children: [
-                  if (_selectedStudentIds.isNotEmpty)
-                    ElevatedButton.icon(
-                      style: ElevatedButton.styleFrom(backgroundColor: AppColors.success, foregroundColor: Colors.white),
-                      icon: const Icon(Icons.done_all_rounded, size: 16),
-                      label: Text('Bulk Verify (${_selectedStudentIds.length})'),
-                      onPressed: _handleBulkVerify,
-                    ),
-                  OutlinedButton.icon(
-                    style: OutlinedButton.styleFrom(
-                      foregroundColor: AppColors.darkNavy,
-                      side: const BorderSide(color: AppColors.border),
-                    ),
-                    icon: const Icon(Icons.file_download_outlined, size: 16),
-                    label: const Text('Export Records (CSV)'),
-                    onPressed: () => _exportCsvRecords(filteredStudents),
-                  ),
-                ],
-              ),
-            ],
+              );
+            },
           ),
           const SizedBox(height: 16),
           const Divider(),
           const SizedBox(height: 12),
 
           // Filters Row 1: University Dropdown & Department Dropdown & Sort
-          Wrap(
-            spacing: 12,
-            runSpacing: 12,
-            children: [
-              // University Selector
-              SizedBox(
-                width: 240,
-                child: DropdownButtonFormField<String>(
-                  initialValue: _selectedUniversity,
-                  decoration: InputDecoration(
-                    labelText: 'University Institution',
-                    contentPadding: const EdgeInsets.symmetric(horizontal: 12, vertical: 10),
-                    border: OutlineInputBorder(borderRadius: BorderRadius.circular(10)),
+          LayoutBuilder(
+            builder: (context, constraints) {
+              final compact = constraints.maxWidth < 680;
+              return Wrap(
+                spacing: 12,
+                runSpacing: 12,
+                children: [
+                  SizedBox(
+                    width: compact ? constraints.maxWidth : 240,
+                    child: DropdownButtonFormField<String>(
+                      initialValue: selectedUniversity,
+                      isExpanded: true,
+                      decoration: InputDecoration(
+                        labelText: 'University Institution',
+                        contentPadding: const EdgeInsets.symmetric(
+                            horizontal: 12, vertical: 10),
+                        border: OutlineInputBorder(
+                            borderRadius: BorderRadius.circular(10)),
+                      ),
+                      items: universities
+                          .map((u) => DropdownMenuItem(
+                                value: u,
+                                child: Text(
+                                  u,
+                                  style: const TextStyle(fontSize: 12.5),
+                                  overflow: TextOverflow.ellipsis,
+                                ),
+                              ))
+                          .toList(),
+                      onChanged: (val) {
+                        if (val != null) {
+                          setState(() {
+                            _selectedUniversity = val;
+                            _currentPage = 1;
+                          });
+                        }
+                      },
+                    ),
                   ),
-                  items: _universities
-                      .map((u) => DropdownMenuItem(value: u, child: Text(u, style: const TextStyle(fontSize: 12.5))))
-                      .toList(),
-                  onChanged: (val) {
-                    if (val != null) setState(() => _selectedUniversity = val);
-                  },
-                ),
-              ),
-
-              // Department Selector
-              SizedBox(
-                width: 260,
-                child: DropdownButtonFormField<String>(
-                  initialValue: _selectedDepartment,
-                  decoration: InputDecoration(
-                    labelText: 'Academic Department',
-                    contentPadding: const EdgeInsets.symmetric(horizontal: 12, vertical: 10),
-                    border: OutlineInputBorder(borderRadius: BorderRadius.circular(10)),
+                  SizedBox(
+                    width: compact ? constraints.maxWidth : 260,
+                    child: DropdownButtonFormField<String>(
+                      initialValue: selectedDepartment,
+                      isExpanded: true,
+                      decoration: InputDecoration(
+                        labelText: 'Academic Department',
+                        contentPadding: const EdgeInsets.symmetric(
+                            horizontal: 12, vertical: 10),
+                        border: OutlineInputBorder(
+                            borderRadius: BorderRadius.circular(10)),
+                      ),
+                      items: departments
+                          .map((d) => DropdownMenuItem(
+                                value: d,
+                                child: Text(
+                                  d,
+                                  style: const TextStyle(fontSize: 12.5),
+                                  overflow: TextOverflow.ellipsis,
+                                ),
+                              ))
+                          .toList(),
+                      onChanged: (val) {
+                        if (val != null) {
+                          setState(() {
+                            _selectedDepartment = val;
+                            _currentPage = 1;
+                          });
+                        }
+                      },
+                    ),
                   ),
-                  items: _departments
-                      .map((d) => DropdownMenuItem(value: d, child: Text(d, style: const TextStyle(fontSize: 12.5), overflow: TextOverflow.ellipsis)))
-                      .toList(),
-                  onChanged: (val) {
-                    if (val != null) setState(() => _selectedDepartment = val);
-                  },
-                ),
-              ),
-
-              // Sort Dropdown
-              SizedBox(
-                width: 180,
-                child: DropdownButtonFormField<String>(
-                  initialValue: _sortBy,
-                  decoration: InputDecoration(
-                    labelText: 'Sort By',
-                    contentPadding: const EdgeInsets.symmetric(horizontal: 12, vertical: 10),
-                    border: OutlineInputBorder(borderRadius: BorderRadius.circular(10)),
+                  SizedBox(
+                    width: compact ? constraints.maxWidth : 180,
+                    child: DropdownButtonFormField<String>(
+                      initialValue: _sortBy,
+                      isExpanded: true,
+                      decoration: InputDecoration(
+                        labelText: 'Sort By',
+                        contentPadding: const EdgeInsets.symmetric(
+                            horizontal: 12, vertical: 10),
+                        border: OutlineInputBorder(
+                            borderRadius: BorderRadius.circular(10)),
+                      ),
+                      items: _sortOptions
+                          .map((s) => DropdownMenuItem(
+                                value: s,
+                                child: Text(
+                                  s,
+                                  style: const TextStyle(fontSize: 12.5),
+                                  overflow: TextOverflow.ellipsis,
+                                ),
+                              ))
+                          .toList(),
+                      onChanged: (val) {
+                        if (val != null) setState(() => _sortBy = val);
+                      },
+                    ),
                   ),
-                  items: _sortOptions
-                      .map((s) => DropdownMenuItem(value: s, child: Text(s, style: const TextStyle(fontSize: 12.5))))
-                      .toList(),
-                  onChanged: (val) {
-                    if (val != null) setState(() => _sortBy = val);
-                  },
-                ),
-              ),
-            ],
+                ],
+              );
+            },
           ),
           const SizedBox(height: 14),
 
           // Filters Row 2: Verification Status Chips & Account Status Chips
-          Row(
+          Wrap(
+            spacing: 20,
+            runSpacing: 10,
+            crossAxisAlignment: WrapCrossAlignment.center,
             children: [
-              const Text('Verification: ', style: TextStyle(fontSize: 12, fontWeight: FontWeight.bold, color: AppColors.darkNavy)),
               Wrap(
                 spacing: 6,
-                children: _verificationFilters.map((vf) {
-                  final isSel = _selectedVerificationStatus == vf;
-                  return ChoiceChip(
-                    label: Text(vf),
-                    selected: isSel,
-                    selectedColor: AppColors.darkNavy,
-                    backgroundColor: AppColors.background,
-                    labelStyle: TextStyle(fontSize: 11, color: isSel ? Colors.white : AppColors.textSecondary, fontWeight: isSel ? FontWeight.bold : FontWeight.normal),
-                    shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(6)),
-                    onSelected: (val) {
-                      if (val) setState(() => _selectedVerificationStatus = vf);
-                    },
-                  );
-                }).toList(),
+                runSpacing: 6,
+                crossAxisAlignment: WrapCrossAlignment.center,
+                children: [
+                  Text(
+                    'Verification:',
+                    style: GoogleFonts.inter(
+                      fontSize: 12,
+                      fontWeight: FontWeight.bold,
+                      color: AppColors.darkNavy,
+                    ),
+                  ),
+                  ..._verificationFilters.map((vf) {
+                    final isSel = _selectedVerificationStatus == vf;
+                    return ChoiceChip(
+                      label: Text(vf),
+                      selected: isSel,
+                      selectedColor: AppColors.darkNavy,
+                      backgroundColor: AppColors.background,
+                      labelStyle: TextStyle(
+                        fontSize: 11,
+                        color: isSel ? Colors.white : AppColors.textSecondary,
+                        fontWeight: isSel ? FontWeight.bold : FontWeight.normal,
+                      ),
+                      shape: RoundedRectangleBorder(
+                          borderRadius: BorderRadius.circular(6)),
+                      onSelected: (val) {
+                        if (val) {
+                          setState(() {
+                            _selectedVerificationStatus = vf;
+                            _currentPage = 1;
+                          });
+                        }
+                      },
+                    );
+                  }),
+                ],
               ),
-              const SizedBox(width: 24),
-              const Text('Account: ', style: TextStyle(fontSize: 12, fontWeight: FontWeight.bold, color: AppColors.darkNavy)),
               Wrap(
                 spacing: 6,
-                children: _accountFilters.map((af) {
-                  final isSel = _selectedAccountStatus == af;
-                  return ChoiceChip(
-                    label: Text(af),
-                    selected: isSel,
-                    selectedColor: AppColors.darkNavy,
-                    backgroundColor: AppColors.background,
-                    labelStyle: TextStyle(fontSize: 11, color: isSel ? Colors.white : AppColors.textSecondary, fontWeight: isSel ? FontWeight.bold : FontWeight.normal),
-                    shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(6)),
-                    onSelected: (val) {
-                      if (val) setState(() => _selectedAccountStatus = af);
-                    },
-                  );
-                }).toList(),
+                runSpacing: 6,
+                crossAxisAlignment: WrapCrossAlignment.center,
+                children: [
+                  Text(
+                    'Account:',
+                    style: GoogleFonts.inter(
+                      fontSize: 12,
+                      fontWeight: FontWeight.bold,
+                      color: AppColors.darkNavy,
+                    ),
+                  ),
+                  ..._accountFilters.map((af) {
+                    final isSel = _selectedAccountStatus == af;
+                    return ChoiceChip(
+                      label: Text(af),
+                      selected: isSel,
+                      selectedColor: AppColors.darkNavy,
+                      backgroundColor: AppColors.background,
+                      labelStyle: TextStyle(
+                        fontSize: 11,
+                        color: isSel ? Colors.white : AppColors.textSecondary,
+                        fontWeight: isSel ? FontWeight.bold : FontWeight.normal,
+                      ),
+                      shape: RoundedRectangleBorder(
+                          borderRadius: BorderRadius.circular(6)),
+                      onSelected: (val) {
+                        if (val) {
+                          setState(() {
+                            _selectedAccountStatus = af;
+                            _currentPage = 1;
+                          });
+                        }
+                      },
+                    );
+                  }),
+                ],
               ),
             ],
           ),
@@ -1404,33 +1730,96 @@ class _StudentManagementScreenState extends State<StudentManagementScreen> {
     );
   }
 
+  Widget _buildVerificationBadge(AdminStudentModel student) {
+    final isVerified =
+        student.verificationStatus == StudentVerificationStatus.verified;
+    final isPending =
+        student.verificationStatus == StudentVerificationStatus.pending;
+    return Container(
+      padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
+      decoration: BoxDecoration(
+        color: isVerified
+            ? AppColors.successBg
+            : isPending
+                ? AppColors.warningBg
+                : AppColors.errorBg,
+        borderRadius: BorderRadius.circular(6),
+      ),
+      child: Text(
+        isVerified
+            ? 'Verified'
+            : isPending
+                ? 'Pending'
+                : 'Rejected',
+        style: TextStyle(
+          fontSize: 10.5,
+          fontWeight: FontWeight.bold,
+          color: isVerified
+              ? const Color(0xFF166534)
+              : isPending
+                  ? const Color(0xFF92400E)
+                  : const Color(0xFF991B1B),
+        ),
+      ),
+    );
+  }
+
+  Widget _buildAccountBadge(bool isSuspended) {
+    return Container(
+      padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
+      decoration: BoxDecoration(
+        color: isSuspended ? AppColors.errorBg : AppColors.lightIceBlue,
+        borderRadius: BorderRadius.circular(6),
+      ),
+      child: Text(
+        isSuspended ? 'Suspended' : 'Active',
+        style: TextStyle(
+          fontSize: 10.5,
+          fontWeight: FontWeight.bold,
+          color: isSuspended ? AppColors.error : AppColors.primary,
+        ),
+      ),
+    );
+  }
+
   // 3. Student Data Table Card with Pagination
-  Widget _buildStudentTableCard(List<AdminStudentModel> pageStudents, int totalCount, int totalPages) {
+  Widget _buildStudentTableCard({
+    required List<AdminStudentModel> pageStudents,
+    required int totalCount,
+    required int safePage,
+    required int totalPages,
+    required bool hasAnyStudents,
+  }) {
     if (pageStudents.isEmpty) {
       return Container(
         width: double.infinity,
-        padding: const EdgeInsets.symmetric(vertical: 48),
+        padding: const EdgeInsets.symmetric(vertical: 40, horizontal: 20),
         decoration: BoxDecoration(
           color: Colors.white,
           borderRadius: BorderRadius.circular(16),
           border: Border.all(color: AppColors.border),
         ),
-        child: const Center(
-          child: Column(
-            children: [
-              Icon(Icons.person_search_rounded, size: 44, color: AppColors.textMuted),
-              SizedBox(height: 12),
-              Text(
-                'No student records match the active criteria',
-                style: TextStyle(fontSize: 14, fontWeight: FontWeight.bold, color: AppColors.darkNavy),
-              ),
-              SizedBox(height: 4),
-              Text(
-                'Try adjusting the university, department, or verification filter.',
-                style: TextStyle(fontSize: 12, color: AppColors.textSecondary),
-              ),
-            ],
-          ),
+        child: AppEmptyState(
+          icon: Icons.person_search_rounded,
+          title: hasAnyStudents
+              ? 'No student records match the active criteria'
+              : 'No student accounts registered yet',
+          subtitle: hasAnyStudents
+              ? 'Try adjusting the university, department, or verification filter.'
+              : 'Registered university students from Supabase will appear here automatically.',
+          actionLabel: hasAnyStudents ? 'Reset Filters' : 'Refresh',
+          onAction: hasAnyStudents
+              ? () {
+                  setState(() {
+                    _searchQuery = '';
+                    _selectedUniversity = 'All Universities';
+                    _selectedDepartment = 'All Departments';
+                    _selectedVerificationStatus = 'All';
+                    _selectedAccountStatus = 'All';
+                    _currentPage = 1;
+                  });
+                }
+              : _refreshStudents,
         ),
       );
     }
@@ -1448,191 +1837,286 @@ class _StudentManagementScreenState extends State<StudentManagementScreen> {
           ),
         ],
       ),
-      child: Column(
-        children: [
-          // Table Rows
-          ListView.separated(
-            shrinkWrap: true,
-            physics: const NeverScrollableScrollPhysics(),
-            itemCount: pageStudents.length,
-            separatorBuilder: (_, index) => const Divider(height: 1),
-            itemBuilder: (context, index) {
-              final student = pageStudents[index];
-              final isChecked = _selectedStudentIds.contains(student.id);
-              final isVerified = student.verificationStatus == StudentVerificationStatus.verified;
-              final isPending = student.verificationStatus == StudentVerificationStatus.pending;
-              final isSuspended = student.accountStatus == StudentAccountStatus.suspended;
+      child: LayoutBuilder(
+        builder: (context, constraints) {
+          final isCompact = constraints.maxWidth < 820;
 
-              return Container(
-                padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 14),
-                child: Row(
-                  children: [
-                    // Checkbox for bulk actions
-                    Checkbox(
-                      value: isChecked,
-                      activeColor: AppColors.primary,
-                      shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(4)),
-                      onChanged: (val) {
-                        setState(() {
-                          if (val == true) {
-                            _selectedStudentIds.add(student.id);
-                          } else {
-                            _selectedStudentIds.remove(student.id);
-                          }
-                        });
-                      },
-                    ),
-                    const SizedBox(width: 8),
+          return Column(
+            children: [
+              ListView.separated(
+                shrinkWrap: true,
+                physics: const NeverScrollableScrollPhysics(),
+                itemCount: pageStudents.length,
+                separatorBuilder: (_, index) => const Divider(height: 1),
+                itemBuilder: (context, index) {
+                  final student = pageStudents[index];
+                  final isChecked = _selectedStudentIds.contains(student.id);
+                  final isSuspended =
+                      student.accountStatus == StudentAccountStatus.suspended;
 
-                    // Avatar
-                    CircleAvatar(
-                      radius: 20,
-                      backgroundColor: isSuspended ? AppColors.textMuted : AppColors.primary,
-                      child: Text(
-                        student.avatarInitial,
-                        style: const TextStyle(color: Colors.white, fontWeight: FontWeight.bold, fontSize: 13),
-                      ),
-                    ),
-                    const SizedBox(width: 14),
-
-                    // Name & Email
-                    Expanded(
-                      flex: 3,
+                  if (isCompact) {
+                    return Padding(
+                      padding: const EdgeInsets.all(16),
                       child: Column(
                         crossAxisAlignment: CrossAxisAlignment.start,
                         children: [
+                          Row(
+                            children: [
+                              Checkbox(
+                                value: isChecked,
+                                activeColor: AppColors.primary,
+                                shape: RoundedRectangleBorder(
+                                    borderRadius: BorderRadius.circular(4)),
+                                onChanged: (val) {
+                                  setState(() {
+                                    if (val == true) {
+                                      _selectedStudentIds.add(student.id);
+                                    } else {
+                                      _selectedStudentIds.remove(student.id);
+                                    }
+                                  });
+                                },
+                              ),
+                              CircleAvatar(
+                                radius: 20,
+                                backgroundColor: isSuspended
+                                    ? AppColors.textMuted
+                                    : AppColors.primary,
+                                child: Text(
+                                  student.avatarInitial,
+                                  style: const TextStyle(
+                                    color: Colors.white,
+                                    fontWeight: FontWeight.bold,
+                                    fontSize: 13,
+                                  ),
+                                ),
+                              ),
+                              const SizedBox(width: 12),
+                              Expanded(
+                                child: Column(
+                                  crossAxisAlignment: CrossAxisAlignment.start,
+                                  children: [
+                                    Text(
+                                      student.name,
+                                      style: GoogleFonts.poppins(
+                                        fontSize: 14,
+                                        fontWeight: FontWeight.bold,
+                                        color: isSuspended
+                                            ? AppColors.textMuted
+                                            : AppColors.darkNavy,
+                                      ),
+                                      overflow: TextOverflow.ellipsis,
+                                    ),
+                                    Text(
+                                      student.email,
+                                      style: GoogleFonts.inter(
+                                        fontSize: 11.5,
+                                        color: AppColors.textSecondary,
+                                      ),
+                                      overflow: TextOverflow.ellipsis,
+                                    ),
+                                  ],
+                                ),
+                              ),
+                            ],
+                          ),
+                          const SizedBox(height: 8),
                           Text(
-                            student.name,
-                            style: TextStyle(
-                              fontSize: 13.5,
-                              fontWeight: FontWeight.bold,
-                              color: isSuspended ? AppColors.textMuted : AppColors.darkNavy,
+                            '${student.university} • ${student.degree} (${student.semester})',
+                            style: GoogleFonts.inter(
+                              fontSize: 12,
+                              color: AppColors.textSecondary,
                             ),
                           ),
-                          const SizedBox(height: 2),
-                          Text(student.email, style: const TextStyle(fontSize: 11.5, color: AppColors.textSecondary)),
-                        ],
-                      ),
-                    ),
-
-                    // University & Degree
-                    Expanded(
-                      flex: 3,
-                      child: Column(
-                        crossAxisAlignment: CrossAxisAlignment.start,
-                        children: [
-                          Text(student.university, style: const TextStyle(fontSize: 12, fontWeight: FontWeight.bold)),
-                          Text(
-                            '${student.degree} (${student.semester})',
-                            style: const TextStyle(fontSize: 11, color: AppColors.textMuted),
-                            maxLines: 1,
-                            overflow: TextOverflow.ellipsis,
+                          const SizedBox(height: 10),
+                          Wrap(
+                            spacing: 8,
+                            runSpacing: 8,
+                            crossAxisAlignment: WrapCrossAlignment.center,
+                            children: [
+                              _buildVerificationBadge(student),
+                              _buildAccountBadge(isSuspended),
+                              ElevatedButton(
+                                style: ElevatedButton.styleFrom(
+                                  backgroundColor: AppColors.darkNavy,
+                                  foregroundColor: Colors.white,
+                                  padding: const EdgeInsets.symmetric(
+                                      horizontal: 12, vertical: 8),
+                                ),
+                                onPressed: () =>
+                                    _openStudentProfileDrawer(student),
+                                child: const Text('View Profile',
+                                    style: TextStyle(fontSize: 11.5)),
+                              ),
+                            ],
                           ),
                         ],
                       ),
-                    ),
+                    );
+                  }
 
-                    // Verification Badge
-                    Container(
-                      padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
-                      decoration: BoxDecoration(
-                        color: isVerified
-                            ? AppColors.successBg
-                            : isPending
-                                ? AppColors.warningBg
-                                : AppColors.errorBg,
-                        borderRadius: BorderRadius.circular(6),
-                      ),
-                      child: Text(
-                        isVerified
-                            ? 'Verified'
-                            : isPending
-                                ? 'Pending'
-                                : 'Rejected',
-                        style: TextStyle(
-                          fontSize: 10.5,
-                          fontWeight: FontWeight.bold,
-                          color: isVerified
-                              ? const Color(0xFF166534)
-                              : isPending
-                                  ? const Color(0xFF92400E)
-                                  : const Color(0xFF991B1B),
+                  return Container(
+                    padding: const EdgeInsets.symmetric(
+                        horizontal: 16, vertical: 14),
+                    child: Row(
+                      children: [
+                        Checkbox(
+                          value: isChecked,
+                          activeColor: AppColors.primary,
+                          shape: RoundedRectangleBorder(
+                              borderRadius: BorderRadius.circular(4)),
+                          onChanged: (val) {
+                            setState(() {
+                              if (val == true) {
+                                _selectedStudentIds.add(student.id);
+                              } else {
+                                _selectedStudentIds.remove(student.id);
+                              }
+                            });
+                          },
                         ),
-                      ),
-                    ),
-                    const SizedBox(width: 10),
-
-                    // Account Status Badge
-                    Container(
-                      padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
-                      decoration: BoxDecoration(
-                        color: isSuspended ? AppColors.errorBg : AppColors.lightIceBlue,
-                        borderRadius: BorderRadius.circular(6),
-                      ),
-                      child: Text(
-                        isSuspended ? 'Suspended' : 'Active',
-                        style: TextStyle(
-                          fontSize: 10.5,
-                          fontWeight: FontWeight.bold,
-                          color: isSuspended ? AppColors.error : AppColors.primary,
+                        const SizedBox(width: 8),
+                        CircleAvatar(
+                          radius: 20,
+                          backgroundColor:
+                              isSuspended ? AppColors.textMuted : AppColors.primary,
+                          child: Text(
+                            student.avatarInitial,
+                            style: const TextStyle(
+                              color: Colors.white,
+                              fontWeight: FontWeight.bold,
+                              fontSize: 13,
+                            ),
+                          ),
                         ),
-                      ),
+                        const SizedBox(width: 14),
+                        Expanded(
+                          flex: 3,
+                          child: Column(
+                            crossAxisAlignment: CrossAxisAlignment.start,
+                            children: [
+                              Text(
+                                student.name,
+                                style: GoogleFonts.poppins(
+                                  fontSize: 13.5,
+                                  fontWeight: FontWeight.bold,
+                                  color: isSuspended
+                                      ? AppColors.textMuted
+                                      : AppColors.darkNavy,
+                                ),
+                                overflow: TextOverflow.ellipsis,
+                              ),
+                              const SizedBox(height: 2),
+                              Text(
+                                student.email,
+                                style: GoogleFonts.inter(
+                                  fontSize: 11.5,
+                                  color: AppColors.textSecondary,
+                                ),
+                                overflow: TextOverflow.ellipsis,
+                              ),
+                            ],
+                          ),
+                        ),
+                        Expanded(
+                          flex: 3,
+                          child: Column(
+                            crossAxisAlignment: CrossAxisAlignment.start,
+                            children: [
+                              Text(
+                                student.university,
+                                style: GoogleFonts.inter(
+                                  fontSize: 12,
+                                  fontWeight: FontWeight.bold,
+                                ),
+                                overflow: TextOverflow.ellipsis,
+                              ),
+                              Text(
+                                '${student.degree} (${student.semester})',
+                                style: GoogleFonts.inter(
+                                  fontSize: 11,
+                                  color: AppColors.textMuted,
+                                ),
+                                maxLines: 1,
+                                overflow: TextOverflow.ellipsis,
+                              ),
+                            ],
+                          ),
+                        ),
+                        _buildVerificationBadge(student),
+                        const SizedBox(width: 10),
+                        _buildAccountBadge(isSuspended),
+                        const SizedBox(width: 14),
+                        ElevatedButton(
+                          style: ElevatedButton.styleFrom(
+                            backgroundColor: AppColors.darkNavy,
+                            foregroundColor: Colors.white,
+                            padding: const EdgeInsets.symmetric(
+                                horizontal: 12, vertical: 8),
+                          ),
+                          onPressed: () => _openStudentProfileDrawer(student),
+                          child: const Text('View Profile',
+                              style: TextStyle(fontSize: 11.5)),
+                        ),
+                      ],
                     ),
-                    const SizedBox(width: 14),
+                  );
+                },
+              ),
 
-                    // View Profile Button
-                    ElevatedButton(
-                      style: ElevatedButton.styleFrom(
-                        backgroundColor: AppColors.darkNavy,
-                        foregroundColor: Colors.white,
-                        padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
-                      ),
-                      onPressed: () => _openStudentProfileDrawer(student),
-                      child: const Text('View Profile', style: TextStyle(fontSize: 11.5)),
-                    ),
-                  ],
+              // Pagination Controls Row
+              Container(
+                width: double.infinity,
+                padding:
+                    const EdgeInsets.symmetric(horizontal: 20, vertical: 14),
+                decoration: const BoxDecoration(
+                  border: Border(
+                      top: BorderSide(color: AppColors.border, width: 0.8)),
                 ),
-              );
-            },
-          ),
-
-          // Pagination Controls Row
-          Container(
-            padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 14),
-            decoration: const BoxDecoration(
-              border: Border(top: BorderSide(color: AppColors.border, width: 0.8)),
-            ),
-            child: Row(
-              mainAxisAlignment: MainAxisAlignment.spaceBetween,
-              children: [
-                Text(
-                  'Showing ${((_currentPage - 1) * _itemsPerPage) + 1} to ${((_currentPage - 1) * _itemsPerPage) + pageStudents.length} of $totalCount students',
-                  style: const TextStyle(fontSize: 12, color: AppColors.textSecondary),
-                ),
-                Row(
+                child: Wrap(
+                  spacing: 12,
+                  runSpacing: 8,
+                  alignment: WrapAlignment.spaceBetween,
+                  crossAxisAlignment: WrapCrossAlignment.center,
                   children: [
-                    IconButton(
-                      icon: const Icon(Icons.chevron_left_rounded),
-                      onPressed: _currentPage > 1
-                          ? () => setState(() => _currentPage--)
-                          : null,
-                    ),
                     Text(
-                      'Page $_currentPage of $totalPages',
-                      style: const TextStyle(fontSize: 12, fontWeight: FontWeight.bold, color: AppColors.darkNavy),
+                      'Showing ${((safePage - 1) * _itemsPerPage) + 1} to ${((safePage - 1) * _itemsPerPage) + pageStudents.length} of $totalCount students',
+                      style: GoogleFonts.inter(
+                        fontSize: 12,
+                        color: AppColors.textSecondary,
+                      ),
                     ),
-                    IconButton(
-                      icon: const Icon(Icons.chevron_right_rounded),
-                      onPressed: _currentPage < totalPages
-                          ? () => setState(() => _currentPage++)
-                          : null,
+                    Row(
+                      mainAxisSize: MainAxisSize.min,
+                      children: [
+                        IconButton(
+                          icon: const Icon(Icons.chevron_left_rounded),
+                          onPressed: safePage > 1
+                              ? () => setState(() => _currentPage = safePage - 1)
+                              : null,
+                        ),
+                        Text(
+                          'Page $safePage of $totalPages',
+                          style: GoogleFonts.poppins(
+                            fontSize: 12,
+                            fontWeight: FontWeight.bold,
+                            color: AppColors.darkNavy,
+                          ),
+                        ),
+                        IconButton(
+                          icon: const Icon(Icons.chevron_right_rounded),
+                          onPressed: safePage < totalPages
+                              ? () => setState(() => _currentPage = safePage + 1)
+                              : null,
+                        ),
+                      ],
                     ),
                   ],
                 ),
-              ],
-            ),
-          ),
-        ],
+              ),
+            ],
+          );
+        },
       ),
     );
   }

@@ -3,7 +3,9 @@ import 'package:google_fonts/google_fonts.dart';
 import 'package:supabase_flutter/supabase_flutter.dart';
 import 'package:link_vibe/core/constants/app_colors.dart';
 import 'package:link_vibe/core/services/app_data_service.dart';
+import 'package:link_vibe/core/services/supabase_helper.dart';
 import 'package:link_vibe/feature/company/presentation/screens/company_dashboard.dart';
+import 'package:link_vibe/feature/company/services/company_profile_service.dart';
 import 'package:link_vibe/feature/student/presentation/screens/student_main_nav.dart';
 import 'login_screen.dart';
 
@@ -15,6 +17,7 @@ class SignupScreen extends StatefulWidget {
 }
 
 class _SignupScreenState extends State<SignupScreen> {
+  final _formKey = GlobalKey<FormState>();
   final _nameController = TextEditingController();
   final _emailController = TextEditingController();
   final _universityController = TextEditingController();
@@ -23,6 +26,7 @@ class _SignupScreenState extends State<SignupScreen> {
   String _selectedRole = 'Student';
   bool _isLoading = false;
   bool _obscurePassword = true;
+  String? _errorBanner;
 
   @override
   void dispose() {
@@ -34,151 +38,195 @@ class _SignupScreenState extends State<SignupScreen> {
   }
 
   Future<void> _handleRegister() async {
+    setState(() => _errorBanner = null);
+    if (!_formKey.currentState!.validate()) return;
+
     final name = _nameController.text.trim();
     final email = _emailController.text.trim();
-    final university = _universityController.text.trim();
+    final instituteOrIndustry = _universityController.text.trim();
     final password = _passwordController.text.trim();
 
-    if (name.isEmpty || email.isEmpty || password.isEmpty) {
-      ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(content: Text('Please fill in all required fields')),
-      );
-      return;
-    }
-
-    if (!email.contains('@') || !email.contains('.')) {
-      ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(content: Text('Please enter a valid email format (e.g. name@domain.com)')),
-      );
-      return;
-    }
-
-    if (password.length < 6) {
-      ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(content: Text('Password must be at least 6 characters')),
-      );
-      return;
-    }
-
-    setState(() {
-      _isLoading = true;
-    });
+    setState(() => _isLoading = true);
 
     try {
-      // 1. Always register and persist the user account locally
-      await AppDataService.instance.registerUserAccount(
-        email: email,
-        password: password,
-        name: name,
-        university: university.isNotEmpty ? university : 'National University',
-        role: _selectedRole,
-      );
+      final supabase = SupabaseHelper.clientOrNull;
 
-      // 2. Attempt Supabase cloud authentication
-      String? userId;
-      try {
-        final supabase = Supabase.instance.client;
+      if (supabase != null) {
         final authResponse = await supabase.auth.signUp(
           email: email,
           password: password,
           data: {
             'name': name,
             'user_type': _selectedRole,
-            'university': university,
+            'university': instituteOrIndustry,
           },
         );
-        userId = authResponse.user?.id;
 
-        try {
-          if (authResponse.user != null) {
-            await supabase.from('profiles').upsert({
-              'id': authResponse.user!.id,
-              'name': name,
+        final user = authResponse.user;
+        if (user == null) {
+          throw const AuthException('Account creation did not return a user.');
+        }
+
+        // If email verification is required (session is null), prompt user to confirm & sign in
+        if (authResponse.session == null) {
+          if (!mounted) return;
+          await showDialog(
+            context: context,
+            builder: (ctx) => AlertDialog(
+              shape: RoundedRectangleBorder(
+                borderRadius: BorderRadius.circular(18),
+              ),
+              title: Row(
+                children: [
+                  const Icon(
+                    Icons.mark_email_read_outlined,
+                    color: AppColors.primaryBlue,
+                  ),
+                  const SizedBox(width: 10),
+                  Expanded(
+                    child: Text(
+                      'Verify Your Email',
+                      style: GoogleFonts.poppins(
+                        fontSize: 17,
+                        fontWeight: FontWeight.w700,
+                        color: AppColors.deepNavy,
+                      ),
+                    ),
+                  ),
+                ],
+              ),
+              content: Text(
+                'Your $_selectedRole account for $email was created! Please confirm your verification link in your email inbox, then sign in.',
+                style: GoogleFonts.inter(
+                  fontSize: 13.5,
+                  color: AppColors.darkText,
+                  height: 1.45,
+                ),
+              ),
+              actions: [
+                ElevatedButton(
+                  onPressed: () => Navigator.pop(ctx),
+                  child: const Text('Go to Sign In'),
+                ),
+              ],
+            ),
+          );
+          if (!mounted) return;
+          Navigator.pushReplacement(
+            context,
+            MaterialPageRoute(builder: (_) => const LoginScreen()),
+          );
+          return;
+        }
+
+        // Session active: ensure profile + role-specific record exist cleanly
+        await supabase.from('profiles').upsert({
+          'id': user.id,
+          'name': name,
+          'email': email,
+          'user_type': _selectedRole,
+          'university': instituteOrIndustry,
+          'account_status': 'active',
+        });
+
+        if (_selectedRole == 'Company') {
+          final existingComp = await supabase
+              .from('companies')
+              .select('id')
+              .eq('user_id', user.id)
+              .maybeSingle();
+          if (existingComp == null) {
+            await supabase.from('companies').insert({
+              'user_id': user.id,
+              'company_name': name,
               'email': email,
-              'user_type': _selectedRole,
-              'university': university,
+              'industry': instituteOrIndustry,
+              'verification_status': 'not_submitted',
+              'logo_initial': SupabaseHelper.initialsFor(name, fallback: 'CO'),
             });
-
-            if (_selectedRole == 'Company') {
-              await supabase.from('companies').upsert({
-                'user_id': authResponse.user!.id,
-                'company_name': name,
-                'email': email,
-                'industry': university.isNotEmpty ? university : 'Technology',
-              });
-            } else {
-              await supabase.from('students').upsert({
-                'user_id': authResponse.user!.id,
-                'full_name': name,
-                'email': email,
-                'university': university.isNotEmpty ? university : 'National University',
-              });
-            }
           }
-        } catch (_) {}
-      } catch (cloudError) {
-        debugPrint('Supabase signup bypass/rate-limit notice: $cloudError');
+        } else {
+          final existingStu = await supabase
+              .from('students')
+              .select('id')
+              .eq('user_id', user.id)
+              .maybeSingle();
+          if (existingStu == null) {
+            await supabase.from('students').insert({
+              'user_id': user.id,
+              'full_name': name,
+              'email': email,
+              'university': instituteOrIndustry,
+            });
+          }
+        }
+
+        await AppDataService.instance.saveAuthSession(
+          role: _selectedRole,
+          email: email,
+          name: name,
+          university: instituteOrIndustry,
+          userId: user.id,
+        );
+
+        if (_selectedRole == 'Company') {
+          await CompanyProfileService.loadAllCompanyPanelData();
+        } else {
+          await AppDataService.instance.syncFromSupabase(forceRefresh: true);
+        }
+      } else {
+        // Offline unit/widget test registry fallback ONLY when Supabase is null
+        await AppDataService.instance.registerUserAccount(
+          email: email,
+          password: password,
+          name: name,
+          university: instituteOrIndustry,
+          role: _selectedRole,
+        );
+        await AppDataService.instance.saveAuthSession(
+          role: _selectedRole,
+          email: email,
+          name: name,
+          university: instituteOrIndustry,
+        );
       }
 
       if (!mounted) return;
-
-      // 3. Save active auth session with exact name and university
-      await AppDataService.instance.saveAuthSession(
-        role: _selectedRole,
-        email: email,
-        name: name,
-        university: university.isNotEmpty ? university : 'National University',
-        userId: userId,
-      );
-
-      if (!mounted) return;
-
       ScaffoldMessenger.of(context).showSnackBar(
         SnackBar(
-          content: Text('Account created successfully! Welcome, $name!'),
-          backgroundColor: Colors.green,
-          duration: const Duration(seconds: 3),
+          content: Text('Account created! Welcome, $name.'),
+          backgroundColor: AppColors.statusOpen,
         ),
       );
 
       if (_selectedRole == 'Company') {
         Navigator.pushReplacement(
           context,
-          MaterialPageRoute(
-            builder: (context) => const CompanyDashboardScreen(),
-          ),
+          MaterialPageRoute(builder: (_) => const CompanyDashboardScreen()),
         );
       } else {
         Navigator.pushReplacement(
           context,
-          MaterialPageRoute(
-            builder: (context) => const StudentMainNav(),
-          ),
+          MaterialPageRoute(builder: (_) => const StudentMainNav()),
         );
       }
+    } on AuthException catch (e) {
+      if (!mounted) return;
+      setState(() => _errorBanner = e.message);
     } catch (e) {
       if (!mounted) return;
-      ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(
-          content: Text('Registration completed: Welcome, $name!'),
-          backgroundColor: Colors.green,
-        ),
-      );
-      Navigator.pushReplacement(
-        context,
-        MaterialPageRoute(builder: (context) => const StudentMainNav()),
-      );
+      setState(() => _errorBanner = 'Registration failed: $e');
     } finally {
       if (mounted) {
-        setState(() {
-          _isLoading = false;
-        });
+        setState(() => _isLoading = false);
       }
     }
   }
 
   @override
   Widget build(BuildContext context) {
+    final isCompany = _selectedRole == 'Company';
+
     return Scaffold(
       backgroundColor: AppColors.background,
       appBar: AppBar(
@@ -192,241 +240,364 @@ class _SignupScreenState extends State<SignupScreen> {
       body: SafeArea(
         child: Center(
           child: SingleChildScrollView(
-            padding: const EdgeInsets.symmetric(horizontal: 24.0, vertical: 12.0),
+            padding: const EdgeInsets.symmetric(horizontal: 20.0, vertical: 12.0),
             child: ConstrainedBox(
               constraints: const BoxConstraints(maxWidth: 480),
-              child: Column(
-                mainAxisSize: MainAxisSize.min,
-                mainAxisAlignment: MainAxisAlignment.center,
-                crossAxisAlignment: CrossAxisAlignment.start,
-                children: [
-                  // Title & Subtitle
-                  Text(
-                    'Create Account',
-                    style: GoogleFonts.poppins(
-                      fontSize: 24,
-                      fontWeight: FontWeight.bold,
-                      color: AppColors.deepNavy,
-                    ),
-                  ),
-                  const SizedBox(height: 4),
-                  Text(
-                    'Join CampusConnect to work on real corporate projects.',
-                    style: GoogleFonts.inter(
-                      fontSize: 13,
-                      color: AppColors.grayText,
-                    ),
-                  ),
-                  const SizedBox(height: 20),
-
-                  // Full Name or Company Name
-                  Text(
-                    _selectedRole == 'Company' ? 'Company Name' : 'Full Name',
-                    style: GoogleFonts.inter(
-                      fontSize: 13,
-                      fontWeight: FontWeight.w600,
-                      color: AppColors.darkText,
-                    ),
-                  ),
-                  const SizedBox(height: 6),
-                  TextField(
-                    controller: _nameController,
-                    decoration: InputDecoration(
-                      hintText: _selectedRole == 'Company'
-                          ? 'e.g. Systems Limited, Arbisoft'
-                          : 'e.g. Ahmed Khan',
-                      prefixIcon: Icon(
-                        _selectedRole == 'Company'
-                            ? Icons.business_rounded
-                            : Icons.person_outline_rounded,
-                        size: 20,
+              child: Container(
+                width: double.infinity,
+                padding: const EdgeInsets.all(24),
+                decoration: BoxDecoration(
+                  color: AppColors.cardWhite,
+                  borderRadius: BorderRadius.circular(20),
+                  border: Border.all(color: AppColors.lightGray),
+                  boxShadow: AppColors.softShadow,
+                ),
+                child: Form(
+                  key: _formKey,
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      Text(
+                        'Create Account',
+                        style: GoogleFonts.poppins(
+                          fontSize: 22,
+                          fontWeight: FontWeight.w700,
+                          color: AppColors.deepNavy,
+                        ),
                       ),
-                    ),
-                  ),
-                  const SizedBox(height: 14),
-
-                  // Email
-                  Text(
-                    'Email Address',
-                    style: GoogleFonts.inter(
-                      fontSize: 13,
-                      fontWeight: FontWeight.w600,
-                      color: AppColors.darkText,
-                    ),
-                  ),
-                  const SizedBox(height: 6),
-                  TextField(
-                    controller: _emailController,
-                    keyboardType: TextInputType.emailAddress,
-                    decoration: InputDecoration(
-                      hintText: _selectedRole == 'Company'
-                          ? 'hr@company.com'
-                          : 'ahmed@university.edu.pk',
-                      prefixIcon: const Icon(Icons.email_outlined, size: 20),
-                    ),
-                  ),
-                  const SizedBox(height: 14),
-
-                  // University or Industry
-                  Text(
-                    _selectedRole == 'Company'
-                        ? 'Industry / Sector'
-                        : 'University / Institute',
-                    style: GoogleFonts.inter(
-                      fontSize: 13,
-                      fontWeight: FontWeight.w600,
-                      color: AppColors.darkText,
-                    ),
-                  ),
-                  const SizedBox(height: 6),
-                  TextField(
-                    controller: _universityController,
-                    decoration: InputDecoration(
-                      hintText: _selectedRole == 'Company'
-                          ? 'e.g. Information Technology, FinTech'
-                          : 'e.g. FAST NUCES, NUST, etc.',
-                      prefixIcon: Icon(
-                        _selectedRole == 'Company'
-                            ? Icons.domain_rounded
-                            : Icons.school_outlined,
-                        size: 20,
-                      ),
-                    ),
-                  ),
-                  const SizedBox(height: 14),
-
-                  // Password
-                  Text(
-                    'Password',
-                    style: GoogleFonts.inter(
-                      fontSize: 13,
-                      fontWeight: FontWeight.w600,
-                      color: AppColors.darkText,
-                    ),
-                  ),
-                  const SizedBox(height: 6),
-                  TextField(
-                    controller: _passwordController,
-                    obscureText: _obscurePassword,
-                    decoration: InputDecoration(
-                      hintText: 'Min 6 characters',
-                      prefixIcon: const Icon(Icons.lock_outline_rounded, size: 20),
-                      suffixIcon: IconButton(
-                        icon: Icon(
-                          _obscurePassword
-                              ? Icons.visibility_off_outlined
-                              : Icons.visibility_outlined,
-                          size: 20,
+                      const SizedBox(height: 4),
+                      Text(
+                        'Join CampusConnect as a university student or corporate partner.',
+                        style: GoogleFonts.inter(
+                          fontSize: 13,
                           color: AppColors.grayText,
                         ),
-                        onPressed: () {
-                          setState(() {
-                            _obscurePassword = !_obscurePassword;
-                          });
+                      ),
+                      const SizedBox(height: 18),
+
+                      if (_errorBanner != null) ...[
+                        Container(
+                          width: double.infinity,
+                          padding: const EdgeInsets.all(12),
+                          decoration: BoxDecoration(
+                            color: AppColors.errorBg,
+                            borderRadius: BorderRadius.circular(12),
+                            border: Border.all(
+                              color: AppColors.error.withValues(alpha: 0.35),
+                            ),
+                          ),
+                          child: Row(
+                            crossAxisAlignment: CrossAxisAlignment.start,
+                            children: [
+                              const Icon(
+                                Icons.error_outline_rounded,
+                                color: AppColors.error,
+                                size: 18,
+                              ),
+                              const SizedBox(width: 8),
+                              Expanded(
+                                child: Text(
+                                  _errorBanner!,
+                                  style: GoogleFonts.inter(
+                                    fontSize: 12.5,
+                                    fontWeight: FontWeight.w600,
+                                    color: const Color(0xFF991B1B),
+                                  ),
+                                ),
+                              ),
+                            ],
+                          ),
+                        ),
+                        const SizedBox(height: 16),
+                      ],
+
+                      // Segmented Role Switcher
+                      Text(
+                        'Account Type',
+                        style: GoogleFonts.inter(
+                          fontSize: 12.5,
+                          fontWeight: FontWeight.w600,
+                          color: AppColors.darkText,
+                        ),
+                      ),
+                      const SizedBox(height: 8),
+                      Row(
+                        children: ['Student', 'Company'].map((role) {
+                          final selected = _selectedRole == role;
+                          return Expanded(
+                            child: Padding(
+                              padding: EdgeInsets.only(
+                                right: role == 'Student' ? 8 : 0,
+                              ),
+                              child: InkWell(
+                                borderRadius: BorderRadius.circular(12),
+                                onTap: _isLoading
+                                    ? null
+                                    : () =>
+                                        setState(() => _selectedRole = role),
+                                child: AnimatedContainer(
+                                  duration: const Duration(milliseconds: 180),
+                                  padding: const EdgeInsets.symmetric(
+                                    vertical: 11,
+                                    horizontal: 10,
+                                  ),
+                                  decoration: BoxDecoration(
+                                    color: selected
+                                        ? AppColors.primaryBlue
+                                        : AppColors.background,
+                                    borderRadius: BorderRadius.circular(12),
+                                    border: Border.all(
+                                      color: selected
+                                          ? AppColors.primaryBlue
+                                          : AppColors.lightGray,
+                                    ),
+                                  ),
+                                  child: Row(
+                                    mainAxisAlignment: MainAxisAlignment.center,
+                                    children: [
+                                      Icon(
+                                        role == 'Company'
+                                            ? Icons.business_rounded
+                                            : Icons.school_outlined,
+                                        size: 18,
+                                        color: selected
+                                            ? Colors.white
+                                            : AppColors.grayText,
+                                      ),
+                                      const SizedBox(width: 6),
+                                      Flexible(
+                                        child: Text(
+                                          role,
+                                          maxLines: 1,
+                                          overflow: TextOverflow.ellipsis,
+                                          style: GoogleFonts.inter(
+                                            fontSize: 13,
+                                            fontWeight: FontWeight.w600,
+                                            color: selected
+                                                ? Colors.white
+                                                : AppColors.darkText,
+                                          ),
+                                        ),
+                                      ),
+                                    ],
+                                  ),
+                                ),
+                              ),
+                            ),
+                          );
+                        }).toList(),
+                      ),
+                      const SizedBox(height: 16),
+
+                      Text(
+                        isCompany ? 'Company Name *' : 'Full Name *',
+                        style: GoogleFonts.inter(
+                          fontSize: 12.5,
+                          fontWeight: FontWeight.w600,
+                          color: AppColors.darkText,
+                        ),
+                      ),
+                      const SizedBox(height: 6),
+                      TextFormField(
+                        controller: _nameController,
+                        textInputAction: TextInputAction.next,
+                        enabled: !_isLoading,
+                        decoration: InputDecoration(
+                          hintText: isCompany
+                              ? 'Enter official company name'
+                              : 'Enter your full name',
+                          prefixIcon: Icon(
+                            isCompany
+                                ? Icons.business_rounded
+                                : Icons.person_outline_rounded,
+                            size: 20,
+                          ),
+                        ),
+                        validator: (val) {
+                          if (val == null || val.trim().length < 2) {
+                            return isCompany
+                                ? 'Company name is required'
+                                : 'Full name is required';
+                          }
+                          return null;
                         },
                       ),
-                    ),
-                  ),
-                  const SizedBox(height: 14),
+                      const SizedBox(height: 14),
 
-                  // Role Selection
-                  Text(
-                    'I am registering as',
-                    style: GoogleFonts.inter(
-                      fontSize: 13,
-                      fontWeight: FontWeight.w600,
-                      color: AppColors.darkText,
-                    ),
-                  ),
-                  const SizedBox(height: 6),
-                  DropdownButtonFormField<String>(
-                    initialValue: _selectedRole,
-                    decoration: const InputDecoration(
-                      prefixIcon: Icon(Icons.badge_outlined, size: 20),
-                    ),
-                    items: ['Student', 'Company']
-                        .map((role) => DropdownMenuItem(
-                              value: role,
-                              child: Text(role),
-                            ))
-                        .toList(),
-                    onChanged: (value) {
-                      setState(() {
-                        _selectedRole = value!;
-                      });
-                    },
-                  ),
-                  const SizedBox(height: 24),
-
-                  // Register Button
-                  SizedBox(
-                    width: double.infinity,
-                    height: 50,
-                    child: ElevatedButton(
-                      style: ElevatedButton.styleFrom(
-                        backgroundColor: AppColors.primaryBlue,
-                        foregroundColor: Colors.white,
-                        shape: RoundedRectangleBorder(
-                          borderRadius: BorderRadius.circular(14),
+                      Text(
+                        'Email Address *',
+                        style: GoogleFonts.inter(
+                          fontSize: 12.5,
+                          fontWeight: FontWeight.w600,
+                          color: AppColors.darkText,
                         ),
                       ),
-                      onPressed: _isLoading ? null : _handleRegister,
-                      child: _isLoading
-                          ? const SizedBox(
-                              width: 24,
-                              height: 24,
-                              child: CircularProgressIndicator(
-                                color: Colors.white,
-                                strokeWidth: 2,
-                              ),
-                            )
-                          : Text(
-                              'Create Account',
-                              style: GoogleFonts.poppins(
-                                fontSize: 16,
-                                fontWeight: FontWeight.bold,
-                              ),
-                            ),
-                    ),
-                  ),
-                  const SizedBox(height: 16),
+                      const SizedBox(height: 6),
+                      TextFormField(
+                        controller: _emailController,
+                        keyboardType: TextInputType.emailAddress,
+                        textInputAction: TextInputAction.next,
+                        enabled: !_isLoading,
+                        decoration: InputDecoration(
+                          hintText: isCompany
+                              ? 'hr@company.com'
+                              : 'student@university.edu',
+                          prefixIcon:
+                              const Icon(Icons.email_outlined, size: 20),
+                        ),
+                        validator: (val) {
+                          final v = val?.trim() ?? '';
+                          if (v.isEmpty ||
+                              !v.contains('@') ||
+                              !v.contains('.')) {
+                            return 'Enter a valid email address';
+                          }
+                          return null;
+                        },
+                      ),
+                      const SizedBox(height: 14),
 
-                  // Already Have Account Link (using Wrap)
-                  Center(
-                    child: Wrap(
-                      alignment: WrapAlignment.center,
-                      crossAxisAlignment: WrapCrossAlignment.center,
-                      children: [
-                        Text(
-                          'Already have an account? ',
-                          style: GoogleFonts.inter(
-                            fontSize: 13,
-                            color: AppColors.grayText,
+                      Text(
+                        isCompany
+                            ? 'Industry / Sector *'
+                            : 'University / Institute *',
+                        style: GoogleFonts.inter(
+                          fontSize: 12.5,
+                          fontWeight: FontWeight.w600,
+                          color: AppColors.darkText,
+                        ),
+                      ),
+                      const SizedBox(height: 6),
+                      TextFormField(
+                        controller: _universityController,
+                        textInputAction: TextInputAction.next,
+                        enabled: !_isLoading,
+                        decoration: InputDecoration(
+                          hintText: isCompany
+                              ? 'e.g. Information Technology, FinTech'
+                              : 'e.g. NUST, FAST-NUCES, LUMS',
+                          prefixIcon: Icon(
+                            isCompany
+                                ? Icons.domain_rounded
+                                : Icons.school_outlined,
+                            size: 20,
                           ),
                         ),
-                        GestureDetector(
-                          onTap: () {
-                            Navigator.pushReplacement(
-                              context,
-                              MaterialPageRoute(
-                                builder: (context) => const LoginScreen(),
-                              ),
-                            );
-                          },
-                          child: Text(
-                            'Log In',
-                            style: GoogleFonts.poppins(
-                              fontSize: 13,
-                              fontWeight: FontWeight.bold,
-                              color: AppColors.primaryBlue,
+                        validator: (val) {
+                          if (val == null || val.trim().length < 2) {
+                            return isCompany
+                                ? 'Please enter your industry sector'
+                                : 'Please enter your university or institute';
+                          }
+                          return null;
+                        },
+                      ),
+                      const SizedBox(height: 14),
+
+                      Text(
+                        'Password *',
+                        style: GoogleFonts.inter(
+                          fontSize: 12.5,
+                          fontWeight: FontWeight.w600,
+                          color: AppColors.darkText,
+                        ),
+                      ),
+                      const SizedBox(height: 6),
+                      TextFormField(
+                        controller: _passwordController,
+                        obscureText: _obscurePassword,
+                        textInputAction: TextInputAction.done,
+                        enabled: !_isLoading,
+                        onFieldSubmitted: (_) => _handleRegister(),
+                        decoration: InputDecoration(
+                          hintText: 'Minimum 6 characters',
+                          prefixIcon: const Icon(
+                            Icons.lock_outline_rounded,
+                            size: 20,
+                          ),
+                          suffixIcon: IconButton(
+                            icon: Icon(
+                              _obscurePassword
+                                  ? Icons.visibility_off_outlined
+                                  : Icons.visibility_outlined,
+                              size: 20,
+                              color: AppColors.grayText,
+                            ),
+                            onPressed: () => setState(
+                              () => _obscurePassword = !_obscurePassword,
                             ),
                           ),
                         ),
-                      ],
-                    ),
+                        validator: (val) {
+                          if (val == null || val.trim().length < 6) {
+                            return 'Password must be at least 6 characters';
+                          }
+                          return null;
+                        },
+                      ),
+                      const SizedBox(height: 22),
+
+                      SizedBox(
+                        width: double.infinity,
+                        height: 50,
+                        child: ElevatedButton(
+                          onPressed: _isLoading ? null : _handleRegister,
+                          child: _isLoading
+                              ? const SizedBox(
+                                  width: 22,
+                                  height: 22,
+                                  child: CircularProgressIndicator(
+                                    color: Colors.white,
+                                    strokeWidth: 2.2,
+                                  ),
+                                )
+                              : Text(
+                                  'Create $_selectedRole Account',
+                                  style: GoogleFonts.poppins(
+                                    fontSize: 15,
+                                    fontWeight: FontWeight.w600,
+                                  ),
+                                ),
+                        ),
+                      ),
+                      const SizedBox(height: 18),
+
+                      Center(
+                        child: Wrap(
+                          alignment: WrapAlignment.center,
+                          crossAxisAlignment: WrapCrossAlignment.center,
+                          children: [
+                            Text(
+                              'Already have an account? ',
+                              style: GoogleFonts.inter(
+                                fontSize: 13,
+                                color: AppColors.grayText,
+                              ),
+                            ),
+                            GestureDetector(
+                              onTap: () {
+                                Navigator.pushReplacement(
+                                  context,
+                                  MaterialPageRoute(
+                                    builder: (_) => const LoginScreen(),
+                                  ),
+                                );
+                              },
+                              child: Text(
+                                'Sign In',
+                                style: GoogleFonts.poppins(
+                                  fontSize: 13,
+                                  fontWeight: FontWeight.w700,
+                                  color: AppColors.primaryBlue,
+                                ),
+                              ),
+                            ),
+                          ],
+                        ),
+                      ),
+                    ],
                   ),
-                  const SizedBox(height: 10),
-                ],
+                ),
               ),
             ),
           ),

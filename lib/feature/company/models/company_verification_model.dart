@@ -13,6 +13,7 @@ class CompanyVerificationModel {
   final String? businessEvidenceFileName;
   final String? businessEvidenceType;
   final String? businessEvidenceFileSize;
+  final String? businessEvidenceUrl;
   final String? websiteUrl;
   final VerificationStatus status;
   final String? submittedAt;
@@ -28,6 +29,7 @@ class CompanyVerificationModel {
     this.businessEvidenceFileName,
     this.businessEvidenceType = 'SECP / Company Registration',
     this.businessEvidenceFileSize,
+    this.businessEvidenceUrl,
     this.websiteUrl,
     this.status = VerificationStatus.notSubmitted,
     this.submittedAt,
@@ -44,6 +46,7 @@ class CompanyVerificationModel {
     String? businessEvidenceFileName,
     String? businessEvidenceType,
     String? businessEvidenceFileSize,
+    String? businessEvidenceUrl,
     String? websiteUrl,
     VerificationStatus? status,
     String? submittedAt,
@@ -61,6 +64,7 @@ class CompanyVerificationModel {
       businessEvidenceType: businessEvidenceType ?? this.businessEvidenceType,
       businessEvidenceFileSize:
           businessEvidenceFileSize ?? this.businessEvidenceFileSize,
+      businessEvidenceUrl: businessEvidenceUrl ?? this.businessEvidenceUrl,
       websiteUrl: websiteUrl ?? this.websiteUrl,
       status: status ?? this.status,
       submittedAt: submittedAt ?? this.submittedAt,
@@ -72,7 +76,7 @@ class CompanyVerificationModel {
 
   factory CompanyVerificationModel.fromJson(Map<String, dynamic> json) {
     VerificationStatus parseStatus(String? val) {
-      switch (val) {
+      switch (val?.toLowerCase()) {
         case 'pending':
           return VerificationStatus.pending;
         case 'verified':
@@ -85,20 +89,23 @@ class CompanyVerificationModel {
     }
 
     return CompanyVerificationModel(
-      companyId: json['company_id'] ?? 'comp_01',
-      officialEmail: json['official_email'] ?? '',
+      companyId: (json['company_id'] ?? '').toString(),
+      officialEmail: (json['official_email'] ?? '').toString(),
       isEmailVerified: json['is_email_verified'] ?? false,
-      emailOtp: json['email_otp'],
-      businessEvidenceFileName: json['business_evidence_file_name'],
+      emailOtp: json['email_otp']?.toString(),
+      businessEvidenceFileName: json['business_evidence_file_name']?.toString(),
       businessEvidenceType:
-          json['business_evidence_type'] ?? 'SECP / Company Registration',
-      businessEvidenceFileSize: json['business_evidence_file_size'],
-      websiteUrl: json['website_url'],
-      status: parseStatus(json['status']),
-      submittedAt: json['submitted_at'],
-      reviewedAt: json['reviewed_at'],
-      adminFeedback: json['admin_feedback'],
-      reviewerName: json['reviewer_name'],
+          (json['business_evidence_type'] ?? 'SECP / Company Registration')
+              .toString(),
+      businessEvidenceFileSize: json['business_evidence_file_size']?.toString(),
+      businessEvidenceUrl:
+          (json['business_evidence_url'] ?? json['evidence_url'])?.toString(),
+      websiteUrl: json['website_url']?.toString(),
+      status: parseStatus(json['status']?.toString()),
+      submittedAt: json['submitted_at']?.toString(),
+      reviewedAt: json['reviewed_at']?.toString(),
+      adminFeedback: json['admin_feedback']?.toString(),
+      reviewerName: json['reviewer_name']?.toString(),
     );
   }
 
@@ -127,6 +134,7 @@ class CompanyVerificationModel {
       'business_evidence_file_name': businessEvidenceFileName,
       'business_evidence_type': businessEvidenceType,
       'business_evidence_file_size': businessEvidenceFileSize,
+      'business_evidence_url': businessEvidenceUrl,
       'website_url': websiteUrl,
       'status': statusString,
       'submitted_at': submittedAt,

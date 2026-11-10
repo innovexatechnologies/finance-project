@@ -1,210 +1,303 @@
 import 'package:flutter/foundation.dart';
+import 'package:link_vibe/core/services/supabase_helper.dart';
+import 'package:link_vibe/feature/admin/models/admin_company_model.dart';
 import 'package:link_vibe/feature/admin/models/admin_company_verification_model.dart';
+import 'package:link_vibe/feature/admin/services/admin_company_service.dart';
 import 'package:link_vibe/feature/company/models/company_verification_model.dart';
 import 'package:link_vibe/feature/company/services/company_profile_service.dart';
 import 'package:link_vibe/feature/company/services/company_verification_service.dart';
 
-/// Enterprise Verification Desk Service
-/// Bridges administrative verification actions with corporate panel state.
+/// Enterprise Verification Desk Service backed by Supabase `companies` table.
+/// Bridges administrative verification actions cleanly with database persistence.
 class AdminVerificationService {
   static final AdminVerificationService _instance =
       AdminVerificationService._internal();
   factory AdminVerificationService() => _instance;
 
-  AdminVerificationService._internal() {
-    _initQueue();
-    _listenToCompanyVerificationChanges();
-  }
+  AdminVerificationService._internal();
 
-  late final ValueNotifier<List<AdminCompanyVerificationItem>>
-      verificationsNotifier;
+  final ValueNotifier<List<AdminCompanyVerificationItem>> verificationsNotifier =
+      ValueNotifier<List<AdminCompanyVerificationItem>>([]);
 
   List<AdminCompanyVerificationItem> get allVerifications =>
       verificationsNotifier.value;
 
-  void _initQueue() {
-    final companyProfile = CompanyProfileService().currentProfile;
-    final companyVerif = CompanyVerificationService().currentVerification;
+  /// Fetches verification requests from Supabase `companies` table.
+  Future<void> loadFromSupabase() async {
+    final supabase = SupabaseHelper.clientOrNull;
+    if (supabase == null) return;
 
-    verificationsNotifier =
-        ValueNotifier<List<AdminCompanyVerificationItem>>([
-      // Primary Logged-in Company (TechVista Innovations)
-      AdminCompanyVerificationItem(
-        id: 'verif_tv_01',
-        companyId: companyProfile.id,
-        companyName: companyProfile.companyName,
-        logoInitial: companyProfile.logoInitial,
-        industry: companyProfile.industry,
-        city: companyProfile.city,
-        registrationNumber: 'SECP-ISB-2019-9481',
-        officialEmail: companyProfile.officialEmail,
-        isEmailVerified: companyVerif.isEmailVerified,
-        websiteUrl: companyProfile.websiteUrl,
-        documentName: companyVerif.businessEvidenceFileName ??
-            'SECP_Registration_TechVista_2026.pdf',
-        documentType: companyVerif.businessEvidenceType ??
-            'SECP / Corporate Certificate',
-        documentSize: companyVerif.businessEvidenceFileSize ?? '2.4 MB',
-        status: companyVerif.status == VerificationStatus.notSubmitted
-            ? VerificationStatus.pending
-            : companyVerif.status,
-        submittedAt: 'Today at 08:20 PM',
-        reviewedAt: companyVerif.reviewedAt,
-        reviewerName: companyVerif.reviewerName,
-        adminFeedback: companyVerif.adminFeedback,
-      ),
+    try {
+      final rows = await supabase
+          .from('companies')
+          .select()
+          .order('submitted_at', ascending: false);
 
-      // Additional realistic companies for rich data table testing
-      const AdminCompanyVerificationItem(
-        id: 'verif_inno_02',
-        companyId: 'comp_02',
-        companyName: 'Innovexa Cloud Technologies',
-        logoInitial: 'IN',
-        industry: 'Cloud Infrastructure & DevOps',
-        city: 'Lahore',
-        registrationNumber: 'SECP-LHR-2021-3829',
-        officialEmail: 'compliance@innovexacloud.io',
-        isEmailVerified: true,
-        websiteUrl: 'https://innovexacloud.io',
-        documentName: 'SECP_Form29_Innovexa.pdf',
-        documentType: 'SECP Certificate of Incorporation',
-        documentSize: '3.1 MB',
-        status: VerificationStatus.verified,
-        submittedAt: '3 days ago',
-        reviewedAt: '2 days ago',
-        reviewerName: 'Dr. Tariq Mahmood (SuperAdmin)',
-        adminFeedback: null,
-      ),
+      final List<AdminCompanyVerificationItem> loaded = [];
+      for (final raw in rows) {
+        final row = Map<String, dynamic>.from(raw);
+        final rawStatus =
+            (row['verification_status']?.toString().toLowerCase() ?? 'not_submitted');
+        VerificationStatus status;
+        switch (rawStatus) {
+          case 'verified':
+            status = VerificationStatus.verified;
+            break;
+          case 'rejected':
+            status = VerificationStatus.rejected;
+            break;
+          case 'pending':
+            status = VerificationStatus.pending;
+            break;
+          default:
+            status = VerificationStatus.notSubmitted;
+        }
 
-      const AdminCompanyVerificationItem(
-        id: 'verif_code_03',
-        companyId: 'comp_03',
-        companyName: 'CodeCraft Mobile Systems',
-        logoInitial: 'CC',
-        industry: 'Mobile App Development',
-        city: 'Karachi',
-        registrationNumber: 'NTN-FBR-7749201-9',
-        officialEmail: 'partners@codecraft.com.pk',
-        isEmailVerified: true,
-        websiteUrl: 'https://codecraft.com.pk',
-        documentName: 'FBR_ActiveTaxpayer_NTN.pdf',
-        documentType: 'FBR NTN Tax Certificate',
-        documentSize: '1.8 MB',
-        status: VerificationStatus.pending,
-        submittedAt: 'Yesterday at 02:15 PM',
-        reviewedAt: null,
-        reviewerName: null,
-        adminFeedback: null,
-      ),
+        // Show companies that have submitted evidence or undergone review (plus any pending)
+        final hasEvidence =
+            (row['evidence_file_name']?.toString().trim().isNotEmpty == true) ||
+                (row['evidence_url']?.toString().trim().isNotEmpty == true);
+        if (status == VerificationStatus.notSubmitted && !hasEvidence) {
+          continue;
+        }
 
-      const AdminCompanyVerificationItem(
-        id: 'verif_byte_04',
-        companyId: 'comp_04',
-        companyName: 'ByteWorks Automation Labs',
-        logoInitial: 'BW',
-        industry: 'Robotics & Embedded Systems',
-        city: 'Peshawar',
-        registrationNumber: 'SECP-PEW-2022-1104',
-        officialEmail: 'admin@byteworks.org',
-        isEmailVerified: false,
-        websiteUrl: 'https://byteworks.org',
-        documentName: 'Registration_Scan_LowRes.png',
-        documentType: 'Business Registration Document',
-        documentSize: '840 KB',
-        status: VerificationStatus.rejected,
-        submittedAt: '5 days ago',
-        reviewedAt: '4 days ago',
-        reviewerName: 'Syeda Fatima Noor (OpsAdmin)',
-        adminFeedback:
-            'The uploaded image was illegible and missing the official SECP seal. Please re-upload a high-resolution PDF scan.',
-      ),
-    ]);
-  }
+        final compId = row['id']?.toString() ?? '';
+        final name = (row['company_name']?.toString().trim().isNotEmpty == true)
+            ? row['company_name'].toString().trim()
+            : 'Corporate Partner';
 
-  void _listenToCompanyVerificationChanges() {
-    CompanyVerificationService().verificationNotifier.addListener(() {
-      final updatedVerif =
-          CompanyVerificationService().currentVerification;
-      final currentList = List<AdminCompanyVerificationItem>.from(
-          verificationsNotifier.value);
-
-      final index =
-          currentList.indexWhere((item) => item.companyId == updatedVerif.companyId);
-      if (index != -1) {
-        currentList[index] = currentList[index].copyWith(
-          status: updatedVerif.status,
-          reviewedAt: updatedVerif.reviewedAt,
-          reviewerName: updatedVerif.reviewerName,
-          adminFeedback: updatedVerif.adminFeedback,
-          isEmailVerified: updatedVerif.isEmailVerified,
+        loaded.add(
+          AdminCompanyVerificationItem(
+            id: 'verif_$compId',
+            companyId: compId,
+            userId: row['user_id']?.toString(),
+            companyName: name,
+            logoInitial: (row['logo_initial']?.toString().trim().isNotEmpty == true)
+                ? row['logo_initial'].toString().trim()
+                : SupabaseHelper.initialsFor(name, fallback: 'CO'),
+            industry: (row['industry']?.toString().trim().isNotEmpty == true)
+                ? row['industry'].toString().trim()
+                : 'General Technology',
+            city: (row['city']?.toString().trim().isNotEmpty == true)
+                ? row['city'].toString().trim()
+                : (row['location']?.toString().trim() ?? ''),
+            registrationNumber: row['registration_number']?.toString() ?? '',
+            officialEmail: row['email']?.toString() ?? '',
+            isEmailVerified: row['is_email_verified'] == true,
+            websiteUrl: row['website']?.toString() ?? '',
+            documentName: row['evidence_file_name']?.toString() ?? '',
+            documentType: row['evidence_file_type']?.toString() ??
+                'SECP / Company Registration',
+            documentSize: row['evidence_file_size']?.toString() ?? '',
+            documentUrl: row['evidence_url']?.toString(),
+            status: status == VerificationStatus.notSubmitted
+                ? VerificationStatus.pending
+                : status,
+            submittedAt: row['submitted_at'] != null
+                ? SupabaseHelper.formatRelativeTime(row['submitted_at'])
+                : SupabaseHelper.formatRelativeTime(row['created_at']),
+            reviewedAt: row['reviewed_at'] != null
+                ? SupabaseHelper.formatRelativeTime(row['reviewed_at'])
+                : null,
+            reviewerName: row['reviewer_name']?.toString(),
+            adminFeedback: row['admin_feedback']?.toString(),
+          ),
         );
-        verificationsNotifier.value = currentList;
       }
-    });
+
+      verificationsNotifier.value = loaded;
+    } catch (e) {
+      debugPrint('AdminVerificationService loadFromSupabase error: $e');
+    }
   }
 
-  /// Approve a company verification
+  /// Approve a company verification in Supabase & sync in-memory company registry.
   Future<bool> approveCompany({
     required String verificationId,
     required String reviewerName,
   }) async {
-    await Future.delayed(const Duration(milliseconds: 300));
-
     final currentList =
         List<AdminCompanyVerificationItem>.from(verificationsNotifier.value);
-    final index = currentList.indexWhere((i) => i.id == verificationId);
+    final index = currentList.indexWhere(
+      (i) => i.id == verificationId || i.companyId == verificationId,
+    );
     if (index == -1) return false;
 
     final target = currentList[index];
-    final updated = target.copyWith(
+    final nowIso = DateTime.now().toIso8601String();
+    final supabase = SupabaseHelper.clientOrNull;
+
+    if (supabase != null && SupabaseHelper.isUuid(target.companyId)) {
+      try {
+        await supabase.from('companies').update({
+          'verification_status': 'verified',
+          'reviewer_name': reviewerName,
+          'reviewed_at': nowIso,
+          'admin_feedback': null,
+          'updated_at': nowIso,
+        }).eq('id', target.companyId);
+
+        if (SupabaseHelper.isUuid(target.userId)) {
+          await supabase.from('profiles').update({
+            'is_verified': true,
+            'updated_at': nowIso,
+          }).eq('id', target.userId!);
+
+          await supabase.from('notifications').insert({
+            'user_id': target.userId,
+            'title': 'Company Verification Approved',
+            'message':
+                '${target.companyName} has been officially verified on CampusConnect.',
+            'type': 'verification',
+            'actor_name': reviewerName,
+          });
+        }
+
+        await supabase.from('admin_audit_logs').insert({
+          'admin_email':
+              SupabaseHelper.currentUser?.email ?? 'admin@campusconnect.edu.pk',
+          'action': 'COMPANY_VERIFICATION_APPROVED',
+          'target': target.companyName,
+          'details': 'Approved corporate verification by $reviewerName.',
+        });
+      } catch (e) {
+        debugPrint('AdminVerificationService approveCompany error: $e');
+        return false;
+      }
+    }
+
+    currentList[index] = target.copyWith(
       status: VerificationStatus.verified,
-      reviewedAt: 'Today at ${DateTime.now().hour}:${DateTime.now().minute.toString().padLeft(2, '0')}',
+      reviewedAt: 'Just now',
       reviewerName: reviewerName,
-      adminFeedback: null,
+      clearAdminFeedback: true,
     );
-    currentList[index] = updated;
     verificationsNotifier.value = currentList;
 
-    // Cross-Panel Synchronization: If comp_01, update company panel service
-    if (target.companyId == CompanyProfileService().currentProfile.id) {
-      CompanyVerificationService().simulateAdminApproval();
-      CompanyProfileService().updateProfile(
-        CompanyProfileService().currentProfile.copyWith(isVerified: true),
+    AdminCompanyService().syncLocalVerificationStatus(
+      companyId: target.companyId,
+      state: CompanyVerificationState.verified,
+    );
+
+    if (target.companyId.isNotEmpty &&
+        target.companyId == CompanyProfileService().currentProfile.id) {
+      CompanyVerificationService().applyAdminDecision(
+        status: VerificationStatus.verified,
+        feedback: null,
+        reviewerName: reviewerName,
       );
+      CompanyProfileService().currentProfileNotifier.value =
+          CompanyProfileService().currentProfile.copyWith(isVerified: true);
     }
 
     return true;
   }
 
-  /// Reject a company verification with feedback
+  /// Reject a company verification with mandatory feedback in Supabase.
   Future<bool> rejectCompany({
     required String verificationId,
     required String feedback,
     required String reviewerName,
   }) async {
-    await Future.delayed(const Duration(milliseconds: 300));
-
     final currentList =
         List<AdminCompanyVerificationItem>.from(verificationsNotifier.value);
-    final index = currentList.indexWhere((i) => i.id == verificationId);
+    final index = currentList.indexWhere(
+      (i) => i.id == verificationId || i.companyId == verificationId,
+    );
     if (index == -1) return false;
 
     final target = currentList[index];
-    final updated = target.copyWith(
+    final cleanFeedback = feedback.trim();
+    final nowIso = DateTime.now().toIso8601String();
+    final supabase = SupabaseHelper.clientOrNull;
+
+    if (supabase != null && SupabaseHelper.isUuid(target.companyId)) {
+      try {
+        await supabase.from('companies').update({
+          'verification_status': 'rejected',
+          'reviewer_name': reviewerName,
+          'reviewed_at': nowIso,
+          'admin_feedback': cleanFeedback,
+          'updated_at': nowIso,
+        }).eq('id', target.companyId);
+
+        if (SupabaseHelper.isUuid(target.userId)) {
+          await supabase.from('profiles').update({
+            'is_verified': false,
+            'updated_at': nowIso,
+          }).eq('id', target.userId!);
+
+          await supabase.from('notifications').insert({
+            'user_id': target.userId,
+            'title': 'Company Verification Rejected',
+            'message': cleanFeedback,
+            'type': 'verification',
+            'actor_name': reviewerName,
+          });
+        }
+
+        await supabase.from('admin_audit_logs').insert({
+          'admin_email':
+              SupabaseHelper.currentUser?.email ?? 'admin@campusconnect.edu.pk',
+          'action': 'COMPANY_VERIFICATION_REJECTED',
+          'target': target.companyName,
+          'details': cleanFeedback,
+        });
+      } catch (e) {
+        debugPrint('AdminVerificationService rejectCompany error: $e');
+        return false;
+      }
+    }
+
+    currentList[index] = target.copyWith(
       status: VerificationStatus.rejected,
-      reviewedAt: 'Today',
+      reviewedAt: 'Just now',
       reviewerName: reviewerName,
-      adminFeedback: feedback,
+      adminFeedback: cleanFeedback,
     );
-    currentList[index] = updated;
     verificationsNotifier.value = currentList;
 
-    // Cross-Panel Synchronization: If comp_01, update company panel service
-    if (target.companyId == CompanyProfileService().currentProfile.id) {
-      CompanyVerificationService().simulateAdminRejection(feedback);
+    AdminCompanyService().syncLocalVerificationStatus(
+      companyId: target.companyId,
+      state: CompanyVerificationState.rejected,
+      feedback: cleanFeedback,
+    );
+
+    if (target.companyId.isNotEmpty &&
+        target.companyId == CompanyProfileService().currentProfile.id) {
+      CompanyVerificationService().applyAdminDecision(
+        status: VerificationStatus.rejected,
+        feedback: cleanFeedback,
+        reviewerName: reviewerName,
+      );
+      CompanyProfileService().currentProfileNotifier.value =
+          CompanyProfileService().currentProfile.copyWith(isVerified: false);
     }
 
     return true;
   }
-}
 
+  void syncVerificationStateLocal({
+    required String companyId,
+    required VerificationStatus status,
+    String? reviewerName,
+    String? adminFeedback,
+  }) {
+    final currentList =
+        List<AdminCompanyVerificationItem>.from(verificationsNotifier.value);
+    final idx = currentList.indexWhere((i) => i.companyId == companyId);
+    if (idx == -1) return;
+    currentList[idx] = currentList[idx].copyWith(
+      status: status,
+      reviewedAt: 'Just now',
+      reviewerName: reviewerName,
+      adminFeedback: adminFeedback,
+      clearAdminFeedback: adminFeedback == null,
+    );
+    verificationsNotifier.value = currentList;
+  }
+
+  void reset() {
+    verificationsNotifier.value = [];
+  }
+}
