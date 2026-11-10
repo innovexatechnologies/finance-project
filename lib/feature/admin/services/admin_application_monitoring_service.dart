@@ -1,24 +1,22 @@
 import 'package:flutter/foundation.dart';
+import 'package:link_vibe/core/services/supabase_helper.dart';
 import 'package:link_vibe/feature/admin/models/admin_application_monitoring_model.dart';
+import 'package:link_vibe/feature/company/models/applicant_model.dart';
 import 'package:link_vibe/feature/company/services/company_applicant_service.dart';
 
-/// Enterprise Application Monitoring & Investigation Service for CampusConnect Admin Panel.
-/// Provides surveillance over reported submissions, credential verification, fraud mitigation,
-/// and authorized audit-tracked case resolutions.
+/// Enterprise Application Monitoring & Investigation Service backed by Supabase `applications`.
 class AdminApplicationMonitoringService {
   static final AdminApplicationMonitoringService _instance =
       AdminApplicationMonitoringService._internal();
   factory AdminApplicationMonitoringService() => _instance;
 
-  AdminApplicationMonitoringService._internal() {
-    _initApplications();
-  }
+  AdminApplicationMonitoringService._internal();
 
-  late final ValueNotifier<List<AdminApplicationModel>> applicationsNotifier;
+  final ValueNotifier<List<AdminApplicationModel>> applicationsNotifier =
+      ValueNotifier<List<AdminApplicationModel>>([]);
 
   List<AdminApplicationModel> get allApplications => applicationsNotifier.value;
 
-  // 1. Application Overview Metrics
   int get totalCount => applicationsNotifier.value.length;
   int get pendingCount => applicationsNotifier.value
       .where((a) => a.workflowStatus == ApplicationWorkflowStatus.pending)
@@ -41,358 +39,283 @@ class AdminApplicationMonitoringService {
           a.reportStatus == ApplicationReportStatus.underInvestigation)
       .length;
 
-  void _initApplications() {
-    applicationsNotifier = ValueNotifier<List<AdminApplicationModel>>([
-      // 1. APP-2026-1001: Ali Khan (Accepted, Clear)
-      AdminApplicationModel(
-        id: 'APP-2026-1001',
-        studentId: 'std_fast_01',
-        studentName: 'Ali Khan',
-        studentEmail: 'ali.khan@nu.edu.pk',
-        university: 'FAST-NUCES Islamabad',
-        degree: 'BS Computer Science (Honors)',
-        department: 'Department of Computer Science',
-        semester: '8th Semester (Final Year)',
-        cgpa: 3.82,
-        isEducationVerified: true,
-        projectId: 'proj_01',
-        projectTitle: 'Flutter E-Commerce Mobile App',
-        projectCategory: 'Mobile App Development',
-        companyId: 'comp_01',
-        companyName: 'TechVista Innovations',
-        companyLiaison: 'Dr. Arshad Malik',
-        submissionDate: '2026-11-06',
-        submissionDateTime: DateTime(2026, 11, 6, 11, 30),
-        workflowStatus: ApplicationWorkflowStatus.accepted,
-        reportStatus: ApplicationReportStatus.clear,
-        flagType: SuspiciousFlagType.none,
-        proposalSummary:
-            'I have built 2 production Flutter apps with clean architecture and Bloc state management. I can implement catalog and checkout flows within 3 weeks with 100% test coverage.',
-        skills: ['Flutter', 'Dart', 'Bloc', 'REST API', 'Git'],
-        resumeFileName: 'AliKhan_Official_Resume_2026.pdf',
-        investigationHistory: const [
-          InvestigationRecord(
-            id: 'inv_1001_1',
-            action: 'Application Submitted',
-            adminName: 'System Gatekeeper',
-            timestamp: '2026-11-06 11:30 AM',
-            findings: 'Automated verification check passed: Fast-NUCES student identity authenticated.',
-          ),
-        ],
-      ),
+  /// Fetches live applications enriched with project, company, student verification & audit records.
+  Future<void> loadFromSupabase() async {
+    final supabase = SupabaseHelper.clientOrNull;
+    if (supabase == null) return;
 
-      // 2. APP-2026-9041: Danish Khan (Reported - Off-Platform Solicitation)
-      AdminApplicationModel(
-        id: 'APP-2026-9041',
-        studentId: 'std_cust_07',
-        studentName: 'Danish Khan',
-        studentEmail: 'danish.khan@cust.edu.pk',
-        university: 'CUST Islamabad',
-        degree: 'BS Software Engineering',
-        department: 'Department of Software Engineering',
-        semester: '3rd Semester',
-        cgpa: 3.10,
-        isEducationVerified: false,
-        projectId: 'proj_02',
-        projectTitle: 'Barcode & QR Scanner Mobile Utility',
-        projectCategory: 'Mobile App Development',
-        companyId: 'comp_01',
-        companyName: 'TechVista Innovations',
-        companyLiaison: 'Dr. Arshad Malik',
-        submissionDate: '2026-11-08',
-        submissionDateTime: DateTime(2026, 11, 8, 14, 20),
-        workflowStatus: ApplicationWorkflowStatus.pending,
-        reportStatus: ApplicationReportStatus.reported,
-        flagType: SuspiciousFlagType.offPlatformSolicitation,
-        proposalSummary:
-            'Contact me on WhatsApp +92-300-XXXXXXX for off-platform payment transfer and shortcut arrangement.',
-        skills: ['HTML', 'CSS', 'Beginner Flutter'],
-        resumeFileName: 'DanishKhan_Resume.pdf',
-        reportDetail: const ApplicationReportDetail(
-          reportId: 'REP-9041-01',
-          reportedBy: 'Dr. Arshad Malik (TechVista)',
-          reporterRole: 'Company Liaison',
-          reportedDate: '2026-11-08 03:40 PM',
-          reportCategory: 'Off-Platform Solicitation Attempt',
-          reportExplanation:
-              'Applicant submitted external phone numbers and solicited off-platform transactions in direct violation of CampusConnect non-financial student guidelines.',
-          evidenceSnippet: 'Proposal snippet: "Contact me on WhatsApp for off-platform payment transfer..."',
-          severity: 'High',
-        ),
-        investigationNotes: const [
-          'Case logged into moderation queue by company sponsor.',
-          'Pending administrative verification of student identity and phone numbers.',
-        ],
-        investigationHistory: const [
-          InvestigationRecord(
-            id: 'inv_9041_1',
-            action: 'Report Filed by Corporate Sponsor',
-            adminName: 'Dr. Arshad Malik (TechVista)',
-            timestamp: '2026-11-08 03:40 PM',
-            findings: 'Off-platform solicitation flag triggered.',
-          ),
-        ],
-      ),
+    try {
+      final appRows = await supabase
+          .from('applications')
+          .select()
+          .order('submitted_at', ascending: false);
 
-      // 3. APP-2026-8820: Sameer Tariq (Under Investigation - Credential Tampering)
-      AdminApplicationModel(
-        id: 'APP-2026-8820',
-        studentId: 'std_uet_08',
-        studentName: 'Sameer Tariq',
-        studentEmail: 'sameer.tariq@uet.edu.pk',
-        university: 'UET Taxila',
-        degree: 'BS Computer Engineering',
-        department: 'Department of Computer Engineering',
-        semester: '7th Semester',
-        cgpa: 3.95,
-        isEducationVerified: false,
-        projectId: 'proj_03',
-        projectTitle: 'Automated Multi-Cloud Kubernetes Orchestrator',
-        projectCategory: 'Cloud Infrastructure & DevOps',
-        companyId: 'comp_02',
-        companyName: 'Innovexa Cloud Technologies',
-        companyLiaison: 'Khurram Shehzad',
-        submissionDate: '2026-11-07',
-        submissionDateTime: DateTime(2026, 11, 7, 16, 15),
-        workflowStatus: ApplicationWorkflowStatus.pending,
-        reportStatus: ApplicationReportStatus.underInvestigation,
-        flagType: SuspiciousFlagType.credentialDiscrepancy,
-        proposalSummary:
-            'Top 1% ranked student with 3.95 CGPA offering automated Helm chart deployment infrastructure.',
-        skills: ['Kubernetes', 'Helm', 'Docker', 'Go'],
-        resumeFileName: 'SameerTariq_Transcripts_Modified.pdf',
-        reportDetail: const ApplicationReportDetail(
-          reportId: 'REP-8820-02',
-          reportedBy: 'CampusConnect Automated Registrar Audit',
-          reporterRole: 'System Heuristic',
-          reportedDate: '2026-11-07 05:00 PM',
-          reportCategory: 'Forged Academic Transcript Discrepancy',
-          reportExplanation:
-              'Official registrar cross-check indicates student CGPA is 2.40, but application self-reported 3.95 with an edited transcript document scan.',
-          evidenceSnippet: 'Discrepancy: Self-reported 3.95 CGPA vs Verified UET Registrar Record 2.40 CGPA.',
-          severity: 'Critical',
-        ),
-        investigationNotes: const [
-          'Proctor request sent to UET Taxila Examination Department.',
-          'Uploaded transcript file analysis reveals altered PDF font metadata in the GPA section.',
-        ],
-        investigationHistory: const [
-          InvestigationRecord(
-            id: 'inv_8820_1',
-            action: 'Automated Discrepancy Flag',
-            adminName: 'Registrar Vault Monitor',
-            timestamp: '2026-11-07 05:00 PM',
-            findings: 'Discrepancy detected between self-reported GPA and university registrar portal.',
-          ),
-          InvestigationRecord(
-            id: 'inv_8820_2',
-            action: 'Marked Under Review',
-            adminName: 'Syeda Fatima Noor (OpsAdmin)',
-            timestamp: '2026-11-08 09:30 AM',
-            note: 'Initiating forensic inspection of uploaded PDF metadata.',
-          ),
-        ],
-      ),
+      // Lookup maps for enrichment
+      final Map<String, String> projectCategoryById = {};
+      try {
+        final projRows = await supabase.from('projects').select('id, category');
+        for (final raw in projRows) {
+          final id = raw['id']?.toString() ?? '';
+          final cat = raw['category']?.toString() ?? '';
+          if (id.isNotEmpty && cat.isNotEmpty) {
+            projectCategoryById[id] = cat;
+          }
+        }
+      } catch (_) {}
 
-      // 4. APP-2026-1002: Hamza Tariq (Pending, Clear)
-      AdminApplicationModel(
-        id: 'APP-2026-1002',
-        studentId: 'std_lums_03',
-        studentName: 'Hamza Tariq',
-        studentEmail: 'hamza.tariq@lums.edu.pk',
-        university: 'LUMS Lahore',
-        degree: 'BS Computer Science',
-        department: 'Syed Babar Ali School of Science and Engineering',
-        semester: '7th Semester',
-        cgpa: 3.65,
-        isEducationVerified: true,
-        projectId: 'proj_01',
-        projectTitle: 'Flutter E-Commerce Mobile App',
-        projectCategory: 'Mobile App Development',
-        companyId: 'comp_01',
-        companyName: 'TechVista Innovations',
-        companyLiaison: 'Dr. Arshad Malik',
-        submissionDate: '2026-11-08',
-        submissionDateTime: DateTime(2026, 11, 8, 12, 00),
-        workflowStatus: ApplicationWorkflowStatus.pending,
-        reportStatus: ApplicationReportStatus.clear,
-        flagType: SuspiciousFlagType.none,
-        proposalSummary:
-            'Full-stack mobile engineer with backend microservice experience. Interested in optimizing cart checkout, caching layers, and offline sync for your e-commerce mobile application.',
-        skills: ['Flutter', 'Node.js', 'PostgreSQL', 'Docker'],
-        resumeFileName: 'HamzaTariq_Resume.pdf',
-        investigationHistory: const [
-          InvestigationRecord(
-            id: 'inv_1002_1',
-            action: 'Application Submitted',
-            adminName: 'System Gatekeeper',
-            timestamp: '2026-11-08 12:00 PM',
-            findings: 'Clear standing: No previous disciplinary infractions recorded.',
-          ),
-        ],
-      ),
+      final Map<String, String> companyLiaisonByNameOrId = {};
+      try {
+        final compRows = await supabase
+            .from('companies')
+            .select('id, company_name, contact_person');
+        for (final raw in compRows) {
+          final id = raw['id']?.toString() ?? '';
+          final name = raw['company_name']?.toString().toLowerCase() ?? '';
+          final liaison = raw['contact_person']?.toString() ?? '';
+          if (liaison.isNotEmpty) {
+            if (id.isNotEmpty) companyLiaisonByNameOrId[id] = liaison;
+            if (name.isNotEmpty) companyLiaisonByNameOrId[name] = liaison;
+          }
+        }
+      } catch (_) {}
 
-      // 5. APP-2026-7731: Farhan Zaidi (Withdrawn, Clear)
-      AdminApplicationModel(
-        id: 'APP-2026-7731',
-        studentId: 'std_giki_09',
-        studentName: 'Farhan Zaidi',
-        studentEmail: 'farhan.zaidi@giki.edu.pk',
-        university: 'GIKI Swabi',
-        degree: 'BS Computer Engineering',
-        department: 'Faculty of Computer Science & Engineering',
-        semester: '6th Semester',
-        cgpa: 3.42,
-        isEducationVerified: true,
-        projectId: 'proj_04',
-        projectTitle: 'Corporate Sentiment Analysis Pipeline',
-        projectCategory: 'AI / Machine Learning & Data',
-        companyId: 'comp_01',
-        companyName: 'TechVista Innovations',
-        companyLiaison: 'Dr. Arshad Malik',
-        submissionDate: '2026-11-02',
-        submissionDateTime: DateTime(2026, 11, 2, 10, 00),
-        workflowStatus: ApplicationWorkflowStatus.withdrawn,
-        reportStatus: ApplicationReportStatus.clear,
-        flagType: SuspiciousFlagType.none,
-        proposalSummary:
-            'Application voluntarily withdrawn due to conflicting university midterm schedule.',
-        skills: ['Python', 'Pandas', 'FastAPI'],
-        resumeFileName: 'FarhanZaidi_CV.pdf',
-        investigationHistory: const [
-          InvestigationRecord(
-            id: 'inv_7731_1',
-            action: 'Application Withdrawn by Student',
-            adminName: 'Student Portal',
-            timestamp: '2026-11-05 02:15 PM',
-            note: 'Student requested withdrawal before company review.',
-          ),
-        ],
-      ),
+      final Map<String, bool> studentVerifiedByUid = {};
+      try {
+        final profRows = await supabase
+            .from('profiles')
+            .select('id, is_verified')
+            .ilike('user_type', 'student');
+        for (final raw in profRows) {
+          final id = raw['id']?.toString() ?? '';
+          if (id.isNotEmpty) {
+            studentVerifiedByUid[id] = raw['is_verified'] == true;
+          }
+        }
+      } catch (_) {}
 
-      // 6. APP-2026-6612: Usman Raza (Rejected, Dismissed False Flag)
-      AdminApplicationModel(
-        id: 'APP-2026-6612',
-        studentId: 'std_pucit_10',
-        studentName: 'Usman Raza',
-        studentEmail: 'usman.raza@pucit.edu.pk',
-        university: 'PUCIT Lahore',
-        degree: 'BS Software Engineering',
-        department: 'Department of Computer Science',
-        semester: '5th Semester',
-        cgpa: 3.30,
-        isEducationVerified: true,
-        projectId: 'proj_05',
-        projectTitle: 'Smart IoT Campus Attendance Hardware Hook',
-        projectCategory: 'IoT & Embedded Systems',
-        companyId: 'comp_01',
-        companyName: 'TechVista Innovations',
-        companyLiaison: 'Dr. Arshad Malik',
-        submissionDate: '2026-10-29',
-        submissionDateTime: DateTime(2026, 10, 29, 15, 45),
-        workflowStatus: ApplicationWorkflowStatus.rejected,
-        reportStatus: ApplicationReportStatus.dismissed,
-        flagType: SuspiciousFlagType.none,
-        proposalSummary:
-            'Hands-on experience with Arduino and ESP8266 IoT boards. Ready to assist with sensor soldering and data capture.',
-        skills: ['C++', 'Arduino', 'IoT', 'Soldering'],
-        resumeFileName: 'UsmanRaza_CV.pdf',
-        reportDetail: const ApplicationReportDetail(
-          reportId: 'REP-6612-03',
-          reportedBy: 'Company Automated System',
-          reporterRole: 'System Heuristic',
-          reportedDate: '2026-10-30 09:00 AM',
-          reportCategory: 'Automated Keyword Flag',
-          reportExplanation: 'System flag triggered on word "circuit hack" in proposal summary.',
-          severity: 'Low',
-        ),
-        investigationNotes: const [
-          'Administrative review verified "circuit hack" was legitimate engineering colloquialism for a hardware prototype.',
-          'Report dismissed as false positive. Student was rejected purely based on academic prerequisites by company.',
-        ],
-        investigationHistory: const [
-          InvestigationRecord(
-            id: 'inv_6612_1',
-            action: 'False Flag Dismissed',
-            adminName: 'Dr. Tariq Mahmood (SuperAdmin)',
-            timestamp: '2026-10-30 11:20 AM',
-            note: 'Dismissed: Technical context validated; no misconduct committed.',
-          ),
-        ],
-      ),
+      final List<Map<String, dynamic>> auditRows = [];
+      try {
+        final rawLogs = await supabase
+            .from('admin_audit_logs')
+            .select()
+            .order('created_at', ascending: false)
+            .limit(100);
+        for (final raw in rawLogs) {
+          auditRows.add(Map<String, dynamic>.from(raw));
+        }
+      } catch (_) {}
 
-      // 7. APP-2026-5509: Haris Qureshi (Rejected, Resolved: Action Taken)
-      AdminApplicationModel(
-        id: 'APP-2026-5509',
-        studentId: 'std_ext_11',
-        studentName: 'Haris Qureshi',
-        studentEmail: 'haris.qureshi@unknown-domain.com',
-        university: 'Non-Affiliated University',
-        degree: 'External Candidate',
-        department: 'Unregistered Department',
-        semester: 'N/A',
-        cgpa: 1.90,
-        isEducationVerified: false,
-        projectId: 'proj_08',
-        projectTitle: 'Crypto Payment Gateway Bridge Prototype',
-        projectCategory: 'Blockchain & Distributed Systems',
-        companyId: 'comp_05',
-        companyName: 'Apex Distributed Technologies',
-        companyLiaison: 'Kamran Siddiqui',
-        submissionDate: '2026-10-19',
-        submissionDateTime: DateTime(2026, 10, 19, 17, 00),
-        workflowStatus: ApplicationWorkflowStatus.rejected,
-        reportStatus: ApplicationReportStatus.resolved,
-        flagType: SuspiciousFlagType.spamApplication,
-        proposalSummary:
-            'Automated mass-application bot attempting to submit promotional cryptocurrency referral links across multiple projects.',
-        skills: ['Spamming', 'Crypto Wallets'],
-        resumeFileName: 'Unverified_File.exe',
-        reportDetail: const ApplicationReportDetail(
-          reportId: 'REP-5509-04',
-          reportedBy: 'Automated Platform Firewall',
-          reporterRole: 'System Heuristic',
-          reportedDate: '2026-10-19 05:05 PM',
-          reportCategory: 'Automated Bot Spam & Malicious Payload',
-          reportExplanation:
-              'Account submitted 40 applications within 12 seconds with executable file attachment violating platform security terms.',
-          severity: 'Critical',
-        ),
-        investigationNotes: const [
-          'Executable attachment quarantined by security sandbox.',
-          'Application terminated and student account marked for permanent suspension.',
-        ],
-        investigationHistory: const [
-          InvestigationRecord(
-            id: 'inv_5509_1',
-            action: 'Automated Threat Quarantine',
-            adminName: 'Security Sentinel Watchdog',
-            timestamp: '2026-10-19 05:05 PM',
-            findings: 'Executable payload detected and isolated.',
+      final List<AdminApplicationModel> loaded = [];
+      for (final raw in appRows) {
+        final row = Map<String, dynamic>.from(raw);
+        final id = row['id']?.toString() ?? '';
+        final studentUid =
+            row['student_id']?.toString() ?? row['user_id']?.toString() ?? '';
+        final projId = row['project_id']?.toString() ?? '';
+        final compId = row['company_id']?.toString() ?? '';
+        final compName =
+            row['company_name']?.toString() ?? 'Corporate Partner';
+
+        final rawStatus = (row['status']?.toString() ?? 'Pending').toLowerCase();
+        ApplicationWorkflowStatus workflowStatus;
+        if (rawStatus == 'accepted' ||
+            rawStatus == 'approved' ||
+            rawStatus == 'shortlisted' ||
+            rawStatus == 'in progress' ||
+            rawStatus == 'under review' ||
+            rawStatus == 'completed' ||
+            rawStatus == 'certified') {
+          workflowStatus = ApplicationWorkflowStatus.accepted;
+        } else if (rawStatus == 'rejected') {
+          workflowStatus = ApplicationWorkflowStatus.rejected;
+        } else if (rawStatus == 'withdrawn') {
+          workflowStatus = ApplicationWorkflowStatus.withdrawn;
+        } else {
+          workflowStatus = ApplicationWorkflowStatus.pending;
+        }
+
+        final rawReport =
+            (row['report_status']?.toString() ?? 'clear').toLowerCase();
+        ApplicationReportStatus reportStatus;
+        switch (rawReport) {
+          case 'reported':
+            reportStatus = ApplicationReportStatus.reported;
+            break;
+          case 'under_investigation':
+          case 'underinvestigation':
+            reportStatus = ApplicationReportStatus.underInvestigation;
+            break;
+          case 'resolved':
+            reportStatus = ApplicationReportStatus.resolved;
+            break;
+          case 'dismissed':
+            reportStatus = ApplicationReportStatus.dismissed;
+            break;
+          default:
+            reportStatus = ApplicationReportStatus.clear;
+        }
+
+        final reportReason = row['report_reason']?.toString() ?? '';
+        final flagType = _inferFlagType(reportStatus, reportReason);
+
+        final submittedDt =
+            SupabaseHelper.parseDate(row['submitted_at']) ?? DateTime.now();
+        final subDateStr =
+            '${submittedDt.year}-${submittedDt.month.toString().padLeft(2, '0')}-${submittedDt.day.toString().padLeft(2, '0')}';
+
+        final notesList = <String>[];
+        if (row['investigation_notes'] is List) {
+          for (final n in (row['investigation_notes'] as List)) {
+            if (n.toString().trim().isNotEmpty) {
+              notesList.add(n.toString().trim());
+            }
+          }
+        }
+
+        final resumeUrl = row['resume_link']?.toString().trim();
+        final submittedWorkUrl = row['submitted_work_url']?.toString().trim();
+        final fileName = row['file_name']?.toString().trim() ?? '';
+        final resumeDisplay = fileName.isNotEmpty
+            ? fileName
+            : (resumeUrl != null && resumeUrl.isNotEmpty
+                ? (Uri.tryParse(resumeUrl)?.pathSegments.lastWhere(
+                          (s) => s.isNotEmpty,
+                          orElse: () => 'Submitted_Resume_Link',
+                        ) ??
+                    'Submitted_Resume_Link')
+                : '');
+
+        final history = auditRows
+            .where((l) => l['target']?.toString() == id)
+            .map((l) => InvestigationRecord(
+                  id: l['id']?.toString() ?? '',
+                  action: l['action']?.toString() ?? 'Review Event',
+                  adminName: l['admin_email']?.toString() ?? 'Administrator',
+                  timestamp: SupabaseHelper.formatRelativeTime(l['created_at']),
+                  findings: l['details']?.toString(),
+                ))
+            .toList();
+
+        ApplicationReportDetail? reportDetail;
+        if (reportStatus != ApplicationReportStatus.clear &&
+            reportReason.isNotEmpty) {
+          reportDetail = ApplicationReportDetail(
+            reportId: 'REP-${id.length >= 6 ? id.substring(0, 6).toUpperCase() : id}',
+            reportedBy: row['reported_by']?.toString() ?? compName,
+            reporterRole: 'Platform Report',
+            reportedDate: SupabaseHelper.formatRelativeTime(
+              row['updated_at'] ?? row['submitted_at'],
+            ),
+            reportCategory: flagType == SuspiciousFlagType.none
+                ? 'Compliance Review'
+                : _flagLabel(flagType),
+            reportExplanation: reportReason,
+            severity: reportStatus == ApplicationReportStatus.reported
+                ? 'High'
+                : 'Medium',
+          );
+        }
+
+        loaded.add(
+          AdminApplicationModel(
+            id: id,
+            studentId: studentUid,
+            studentName: row['student_name']?.toString() ?? 'Student Candidate',
+            studentEmail: row['student_email']?.toString() ?? '',
+            university: row['university']?.toString() ?? '',
+            degree: row['student_degree']?.toString() ?? 'BS Computer Science',
+            department:
+                row['student_department']?.toString() ?? 'Computer Science',
+            semester: row['student_semester']?.toString() ?? '',
+            cgpa: (row['student_cgpa'] as num?)?.toDouble() ?? 0.0,
+            isEducationVerified: studentVerifiedByUid[studentUid] ?? false,
+            projectId: projId,
+            projectTitle: row['project_title']?.toString() ?? 'Project',
+            projectCategory:
+                projectCategoryById[projId] ?? 'General',
+            companyId: compId,
+            companyName: compName,
+            companyLiaison: companyLiaisonByNameOrId[compId] ??
+                companyLiaisonByNameOrId[compName.toLowerCase()] ??
+                compName,
+            submissionDate: subDateStr,
+            submissionDateTime: submittedDt,
+            workflowStatus: workflowStatus,
+            reportStatus: reportStatus,
+            flagType: flagType,
+            proposalSummary: row['cover_letter']?.toString() ?? '',
+            skills: SupabaseHelper.parseStringList(row['skills']),
+            resumeFileName: resumeDisplay,
+            resumeUrl: (resumeUrl?.isNotEmpty == true) ? resumeUrl : null,
+            submittedWorkUrl:
+                (submittedWorkUrl?.isNotEmpty == true) ? submittedWorkUrl : null,
+            reportDetail: reportDetail,
+            investigationNotes: notesList,
+            investigationHistory: history,
+            isDecisionModifiedByAdmin: false,
+            administrativeDecisionNote: row['company_feedback']?.toString(),
           ),
-          InvestigationRecord(
-            id: 'inv_5509_2',
-            action: 'Investigation Resolved & Application Revoked',
-            adminName: 'Dr. Tariq Mahmood (SuperAdmin)',
-            timestamp: '2026-10-19 06:00 PM',
-            findings: 'Formal sanction: Application administratively revoked and domain blacklisted.',
-          ),
-        ],
-        isDecisionModifiedByAdmin: true,
-        administrativeDecisionNote:
-            'Administrative decision: Application administratively revoked due to malicious payload.',
-      ),
-    ]);
+        );
+      }
+
+      applicationsNotifier.value = loaded;
+    } catch (e) {
+      debugPrint('AdminApplicationMonitoringService loadFromSupabase error: $e');
+    }
   }
 
-  // 5. Mark Case as Under Review / Investigation
+  SuspiciousFlagType _inferFlagType(
+    ApplicationReportStatus status,
+    String reason,
+  ) {
+    if (status == ApplicationReportStatus.clear ||
+        status == ApplicationReportStatus.dismissed) {
+      return SuspiciousFlagType.none;
+    }
+    final lower = reason.toLowerCase();
+    if (lower.contains('whatsapp') ||
+        lower.contains('off-platform') ||
+        lower.contains('payment')) {
+      return SuspiciousFlagType.offPlatformSolicitation;
+    }
+    if (lower.contains('plagiar')) return SuspiciousFlagType.plagiarism;
+    if (lower.contains('cgpa') ||
+        lower.contains('transcript') ||
+        lower.contains('credential')) {
+      return SuspiciousFlagType.credentialDiscrepancy;
+    }
+    if (lower.contains('spam') || lower.contains('bot')) {
+      return SuspiciousFlagType.spamApplication;
+    }
+    if (lower.contains('imperson')) return SuspiciousFlagType.impersonation;
+    return status == ApplicationReportStatus.reported ||
+            status == ApplicationReportStatus.underInvestigation
+        ? SuspiciousFlagType.spamApplication
+        : SuspiciousFlagType.none;
+  }
+
+  String _flagLabel(SuspiciousFlagType flag) {
+    switch (flag) {
+      case SuspiciousFlagType.none:
+        return 'None';
+      case SuspiciousFlagType.spamApplication:
+        return 'Spam Submissions';
+      case SuspiciousFlagType.credentialDiscrepancy:
+        return 'Credential Tampering';
+      case SuspiciousFlagType.offPlatformSolicitation:
+        return 'Off-Platform Solicitation';
+      case SuspiciousFlagType.plagiarism:
+        return 'Proposal Plagiarism';
+      case SuspiciousFlagType.impersonation:
+        return 'Identity Impersonation';
+    }
+  }
+
   Future<bool> markCaseUnderInvestigation({
     required String applicationId,
     required String adminName,
     required String initialNote,
   }) async {
-    await Future.delayed(const Duration(milliseconds: 300));
-
     final list = List<AdminApplicationModel>.from(applicationsNotifier.value);
     final idx = list.indexWhere((a) => a.id == applicationId);
     if (idx == -1) return false;
@@ -400,16 +323,38 @@ class AdminApplicationMonitoringService {
     final app = list[idx];
     final history = List<InvestigationRecord>.from(app.investigationHistory);
     final notes = List<String>.from(app.investigationNotes);
+    notes.insert(0, '[$adminName]: ${initialNote.trim()}');
 
-    notes.insert(0, '[$adminName]: $initialNote');
+    final supabase = SupabaseHelper.clientOrNull;
+    if (supabase != null && SupabaseHelper.isUuid(applicationId)) {
+      try {
+        await supabase.from('applications').update({
+          'report_status': 'under_investigation',
+          'investigation_notes': notes,
+          'updated_at': DateTime.now().toIso8601String(),
+        }).eq('id', applicationId);
+
+        await supabase.from('admin_audit_logs').insert({
+          'admin_email':
+              SupabaseHelper.currentUser?.email ?? 'admin@campusconnect.edu.pk',
+          'action': 'APPLICATION_INVESTIGATION_STARTED',
+          'target': applicationId,
+          'details': initialNote.trim(),
+        });
+      } catch (e) {
+        debugPrint('markCaseUnderInvestigation error: $e');
+        return false;
+      }
+    }
+
     history.insert(
       0,
       InvestigationRecord(
         id: 'inv_${DateTime.now().millisecondsSinceEpoch}',
         action: 'Case Marked Under Active Investigation',
         adminName: adminName,
-        timestamp: 'Today at ${DateTime.now().hour}:${DateTime.now().minute.toString().padLeft(2, '0')}',
-        note: initialNote,
+        timestamp: 'Just now',
+        note: initialNote.trim(),
       ),
     );
 
@@ -422,14 +367,11 @@ class AdminApplicationMonitoringService {
     return true;
   }
 
-  // 5. Record Investigation Note
   Future<bool> recordInvestigationNote({
     required String applicationId,
     required String adminName,
     required String note,
   }) async {
-    await Future.delayed(const Duration(milliseconds: 250));
-
     final list = List<AdminApplicationModel>.from(applicationsNotifier.value);
     final idx = list.indexWhere((a) => a.id == applicationId);
     if (idx == -1) return false;
@@ -437,16 +379,37 @@ class AdminApplicationMonitoringService {
     final app = list[idx];
     final history = List<InvestigationRecord>.from(app.investigationHistory);
     final notes = List<String>.from(app.investigationNotes);
+    notes.insert(0, '[$adminName]: ${note.trim()}');
 
-    notes.insert(0, '[$adminName]: $note');
+    final supabase = SupabaseHelper.clientOrNull;
+    if (supabase != null && SupabaseHelper.isUuid(applicationId)) {
+      try {
+        await supabase.from('applications').update({
+          'investigation_notes': notes,
+          'updated_at': DateTime.now().toIso8601String(),
+        }).eq('id', applicationId);
+
+        await supabase.from('admin_audit_logs').insert({
+          'admin_email':
+              SupabaseHelper.currentUser?.email ?? 'admin@campusconnect.edu.pk',
+          'action': 'APPLICATION_NOTE_RECORDED',
+          'target': applicationId,
+          'details': note.trim(),
+        });
+      } catch (e) {
+        debugPrint('recordInvestigationNote error: $e');
+        return false;
+      }
+    }
+
     history.insert(
       0,
       InvestigationRecord(
         id: 'inv_${DateTime.now().millisecondsSinceEpoch}',
         action: 'Investigation Note Recorded',
         adminName: adminName,
-        timestamp: 'Today at ${DateTime.now().hour}:${DateTime.now().minute.toString().padLeft(2, '0')}',
-        note: note,
+        timestamp: 'Just now',
+        note: note.trim(),
       ),
     );
 
@@ -458,14 +421,11 @@ class AdminApplicationMonitoringService {
     return true;
   }
 
-  // 5. Dismiss Report (False Flag / No Misconduct)
   Future<bool> dismissReport({
     required String applicationId,
     required String adminName,
     required String reason,
   }) async {
-    await Future.delayed(const Duration(milliseconds: 300));
-
     final list = List<AdminApplicationModel>.from(applicationsNotifier.value);
     final idx = list.indexWhere((a) => a.id == applicationId);
     if (idx == -1) return false;
@@ -473,16 +433,38 @@ class AdminApplicationMonitoringService {
     final app = list[idx];
     final history = List<InvestigationRecord>.from(app.investigationHistory);
     final notes = List<String>.from(app.investigationNotes);
+    notes.insert(0, '[$adminName - Dismissal]: ${reason.trim()}');
 
-    notes.insert(0, '[$adminName - Dismissal]: $reason');
+    final supabase = SupabaseHelper.clientOrNull;
+    if (supabase != null && SupabaseHelper.isUuid(applicationId)) {
+      try {
+        await supabase.from('applications').update({
+          'report_status': 'dismissed',
+          'investigation_notes': notes,
+          'updated_at': DateTime.now().toIso8601String(),
+        }).eq('id', applicationId);
+
+        await supabase.from('admin_audit_logs').insert({
+          'admin_email':
+              SupabaseHelper.currentUser?.email ?? 'admin@campusconnect.edu.pk',
+          'action': 'APPLICATION_REPORT_DISMISSED',
+          'target': applicationId,
+          'details': reason.trim(),
+        });
+      } catch (e) {
+        debugPrint('dismissReport error: $e');
+        return false;
+      }
+    }
+
     history.insert(
       0,
       InvestigationRecord(
         id: 'inv_${DateTime.now().millisecondsSinceEpoch}',
         action: 'Report Dismissed (No Policy Violation)',
         adminName: adminName,
-        timestamp: 'Today',
-        findings: reason,
+        timestamp: 'Just now',
+        findings: reason.trim(),
       ),
     );
 
@@ -496,15 +478,12 @@ class AdminApplicationMonitoringService {
     return true;
   }
 
-  // 5. Resolve Report With Action (Authorize Administrative Decision)
   Future<bool> resolveReportWithAction({
     required String applicationId,
     required String adminName,
     required String resolutionSummary,
     bool revokeApplication = false,
   }) async {
-    await Future.delayed(const Duration(milliseconds: 350));
-
     final list = List<AdminApplicationModel>.from(applicationsNotifier.value);
     final idx = list.indexWhere((a) => a.id == applicationId);
     if (idx == -1) return false;
@@ -515,8 +494,52 @@ class AdminApplicationMonitoringService {
 
     notes.insert(
       0,
-      '[$adminName - Resolution]: $resolutionSummary ${revokeApplication ? "(Application Administratively Revoked)" : ""}',
+      '[$adminName - Resolution]: ${resolutionSummary.trim()}${revokeApplication ? " (Application Administratively Revoked)" : ""}',
     );
+
+    final supabase = SupabaseHelper.clientOrNull;
+    if (supabase != null && SupabaseHelper.isUuid(applicationId)) {
+      try {
+        final updatePayload = <String, dynamic>{
+          'report_status': 'resolved',
+          'investigation_notes': notes,
+          'updated_at': DateTime.now().toIso8601String(),
+        };
+        if (revokeApplication) {
+          updatePayload['status'] = 'Rejected';
+          updatePayload['company_feedback'] = resolutionSummary.trim();
+        }
+        await supabase
+            .from('applications')
+            .update(updatePayload)
+            .eq('id', applicationId);
+
+        if (SupabaseHelper.isUuid(app.studentId)) {
+          await supabase.from('notifications').insert({
+            'user_id': app.studentId,
+            'title': revokeApplication
+                ? 'Application Revoked by Governance'
+                : 'Application Compliance Update',
+            'message': resolutionSummary.trim(),
+            'type': 'compliance',
+            'actor_name': adminName,
+          });
+        }
+
+        await supabase.from('admin_audit_logs').insert({
+          'admin_email':
+              SupabaseHelper.currentUser?.email ?? 'admin@campusconnect.edu.pk',
+          'action': revokeApplication
+              ? 'APPLICATION_REVOKED'
+              : 'APPLICATION_REPORT_RESOLVED',
+          'target': applicationId,
+          'details': resolutionSummary.trim(),
+        });
+      } catch (e) {
+        debugPrint('resolveReportWithAction error: $e');
+        return false;
+      }
+    }
 
     history.insert(
       0,
@@ -526,8 +549,8 @@ class AdminApplicationMonitoringService {
             ? 'Investigation Concluded: Application Revoked'
             : 'Investigation Concluded: Action Recorded',
         adminName: adminName,
-        timestamp: 'Today',
-        findings: resolutionSummary,
+        timestamp: 'Just now',
+        findings: resolutionSummary.trim(),
       ),
     );
 
@@ -537,29 +560,28 @@ class AdminApplicationMonitoringService {
           ? ApplicationWorkflowStatus.rejected
           : app.workflowStatus,
       isDecisionModifiedByAdmin: revokeApplication,
-      administrativeDecisionNote: resolutionSummary,
+      administrativeDecisionNote: resolutionSummary.trim(),
       investigationNotes: notes,
       investigationHistory: history,
     );
     applicationsNotifier.value = list;
 
-    // Cross-panel synchronization with CompanyApplicantService if revoked
     if (revokeApplication) {
       try {
         final applicantService = CompanyApplicantService();
-        applicantService.updateApplicantStatus(
-          applicantId: app.id,
-          newStatus: 'Rejected',
-        );
-      } catch (_) {
-        // Fallback in test suites
-      }
+        final compList =
+            List<ApplicantModel>.from(applicantService.applicantsNotifier.value);
+        final cIdx = compList.indexWhere((a) => a.id == applicationId);
+        if (cIdx != -1) {
+          compList[cIdx] = compList[cIdx].copyWith(status: 'Rejected');
+          applicantService.applicantsNotifier.value = compList;
+        }
+      } catch (_) {}
     }
 
     return true;
   }
 
-  // 7. Export Applications to CSV
   String exportApplicationsCsv(List<AdminApplicationModel> applications) {
     final buffer = StringBuffer();
     buffer.writeln(
@@ -573,5 +595,8 @@ class AdminApplicationMonitoringService {
     }
     return buffer.toString();
   }
-}
 
+  void reset() {
+    applicationsNotifier.value = [];
+  }
+}

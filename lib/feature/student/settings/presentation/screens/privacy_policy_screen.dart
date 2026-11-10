@@ -11,14 +11,19 @@ class PrivacyPolicyScreen extends StatelessWidget {
       backgroundColor: AppColors.background,
       appBar: AppBar(
         title: const Text('Privacy Policy'),
-        leading: IconButton(
-          icon: const Icon(Icons.arrow_back_ios_new_rounded, size: 20),
-          onPressed: () => Navigator.pop(context),
-        ),
+        leading: Navigator.canPop(context)
+            ? IconButton(
+                icon: const Icon(Icons.arrow_back_ios_new_rounded, size: 20),
+                onPressed: () => Navigator.pop(context),
+              )
+            : null,
       ),
-      body: ListView(
-        padding: const EdgeInsets.all(20),
-        children: [
+      body: Center(
+        child: ConstrainedBox(
+          constraints: const BoxConstraints(maxWidth: 780),
+          child: ListView(
+            padding: const EdgeInsets.all(20),
+            children: [
           Container(
             padding: const EdgeInsets.all(16),
             decoration: BoxDecoration(
@@ -94,7 +99,9 @@ class PrivacyPolicyScreen extends StatelessWidget {
             'You may view, edit, or remove your profile information at any time from the Profile tab or submit a data removal request via the Contact Support screen.',
           ),
           const SizedBox(height: 16),
-        ],
+            ],
+          ),
+        ),
       ),
     );
   }

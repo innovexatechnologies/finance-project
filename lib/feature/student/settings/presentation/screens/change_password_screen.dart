@@ -1,8 +1,10 @@
 import 'package:flutter/material.dart';
 import 'package:google_fonts/google_fonts.dart';
-import 'package:supabase_flutter/supabase_flutter.dart';
+import 'package:supabase_flutter/supabase_flutter.dart'
+    show AuthException, UserAttributes;
 import 'package:link_vibe/core/constants/app_colors.dart';
 import 'package:link_vibe/core/services/app_data_service.dart';
+import 'package:link_vibe/core/services/supabase_helper.dart';
 
 class ChangePasswordScreen extends StatefulWidget {
   const ChangePasswordScreen({super.key});
@@ -24,12 +26,13 @@ class _ChangePasswordScreenState extends State<ChangePasswordScreen> {
   @override
   void initState() {
     super.initState();
-    final currentEmail = AppDataService.instance.userEmail;
-    final sbEmail = Supabase.instance.client.auth.currentUser?.email;
-    final profileEmail = AppDataService.instance.getProfile()['email']?.toString();
-    _emailController.text = (currentEmail.isNotEmpty)
+    final currentEmail = AppDataService.instance.userEmail.trim();
+    final sbEmail = SupabaseHelper.currentUser?.email?.trim() ?? '';
+    final profileEmail =
+        AppDataService.instance.getProfile()['email']?.toString().trim() ?? '';
+    _emailController.text = currentEmail.isNotEmpty
         ? currentEmail
-        : (sbEmail ?? profileEmail ?? 'ahmed.khan@student.edu.pk');
+        : (sbEmail.isNotEmpty ? sbEmail : profileEmail);
   }
 
   @override
@@ -52,14 +55,31 @@ class _ChangePasswordScreenState extends State<ChangePasswordScreen> {
       return;
     }
 
+    final supabase = SupabaseHelper.clientOrNull;
+    if (supabase == null) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(
+          content: Text(
+            'Cloud authentication service is unavailable. Connect to Supabase to send password reset emails.',
+          ),
+          backgroundColor: AppColors.statusPending,
+        ),
+      );
+      return;
+    }
+
     setState(() => _isSendingEmail = true);
 
     try {
-      await Supabase.instance.client.auth.resetPasswordForEmail(email);
+      await supabase.auth.resetPasswordForEmail(
+        email,
+        redirectTo: SupabaseHelper.emailRedirectUrl,
+      );
 
       await AppDataService.instance.addNotification(
         title: 'Password Reset Email Sent',
-        subtitle: 'Password reset link sent to $email. Follow instructions in your email.',
+        subtitle:
+            'Password reset link sent to $email. Follow the instructions in your inbox.',
         time: 'Just now',
         type: 'default',
       );
@@ -68,7 +88,7 @@ class _ChangePasswordScreenState extends State<ChangePasswordScreen> {
       ScaffoldMessenger.of(context).showSnackBar(
         SnackBar(
           content: Text(
-            'Password reset link successfully sent to $email! Please check your inbox or spam.',
+            'Password reset link sent to $email. Please check your inbox or spam folder.',
           ),
           backgroundColor: AppColors.statusOpen,
           duration: const Duration(seconds: 4),
@@ -77,22 +97,17 @@ class _ChangePasswordScreenState extends State<ChangePasswordScreen> {
     } on AuthException catch (e) {
       if (!mounted) return;
       ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(content: Text(e.message), backgroundColor: Colors.redAccent),
+        SnackBar(
+          content: Text(SupabaseHelper.friendlyError(e)),
+          backgroundColor: Colors.redAccent,
+        ),
       );
     } catch (e) {
       if (!mounted) return;
-      // Even if offline/local dev, record notification and show guidance
-      await AppDataService.instance.addNotification(
-        title: 'Password Reset Requested',
-        subtitle: 'Instructions generated for $email.',
-        time: 'Just now',
-        type: 'default',
-      );
-      if (!mounted) return;
       ScaffoldMessenger.of(context).showSnackBar(
         SnackBar(
-          content: Text('Reset link requested for $email. Please check your inbox.'),
-          backgroundColor: AppColors.primaryBlue,
+          content: Text(SupabaseHelper.friendlyError(e)),
+          backgroundColor: Colors.redAccent,
         ),
       );
     } finally {
@@ -139,19 +154,14 @@ class _ChangePasswordScreenState extends State<ChangePasswordScreen> {
     try {
       final email = _emailController.text.trim();
 
-      // 1. Always update local credential store permanently
-      await AppDataService.instance.updateAccountPassword(email, newPass);
+      final supabase = SupabaseHelper.clientOrNull;
+      final user = supabase?.auth.currentUser;
+      if (supabase != null && user != null) {
+        await supabase.auth.updateUser(UserAttributes(password: newPass));
+      }
 
-      // 2. Also update in Supabase if session active
-      try {
-        final user = Supabase.instance.client.auth.currentUser;
-        if (user != null) {
-          await Supabase.instance.client.auth.updateUser(
-            UserAttributes(password: newPass),
-          );
-        }
-      } catch (cloudErr) {
-        debugPrint('Supabase cloud updateUser note: $cloudErr');
+      if (email.isNotEmpty) {
+        await AppDataService.instance.updateAccountPassword(email, newPass);
       }
 
       await AppDataService.instance.addNotification(
@@ -167,7 +177,9 @@ class _ChangePasswordScreenState extends State<ChangePasswordScreen> {
 
       ScaffoldMessenger.of(context).showSnackBar(
         const SnackBar(
-          content: Text('Password updated successfully! You can now log in with this new password.'),
+          content: Text(
+            'Password updated successfully! You can now sign in with your new password.',
+          ),
           backgroundColor: AppColors.statusOpen,
         ),
       );
@@ -176,12 +188,12 @@ class _ChangePasswordScreenState extends State<ChangePasswordScreen> {
       ScaffoldMessenger.of(context).showSnackBar(
         SnackBar(content: Text(e.message), backgroundColor: Colors.redAccent),
       );
-    } catch (_) {
+    } catch (e) {
       if (!mounted) return;
       ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(
-          content: Text('Password updated successfully! You can now log in with this new password.'),
-          backgroundColor: AppColors.statusOpen,
+        SnackBar(
+          content: Text('Unable to update password: $e'),
+          backgroundColor: Colors.redAccent,
         ),
       );
     } finally {
@@ -195,210 +207,264 @@ class _ChangePasswordScreenState extends State<ChangePasswordScreen> {
       backgroundColor: AppColors.background,
       appBar: AppBar(
         title: const Text('Change Password'),
-        leading: IconButton(
-          icon: const Icon(Icons.arrow_back_ios_new_rounded, size: 20),
-          onPressed: () => Navigator.pop(context),
-        ),
+        leading: Navigator.canPop(context)
+            ? IconButton(
+                icon: const Icon(Icons.arrow_back_ios_new_rounded, size: 20),
+                onPressed: () => Navigator.pop(context),
+              )
+            : null,
       ),
-      body: SingleChildScrollView(
-        padding: const EdgeInsets.all(20),
-        child: Column(
-          crossAxisAlignment: CrossAxisAlignment.start,
-          children: [
-            // Header Info Card
-            Container(
-              padding: const EdgeInsets.all(16),
-              decoration: BoxDecoration(
-                color: AppColors.primaryBlue.withValues(alpha: 0.08),
-                borderRadius: BorderRadius.circular(16),
-                border: Border.all(
-                  color: AppColors.primaryBlue.withValues(alpha: 0.2),
-                ),
-              ),
-              child: Row(
-                children: [
-                  const Icon(
-                    Icons.security_rounded,
-                    color: AppColors.primaryBlue,
-                    size: 32,
-                  ),
-                  const SizedBox(width: 14),
-                  Expanded(
-                    child: Column(
-                      crossAxisAlignment: CrossAxisAlignment.start,
-                      children: [
-                        Text(
-                          'Account Security',
-                          style: GoogleFonts.poppins(
-                            fontWeight: FontWeight.bold,
-                            fontSize: 14,
-                            color: AppColors.deepNavy,
-                          ),
-                        ),
-                        const SizedBox(height: 2),
-                        Text(
-                          'You can reset your password via your verified email link or update it directly below.',
-                          style: GoogleFonts.inter(
-                            fontSize: 12,
-                            color: AppColors.darkText,
-                          ),
-                        ),
-                      ],
-                    ),
-                  ),
-                ],
-              ),
-            ),
-            const SizedBox(height: 24),
-
-            // Method 1: Email Reset Link
-            Text(
-              'Reset via Email',
-              style: GoogleFonts.poppins(
-                fontSize: 15,
-                fontWeight: FontWeight.bold,
-                color: AppColors.deepNavy,
-              ),
-            ),
-            const SizedBox(height: 6),
-            Text(
-              'A password reset link will be sent to your registered email address.',
-              style: GoogleFonts.inter(fontSize: 12, color: AppColors.grayText),
-            ),
-            const SizedBox(height: 12),
-            TextField(
-              controller: _emailController,
-              keyboardType: TextInputType.emailAddress,
-              decoration: InputDecoration(
-                labelText: 'Registered Email',
-                prefixIcon: const Icon(Icons.email_outlined, color: AppColors.primaryBlue),
-                border: OutlineInputBorder(borderRadius: BorderRadius.circular(12)),
-              ),
-            ),
-            const SizedBox(height: 12),
-            SizedBox(
-              width: double.infinity,
-              height: 48,
-              child: ElevatedButton.icon(
-                onPressed: _isSendingEmail ? null : _handleSendResetEmail,
-                icon: _isSendingEmail
-                    ? const SizedBox(
-                        width: 18,
-                        height: 18,
-                        child: CircularProgressIndicator(color: Colors.white, strokeWidth: 2),
-                      )
-                    : const Icon(Icons.send_rounded, size: 18),
-                label: Text(
-                  _isSendingEmail ? 'Sending Link...' : 'Send Password Reset Email',
-                  style: GoogleFonts.poppins(fontWeight: FontWeight.w600, fontSize: 14),
-                ),
-                style: ElevatedButton.styleFrom(
-                  backgroundColor: AppColors.primaryBlue,
-                  foregroundColor: Colors.white,
-                  shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
-                ),
-              ),
-            ),
-            const SizedBox(height: 32),
-
-            // Method 2: Direct Password Update
-            Row(
+      body: Center(
+        child: ConstrainedBox(
+          constraints: const BoxConstraints(maxWidth: 680),
+          child: SingleChildScrollView(
+            padding: const EdgeInsets.all(20),
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
               children: [
-                const Expanded(child: Divider()),
-                Padding(
-                  padding: const EdgeInsets.symmetric(horizontal: 12),
-                  child: Text(
-                    'OR UPDATE DIRECTLY',
-                    style: GoogleFonts.inter(
-                      fontSize: 11,
-                      fontWeight: FontWeight.bold,
-                      color: AppColors.grayText,
+                // Header Info Card
+                Container(
+                  padding: const EdgeInsets.all(16),
+                  decoration: BoxDecoration(
+                    color: AppColors.primaryBlue.withValues(alpha: 0.08),
+                    borderRadius: BorderRadius.circular(16),
+                    border: Border.all(
+                      color: AppColors.primaryBlue.withValues(alpha: 0.2),
+                    ),
+                  ),
+                  child: Row(
+                    children: [
+                      const Icon(
+                        Icons.security_rounded,
+                        color: AppColors.primaryBlue,
+                        size: 32,
+                      ),
+                      const SizedBox(width: 14),
+                      Expanded(
+                        child: Column(
+                          crossAxisAlignment: CrossAxisAlignment.start,
+                          children: [
+                            Text(
+                              'Account Security',
+                              style: GoogleFonts.poppins(
+                                fontWeight: FontWeight.bold,
+                                fontSize: 14,
+                                color: AppColors.deepNavy,
+                              ),
+                            ),
+                            const SizedBox(height: 2),
+                            Text(
+                              'Reset your password via your registered email link or update it directly for your active session.',
+                              style: GoogleFonts.inter(
+                                fontSize: 12,
+                                color: AppColors.darkText,
+                              ),
+                            ),
+                          ],
+                        ),
+                      ),
+                    ],
+                  ),
+                ),
+                const SizedBox(height: 24),
+
+                // Method 1: Email Reset Link
+                Text(
+                  'Reset via Email',
+                  style: GoogleFonts.poppins(
+                    fontSize: 15,
+                    fontWeight: FontWeight.bold,
+                    color: AppColors.deepNavy,
+                  ),
+                ),
+                const SizedBox(height: 6),
+                Text(
+                  'A password reset link will be sent to your registered email address.',
+                  style: GoogleFonts.inter(
+                      fontSize: 12, color: AppColors.grayText),
+                ),
+                const SizedBox(height: 12),
+                TextField(
+                  controller: _emailController,
+                  keyboardType: TextInputType.emailAddress,
+                  decoration: InputDecoration(
+                    labelText: 'Registered Email',
+                    hintText: 'Enter your account email',
+                    prefixIcon: const Icon(
+                      Icons.email_outlined,
+                      color: AppColors.primaryBlue,
+                    ),
+                    border: OutlineInputBorder(
+                      borderRadius: BorderRadius.circular(12),
                     ),
                   ),
                 ),
-                const Expanded(child: Divider()),
+                const SizedBox(height: 12),
+                SizedBox(
+                  width: double.infinity,
+                  height: 48,
+                  child: ElevatedButton.icon(
+                    onPressed: _isSendingEmail ? null : _handleSendResetEmail,
+                    icon: _isSendingEmail
+                        ? const SizedBox(
+                            width: 18,
+                            height: 18,
+                            child: CircularProgressIndicator(
+                              color: Colors.white,
+                              strokeWidth: 2,
+                            ),
+                          )
+                        : const Icon(Icons.send_rounded, size: 18),
+                    label: Text(
+                      _isSendingEmail
+                          ? 'Sending Link...'
+                          : 'Send Password Reset Email',
+                      style: GoogleFonts.poppins(
+                        fontWeight: FontWeight.w600,
+                        fontSize: 14,
+                      ),
+                    ),
+                    style: ElevatedButton.styleFrom(
+                      backgroundColor: AppColors.primaryBlue,
+                      foregroundColor: Colors.white,
+                      shape: RoundedRectangleBorder(
+                        borderRadius: BorderRadius.circular(12),
+                      ),
+                    ),
+                  ),
+                ),
+                const SizedBox(height: 32),
+
+                // Method 2: Direct Password Update
+                Row(
+                  children: [
+                    const Expanded(child: Divider()),
+                    Padding(
+                      padding: const EdgeInsets.symmetric(horizontal: 12),
+                      child: Text(
+                        'OR UPDATE DIRECTLY',
+                        style: GoogleFonts.inter(
+                          fontSize: 11,
+                          fontWeight: FontWeight.bold,
+                          color: AppColors.grayText,
+                        ),
+                      ),
+                    ),
+                    const Expanded(child: Divider()),
+                  ],
+                ),
+                const SizedBox(height: 24),
+
+                Text(
+                  'New Password',
+                  style: GoogleFonts.poppins(
+                    fontSize: 14,
+                    fontWeight: FontWeight.w600,
+                    color: AppColors.deepNavy,
+                  ),
+                ),
+                const SizedBox(height: 8),
+                TextField(
+                  controller: _newPasswordController,
+                  obscureText: _obscureNewPass,
+                  decoration: InputDecoration(
+                    hintText: 'Enter new password (min. 6 chars)',
+                    prefixIcon: const Icon(
+                      Icons.lock_outline_rounded,
+                      color: AppColors.primaryBlue,
+                    ),
+                    suffixIcon: IconButton(
+                      icon: Icon(
+                        _obscureNewPass
+                            ? Icons.visibility_off_outlined
+                            : Icons.visibility_outlined,
+                        color: AppColors.grayText,
+                      ),
+                      onPressed: () =>
+                          setState(() => _obscureNewPass = !_obscureNewPass),
+                    ),
+                    border: OutlineInputBorder(
+                      borderRadius: BorderRadius.circular(12),
+                    ),
+                  ),
+                ),
+                const SizedBox(height: 16),
+
+                Text(
+                  'Confirm New Password',
+                  style: GoogleFonts.poppins(
+                    fontSize: 14,
+                    fontWeight: FontWeight.w600,
+                    color: AppColors.deepNavy,
+                  ),
+                ),
+                const SizedBox(height: 8),
+                TextField(
+                  controller: _confirmPasswordController,
+                  obscureText: _obscureConfirmPass,
+                  decoration: InputDecoration(
+                    hintText: 'Re-enter new password',
+                    prefixIcon: const Icon(
+                      Icons.lock_reset_rounded,
+                      color: AppColors.primaryBlue,
+                    ),
+                    suffixIcon: IconButton(
+                      icon: Icon(
+                        _obscureConfirmPass
+                            ? Icons.visibility_off_outlined
+                            : Icons.visibility_outlined,
+                        color: AppColors.grayText,
+                      ),
+                      onPressed: () => setState(
+                          () => _obscureConfirmPass = !_obscureConfirmPass),
+                    ),
+                    border: OutlineInputBorder(
+                      borderRadius: BorderRadius.circular(12),
+                    ),
+                  ),
+                ),
+                const SizedBox(height: 20),
+
+                SizedBox(
+                  width: double.infinity,
+                  height: 48,
+                  child: ElevatedButton.icon(
+                    onPressed:
+                        _isUpdatingPassword ? null : _handleUpdatePassword,
+                    icon: _isUpdatingPassword
+                        ? const SizedBox(
+                            width: 18,
+                            height: 18,
+                            child: CircularProgressIndicator(
+                              color: Colors.white,
+                              strokeWidth: 2,
+                            ),
+                          )
+                        : const Icon(
+                            Icons.check_circle_outline_rounded,
+                            size: 18,
+                          ),
+                    label: Text(
+                      _isUpdatingPassword
+                          ? 'Updating...'
+                          : 'Update Password Now',
+                      style: GoogleFonts.poppins(
+                        fontWeight: FontWeight.w600,
+                        fontSize: 14,
+                      ),
+                    ),
+                    style: ElevatedButton.styleFrom(
+                      backgroundColor: AppColors.deepNavy,
+                      foregroundColor: Colors.white,
+                      shape: RoundedRectangleBorder(
+                        borderRadius: BorderRadius.circular(12),
+                      ),
+                    ),
+                  ),
+                ),
               ],
             ),
-            const SizedBox(height: 24),
-
-            Text(
-              'New Password',
-              style: GoogleFonts.poppins(
-                fontSize: 14,
-                fontWeight: FontWeight.w600,
-                color: AppColors.deepNavy,
-              ),
-            ),
-            const SizedBox(height: 8),
-            TextField(
-              controller: _newPasswordController,
-              obscureText: _obscureNewPass,
-              decoration: InputDecoration(
-                hintText: 'Enter new password (min. 6 chars)',
-                prefixIcon: const Icon(Icons.lock_outline_rounded, color: AppColors.primaryBlue),
-                suffixIcon: IconButton(
-                  icon: Icon(
-                    _obscureNewPass ? Icons.visibility_off_outlined : Icons.visibility_outlined,
-                    color: AppColors.grayText,
-                  ),
-                  onPressed: () => setState(() => _obscureNewPass = !_obscureNewPass),
-                ),
-                border: OutlineInputBorder(borderRadius: BorderRadius.circular(12)),
-              ),
-            ),
-            const SizedBox(height: 16),
-
-            Text(
-              'Confirm New Password',
-              style: GoogleFonts.poppins(
-                fontSize: 14,
-                fontWeight: FontWeight.w600,
-                color: AppColors.deepNavy,
-              ),
-            ),
-            const SizedBox(height: 8),
-            TextField(
-              controller: _confirmPasswordController,
-              obscureText: _obscureConfirmPass,
-              decoration: InputDecoration(
-                hintText: 'Re-enter new password',
-                prefixIcon: const Icon(Icons.lock_reset_rounded, color: AppColors.primaryBlue),
-                suffixIcon: IconButton(
-                  icon: Icon(
-                    _obscureConfirmPass ? Icons.visibility_off_outlined : Icons.visibility_outlined,
-                    color: AppColors.grayText,
-                  ),
-                  onPressed: () => setState(() => _obscureConfirmPass = !_obscureConfirmPass),
-                ),
-                border: OutlineInputBorder(borderRadius: BorderRadius.circular(12)),
-              ),
-            ),
-            const SizedBox(height: 20),
-
-            SizedBox(
-              width: double.infinity,
-              height: 48,
-              child: ElevatedButton.icon(
-                onPressed: _isUpdatingPassword ? null : _handleUpdatePassword,
-                icon: _isUpdatingPassword
-                    ? const SizedBox(
-                        width: 18,
-                        height: 18,
-                        child: CircularProgressIndicator(color: Colors.white, strokeWidth: 2),
-                      )
-                    : const Icon(Icons.check_circle_outline_rounded, size: 18),
-                label: Text(
-                  _isUpdatingPassword ? 'Updating...' : 'Update Password Now',
-                  style: GoogleFonts.poppins(fontWeight: FontWeight.w600, fontSize: 14),
-                ),
-                style: ElevatedButton.styleFrom(
-                  backgroundColor: AppColors.deepNavy,
-                  foregroundColor: Colors.white,
-                  shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
-                ),
-              ),
-            ),
-          ],
+          ),
         ),
       ),
     );

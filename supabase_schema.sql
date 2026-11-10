@@ -1,9 +1,9 @@
 -- ============================================================================
--- CAMPUSCONNECT / LINKVIBE — RESILIENT SUPABASE DATABASE & STORAGE SCHEMA
+-- CAMPUSCONNECT / LINKVIBE — PRODUCTION SUPABASE DATABASE & STORAGE SCHEMA
 -- ============================================================================
--- Designed to run smoothly without ANY constraint violation errors.
--- Safely drops legacy check constraints, normalizes existing rows,
--- sets up triggers, public storage buckets, and permissive RLS policies.
+-- Idempotent & backward-compatible migration script for Student, Company, and
+-- Admin panels. Safely evolves existing tables, fixes cross-panel RLS
+-- permissions, sets up public storage buckets, and configures default Admin.
 -- ============================================================================
 
 -- ----------------------------------------------------------------------------
@@ -21,29 +21,38 @@ CREATE TABLE IF NOT EXISTS public.profiles (
   email TEXT,
   user_type TEXT DEFAULT 'Student',
   university TEXT,
+  department TEXT DEFAULT 'Computer Science',
+  degree TEXT DEFAULT 'BS',
+  semester TEXT DEFAULT '1st Semester',
+  cgpa DOUBLE PRECISION DEFAULT 0.0,
   phone TEXT,
   bio TEXT,
   avatar_url TEXT,
+  is_verified BOOLEAN DEFAULT false,
+  account_status TEXT DEFAULT 'active',
   created_at TIMESTAMPTZ DEFAULT timezone('utc'::text, now()) NOT NULL,
   updated_at TIMESTAMPTZ DEFAULT timezone('utc'::text, now()) NOT NULL
 );
 
--- Ensure all columns exist if table was created previously
 ALTER TABLE public.profiles ADD COLUMN IF NOT EXISTS name TEXT;
 ALTER TABLE public.profiles ADD COLUMN IF NOT EXISTS email TEXT;
 ALTER TABLE public.profiles ADD COLUMN IF NOT EXISTS user_type TEXT DEFAULT 'Student';
 ALTER TABLE public.profiles ADD COLUMN IF NOT EXISTS university TEXT;
+ALTER TABLE public.profiles ADD COLUMN IF NOT EXISTS department TEXT DEFAULT 'Computer Science';
+ALTER TABLE public.profiles ADD COLUMN IF NOT EXISTS degree TEXT DEFAULT 'BS';
+ALTER TABLE public.profiles ADD COLUMN IF NOT EXISTS semester TEXT DEFAULT '1st Semester';
+ALTER TABLE public.profiles ADD COLUMN IF NOT EXISTS cgpa DOUBLE PRECISION DEFAULT 0.0;
 ALTER TABLE public.profiles ADD COLUMN IF NOT EXISTS phone TEXT;
 ALTER TABLE public.profiles ADD COLUMN IF NOT EXISTS bio TEXT;
 ALTER TABLE public.profiles ADD COLUMN IF NOT EXISTS avatar_url TEXT;
+ALTER TABLE public.profiles ADD COLUMN IF NOT EXISTS is_verified BOOLEAN DEFAULT false;
+ALTER TABLE public.profiles ADD COLUMN IF NOT EXISTS account_status TEXT DEFAULT 'active';
 ALTER TABLE public.profiles ADD COLUMN IF NOT EXISTS created_at TIMESTAMPTZ DEFAULT timezone('utc'::text, now());
 ALTER TABLE public.profiles ADD COLUMN IF NOT EXISTS updated_at TIMESTAMPTZ DEFAULT timezone('utc'::text, now());
 
--- Drop legacy check constraints completely so they never block existing or new rows
 ALTER TABLE public.profiles DROP CONSTRAINT IF EXISTS profiles_user_type_check;
 ALTER TABLE public.profiles DROP CONSTRAINT IF EXISTS profiles_role_check;
 
--- Clean up any null or invalid user_type values in existing rows
 UPDATE public.profiles
 SET user_type = 'Student'
 WHERE user_type IS NULL OR trim(user_type) = '';
@@ -56,12 +65,29 @@ CREATE TABLE IF NOT EXISTS public.companies (
   user_id UUID REFERENCES auth.users(id) ON DELETE CASCADE,
   company_name TEXT,
   email TEXT,
-  industry TEXT DEFAULT 'Information Technology',
-  location TEXT DEFAULT 'Lahore, Pakistan',
-  website TEXT,
-  description TEXT,
+  industry TEXT DEFAULT 'Software & Cloud Services',
+  location TEXT DEFAULT '',
+  city TEXT DEFAULT '',
+  address TEXT DEFAULT '',
+  website TEXT DEFAULT '',
+  description TEXT DEFAULT '',
+  contact_person TEXT DEFAULT '',
+  phone TEXT DEFAULT '',
+  registration_number TEXT DEFAULT '',
   logo_url TEXT,
-  verification_status TEXT DEFAULT 'verified',
+  logo_initial TEXT DEFAULT 'CO',
+  is_email_verified BOOLEAN DEFAULT false,
+  verification_status TEXT DEFAULT 'not_submitted',
+  account_status TEXT DEFAULT 'active',
+  evidence_file_name TEXT,
+  evidence_file_type TEXT,
+  evidence_file_size TEXT,
+  evidence_url TEXT,
+  admin_feedback TEXT,
+  reviewer_name TEXT,
+  suspension_reason TEXT,
+  submitted_at TIMESTAMPTZ,
+  reviewed_at TIMESTAMPTZ,
   created_at TIMESTAMPTZ DEFAULT timezone('utc'::text, now()) NOT NULL,
   updated_at TIMESTAMPTZ DEFAULT timezone('utc'::text, now()) NOT NULL
 );
@@ -69,12 +95,29 @@ CREATE TABLE IF NOT EXISTS public.companies (
 ALTER TABLE public.companies ADD COLUMN IF NOT EXISTS user_id UUID REFERENCES auth.users(id) ON DELETE CASCADE;
 ALTER TABLE public.companies ADD COLUMN IF NOT EXISTS company_name TEXT;
 ALTER TABLE public.companies ADD COLUMN IF NOT EXISTS email TEXT;
-ALTER TABLE public.companies ADD COLUMN IF NOT EXISTS industry TEXT DEFAULT 'Information Technology';
-ALTER TABLE public.companies ADD COLUMN IF NOT EXISTS location TEXT DEFAULT 'Lahore, Pakistan';
-ALTER TABLE public.companies ADD COLUMN IF NOT EXISTS website TEXT;
-ALTER TABLE public.companies ADD COLUMN IF NOT EXISTS description TEXT;
+ALTER TABLE public.companies ADD COLUMN IF NOT EXISTS industry TEXT DEFAULT 'Software & Cloud Services';
+ALTER TABLE public.companies ADD COLUMN IF NOT EXISTS location TEXT DEFAULT '';
+ALTER TABLE public.companies ADD COLUMN IF NOT EXISTS city TEXT DEFAULT '';
+ALTER TABLE public.companies ADD COLUMN IF NOT EXISTS address TEXT DEFAULT '';
+ALTER TABLE public.companies ADD COLUMN IF NOT EXISTS website TEXT DEFAULT '';
+ALTER TABLE public.companies ADD COLUMN IF NOT EXISTS description TEXT DEFAULT '';
+ALTER TABLE public.companies ADD COLUMN IF NOT EXISTS contact_person TEXT DEFAULT '';
+ALTER TABLE public.companies ADD COLUMN IF NOT EXISTS phone TEXT DEFAULT '';
+ALTER TABLE public.companies ADD COLUMN IF NOT EXISTS registration_number TEXT DEFAULT '';
 ALTER TABLE public.companies ADD COLUMN IF NOT EXISTS logo_url TEXT;
-ALTER TABLE public.companies ADD COLUMN IF NOT EXISTS verification_status TEXT DEFAULT 'verified';
+ALTER TABLE public.companies ADD COLUMN IF NOT EXISTS logo_initial TEXT DEFAULT 'CO';
+ALTER TABLE public.companies ADD COLUMN IF NOT EXISTS is_email_verified BOOLEAN DEFAULT false;
+ALTER TABLE public.companies ADD COLUMN IF NOT EXISTS verification_status TEXT DEFAULT 'not_submitted';
+ALTER TABLE public.companies ADD COLUMN IF NOT EXISTS account_status TEXT DEFAULT 'active';
+ALTER TABLE public.companies ADD COLUMN IF NOT EXISTS evidence_file_name TEXT;
+ALTER TABLE public.companies ADD COLUMN IF NOT EXISTS evidence_file_type TEXT;
+ALTER TABLE public.companies ADD COLUMN IF NOT EXISTS evidence_file_size TEXT;
+ALTER TABLE public.companies ADD COLUMN IF NOT EXISTS evidence_url TEXT;
+ALTER TABLE public.companies ADD COLUMN IF NOT EXISTS admin_feedback TEXT;
+ALTER TABLE public.companies ADD COLUMN IF NOT EXISTS reviewer_name TEXT;
+ALTER TABLE public.companies ADD COLUMN IF NOT EXISTS suspension_reason TEXT;
+ALTER TABLE public.companies ADD COLUMN IF NOT EXISTS submitted_at TIMESTAMPTZ;
+ALTER TABLE public.companies ADD COLUMN IF NOT EXISTS reviewed_at TIMESTAMPTZ;
 ALTER TABLE public.companies ADD COLUMN IF NOT EXISTS created_at TIMESTAMPTZ DEFAULT timezone('utc'::text, now());
 ALTER TABLE public.companies ADD COLUMN IF NOT EXISTS updated_at TIMESTAMPTZ DEFAULT timezone('utc'::text, now());
 
@@ -88,12 +131,21 @@ CREATE TABLE IF NOT EXISTS public.students (
   user_id UUID REFERENCES auth.users(id) ON DELETE CASCADE,
   full_name TEXT,
   email TEXT,
+  phone TEXT DEFAULT '',
   university TEXT,
   department TEXT DEFAULT 'Computer Science',
   degree TEXT DEFAULT 'BS',
-  bio TEXT,
-  resume_url TEXT,
+  semester TEXT DEFAULT '1st Semester',
+  cgpa DOUBLE PRECISION DEFAULT 0.0,
+  bio TEXT DEFAULT '',
+  resume_url TEXT DEFAULT '',
+  github_url TEXT DEFAULT '',
+  portfolio_url TEXT DEFAULT '',
   skills TEXT[] DEFAULT '{}',
+  verification_status TEXT DEFAULT 'pending',
+  verification_doc TEXT DEFAULT '',
+  account_status TEXT DEFAULT 'active',
+  suspension_reason TEXT,
   created_at TIMESTAMPTZ DEFAULT timezone('utc'::text, now()) NOT NULL,
   updated_at TIMESTAMPTZ DEFAULT timezone('utc'::text, now()) NOT NULL
 );
@@ -101,12 +153,21 @@ CREATE TABLE IF NOT EXISTS public.students (
 ALTER TABLE public.students ADD COLUMN IF NOT EXISTS user_id UUID REFERENCES auth.users(id) ON DELETE CASCADE;
 ALTER TABLE public.students ADD COLUMN IF NOT EXISTS full_name TEXT;
 ALTER TABLE public.students ADD COLUMN IF NOT EXISTS email TEXT;
+ALTER TABLE public.students ADD COLUMN IF NOT EXISTS phone TEXT DEFAULT '';
 ALTER TABLE public.students ADD COLUMN IF NOT EXISTS university TEXT;
 ALTER TABLE public.students ADD COLUMN IF NOT EXISTS department TEXT DEFAULT 'Computer Science';
 ALTER TABLE public.students ADD COLUMN IF NOT EXISTS degree TEXT DEFAULT 'BS';
-ALTER TABLE public.students ADD COLUMN IF NOT EXISTS bio TEXT;
-ALTER TABLE public.students ADD COLUMN IF NOT EXISTS resume_url TEXT;
+ALTER TABLE public.students ADD COLUMN IF NOT EXISTS semester TEXT DEFAULT '1st Semester';
+ALTER TABLE public.students ADD COLUMN IF NOT EXISTS cgpa DOUBLE PRECISION DEFAULT 0.0;
+ALTER TABLE public.students ADD COLUMN IF NOT EXISTS bio TEXT DEFAULT '';
+ALTER TABLE public.students ADD COLUMN IF NOT EXISTS resume_url TEXT DEFAULT '';
+ALTER TABLE public.students ADD COLUMN IF NOT EXISTS github_url TEXT DEFAULT '';
+ALTER TABLE public.students ADD COLUMN IF NOT EXISTS portfolio_url TEXT DEFAULT '';
 ALTER TABLE public.students ADD COLUMN IF NOT EXISTS skills TEXT[] DEFAULT '{}';
+ALTER TABLE public.students ADD COLUMN IF NOT EXISTS verification_status TEXT DEFAULT 'pending';
+ALTER TABLE public.students ADD COLUMN IF NOT EXISTS verification_doc TEXT DEFAULT '';
+ALTER TABLE public.students ADD COLUMN IF NOT EXISTS account_status TEXT DEFAULT 'active';
+ALTER TABLE public.students ADD COLUMN IF NOT EXISTS suspension_reason TEXT;
 ALTER TABLE public.students ADD COLUMN IF NOT EXISTS created_at TIMESTAMPTZ DEFAULT timezone('utc'::text, now());
 ALTER TABLE public.students ADD COLUMN IF NOT EXISTS updated_at TIMESTAMPTZ DEFAULT timezone('utc'::text, now());
 
@@ -122,12 +183,22 @@ CREATE TABLE IF NOT EXISTS public.projects (
   company_name TEXT,
   category TEXT DEFAULT 'Development',
   description TEXT,
-  requirements TEXT,
-  duration TEXT DEFAULT '4-6 Weeks',
+  requirements TEXT DEFAULT '',
+  deliverables TEXT DEFAULT '',
+  additional_instructions TEXT DEFAULT '',
+  work_mode TEXT DEFAULT 'Remote',
+  duration TEXT DEFAULT '3-4 Weeks',
+  deadline TEXT DEFAULT 'Flexible',
+  openings INTEGER DEFAULT 1,
+  skills TEXT[] DEFAULT '{}',
   stipend TEXT DEFAULT 'Academic Credit / Verified Certificate',
-  budget TEXT,
+  budget TEXT DEFAULT '',
   status TEXT DEFAULT 'Open',
+  assigned_student TEXT,
+  progress DOUBLE PRECISION DEFAULT 0.0,
   attachment_url TEXT,
+  moderation_reason TEXT,
+  moderator_name TEXT,
   created_at TIMESTAMPTZ DEFAULT timezone('utc'::text, now()) NOT NULL,
   updated_at TIMESTAMPTZ DEFAULT timezone('utc'::text, now()) NOT NULL
 );
@@ -139,12 +210,22 @@ ALTER TABLE public.projects ADD COLUMN IF NOT EXISTS title TEXT;
 ALTER TABLE public.projects ADD COLUMN IF NOT EXISTS company_name TEXT;
 ALTER TABLE public.projects ADD COLUMN IF NOT EXISTS category TEXT DEFAULT 'Development';
 ALTER TABLE public.projects ADD COLUMN IF NOT EXISTS description TEXT;
-ALTER TABLE public.projects ADD COLUMN IF NOT EXISTS requirements TEXT;
-ALTER TABLE public.projects ADD COLUMN IF NOT EXISTS duration TEXT DEFAULT '4-6 Weeks';
+ALTER TABLE public.projects ADD COLUMN IF NOT EXISTS requirements TEXT DEFAULT '';
+ALTER TABLE public.projects ADD COLUMN IF NOT EXISTS deliverables TEXT DEFAULT '';
+ALTER TABLE public.projects ADD COLUMN IF NOT EXISTS additional_instructions TEXT DEFAULT '';
+ALTER TABLE public.projects ADD COLUMN IF NOT EXISTS work_mode TEXT DEFAULT 'Remote';
+ALTER TABLE public.projects ADD COLUMN IF NOT EXISTS duration TEXT DEFAULT '3-4 Weeks';
+ALTER TABLE public.projects ADD COLUMN IF NOT EXISTS deadline TEXT DEFAULT 'Flexible';
+ALTER TABLE public.projects ADD COLUMN IF NOT EXISTS openings INTEGER DEFAULT 1;
+ALTER TABLE public.projects ADD COLUMN IF NOT EXISTS skills TEXT[] DEFAULT '{}';
 ALTER TABLE public.projects ADD COLUMN IF NOT EXISTS stipend TEXT DEFAULT 'Academic Credit / Verified Certificate';
-ALTER TABLE public.projects ADD COLUMN IF NOT EXISTS budget TEXT;
+ALTER TABLE public.projects ADD COLUMN IF NOT EXISTS budget TEXT DEFAULT '';
 ALTER TABLE public.projects ADD COLUMN IF NOT EXISTS status TEXT DEFAULT 'Open';
+ALTER TABLE public.projects ADD COLUMN IF NOT EXISTS assigned_student TEXT;
+ALTER TABLE public.projects ADD COLUMN IF NOT EXISTS progress DOUBLE PRECISION DEFAULT 0.0;
 ALTER TABLE public.projects ADD COLUMN IF NOT EXISTS attachment_url TEXT;
+ALTER TABLE public.projects ADD COLUMN IF NOT EXISTS moderation_reason TEXT;
+ALTER TABLE public.projects ADD COLUMN IF NOT EXISTS moderator_name TEXT;
 ALTER TABLE public.projects ADD COLUMN IF NOT EXISTS created_at TIMESTAMPTZ DEFAULT timezone('utc'::text, now());
 ALTER TABLE public.projects ADD COLUMN IF NOT EXISTS updated_at TIMESTAMPTZ DEFAULT timezone('utc'::text, now());
 
@@ -159,31 +240,73 @@ UPDATE public.projects SET user_id = posted_by WHERE user_id IS NULL AND posted_
 CREATE TABLE IF NOT EXISTS public.applications (
   id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
   project_id UUID,
+  project_title TEXT,
+  company_id UUID,
+  company_name TEXT,
   student_id UUID REFERENCES auth.users(id) ON DELETE CASCADE,
   user_id UUID REFERENCES auth.users(id) ON DELETE CASCADE,
   student_name TEXT,
   student_email TEXT,
   university TEXT,
-  cover_letter TEXT,
-  resume_link TEXT,
-  github_link TEXT,
-  submission_notes TEXT,
+  student_degree TEXT DEFAULT 'BS Computer Science',
+  student_department TEXT DEFAULT 'Computer Science',
+  student_semester TEXT DEFAULT 'Senior',
+  student_cgpa DOUBLE PRECISION DEFAULT 0.0,
+  skills TEXT[] DEFAULT '{}',
+  availability TEXT DEFAULT '',
+  cover_letter TEXT DEFAULT '',
+  resume_link TEXT DEFAULT '',
+  portfolio_link TEXT DEFAULT '',
+  github_link TEXT DEFAULT '',
+  submission_title TEXT DEFAULT '',
+  submission_notes TEXT DEFAULT '',
+  submitted_work_url TEXT DEFAULT '',
+  file_name TEXT DEFAULT '',
+  company_feedback TEXT,
+  progress DOUBLE PRECISION DEFAULT 0.0,
   status TEXT DEFAULT 'Pending',
+  report_status TEXT DEFAULT 'clear',
+  report_reason TEXT,
+  reported_by TEXT,
+  investigation_notes JSONB DEFAULT '[]'::jsonb,
+  review_history JSONB DEFAULT '[]'::jsonb,
+  work_submitted_at TIMESTAMPTZ,
   submitted_at TIMESTAMPTZ DEFAULT timezone('utc'::text, now()) NOT NULL,
   updated_at TIMESTAMPTZ DEFAULT timezone('utc'::text, now()) NOT NULL
 );
 
 ALTER TABLE public.applications ADD COLUMN IF NOT EXISTS project_id UUID;
+ALTER TABLE public.applications ADD COLUMN IF NOT EXISTS project_title TEXT;
+ALTER TABLE public.applications ADD COLUMN IF NOT EXISTS company_id UUID;
+ALTER TABLE public.applications ADD COLUMN IF NOT EXISTS company_name TEXT;
 ALTER TABLE public.applications ADD COLUMN IF NOT EXISTS student_id UUID REFERENCES auth.users(id) ON DELETE CASCADE;
 ALTER TABLE public.applications ADD COLUMN IF NOT EXISTS user_id UUID REFERENCES auth.users(id) ON DELETE CASCADE;
 ALTER TABLE public.applications ADD COLUMN IF NOT EXISTS student_name TEXT;
 ALTER TABLE public.applications ADD COLUMN IF NOT EXISTS student_email TEXT;
 ALTER TABLE public.applications ADD COLUMN IF NOT EXISTS university TEXT;
-ALTER TABLE public.applications ADD COLUMN IF NOT EXISTS cover_letter TEXT;
-ALTER TABLE public.applications ADD COLUMN IF NOT EXISTS resume_link TEXT;
-ALTER TABLE public.applications ADD COLUMN IF NOT EXISTS github_link TEXT;
-ALTER TABLE public.applications ADD COLUMN IF NOT EXISTS submission_notes TEXT;
+ALTER TABLE public.applications ADD COLUMN IF NOT EXISTS student_degree TEXT DEFAULT 'BS Computer Science';
+ALTER TABLE public.applications ADD COLUMN IF NOT EXISTS student_department TEXT DEFAULT 'Computer Science';
+ALTER TABLE public.applications ADD COLUMN IF NOT EXISTS student_semester TEXT DEFAULT 'Senior';
+ALTER TABLE public.applications ADD COLUMN IF NOT EXISTS student_cgpa DOUBLE PRECISION DEFAULT 0.0;
+ALTER TABLE public.applications ADD COLUMN IF NOT EXISTS skills TEXT[] DEFAULT '{}';
+ALTER TABLE public.applications ADD COLUMN IF NOT EXISTS availability TEXT DEFAULT '';
+ALTER TABLE public.applications ADD COLUMN IF NOT EXISTS cover_letter TEXT DEFAULT '';
+ALTER TABLE public.applications ADD COLUMN IF NOT EXISTS resume_link TEXT DEFAULT '';
+ALTER TABLE public.applications ADD COLUMN IF NOT EXISTS portfolio_link TEXT DEFAULT '';
+ALTER TABLE public.applications ADD COLUMN IF NOT EXISTS github_link TEXT DEFAULT '';
+ALTER TABLE public.applications ADD COLUMN IF NOT EXISTS submission_title TEXT DEFAULT '';
+ALTER TABLE public.applications ADD COLUMN IF NOT EXISTS submission_notes TEXT DEFAULT '';
+ALTER TABLE public.applications ADD COLUMN IF NOT EXISTS submitted_work_url TEXT DEFAULT '';
+ALTER TABLE public.applications ADD COLUMN IF NOT EXISTS file_name TEXT DEFAULT '';
+ALTER TABLE public.applications ADD COLUMN IF NOT EXISTS company_feedback TEXT;
+ALTER TABLE public.applications ADD COLUMN IF NOT EXISTS progress DOUBLE PRECISION DEFAULT 0.0;
 ALTER TABLE public.applications ADD COLUMN IF NOT EXISTS status TEXT DEFAULT 'Pending';
+ALTER TABLE public.applications ADD COLUMN IF NOT EXISTS report_status TEXT DEFAULT 'clear';
+ALTER TABLE public.applications ADD COLUMN IF NOT EXISTS report_reason TEXT;
+ALTER TABLE public.applications ADD COLUMN IF NOT EXISTS reported_by TEXT;
+ALTER TABLE public.applications ADD COLUMN IF NOT EXISTS investigation_notes JSONB DEFAULT '[]'::jsonb;
+ALTER TABLE public.applications ADD COLUMN IF NOT EXISTS review_history JSONB DEFAULT '[]'::jsonb;
+ALTER TABLE public.applications ADD COLUMN IF NOT EXISTS work_submitted_at TIMESTAMPTZ;
 ALTER TABLE public.applications ADD COLUMN IF NOT EXISTS submitted_at TIMESTAMPTZ DEFAULT timezone('utc'::text, now());
 ALTER TABLE public.applications ADD COLUMN IF NOT EXISTS updated_at TIMESTAMPTZ DEFAULT timezone('utc'::text, now());
 
@@ -200,11 +323,25 @@ CREATE TABLE IF NOT EXISTS public.certificates (
   certificate_id TEXT,
   student_id UUID REFERENCES auth.users(id) ON DELETE CASCADE,
   student_name TEXT,
+  student_university TEXT DEFAULT '',
+  student_degree TEXT DEFAULT '',
+  company_id UUID,
+  company_name TEXT DEFAULT '',
   project_id UUID,
   project_title TEXT,
-  certificate_title TEXT,
+  certificate_title TEXT DEFAULT 'Certificate of Project Completion',
+  certificate_type TEXT DEFAULT 'completion',
   issuer TEXT,
   issue_date TEXT,
+  overall_rating DOUBLE PRECISION DEFAULT 5.0,
+  recommendation_letter TEXT DEFAULT '',
+  signatory_name TEXT DEFAULT '',
+  signatory_title TEXT DEFAULT 'Corporate Partner',
+  status TEXT DEFAULT 'valid',
+  cryptographic_hash TEXT DEFAULT '',
+  verification_url TEXT DEFAULT '',
+  revocation_reason TEXT,
+  revoking_admin_name TEXT,
   pdf_url TEXT,
   created_at TIMESTAMPTZ DEFAULT timezone('utc'::text, now()) NOT NULL
 );
@@ -212,11 +349,25 @@ CREATE TABLE IF NOT EXISTS public.certificates (
 ALTER TABLE public.certificates ADD COLUMN IF NOT EXISTS certificate_id TEXT;
 ALTER TABLE public.certificates ADD COLUMN IF NOT EXISTS student_id UUID REFERENCES auth.users(id) ON DELETE CASCADE;
 ALTER TABLE public.certificates ADD COLUMN IF NOT EXISTS student_name TEXT;
+ALTER TABLE public.certificates ADD COLUMN IF NOT EXISTS student_university TEXT DEFAULT '';
+ALTER TABLE public.certificates ADD COLUMN IF NOT EXISTS student_degree TEXT DEFAULT '';
+ALTER TABLE public.certificates ADD COLUMN IF NOT EXISTS company_id UUID;
+ALTER TABLE public.certificates ADD COLUMN IF NOT EXISTS company_name TEXT DEFAULT '';
 ALTER TABLE public.certificates ADD COLUMN IF NOT EXISTS project_id UUID;
 ALTER TABLE public.certificates ADD COLUMN IF NOT EXISTS project_title TEXT;
-ALTER TABLE public.certificates ADD COLUMN IF NOT EXISTS certificate_title TEXT;
+ALTER TABLE public.certificates ADD COLUMN IF NOT EXISTS certificate_title TEXT DEFAULT 'Certificate of Project Completion';
+ALTER TABLE public.certificates ADD COLUMN IF NOT EXISTS certificate_type TEXT DEFAULT 'completion';
 ALTER TABLE public.certificates ADD COLUMN IF NOT EXISTS issuer TEXT;
 ALTER TABLE public.certificates ADD COLUMN IF NOT EXISTS issue_date TEXT;
+ALTER TABLE public.certificates ADD COLUMN IF NOT EXISTS overall_rating DOUBLE PRECISION DEFAULT 5.0;
+ALTER TABLE public.certificates ADD COLUMN IF NOT EXISTS recommendation_letter TEXT DEFAULT '';
+ALTER TABLE public.certificates ADD COLUMN IF NOT EXISTS signatory_name TEXT DEFAULT '';
+ALTER TABLE public.certificates ADD COLUMN IF NOT EXISTS signatory_title TEXT DEFAULT 'Corporate Partner';
+ALTER TABLE public.certificates ADD COLUMN IF NOT EXISTS status TEXT DEFAULT 'valid';
+ALTER TABLE public.certificates ADD COLUMN IF NOT EXISTS cryptographic_hash TEXT DEFAULT '';
+ALTER TABLE public.certificates ADD COLUMN IF NOT EXISTS verification_url TEXT DEFAULT '';
+ALTER TABLE public.certificates ADD COLUMN IF NOT EXISTS revocation_reason TEXT;
+ALTER TABLE public.certificates ADD COLUMN IF NOT EXISTS revoking_admin_name TEXT;
 ALTER TABLE public.certificates ADD COLUMN IF NOT EXISTS pdf_url TEXT;
 ALTER TABLE public.certificates ADD COLUMN IF NOT EXISTS created_at TIMESTAMPTZ DEFAULT timezone('utc'::text, now());
 
@@ -225,21 +376,27 @@ ALTER TABLE public.certificates ADD COLUMN IF NOT EXISTS created_at TIMESTAMPTZ 
 -- ----------------------------------------------------------------------------
 CREATE TABLE IF NOT EXISTS public.messages (
   id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+  conversation_id TEXT,
   sender_id UUID REFERENCES auth.users(id) ON DELETE CASCADE,
   receiver_id UUID REFERENCES auth.users(id) ON DELETE CASCADE,
   sender_name TEXT,
   receiver_name TEXT,
+  company_name TEXT,
   project_title TEXT,
   message_text TEXT,
+  is_read BOOLEAN DEFAULT false,
   created_at TIMESTAMPTZ DEFAULT timezone('utc'::text, now()) NOT NULL
 );
 
+ALTER TABLE public.messages ADD COLUMN IF NOT EXISTS conversation_id TEXT;
 ALTER TABLE public.messages ADD COLUMN IF NOT EXISTS sender_id UUID REFERENCES auth.users(id) ON DELETE CASCADE;
 ALTER TABLE public.messages ADD COLUMN IF NOT EXISTS receiver_id UUID REFERENCES auth.users(id) ON DELETE CASCADE;
 ALTER TABLE public.messages ADD COLUMN IF NOT EXISTS sender_name TEXT;
 ALTER TABLE public.messages ADD COLUMN IF NOT EXISTS receiver_name TEXT;
+ALTER TABLE public.messages ADD COLUMN IF NOT EXISTS company_name TEXT;
 ALTER TABLE public.messages ADD COLUMN IF NOT EXISTS project_title TEXT;
 ALTER TABLE public.messages ADD COLUMN IF NOT EXISTS message_text TEXT;
+ALTER TABLE public.messages ADD COLUMN IF NOT EXISTS is_read BOOLEAN DEFAULT false;
 ALTER TABLE public.messages ADD COLUMN IF NOT EXISTS created_at TIMESTAMPTZ DEFAULT timezone('utc'::text, now());
 
 -- ----------------------------------------------------------------------------
@@ -251,6 +408,8 @@ CREATE TABLE IF NOT EXISTS public.notifications (
   title TEXT,
   message TEXT,
   type TEXT DEFAULT 'general',
+  project_id UUID,
+  actor_name TEXT,
   is_read BOOLEAN DEFAULT false,
   created_at TIMESTAMPTZ DEFAULT timezone('utc'::text, now()) NOT NULL
 );
@@ -259,11 +418,85 @@ ALTER TABLE public.notifications ADD COLUMN IF NOT EXISTS user_id UUID REFERENCE
 ALTER TABLE public.notifications ADD COLUMN IF NOT EXISTS title TEXT;
 ALTER TABLE public.notifications ADD COLUMN IF NOT EXISTS message TEXT;
 ALTER TABLE public.notifications ADD COLUMN IF NOT EXISTS type TEXT DEFAULT 'general';
+ALTER TABLE public.notifications ADD COLUMN IF NOT EXISTS project_id UUID;
+ALTER TABLE public.notifications ADD COLUMN IF NOT EXISTS actor_name TEXT;
 ALTER TABLE public.notifications ADD COLUMN IF NOT EXISTS is_read BOOLEAN DEFAULT false;
 ALTER TABLE public.notifications ADD COLUMN IF NOT EXISTS created_at TIMESTAMPTZ DEFAULT timezone('utc'::text, now());
 
 -- ----------------------------------------------------------------------------
--- 10. AUTOMATED TRIGGER: AUTO INSERT STUDENT / COMPANY UPON AUTH SIGNUP
+-- 10. SAVED PROJECTS, SUPPORT TICKETS, USER SETTINGS, TAXONOMIES & AUDIT LOGS
+-- ----------------------------------------------------------------------------
+CREATE TABLE IF NOT EXISTS public.saved_projects (
+  id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+  user_id UUID REFERENCES auth.users(id) ON DELETE CASCADE NOT NULL,
+  project_id UUID NOT NULL,
+  created_at TIMESTAMPTZ DEFAULT timezone('utc'::text, now()) NOT NULL,
+  UNIQUE(user_id, project_id)
+);
+
+CREATE TABLE IF NOT EXISTS public.support_tickets (
+  id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+  ticket_number TEXT,
+  user_id UUID REFERENCES auth.users(id) ON DELETE CASCADE,
+  user_name TEXT,
+  user_email TEXT,
+  user_role TEXT DEFAULT 'Student',
+  category TEXT,
+  subject TEXT,
+  message TEXT,
+  status TEXT DEFAULT 'Open',
+  admin_response TEXT,
+  assigned_to TEXT,
+  created_at TIMESTAMPTZ DEFAULT timezone('utc'::text, now()) NOT NULL,
+  updated_at TIMESTAMPTZ DEFAULT timezone('utc'::text, now()) NOT NULL
+);
+
+CREATE TABLE IF NOT EXISTS public.user_settings (
+  user_id UUID PRIMARY KEY REFERENCES auth.users(id) ON DELETE CASCADE,
+  notification_prefs JSONB DEFAULT '{}'::jsonb,
+  privacy_settings JSONB DEFAULT '{}'::jsonb,
+  updated_at TIMESTAMPTZ DEFAULT timezone('utc'::text, now()) NOT NULL
+);
+
+CREATE TABLE IF NOT EXISTS public.platform_taxonomies (
+  id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+  item_type TEXT NOT NULL,
+  name TEXT NOT NULL,
+  description TEXT DEFAULT '',
+  is_active BOOLEAN DEFAULT true,
+  metadata JSONB DEFAULT '{}'::jsonb,
+  created_at TIMESTAMPTZ DEFAULT timezone('utc'::text, now()) NOT NULL,
+  UNIQUE(item_type, name)
+);
+
+CREATE TABLE IF NOT EXISTS public.admin_audit_logs (
+  id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+  admin_email TEXT,
+  action TEXT,
+  target TEXT,
+  details TEXT,
+  created_at TIMESTAMPTZ DEFAULT timezone('utc'::text, now()) NOT NULL
+);
+
+-- ----------------------------------------------------------------------------
+-- 11. ADMIN HELPER FUNCTION (SECURITY DEFINER, NO RECURSION)
+-- ----------------------------------------------------------------------------
+CREATE OR REPLACE FUNCTION public.is_admin()
+RETURNS BOOLEAN
+LANGUAGE sql
+STABLE
+SECURITY DEFINER
+SET search_path = public
+AS $$
+  SELECT EXISTS (
+    SELECT 1 FROM public.profiles
+    WHERE id = auth.uid()
+      AND lower(COALESCE(user_type, '')) = 'admin'
+  );
+$$;
+
+-- ----------------------------------------------------------------------------
+-- 12. AUTOMATED TRIGGER: AUTO INSERT STUDENT / COMPANY UPON AUTH SIGNUP
 -- ----------------------------------------------------------------------------
 CREATE OR REPLACE FUNCTION public.handle_new_user()
 RETURNS TRIGGER AS $$
@@ -274,24 +507,33 @@ DECLARE
 BEGIN
   role_val := COALESCE(new.raw_user_meta_data->>'user_type', 'Student');
   name_val := COALESCE(new.raw_user_meta_data->>'name', split_part(new.email, '@', 1));
-  uni_val  := COALESCE(new.raw_user_meta_data->>'university', 'National University');
+  uni_val  := COALESCE(new.raw_user_meta_data->>'university', '');
 
   INSERT INTO public.profiles (id, name, email, user_type, university)
   VALUES (new.id, name_val, new.email, role_val, uni_val)
   ON CONFLICT (id) DO UPDATE
   SET name = EXCLUDED.name,
       user_type = EXCLUDED.user_type,
-      university = EXCLUDED.university,
+      university = COALESCE(NULLIF(EXCLUDED.university, ''), public.profiles.university),
       updated_at = timezone('utc'::text, now());
 
   IF lower(role_val) = 'company' THEN
-    INSERT INTO public.companies (user_id, company_name, email, industry)
-    VALUES (new.id, name_val, new.email, uni_val)
-    ON CONFLICT (user_id) DO NOTHING;
+    IF NOT EXISTS (SELECT 1 FROM public.companies WHERE user_id = new.id) THEN
+      INSERT INTO public.companies (user_id, company_name, email, industry, verification_status, logo_initial)
+      VALUES (
+        new.id,
+        name_val,
+        new.email,
+        COALESCE(NULLIF(uni_val, ''), 'Software & Cloud Services'),
+        'not_submitted',
+        upper(left(regexp_replace(name_val, '[^a-zA-Z0-9]', '', 'g') || 'CO', 2))
+      );
+    END IF;
   ELSIF lower(role_val) = 'student' THEN
-    INSERT INTO public.students (user_id, full_name, email, university)
-    VALUES (new.id, name_val, new.email, uni_val)
-    ON CONFLICT (user_id) DO NOTHING;
+    IF NOT EXISTS (SELECT 1 FROM public.students WHERE user_id = new.id) THEN
+      INSERT INTO public.students (user_id, full_name, email, university)
+      VALUES (new.id, name_val, new.email, uni_val);
+    END IF;
   END IF;
 
   RETURN new;
@@ -304,7 +546,7 @@ CREATE TRIGGER on_auth_user_created
   FOR EACH ROW EXECUTE FUNCTION public.handle_new_user();
 
 -- ----------------------------------------------------------------------------
--- 11. SUPABASE STORAGE BUCKETS (PUBLIC VISIBILITY)
+-- 13. SUPABASE STORAGE BUCKETS (PUBLIC VISIBILITY)
 -- ----------------------------------------------------------------------------
 INSERT INTO storage.buckets (id, name, public)
 VALUES
@@ -315,7 +557,7 @@ VALUES
 ON CONFLICT (id) DO UPDATE SET public = true;
 
 -- ----------------------------------------------------------------------------
--- 12. STORAGE ROW LEVEL SECURITY (RLS) POLICIES
+-- 14. STORAGE ROW LEVEL SECURITY (RLS) POLICIES
 -- ----------------------------------------------------------------------------
 DROP POLICY IF EXISTS "Public Storage Read" ON storage.objects;
 DROP POLICY IF EXISTS "Authenticated Storage Upload" ON storage.objects;
@@ -334,15 +576,15 @@ WITH CHECK (bucket_id IN ('public-files', 'company-assets', 'student-docs', 'cer
 CREATE POLICY "Owner Storage Update"
 ON storage.objects FOR UPDATE
 TO authenticated
-USING (auth.uid() = owner);
+USING (auth.uid() = owner OR public.is_admin());
 
 CREATE POLICY "Owner Storage Delete"
 ON storage.objects FOR DELETE
 TO authenticated
-USING (auth.uid() = owner);
+USING (auth.uid() = owner OR public.is_admin());
 
 -- ----------------------------------------------------------------------------
--- 13. TABLE ROW LEVEL SECURITY (RLS) POLICIES
+-- 15. TABLE ROW LEVEL SECURITY (RLS) POLICIES
 -- ----------------------------------------------------------------------------
 ALTER TABLE public.profiles ENABLE ROW LEVEL SECURITY;
 ALTER TABLE public.companies ENABLE ROW LEVEL SECURITY;
@@ -352,66 +594,139 @@ ALTER TABLE public.applications ENABLE ROW LEVEL SECURITY;
 ALTER TABLE public.certificates ENABLE ROW LEVEL SECURITY;
 ALTER TABLE public.messages ENABLE ROW LEVEL SECURITY;
 ALTER TABLE public.notifications ENABLE ROW LEVEL SECURITY;
+ALTER TABLE public.saved_projects ENABLE ROW LEVEL SECURITY;
+ALTER TABLE public.support_tickets ENABLE ROW LEVEL SECURITY;
+ALTER TABLE public.user_settings ENABLE ROW LEVEL SECURITY;
+ALTER TABLE public.platform_taxonomies ENABLE ROW LEVEL SECURITY;
+ALTER TABLE public.admin_audit_logs ENABLE ROW LEVEL SECURITY;
 
 DROP POLICY IF EXISTS "Profiles Public View" ON public.profiles;
 DROP POLICY IF EXISTS "Profiles Self Insert" ON public.profiles;
 DROP POLICY IF EXISTS "Profiles Self Update" ON public.profiles;
+DROP POLICY IF EXISTS "Profiles Self Manage" ON public.profiles;
+
 DROP POLICY IF EXISTS "Companies Public View" ON public.companies;
 DROP POLICY IF EXISTS "Companies Self Manage" ON public.companies;
+
 DROP POLICY IF EXISTS "Students Public View" ON public.students;
 DROP POLICY IF EXISTS "Students Self Manage" ON public.students;
+
 DROP POLICY IF EXISTS "Projects Public View" ON public.projects;
 DROP POLICY IF EXISTS "Projects Company Manage" ON public.projects;
+
 DROP POLICY IF EXISTS "Applications Student Manage" ON public.applications;
 DROP POLICY IF EXISTS "Applications Company View" ON public.applications;
+DROP POLICY IF EXISTS "Applications Company Manage" ON public.applications;
+DROP POLICY IF EXISTS "Applications Admin Manage" ON public.applications;
+
 DROP POLICY IF EXISTS "Certificates Public View" ON public.certificates;
 DROP POLICY IF EXISTS "Certificates Authenticated Manage" ON public.certificates;
+
 DROP POLICY IF EXISTS "Messages Participant Access" ON public.messages;
 DROP POLICY IF EXISTS "Notifications User Access" ON public.notifications;
+DROP POLICY IF EXISTS "Notifications Insert Authenticated" ON public.notifications;
+DROP POLICY IF EXISTS "Notifications User Update" ON public.notifications;
+DROP POLICY IF EXISTS "Notifications User Delete" ON public.notifications;
+DROP POLICY IF EXISTS "Saved Projects User Access" ON public.saved_projects;
+DROP POLICY IF EXISTS "Support Tickets Access" ON public.support_tickets;
+DROP POLICY IF EXISTS "User Settings Self Access" ON public.user_settings;
+DROP POLICY IF EXISTS "Platform Taxonomies Public Read" ON public.platform_taxonomies;
+DROP POLICY IF EXISTS "Platform Taxonomies Admin Manage" ON public.platform_taxonomies;
+DROP POLICY IF EXISTS "Admin Audit Logs Access" ON public.admin_audit_logs;
 
 CREATE POLICY "Profiles Public View" ON public.profiles FOR SELECT USING (true);
-CREATE POLICY "Profiles Self Insert" ON public.profiles FOR INSERT TO authenticated WITH CHECK (auth.uid() = id);
-CREATE POLICY "Profiles Self Update" ON public.profiles FOR UPDATE TO authenticated USING (auth.uid() = id);
+CREATE POLICY "Profiles Self Insert" ON public.profiles FOR INSERT TO authenticated
+  WITH CHECK (auth.uid() = id OR public.is_admin());
+CREATE POLICY "Profiles Self Update" ON public.profiles FOR UPDATE TO authenticated
+  USING (auth.uid() = id OR public.is_admin());
 
 CREATE POLICY "Companies Public View" ON public.companies FOR SELECT USING (true);
-CREATE POLICY "Companies Self Manage" ON public.companies FOR ALL TO authenticated USING (auth.uid() = user_id);
+CREATE POLICY "Companies Self Manage" ON public.companies FOR ALL TO authenticated
+  USING (auth.uid() = user_id OR public.is_admin())
+  WITH CHECK (auth.uid() = user_id OR public.is_admin());
 
 CREATE POLICY "Students Public View" ON public.students FOR SELECT USING (true);
-CREATE POLICY "Students Self Manage" ON public.students FOR ALL TO authenticated USING (auth.uid() = user_id);
+CREATE POLICY "Students Self Manage" ON public.students FOR ALL TO authenticated
+  USING (auth.uid() = user_id OR public.is_admin())
+  WITH CHECK (auth.uid() = user_id OR public.is_admin());
 
 CREATE POLICY "Projects Public View" ON public.projects FOR SELECT USING (true);
 CREATE POLICY "Projects Company Manage" ON public.projects FOR ALL TO authenticated
-  USING (auth.uid() = posted_by OR auth.uid() = user_id);
+  USING (auth.uid() = posted_by OR auth.uid() = user_id OR public.is_admin())
+  WITH CHECK (auth.uid() = posted_by OR auth.uid() = user_id OR public.is_admin());
 
 CREATE POLICY "Applications Student Manage" ON public.applications FOR ALL TO authenticated
-  USING (auth.uid() = student_id OR auth.uid() = user_id);
+  USING (auth.uid() = student_id OR auth.uid() = user_id)
+  WITH CHECK (auth.uid() = student_id OR auth.uid() = user_id);
 
-CREATE POLICY "Applications Company View" ON public.applications FOR SELECT TO authenticated
+CREATE POLICY "Applications Company Manage" ON public.applications FOR ALL TO authenticated
   USING (EXISTS (
     SELECT 1 FROM public.projects
     WHERE public.projects.id = public.applications.project_id
-    AND (public.projects.posted_by = auth.uid() OR public.projects.user_id = auth.uid())
+      AND (public.projects.posted_by = auth.uid() OR public.projects.user_id = auth.uid())
+  ))
+  WITH CHECK (EXISTS (
+    SELECT 1 FROM public.projects
+    WHERE public.projects.id = public.applications.project_id
+      AND (public.projects.posted_by = auth.uid() OR public.projects.user_id = auth.uid())
   ));
 
+CREATE POLICY "Applications Admin Manage" ON public.applications FOR ALL TO authenticated
+  USING (public.is_admin())
+  WITH CHECK (public.is_admin());
+
 CREATE POLICY "Certificates Public View" ON public.certificates FOR SELECT USING (true);
-CREATE POLICY "Certificates Authenticated Manage" ON public.certificates FOR ALL TO authenticated USING (true);
+CREATE POLICY "Certificates Authenticated Manage" ON public.certificates FOR ALL TO authenticated
+  USING (true)
+  WITH CHECK (true);
 
 CREATE POLICY "Messages Participant Access" ON public.messages FOR ALL TO authenticated
-  USING (auth.uid() = sender_id OR auth.uid() = receiver_id);
+  USING (auth.uid() = sender_id OR auth.uid() = receiver_id OR public.is_admin())
+  WITH CHECK (auth.uid() = sender_id OR public.is_admin());
 
-CREATE POLICY "Notifications User Access" ON public.notifications FOR ALL TO authenticated
-  USING (auth.uid() = user_id);
+CREATE POLICY "Notifications User Access" ON public.notifications FOR SELECT TO authenticated
+  USING (auth.uid() = user_id OR public.is_admin());
+CREATE POLICY "Notifications Insert Authenticated" ON public.notifications FOR INSERT TO authenticated
+  WITH CHECK (true);
+CREATE POLICY "Notifications User Update" ON public.notifications FOR UPDATE TO authenticated
+  USING (auth.uid() = user_id OR public.is_admin());
+CREATE POLICY "Notifications User Delete" ON public.notifications FOR DELETE TO authenticated
+  USING (auth.uid() = user_id OR public.is_admin());
+
+CREATE POLICY "Saved Projects User Access" ON public.saved_projects FOR ALL TO authenticated
+  USING (auth.uid() = user_id)
+  WITH CHECK (auth.uid() = user_id);
+
+CREATE POLICY "Support Tickets Access" ON public.support_tickets FOR ALL TO authenticated
+  USING (auth.uid() = user_id OR public.is_admin())
+  WITH CHECK (auth.uid() = user_id OR public.is_admin());
+
+CREATE POLICY "User Settings Self Access" ON public.user_settings FOR ALL TO authenticated
+  USING (auth.uid() = user_id OR public.is_admin())
+  WITH CHECK (auth.uid() = user_id OR public.is_admin());
+
+CREATE POLICY "Platform Taxonomies Public Read" ON public.platform_taxonomies FOR SELECT USING (true);
+CREATE POLICY "Platform Taxonomies Admin Manage" ON public.platform_taxonomies FOR ALL TO authenticated
+  USING (public.is_admin())
+  WITH CHECK (public.is_admin());
+
+CREATE POLICY "Admin Audit Logs Access" ON public.admin_audit_logs FOR ALL TO authenticated
+  USING (public.is_admin())
+  WITH CHECK (public.is_admin());
 
 -- ----------------------------------------------------------------------------
--- 14. DEFAULT ADMIN SETUP
+-- 16. DEFAULT ADMIN SETUP
 -- ----------------------------------------------------------------------------
 DO $$
 DECLARE
   admin_uid UUID := 'a0000000-0000-0000-0000-000000000001'::UUID;
+  existing_uid UUID;
   admin_email TEXT := 'admin@campusconnect.edu.pk';
   admin_pass  TEXT := 'Admin@CampusConnect2026!';
 BEGIN
-  IF NOT EXISTS (SELECT 1 FROM auth.users WHERE email = admin_email) THEN
+  SELECT id INTO existing_uid FROM auth.users WHERE email = admin_email LIMIT 1;
+
+  IF existing_uid IS NULL THEN
     INSERT INTO auth.users (
       instance_id,
       id,
@@ -433,7 +748,32 @@ BEGIN
       crypt(admin_pass, gen_salt('bf')),
       now(),
       '{"provider":"email","providers":["email"]}',
-      '{"name":"CampusConnect Admin","user_type":"Admin","university":"CampusConnect Council"}',
+      '{"name":"Executive Administrator","user_type":"Admin","university":"CampusConnect Governance Council"}',
+      now(),
+      now()
+    );
+    existing_uid := admin_uid;
+  END IF;
+
+  IF NOT EXISTS (
+    SELECT 1 FROM auth.identities WHERE user_id = existing_uid AND provider = 'email'
+  ) THEN
+    INSERT INTO auth.identities (
+      id,
+      user_id,
+      identity_data,
+      provider,
+      provider_id,
+      last_sign_in_at,
+      created_at,
+      updated_at
+    ) VALUES (
+      gen_random_uuid(),
+      existing_uid,
+      jsonb_build_object('sub', existing_uid::text, 'email', admin_email),
+      'email',
+      existing_uid::text,
+      now(),
       now(),
       now()
     );
@@ -441,7 +781,7 @@ BEGIN
 
   INSERT INTO public.profiles (id, name, email, user_type, university)
   VALUES (
-    (SELECT id FROM auth.users WHERE email = admin_email LIMIT 1),
+    existing_uid,
     'Executive Administrator',
     admin_email,
     'Admin',
@@ -449,5 +789,6 @@ BEGIN
   )
   ON CONFLICT (id) DO UPDATE
   SET user_type = 'Admin',
-      name = 'Executive Administrator';
+      name = 'Executive Administrator',
+      university = 'CampusConnect Governance Council';
 END $$;

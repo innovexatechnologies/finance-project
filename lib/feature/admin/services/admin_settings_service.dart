@@ -1,338 +1,389 @@
-import 'dart:math';
+import 'dart:async';
 import 'package:flutter/material.dart';
+import 'package:supabase_flutter/supabase_flutter.dart';
+import 'package:link_vibe/core/services/supabase_helper.dart';
 import 'package:link_vibe/feature/admin/models/admin_settings_model.dart';
 import 'package:link_vibe/feature/admin/models/admin_user_model.dart';
 import 'package:link_vibe/feature/admin/services/admin_auth_service.dart';
+import 'package:link_vibe/feature/admin/services/admin_project_service.dart';
+import 'package:link_vibe/feature/admin/services/admin_student_service.dart';
 
 /// Centralized Administration, System Taxonomies, Support & RBAC Service
+/// backed by `platform_taxonomies`, `support_tickets`, `profiles`, and `admin_audit_logs`.
 class AdminSettingsService {
-  static final AdminSettingsService _instance = AdminSettingsService._internal();
+  static final AdminSettingsService _instance =
+      AdminSettingsService._internal();
   factory AdminSettingsService() => _instance;
 
-  AdminSettingsService._internal() {
-    _initData();
-  }
+  AdminSettingsService._internal();
 
-  late final ValueNotifier<List<CategorySettingItem>> categoriesNotifier;
-  late final ValueNotifier<List<SkillSettingItem>> skillsNotifier;
-  late final ValueNotifier<List<UniversitySettingItem>> universitiesNotifier;
-  late final ValueNotifier<List<HelpRequestItem>> helpRequestsNotifier;
-  late final ValueNotifier<List<ComplaintItem>> complaintsNotifier;
-  late final ValueNotifier<List<PlatformPolicyItem>> policiesNotifier;
-  late final ValueNotifier<List<AdminUserModel>> adminsNotifier;
-  late final ValueNotifier<List<AdminSessionItem>> sessionsNotifier;
-  late final ValueNotifier<List<AdminAuditLogItem>> auditLogsNotifier;
+  final ValueNotifier<List<CategorySettingItem>> categoriesNotifier =
+      ValueNotifier<List<CategorySettingItem>>([]);
+  final ValueNotifier<List<SkillSettingItem>> skillsNotifier =
+      ValueNotifier<List<SkillSettingItem>>([]);
+  final ValueNotifier<List<UniversitySettingItem>> universitiesNotifier =
+      ValueNotifier<List<UniversitySettingItem>>([]);
+  final ValueNotifier<List<HelpRequestItem>> helpRequestsNotifier =
+      ValueNotifier<List<HelpRequestItem>>([]);
+  final ValueNotifier<List<ComplaintItem>> complaintsNotifier =
+      ValueNotifier<List<ComplaintItem>>([]);
+  final ValueNotifier<List<PlatformPolicyItem>> policiesNotifier =
+      ValueNotifier<List<PlatformPolicyItem>>([]);
+  final ValueNotifier<List<AdminUserModel>> adminsNotifier =
+      ValueNotifier<List<AdminUserModel>>([]);
+  final ValueNotifier<List<AdminSessionItem>> sessionsNotifier =
+      ValueNotifier<List<AdminSessionItem>>([]);
+  final ValueNotifier<List<AdminAuditLogItem>> auditLogsNotifier =
+      ValueNotifier<List<AdminAuditLogItem>>([]);
 
-  void _initData() {
-    // 1. Initial Categories
-    categoriesNotifier = ValueNotifier<List<CategorySettingItem>>([
-      CategorySettingItem(
-        id: 'cat_01',
-        name: 'Artificial Intelligence & Machine Learning',
-        description: 'Computer vision, natural language processing, LLM fine-tuning, and predictive modeling.',
-        color: const Color(0xFF6366F1), // Indigo
-        projectCount: 28,
-        isActive: true,
-        createdAt: DateTime(2026, 1, 15),
-      ),
-      CategorySettingItem(
-        id: 'cat_02',
-        name: 'Mobile Application Development',
-        description: 'Cross-platform Flutter/Dart and native iOS/Android corporate applications.',
-        color: const Color(0xFF0D9488), // Teal
-        projectCount: 22,
-        isActive: true,
-        createdAt: DateTime(2026, 1, 15),
-      ),
-      CategorySettingItem(
-        id: 'cat_03',
-        name: 'Cloud Infrastructure & DevOps',
-        description: 'Docker containerization, Kubernetes orchestration, CI/CD pipelines, and cloud security.',
-        color: const Color(0xFF3B82F6), // Blue
-        projectCount: 15,
-        isActive: true,
-        createdAt: DateTime(2026, 2, 1),
-      ),
-      CategorySettingItem(
-        id: 'cat_04',
-        name: 'Full Stack Web Engineering',
-        description: 'Modern reactive web apps with React, Next.js, Node.js, and scalable APIs.',
-        color: const Color(0xFF10B981), // Emerald
-        projectCount: 12,
-        isActive: true,
-        createdAt: DateTime(2026, 2, 10),
-      ),
-      CategorySettingItem(
-        id: 'cat_05',
-        name: 'Cybersecurity & Threat Intelligence',
-        description: 'Vulnerability assessment, penetration testing, OWASP compliance, and security audits.',
-        color: const Color(0xFFF59E0B), // Amber
-        projectCount: 7,
-        isActive: true,
-        createdAt: DateTime(2026, 3, 5),
-      ),
-      CategorySettingItem(
-        id: 'cat_06',
-        name: 'UI/UX & Product Design Systems',
-        description: 'Design token architecture, Figma component libraries, and user experience research.',
-        color: const Color(0xFFEC4899), // Pink
-        projectCount: 5,
-        isActive: true,
-        createdAt: DateTime(2026, 3, 20),
-      ),
-    ]);
+  // Tracks support_ticket user_id by ticket id for response notifications
+  final Map<String, String> _ticketUserIds = {};
 
-    // 2. Initial Skills
-    skillsNotifier = ValueNotifier<List<SkillSettingItem>>([
-      SkillSettingItem(id: 'skl_01', name: 'Flutter & Dart', categoryName: 'Mobile Application Development', usageCount: 26, isActive: true, createdAt: DateTime(2026, 1, 15)),
-      SkillSettingItem(id: 'skl_02', name: 'Python & PyTorch', categoryName: 'Artificial Intelligence & Machine Learning', usageCount: 24, isActive: true, createdAt: DateTime(2026, 1, 15)),
-      SkillSettingItem(id: 'skl_03', name: 'Docker & Kubernetes', categoryName: 'Cloud Infrastructure & DevOps', usageCount: 18, isActive: true, createdAt: DateTime(2026, 1, 20)),
-      SkillSettingItem(id: 'skl_04', name: 'React & Next.js 14', categoryName: 'Full Stack Web Engineering', usageCount: 16, isActive: true, createdAt: DateTime(2026, 2, 1)),
-      SkillSettingItem(id: 'skl_05', name: 'PostgreSQL & Supabase', categoryName: 'Full Stack Web Engineering', usageCount: 15, isActive: true, createdAt: DateTime(2026, 2, 5)),
-      SkillSettingItem(id: 'skl_06', name: 'FastAPI Microservices', categoryName: 'Full Stack Web Engineering', usageCount: 13, isActive: true, createdAt: DateTime(2026, 2, 15)),
-      SkillSettingItem(id: 'skl_07', name: 'OWASP & Penetration Testing', categoryName: 'Cybersecurity & Threat Intelligence', usageCount: 9, isActive: true, createdAt: DateTime(2026, 3, 1)),
-      SkillSettingItem(id: 'skl_08', name: 'Figma & Design Tokens', categoryName: 'UI/UX & Product Design Systems', usageCount: 8, isActive: true, createdAt: DateTime(2026, 3, 10)),
-      SkillSettingItem(id: 'skl_09', name: 'Node.js & Express', categoryName: 'Full Stack Web Engineering', usageCount: 11, isActive: true, createdAt: DateTime(2026, 3, 15)),
-      SkillSettingItem(id: 'skl_10', name: 'Git & GitHub Actions', categoryName: 'Cloud Infrastructure & DevOps', usageCount: 21, isActive: true, createdAt: DateTime(2026, 3, 22)),
-    ]);
+  /// Loads taxonomies, tickets, complaints, policies, admins, sessions & audit logs from Supabase.
+  Future<void> loadFromSupabase() async {
+    final supabase = SupabaseHelper.clientOrNull;
+    if (supabase == null) return;
 
-    // 3. Initial Universities
-    universitiesNotifier = ValueNotifier<List<UniversitySettingItem>>([
-      UniversitySettingItem(id: 'uni_01', name: 'National University of Computer and Emerging Sciences', shortName: 'FAST-NUCES', city: 'Islamabad', province: 'ICT', domain: 'nu.edu.pk', studentCount: 420, isActive: true, createdAt: DateTime(2026, 1, 10)),
-      UniversitySettingItem(id: 'uni_02', name: 'National University of Sciences & Technology', shortName: 'NUST', city: 'Islamabad', province: 'ICT', domain: 'seecs.edu.pk', studentCount: 385, isActive: true, createdAt: DateTime(2026, 1, 10)),
-      UniversitySettingItem(id: 'uni_03', name: 'Punjab University College of Information Technology', shortName: 'PUCIT', city: 'Lahore', province: 'Punjab', domain: 'pucit.edu.pk', studentCount: 290, isActive: true, createdAt: DateTime(2026, 1, 12)),
-      UniversitySettingItem(id: 'uni_04', name: 'Lahore University of Management Sciences', shortName: 'LUMS', city: 'Lahore', province: 'Punjab', domain: 'lums.edu.pk', studentCount: 210, isActive: true, createdAt: DateTime(2026, 1, 15)),
-      UniversitySettingItem(id: 'uni_05', name: 'University of Engineering and Technology', shortName: 'UET Lahore', city: 'Lahore', province: 'Punjab', domain: 'uet.edu.pk', studentCount: 195, isActive: true, createdAt: DateTime(2026, 1, 20)),
-      UniversitySettingItem(id: 'uni_06', name: 'Ghulam Ishaq Khan Institute', shortName: 'GIKI', city: 'Topi', province: 'KPK', domain: 'giki.edu.pk', studentCount: 160, isActive: true, createdAt: DateTime(2026, 2, 1)),
-      UniversitySettingItem(id: 'uni_07', name: 'Institute of Business Administration', shortName: 'IBA Karachi', city: 'Karachi', province: 'Sindh', domain: 'iba.edu.pk', studentCount: 140, isActive: true, createdAt: DateTime(2026, 2, 5)),
-      UniversitySettingItem(id: 'uni_08', name: 'COMSATS University Islamabad', shortName: 'CUI', city: 'Islamabad', province: 'ICT', domain: 'comsats.edu.pk', studentCount: 230, isActive: true, createdAt: DateTime(2026, 2, 15)),
-    ]);
+    final projects = AdminProjectService().allProjects;
+    final students = AdminStudentService().allStudents;
 
-    // 4. Initial Help Requests
-    helpRequestsNotifier = ValueNotifier<List<HelpRequestItem>>([
-      HelpRequestItem(
-        id: 'TKT-2026-081',
-        senderName: 'Hamza Tariq',
-        senderEmail: 'hamza.tariq@nu.edu.pk',
-        userType: 'student',
-        subject: 'Degree transcript verification upload issue',
-        message: 'I received an error while uploading my 7th semester official grade card PDF. It keeps saying document exceeded size.',
-        category: 'Document Verification',
-        status: HelpRequestStatus.pending,
-        priority: HelpRequestPriority.high,
-        submittedAt: DateTime(2026, 11, 9, 14, 20),
-      ),
-      HelpRequestItem(
-        id: 'TKT-2026-079',
-        senderName: 'Arbisoft Talent Acquisition',
-        senderEmail: 'careers@arbisoft.com',
-        userType: 'company',
-        subject: 'Project deadline extension for sprint team',
-        message: 'We wish to extend the final sprint milestone deliverable by 5 working days due to university mid-term schedules.',
-        category: 'Project Milestones',
-        status: HelpRequestStatus.inProgress,
-        priority: HelpRequestPriority.normal,
-        submittedAt: DateTime(2026, 11, 8, 11, 15),
-        adminResponse: 'Under review with academic department liaison.',
-        respondedByAdmin: 'ops@campusconnect.edu.pk',
-      ),
-      HelpRequestItem(
-        id: 'TKT-2026-072',
-        senderName: 'Ayesha Siddiqui',
-        senderEmail: 'ayesha.s@seecs.edu.pk',
-        userType: 'student',
-        subject: 'Certificate verification ID not generating QR',
-        message: 'My completed sprint certificate CC-CERT-2026-N044 QR code links to a 404 page.',
-        category: 'Credential Vault',
-        status: HelpRequestStatus.resolved,
-        priority: HelpRequestPriority.urgent,
-        submittedAt: DateTime(2026, 11, 6, 9, 30),
-        adminResponse: 'FIPS cryptographic ledger re-indexed and public URL regenerated.',
-        respondedByAdmin: 'admin@campusconnect.edu.pk',
-        resolvedAt: DateTime(2026, 11, 6, 12, 10),
-        resolutionNotes: 'Verified DNS routing and ledger sync resolved.',
-      ),
-    ]);
+    // 1. Load platform_taxonomies (category, skill, university, policy)
+    try {
+      final taxRows = await supabase
+          .from('platform_taxonomies')
+          .select()
+          .order('created_at', ascending: true);
 
-    // 5. Initial Complaints
-    complaintsNotifier = ValueNotifier<List<ComplaintItem>>([
-      ComplaintItem(
-        id: 'CMP-2026-014',
-        complainantName: 'Systems Limited (Corporate Sponsor)',
-        complainantEmail: 'projects@systemsltd.com',
-        reportedEntityName: 'Student Candidate (Usman Farooq)',
-        reportedEntityType: 'student',
-        category: 'Deliverable Integrity & Plagiarism',
-        subject: 'Suspected third-party repository code submitted without attribution',
-        description: 'Candidate submitted sprint module that closely mirrors an open-source MIT repository without disclosing libraries or attribution.',
-        status: ComplaintStatus.underInvestigation,
-        severity: ComplaintSeverity.high,
-        submittedAt: DateTime(2026, 11, 7, 16, 45),
-        investigationNotes: 'Administrative code diff audit scheduled with candidate and mentor.',
-        history: [
-          ComplaintHistoryEvent(
-            action: 'Complaint Logged',
-            performedBy: 'System Auto-Ingest',
-            timestamp: DateTime(2026, 11, 7, 16, 45),
-            notes: 'Corporate grievance ticket opened with repository comparison log.',
+      final List<CategorySettingItem> cats = [];
+      final List<SkillSettingItem> skills = [];
+      final List<UniversitySettingItem> unis = [];
+      final List<PlatformPolicyItem> policies = [];
+
+      for (final raw in taxRows) {
+        final row = Map<String, dynamic>.from(raw);
+        final id = row['id']?.toString() ?? '';
+        final itemType = (row['item_type']?.toString() ?? '').toLowerCase();
+        final name = row['name']?.toString() ?? '';
+        final desc = row['description']?.toString() ?? '';
+        final isActive = row['is_active'] != false;
+        final createdAt =
+            SupabaseHelper.parseDate(row['created_at']) ?? DateTime.now();
+        final meta = row['metadata'] is Map
+            ? Map<String, dynamic>.from(row['metadata'] as Map)
+            : <String, dynamic>{};
+
+        if (itemType == 'category') {
+          final colorVal = (meta['color_value'] as num?)?.toInt() ?? 0xFF6366F1;
+          final projCount = projects
+              .where((p) => p.category.toLowerCase() == name.toLowerCase())
+              .length;
+          cats.add(
+            CategorySettingItem(
+              id: id,
+              name: name,
+              description: desc,
+              color: Color(colorVal),
+              projectCount: projCount,
+              isActive: isActive,
+              createdAt: createdAt,
+            ),
+          );
+        } else if (itemType == 'skill') {
+          final catName = meta['category_name']?.toString() ?? 'General';
+          final usage = projects
+              .where(
+                (p) => p.skillsRequired.any(
+                  (s) => s.toLowerCase() == name.toLowerCase(),
+                ),
+              )
+              .length;
+          skills.add(
+            SkillSettingItem(
+              id: id,
+              name: name,
+              categoryName: catName,
+              usageCount: usage,
+              isActive: isActive,
+              createdAt: createdAt,
+            ),
+          );
+        } else if (itemType == 'university') {
+          final shortName = meta['short_name']?.toString() ?? name;
+          final studCount = students
+              .where(
+                (s) =>
+                    s.university.toLowerCase().contains(shortName.toLowerCase()) ||
+                    s.university.toLowerCase() == name.toLowerCase(),
+              )
+              .length;
+          unis.add(
+            UniversitySettingItem(
+              id: id,
+              name: name,
+              shortName: shortName,
+              city: meta['city']?.toString() ?? '',
+              province: meta['province']?.toString() ?? '',
+              domain: meta['domain']?.toString() ?? '',
+              studentCount: studCount,
+              isActive: isActive,
+              createdAt: createdAt,
+            ),
+          );
+        } else if (itemType == 'policy') {
+          final rawHistory = meta['history'];
+          final List<PolicyVersionRecord> history = [];
+          if (rawHistory is List) {
+            for (final h in rawHistory) {
+              if (h is Map) {
+                history.add(
+                  PolicyVersionRecord(
+                    version: h['version']?.toString() ?? 'v1.0',
+                    updatedAt:
+                        SupabaseHelper.parseDate(h['updated_at']) ?? createdAt,
+                    updatedByAdmin:
+                        h['updated_by_admin']?.toString() ?? 'Administrator',
+                    changeSummary: h['change_summary']?.toString() ?? '',
+                  ),
+                );
+              }
+            }
+          }
+          policies.add(
+            PlatformPolicyItem(
+              id: id,
+              title: name,
+              policyKey: meta['policy_key']?.toString() ?? id,
+              version: meta['version']?.toString() ?? 'v1.0',
+              lastUpdatedAt:
+                  SupabaseHelper.parseDate(meta['last_updated_at']) ?? createdAt,
+              updatedByAdmin:
+                  meta['updated_by_admin']?.toString() ?? 'Administrator',
+              content: desc,
+              history: history,
+            ),
+          );
+        }
+      }
+
+      categoriesNotifier.value = cats;
+      skillsNotifier.value = skills;
+      universitiesNotifier.value = unis;
+      policiesNotifier.value = policies;
+    } catch (e) {
+      debugPrint('AdminSettingsService load taxonomies error: $e');
+    }
+
+    // 2. Load support_tickets -> split into Help Requests vs Complaints/Grievances
+    try {
+      final ticketRows = await supabase
+          .from('support_tickets')
+          .select()
+          .order('created_at', ascending: false);
+
+      final List<HelpRequestItem> helpItems = [];
+      final List<ComplaintItem> complaintItems = [];
+      _ticketUserIds.clear();
+
+      for (final raw in ticketRows) {
+        final row = Map<String, dynamic>.from(raw);
+        final id = row['id']?.toString() ?? '';
+        final ticketNo = row['ticket_number']?.toString() ?? id;
+        final uid = row['user_id']?.toString() ?? '';
+        if (id.isNotEmpty && uid.isNotEmpty) {
+          _ticketUserIds[id] = uid;
+        }
+
+        final category = row['category']?.toString() ?? 'General';
+        final rawStatus = (row['status']?.toString() ?? 'Open').toLowerCase();
+        final subject = row['subject']?.toString() ?? 'Support Inquiry';
+        final message = row['message']?.toString() ?? '';
+        final createdAt =
+            SupabaseHelper.parseDate(row['created_at']) ?? DateTime.now();
+        final updatedAt = SupabaseHelper.parseDate(row['updated_at']);
+        final adminResp = row['admin_response']?.toString();
+        final assignedTo = row['assigned_to']?.toString();
+
+        final isComplaint = category.toLowerCase().contains('complaint') ||
+            category.toLowerCase().contains('grievance') ||
+            category.toLowerCase().contains('plagiarism') ||
+            ticketNo.toUpperCase().startsWith('CMP');
+
+        if (isComplaint) {
+          ComplaintStatus compStatus;
+          if (rawStatus == 'resolved') {
+            compStatus = ComplaintStatus.resolved;
+          } else if (rawStatus == 'dismissed') {
+            compStatus = ComplaintStatus.dismissed;
+          } else if (rawStatus == 'in_progress' ||
+              rawStatus == 'under_investigation' ||
+              rawStatus == 'in progress') {
+            compStatus = ComplaintStatus.underInvestigation;
+          } else {
+            compStatus = ComplaintStatus.newComplaint;
+          }
+
+          complaintItems.add(
+            ComplaintItem(
+              id: id,
+              complainantName: row['user_name']?.toString() ?? 'Platform User',
+              complainantEmail: row['user_email']?.toString() ?? '',
+              reportedEntityName: assignedTo ?? 'Platform Compliance',
+              reportedEntityType:
+                  (row['user_role']?.toString().toLowerCase() == 'company')
+                      ? 'student'
+                      : 'company',
+              category: category,
+              subject: subject,
+              description: message,
+              status: compStatus,
+              severity: category.toLowerCase().contains('plagiarism')
+                  ? ComplaintSeverity.high
+                  : ComplaintSeverity.medium,
+              submittedAt: createdAt,
+              investigationNotes: adminResp,
+              resolutionReason: compStatus == ComplaintStatus.resolved ||
+                      compStatus == ComplaintStatus.dismissed
+                  ? adminResp
+                  : null,
+              resolvedAt: compStatus == ComplaintStatus.resolved ||
+                      compStatus == ComplaintStatus.dismissed
+                  ? updatedAt
+                  : null,
+            ),
+          );
+        } else {
+          HelpRequestStatus helpStatus;
+          if (rawStatus == 'resolved' || rawStatus == 'closed') {
+            helpStatus = HelpRequestStatus.resolved;
+          } else if (rawStatus == 'in_progress' ||
+              rawStatus == 'in progress' ||
+              (adminResp?.isNotEmpty == true)) {
+            helpStatus = HelpRequestStatus.inProgress;
+          } else {
+            helpStatus = HelpRequestStatus.pending;
+          }
+
+          helpItems.add(
+            HelpRequestItem(
+              id: id,
+              senderName: row['user_name']?.toString() ?? 'Platform User',
+              senderEmail: row['user_email']?.toString() ?? '',
+              userType:
+                  (row['user_role']?.toString() ?? 'student').toLowerCase(),
+              subject: subject,
+              message: message,
+              category: category,
+              status: helpStatus,
+              priority: HelpRequestPriority.normal,
+              submittedAt: createdAt,
+              adminResponse: adminResp,
+              respondedByAdmin: assignedTo,
+              resolvedAt:
+                  helpStatus == HelpRequestStatus.resolved ? updatedAt : null,
+              resolutionNotes:
+                  helpStatus == HelpRequestStatus.resolved ? adminResp : null,
+            ),
+          );
+        }
+      }
+
+      helpRequestsNotifier.value = helpItems;
+      complaintsNotifier.value = complaintItems;
+    } catch (e) {
+      debugPrint('AdminSettingsService load support_tickets error: $e');
+    }
+
+    // 3. Load Admin accounts from profiles
+    try {
+      final adminRows = await supabase
+          .from('profiles')
+          .select()
+          .ilike('user_type', 'admin')
+          .order('created_at', ascending: true);
+
+      final List<AdminUserModel> admins = [];
+      for (final raw in adminRows) {
+        final row = Map<String, dynamic>.from(raw);
+        final name = (row['name']?.toString().trim().isNotEmpty == true)
+            ? row['name'].toString().trim()
+            : 'Executive Administrator';
+        final dept = (row['university']?.toString().trim().isNotEmpty == true)
+            ? row['university'].toString().trim()
+            : 'CampusConnect Governance Council';
+        final email = row['email']?.toString() ?? '';
+        admins.add(
+          AdminUserModel(
+            id: row['id']?.toString() ?? '',
+            fullName: name,
+            email: email,
+            role: 'SUPER_ADMIN',
+            roleDisplayName: 'Platform Administrator',
+            department: dept,
+            avatarInitial: SupabaseHelper.initialsFor(name, fallback: 'EA'),
+            permissions: const [
+              'all',
+              'manage_categories',
+              'manage_skills',
+              'manage_universities',
+              'manage_support',
+              'manage_policies',
+              'manage_admins',
+            ],
+            lastLoginAt: SupabaseHelper.formatRelativeTime(
+              row['updated_at'] ?? row['created_at'],
+            ),
+            isActive:
+                (row['account_status']?.toString().toLowerCase() ?? 'active') !=
+                    'suspended',
           ),
-          ComplaintHistoryEvent(
-            action: 'Status updated to Under Investigation',
-            performedBy: 'ops@campusconnect.edu.pk',
-            timestamp: DateTime(2026, 11, 8, 10, 0),
-            notes: 'Code integrity review initiated.',
-          ),
-        ],
-      ),
-      ComplaintItem(
-        id: 'CMP-2026-011',
-        complainantName: 'PUCIT Student Cohort Team',
-        complainantEmail: 'lead@pucit.edu.pk',
-        reportedEntityName: 'NexGen Cloud Solutions',
-        reportedEntityType: 'company',
-        category: 'Unresponsive Corporate Liaison',
-        subject: 'Corporate mentor has not responded for 10 consecutive days',
-        description: 'Sprint deliverable review is blocked because company mentor has not scheduled weekly check-in or reviewed PR.',
-        status: ComplaintStatus.resolved,
-        severity: ComplaintSeverity.medium,
-        submittedAt: DateTime(2026, 11, 3, 10, 15),
-        investigationNotes: 'Contacted company VP of Engineering. Mentor on emergency medical leave.',
-        resolutionReason: 'Corporate sponsor appointed alternate senior engineering lead to unblock sprint evaluations.',
-        resolvedByAdmin: 'admin@campusconnect.edu.pk',
-        resolvedAt: DateTime(2026, 11, 5, 15, 30),
-      ),
-    ]);
+        );
+      }
+      adminsNotifier.value = admins;
+    } catch (e) {
+      debugPrint('AdminSettingsService load admins error: $e');
+    }
 
-    // 6. Initial Platform Policies
-    policiesNotifier = ValueNotifier<List<PlatformPolicyItem>>([
-      PlatformPolicyItem(
-        id: 'pol_terms',
-        title: 'Institutional Terms of Service & Collaboration Charter',
-        policyKey: 'terms',
-        version: 'v2.4',
-        lastUpdatedAt: DateTime(2026, 10, 15),
-        updatedByAdmin: 'admin@campusconnect.edu.pk',
-        content: 'CampusConnect facilitates non-monetary academic and corporate student collaboration. All projects are strictly educational and non-financial sprints. No financial compensation, salaries, or stipend claims are mediated through the platform.',
-        history: [
-          PolicyVersionRecord(version: 'v2.4', updatedAt: DateTime(2026, 10, 15), updatedByAdmin: 'admin@campusconnect.edu.pk', changeSummary: 'Clarified educational project governance and non-financial charter.'),
-          PolicyVersionRecord(version: 'v2.3', updatedAt: DateTime(2026, 7, 1), updatedByAdmin: 'admin@campusconnect.edu.pk', changeSummary: 'Integrated HEC accreditation compliance clauses.'),
-        ],
-      ),
-      PlatformPolicyItem(
-        id: 'pol_privacy',
-        title: 'Academic Data Privacy & FERPA Compliance',
-        policyKey: 'privacy',
-        version: 'v2.1',
-        lastUpdatedAt: DateTime(2026, 9, 20),
-        updatedByAdmin: 'admin@campusconnect.edu.pk',
-        content: 'Student academic records, transcript credentials, and corporate evaluation documents are encrypted using AES-256 at rest and TLS 1.3 in transit. Personal contact details are disclosed solely to verified project mentors.',
-        history: [
-          PolicyVersionRecord(version: 'v2.1', updatedAt: DateTime(2026, 9, 20), updatedByAdmin: 'admin@campusconnect.edu.pk', changeSummary: 'Updated data retention policies for graduated students.'),
-        ],
-      ),
-      PlatformPolicyItem(
-        id: 'pol_community',
-        title: 'Community Code of Conduct & Academic Integrity',
-        policyKey: 'community',
-        version: 'v1.8',
-        lastUpdatedAt: DateTime(2026, 8, 14),
-        updatedByAdmin: 'ops@campusconnect.edu.pk',
-        content: 'Members agree to professional conduct, mutual respect, and honest academic attribution. Plagiarism, unauthorized code duplication, or harassment results in immediate credential nullification and institutional report.',
-      ),
-    ]);
+    // 4. Current live auth session
+    final user = supabase.auth.currentUser;
+    if (user != null) {
+      sessionsNotifier.value = [
+        AdminSessionItem(
+          sessionId: user.id.length >= 8 ? 'sess_${user.id.substring(0, 8)}' : 'sess_current',
+          device: 'Authenticated Supabase Session',
+          browser: user.email ?? 'Admin Console',
+          ipAddress: 'Active JWT Session',
+          location: 'Supabase Auth Verified',
+          loginAt: SupabaseHelper.parseDate(user.lastSignInAt) ?? DateTime.now(),
+          isCurrent: true,
+        ),
+      ];
+    } else {
+      sessionsNotifier.value = [];
+    }
 
-    // 7. Initial Admin Accounts
-    adminsNotifier = ValueNotifier<List<AdminUserModel>>([
-      const AdminUserModel(
-        id: 'adm_root_001',
-        fullName: 'Dr. Tariq Mahmood',
-        email: 'admin@campusconnect.edu.pk',
-        role: 'SUPER_ADMIN',
-        roleDisplayName: 'Executive Super Administrator',
-        department: 'CampusConnect Governance Council',
-        avatarInitial: 'TM',
-        permissions: ['all', 'manage_categories', 'manage_skills', 'manage_universities', 'manage_support', 'manage_policies', 'manage_admins'],
-        lastLoginAt: 'Today at 09:15 AM',
-        isActive: true,
-      ),
-      const AdminUserModel(
-        id: 'adm_ops_002',
-        fullName: 'Syeda Fatima Noor',
-        email: 'ops@campusconnect.edu.pk',
-        role: 'OPERATIONS_ADMIN',
-        roleDisplayName: 'Operations & Verification Director',
-        department: 'Corporate & University Partnerships',
-        avatarInitial: 'FN',
-        permissions: ['manage_categories', 'manage_skills', 'manage_universities', 'manage_support'],
-        lastLoginAt: 'Yesterday at 04:30 PM',
-        isActive: true,
-      ),
-      const AdminUserModel(
-        id: 'adm_sec_003',
-        fullName: 'Zainab Malik',
-        email: 'compliance@campusconnect.edu.pk',
-        role: 'AUDIT_ADMIN',
-        roleDisplayName: 'Compliance & Audit Officer',
-        department: 'Institutional Integrity Unit',
-        avatarInitial: 'ZM',
-        permissions: ['manage_support', 'manage_policies'],
-        lastLoginAt: 'Nov 6 at 11:20 AM',
-        isActive: true,
-      ),
-    ]);
-
-    // 8. Initial Login Sessions
-    sessionsNotifier = ValueNotifier<List<AdminSessionItem>>([
-      AdminSessionItem(
-        sessionId: 'sess_cur_9821',
-        device: 'Windows 11 PC (Workstation)',
-        browser: 'Google Chrome 131.0',
-        ipAddress: '111.68.102.45 (PTCL Islamabad)',
-        location: 'Islamabad, Pakistan',
-        loginAt: DateTime.now().subtract(const Duration(hours: 2)),
-        isCurrent: true,
-      ),
-      AdminSessionItem(
-        sessionId: 'sess_sec_4102',
-        device: 'MacBook Pro 16" M3',
-        browser: 'Safari 18.1',
-        ipAddress: '39.40.118.22 (Nayatel Lahore)',
-        location: 'Lahore, Pakistan',
-        loginAt: DateTime.now().subtract(const Duration(days: 1, hours: 4)),
-        isCurrent: false,
-      ),
-    ]);
-
-    // 9. Initial Audit Logs
-    auditLogsNotifier = ValueNotifier<List<AdminAuditLogItem>>([
-      AdminAuditLogItem(
-        id: 'LOG-2026-9041',
-        adminEmail: 'admin@campusconnect.edu.pk',
-        action: 'POLICY_UPDATE',
-        target: 'Institutional Terms of Service',
-        timestamp: DateTime(2026, 11, 9, 18, 20),
-        details: 'Updated collaboration charter version to v2.4.',
-        ipAddress: '111.68.102.45',
-      ),
-      AdminAuditLogItem(
-        id: 'LOG-2026-9038',
-        adminEmail: 'ops@campusconnect.edu.pk',
-        action: 'HELP_TICKET_ASSIGNED',
-        target: 'TKT-2026-079',
-        timestamp: DateTime(2026, 11, 8, 11, 30),
-        details: 'Assigned Arbisoft extension inquiry to academic liaison.',
-        ipAddress: '39.40.118.22',
-      ),
-      AdminAuditLogItem(
-        id: 'LOG-2026-9012',
-        adminEmail: 'admin@campusconnect.edu.pk',
-        action: 'UNIVERSITY_ACCREDITATION',
-        target: 'FAST-NUCES Islamabad',
-        timestamp: DateTime(2026, 11, 5, 14, 0),
-        details: 'Re-validated institutional domain and SSL cert binding.',
-        ipAddress: '111.68.102.45',
-      ),
-    ]);
+    // 5. Audit Logs
+    try {
+      final logRows = await supabase
+          .from('admin_audit_logs')
+          .select()
+          .order('created_at', ascending: false)
+          .limit(200);
+      auditLogsNotifier.value = logRows.map((raw) {
+        final row = Map<String, dynamic>.from(raw);
+        return AdminAuditLogItem(
+          id: row['id']?.toString() ?? '',
+          adminEmail: row['admin_email']?.toString() ?? 'admin',
+          action: row['action']?.toString() ?? 'EVENT',
+          target: row['target']?.toString() ?? '',
+          timestamp:
+              SupabaseHelper.parseDate(row['created_at']) ?? DateTime.now(),
+          details: row['details']?.toString() ?? '',
+          ipAddress: 'Supabase Audit Vault',
+        );
+      }).toList();
+    } catch (e) {
+      debugPrint('AdminSettingsService load audit logs error: $e');
+    }
   }
 
   // --- 1. CATEGORY MANAGEMENT ---
@@ -351,8 +402,9 @@ class AdminSettingsService {
   }) {
     if (isDuplicateCategory(name)) return false;
 
+    final newId = SupabaseHelper.generateUuid();
     final newCat = CategorySettingItem(
-      id: 'cat_${Random().nextInt(9000) + 1000}',
+      id: newId,
       name: name.trim(),
       description: description.trim(),
       color: color,
@@ -362,7 +414,25 @@ class AdminSettingsService {
     );
 
     categoriesNotifier.value = [...categoriesNotifier.value, newCat];
-    _logAction(adminEmail, 'CATEGORY_CREATE', newCat.name, 'Created new category taxonomy.');
+    _persistAsync(() async {
+      final supabase = SupabaseHelper.clientOrNull;
+      if (supabase != null) {
+        await supabase.from('platform_taxonomies').insert({
+          'id': newId,
+          'item_type': 'category',
+          'name': newCat.name,
+          'description': newCat.description,
+          'is_active': true,
+          'metadata': {'color_value': color.toARGB32()},
+        });
+      }
+    });
+    _logAction(
+      adminEmail,
+      'CATEGORY_CREATE',
+      newCat.name,
+      'Created new category taxonomy.',
+    );
     return true;
   }
 
@@ -377,12 +447,31 @@ class AdminSettingsService {
 
     categoriesNotifier.value = categoriesNotifier.value.map((c) {
       if (c.id == id) {
-        return c.copyWith(name: name.trim(), description: description.trim(), color: color);
+        return c.copyWith(
+          name: name.trim(),
+          description: description.trim(),
+          color: color,
+        );
       }
       return c;
     }).toList();
 
-    _logAction(adminEmail, 'CATEGORY_UPDATE', name, 'Updated category description and theme color.');
+    _persistAsync(() async {
+      final supabase = SupabaseHelper.clientOrNull;
+      if (supabase != null && SupabaseHelper.isUuid(id)) {
+        await supabase.from('platform_taxonomies').update({
+          'name': name.trim(),
+          'description': description.trim(),
+          'metadata': {'color_value': color.toARGB32()},
+        }).eq('id', id);
+      }
+    });
+    _logAction(
+      adminEmail,
+      'CATEGORY_UPDATE',
+      name.trim(),
+      'Updated category description and theme color.',
+    );
     return true;
   }
 
@@ -390,7 +479,20 @@ class AdminSettingsService {
     categoriesNotifier.value = categoriesNotifier.value.map((c) {
       if (c.id == id) {
         final newStatus = !c.isActive;
-        _logAction(adminEmail, 'CATEGORY_TOGGLE', c.name, 'Toggled status to ${newStatus ? 'Active' : 'Inactive'}.');
+        _persistAsync(() async {
+          final supabase = SupabaseHelper.clientOrNull;
+          if (supabase != null && SupabaseHelper.isUuid(id)) {
+            await supabase
+                .from('platform_taxonomies')
+                .update({'is_active': newStatus}).eq('id', id);
+          }
+        });
+        _logAction(
+          adminEmail,
+          'CATEGORY_TOGGLE',
+          c.name,
+          'Toggled status to ${newStatus ? 'Active' : 'Inactive'}.',
+        );
         return c.copyWith(isActive: newStatus);
       }
       return c;
@@ -412,8 +514,9 @@ class AdminSettingsService {
   }) {
     if (isDuplicateSkill(name)) return false;
 
+    final newId = SupabaseHelper.generateUuid();
     final newSkill = SkillSettingItem(
-      id: 'skl_${Random().nextInt(9000) + 1000}',
+      id: newId,
       name: name.trim(),
       categoryName: categoryName,
       usageCount: 0,
@@ -422,7 +525,25 @@ class AdminSettingsService {
     );
 
     skillsNotifier.value = [...skillsNotifier.value, newSkill];
-    _logAction(adminEmail, 'SKILL_CREATE', newSkill.name, 'Added skill to $categoryName.');
+    _persistAsync(() async {
+      final supabase = SupabaseHelper.clientOrNull;
+      if (supabase != null) {
+        await supabase.from('platform_taxonomies').insert({
+          'id': newId,
+          'item_type': 'skill',
+          'name': newSkill.name,
+          'description': '',
+          'is_active': true,
+          'metadata': {'category_name': categoryName},
+        });
+      }
+    });
+    _logAction(
+      adminEmail,
+      'SKILL_CREATE',
+      newSkill.name,
+      'Added skill to $categoryName.',
+    );
     return true;
   }
 
@@ -441,21 +562,63 @@ class AdminSettingsService {
       return s;
     }).toList();
 
-    _logAction(adminEmail, 'SKILL_UPDATE', name, 'Updated skill taxonomy metadata.');
+    _persistAsync(() async {
+      final supabase = SupabaseHelper.clientOrNull;
+      if (supabase != null && SupabaseHelper.isUuid(id)) {
+        await supabase.from('platform_taxonomies').update({
+          'name': name.trim(),
+          'metadata': {'category_name': categoryName},
+        }).eq('id', id);
+      }
+    });
+    _logAction(
+      adminEmail,
+      'SKILL_UPDATE',
+      name.trim(),
+      'Updated skill taxonomy metadata.',
+    );
     return true;
   }
 
   void deleteSkill(String id, String adminEmail) {
-    final target = skillsNotifier.value.firstWhere((s) => s.id == id);
-    skillsNotifier.value = skillsNotifier.value.where((s) => s.id != id).toList();
-    _logAction(adminEmail, 'SKILL_DELETE', target.name, 'Removed skill from taxonomy registry.');
+    final idx = skillsNotifier.value.indexWhere((s) => s.id == id);
+    if (idx == -1) return;
+    final target = skillsNotifier.value[idx];
+    skillsNotifier.value =
+        skillsNotifier.value.where((s) => s.id != id).toList();
+
+    _persistAsync(() async {
+      final supabase = SupabaseHelper.clientOrNull;
+      if (supabase != null && SupabaseHelper.isUuid(id)) {
+        await supabase.from('platform_taxonomies').delete().eq('id', id);
+      }
+    });
+    _logAction(
+      adminEmail,
+      'SKILL_DELETE',
+      target.name,
+      'Removed skill from taxonomy registry.',
+    );
   }
 
   void toggleSkillActive(String id, String adminEmail) {
     skillsNotifier.value = skillsNotifier.value.map((s) {
       if (s.id == id) {
         final newStatus = !s.isActive;
-        _logAction(adminEmail, 'SKILL_TOGGLE', s.name, 'Toggled skill status to ${newStatus ? 'Active' : 'Deactivated'}.');
+        _persistAsync(() async {
+          final supabase = SupabaseHelper.clientOrNull;
+          if (supabase != null && SupabaseHelper.isUuid(id)) {
+            await supabase
+                .from('platform_taxonomies')
+                .update({'is_active': newStatus}).eq('id', id);
+          }
+        });
+        _logAction(
+          adminEmail,
+          'SKILL_TOGGLE',
+          s.name,
+          'Toggled skill status to ${newStatus ? 'Active' : 'Deactivated'}.',
+        );
         return s.copyWith(isActive: newStatus);
       }
       return s;
@@ -468,7 +631,8 @@ class AdminSettingsService {
     final lowerDomain = domain.trim().toLowerCase();
     return universitiesNotifier.value.any(
       (u) =>
-          (u.name.trim().toLowerCase() == lowerName || u.domain.trim().toLowerCase() == lowerDomain) &&
+          (u.name.trim().toLowerCase() == lowerName ||
+              u.domain.trim().toLowerCase() == lowerDomain) &&
           u.id != excludeId,
     );
   }
@@ -483,8 +647,9 @@ class AdminSettingsService {
   }) {
     if (isDuplicateUniversity(name, domain)) return false;
 
+    final newId = SupabaseHelper.generateUuid();
     final newUni = UniversitySettingItem(
-      id: 'uni_${Random().nextInt(9000) + 1000}',
+      id: newId,
       name: name.trim(),
       shortName: shortName.trim(),
       city: city.trim(),
@@ -496,7 +661,30 @@ class AdminSettingsService {
     );
 
     universitiesNotifier.value = [...universitiesNotifier.value, newUni];
-    _logAction(adminEmail, 'UNIVERSITY_CREATE', newUni.shortName, 'Accredited university $domain in $city.');
+    _persistAsync(() async {
+      final supabase = SupabaseHelper.clientOrNull;
+      if (supabase != null) {
+        await supabase.from('platform_taxonomies').insert({
+          'id': newId,
+          'item_type': 'university',
+          'name': newUni.name,
+          'description': '${newUni.city}, ${newUni.province}',
+          'is_active': true,
+          'metadata': {
+            'short_name': newUni.shortName,
+            'city': newUni.city,
+            'province': newUni.province,
+            'domain': newUni.domain,
+          },
+        });
+      }
+    });
+    _logAction(
+      adminEmail,
+      'UNIVERSITY_CREATE',
+      newUni.shortName,
+      'Accredited university ${newUni.domain} in ${newUni.city}.',
+    );
     return true;
   }
 
@@ -524,7 +712,27 @@ class AdminSettingsService {
       return u;
     }).toList();
 
-    _logAction(adminEmail, 'UNIVERSITY_UPDATE', shortName, 'Updated institutional records.');
+    _persistAsync(() async {
+      final supabase = SupabaseHelper.clientOrNull;
+      if (supabase != null && SupabaseHelper.isUuid(id)) {
+        await supabase.from('platform_taxonomies').update({
+          'name': name.trim(),
+          'description': '${city.trim()}, ${province.trim()}',
+          'metadata': {
+            'short_name': shortName.trim(),
+            'city': city.trim(),
+            'province': province.trim(),
+            'domain': domain.trim().toLowerCase(),
+          },
+        }).eq('id', id);
+      }
+    });
+    _logAction(
+      adminEmail,
+      'UNIVERSITY_UPDATE',
+      shortName.trim(),
+      'Updated institutional records.',
+    );
     return true;
   }
 
@@ -532,7 +740,20 @@ class AdminSettingsService {
     universitiesNotifier.value = universitiesNotifier.value.map((u) {
       if (u.id == id) {
         final newStatus = !u.isActive;
-        _logAction(adminEmail, 'UNIVERSITY_TOGGLE', u.shortName, 'Changed accreditation state to ${newStatus ? 'Active' : 'Suspended'}.');
+        _persistAsync(() async {
+          final supabase = SupabaseHelper.clientOrNull;
+          if (supabase != null && SupabaseHelper.isUuid(id)) {
+            await supabase
+                .from('platform_taxonomies')
+                .update({'is_active': newStatus}).eq('id', id);
+          }
+        });
+        _logAction(
+          adminEmail,
+          'UNIVERSITY_TOGGLE',
+          u.shortName,
+          'Changed accreditation state to ${newStatus ? 'Active' : 'Suspended'}.',
+        );
         return u.copyWith(isActive: newStatus);
       }
       return u;
@@ -545,10 +766,11 @@ class AdminSettingsService {
     required String responseText,
     required String adminEmail,
   }) {
+    final cleanResp = responseText.trim();
     helpRequestsNotifier.value = helpRequestsNotifier.value.map((t) {
       if (t.id == ticketId) {
         return t.copyWith(
-          adminResponse: responseText.trim(),
+          adminResponse: cleanResp,
           respondedByAdmin: adminEmail,
           status: HelpRequestStatus.inProgress,
         );
@@ -556,7 +778,34 @@ class AdminSettingsService {
       return t;
     }).toList();
 
-    _logAction(adminEmail, 'HELP_TICKET_RESPOND', ticketId, 'Provided administrative answer.');
+    _persistAsync(() async {
+      final supabase = SupabaseHelper.clientOrNull;
+      if (supabase != null && SupabaseHelper.isUuid(ticketId)) {
+        await supabase.from('support_tickets').update({
+          'admin_response': cleanResp,
+          'assigned_to': adminEmail,
+          'status': 'In Progress',
+          'updated_at': DateTime.now().toIso8601String(),
+        }).eq('id', ticketId);
+
+        final ownerUid = _ticketUserIds[ticketId];
+        if (SupabaseHelper.isUuid(ownerUid)) {
+          await supabase.from('notifications').insert({
+            'user_id': ownerUid,
+            'title': 'Support Ticket Response',
+            'message': cleanResp,
+            'type': 'support',
+            'actor_name': adminEmail,
+          });
+        }
+      }
+    });
+    _logAction(
+      adminEmail,
+      'HELP_TICKET_RESPOND',
+      ticketId,
+      'Provided administrative answer.',
+    );
   }
 
   void resolveHelpRequest({
@@ -564,18 +813,50 @@ class AdminSettingsService {
     required String resolutionNotes,
     required String adminEmail,
   }) {
+    final cleanNotes = resolutionNotes.trim();
     helpRequestsNotifier.value = helpRequestsNotifier.value.map((t) {
       if (t.id == ticketId) {
         return t.copyWith(
           status: HelpRequestStatus.resolved,
           resolvedAt: DateTime.now(),
-          resolutionNotes: resolutionNotes.trim(),
+          resolutionNotes: cleanNotes,
+          adminResponse: t.adminResponse?.isNotEmpty == true
+              ? t.adminResponse
+              : cleanNotes,
+          respondedByAdmin: adminEmail,
         );
       }
       return t;
     }).toList();
 
-    _logAction(adminEmail, 'HELP_TICKET_RESOLVE', ticketId, 'Ticket resolved: $resolutionNotes');
+    _persistAsync(() async {
+      final supabase = SupabaseHelper.clientOrNull;
+      if (supabase != null && SupabaseHelper.isUuid(ticketId)) {
+        await supabase.from('support_tickets').update({
+          'admin_response': cleanNotes,
+          'assigned_to': adminEmail,
+          'status': 'Resolved',
+          'updated_at': DateTime.now().toIso8601String(),
+        }).eq('id', ticketId);
+
+        final ownerUid = _ticketUserIds[ticketId];
+        if (SupabaseHelper.isUuid(ownerUid)) {
+          await supabase.from('notifications').insert({
+            'user_id': ownerUid,
+            'title': 'Support Ticket Resolved',
+            'message': cleanNotes,
+            'type': 'support',
+            'actor_name': adminEmail,
+          });
+        }
+      }
+    });
+    _logAction(
+      adminEmail,
+      'HELP_TICKET_RESOLVE',
+      ticketId,
+      'Ticket resolved: $cleanNotes',
+    );
   }
 
   // --- 5. COMPLAINT MANAGEMENT ---
@@ -584,6 +865,7 @@ class AdminSettingsService {
     required String notes,
     required String adminEmail,
   }) {
+    final cleanNotes = notes.trim();
     complaintsNotifier.value = complaintsNotifier.value.map((c) {
       if (c.id == complaintId) {
         final newHistory = [
@@ -592,11 +874,11 @@ class AdminSettingsService {
             action: 'Investigation Note Recorded',
             performedBy: adminEmail,
             timestamp: DateTime.now(),
-            notes: notes.trim(),
+            notes: cleanNotes,
           ),
         ];
         return c.copyWith(
-          investigationNotes: notes.trim(),
+          investigationNotes: cleanNotes,
           status: ComplaintStatus.underInvestigation,
           history: newHistory,
         );
@@ -604,7 +886,23 @@ class AdminSettingsService {
       return c;
     }).toList();
 
-    _logAction(adminEmail, 'COMPLAINT_NOTE', complaintId, 'Recorded investigation observations.');
+    _persistAsync(() async {
+      final supabase = SupabaseHelper.clientOrNull;
+      if (supabase != null && SupabaseHelper.isUuid(complaintId)) {
+        await supabase.from('support_tickets').update({
+          'admin_response': cleanNotes,
+          'assigned_to': adminEmail,
+          'status': 'under_investigation',
+          'updated_at': DateTime.now().toIso8601String(),
+        }).eq('id', complaintId);
+      }
+    });
+    _logAction(
+      adminEmail,
+      'COMPLAINT_NOTE',
+      complaintId,
+      'Recorded investigation observations.',
+    );
   }
 
   void resolveComplaint({
@@ -612,6 +910,7 @@ class AdminSettingsService {
     required String reason,
     required String adminEmail,
   }) {
+    final cleanReason = reason.trim();
     complaintsNotifier.value = complaintsNotifier.value.map((c) {
       if (c.id == complaintId) {
         final newHistory = [
@@ -620,12 +919,12 @@ class AdminSettingsService {
             action: 'Grievance Resolved',
             performedBy: adminEmail,
             timestamp: DateTime.now(),
-            notes: reason.trim(),
+            notes: cleanReason,
           ),
         ];
         return c.copyWith(
           status: ComplaintStatus.resolved,
-          resolutionReason: reason.trim(),
+          resolutionReason: cleanReason,
           resolvedByAdmin: adminEmail,
           resolvedAt: DateTime.now(),
           history: newHistory,
@@ -634,7 +933,23 @@ class AdminSettingsService {
       return c;
     }).toList();
 
-    _logAction(adminEmail, 'COMPLAINT_RESOLVE', complaintId, 'Resolved complaint with formal outcome.');
+    _persistAsync(() async {
+      final supabase = SupabaseHelper.clientOrNull;
+      if (supabase != null && SupabaseHelper.isUuid(complaintId)) {
+        await supabase.from('support_tickets').update({
+          'admin_response': cleanReason,
+          'assigned_to': adminEmail,
+          'status': 'resolved',
+          'updated_at': DateTime.now().toIso8601String(),
+        }).eq('id', complaintId);
+      }
+    });
+    _logAction(
+      adminEmail,
+      'COMPLAINT_RESOLVE',
+      complaintId,
+      'Resolved complaint with formal outcome.',
+    );
   }
 
   void dismissComplaint({
@@ -642,6 +957,7 @@ class AdminSettingsService {
     required String reason,
     required String adminEmail,
   }) {
+    final cleanReason = reason.trim();
     complaintsNotifier.value = complaintsNotifier.value.map((c) {
       if (c.id == complaintId) {
         final newHistory = [
@@ -650,12 +966,12 @@ class AdminSettingsService {
             action: 'Complaint Dismissed',
             performedBy: adminEmail,
             timestamp: DateTime.now(),
-            notes: reason.trim(),
+            notes: cleanReason,
           ),
         ];
         return c.copyWith(
           status: ComplaintStatus.dismissed,
-          resolutionReason: reason.trim(),
+          resolutionReason: cleanReason,
           resolvedByAdmin: adminEmail,
           resolvedAt: DateTime.now(),
           history: newHistory,
@@ -664,7 +980,23 @@ class AdminSettingsService {
       return c;
     }).toList();
 
-    _logAction(adminEmail, 'COMPLAINT_DISMISS', complaintId, 'Dismissed grievance without penalty.');
+    _persistAsync(() async {
+      final supabase = SupabaseHelper.clientOrNull;
+      if (supabase != null && SupabaseHelper.isUuid(complaintId)) {
+        await supabase.from('support_tickets').update({
+          'admin_response': cleanReason,
+          'assigned_to': adminEmail,
+          'status': 'dismissed',
+          'updated_at': DateTime.now().toIso8601String(),
+        }).eq('id', complaintId);
+      }
+    });
+    _logAction(
+      adminEmail,
+      'COMPLAINT_DISMISS',
+      complaintId,
+      'Dismissed grievance without penalty.',
+    );
   }
 
   // --- 6. PLATFORM POLICIES ---
@@ -675,12 +1007,14 @@ class AdminSettingsService {
     required String changeSummary,
     required String adminEmail,
   }) {
+    PlatformPolicyItem? updatedPolicy;
     policiesNotifier.value = policiesNotifier.value.map((p) {
-      if (p.policyKey == policyKey) {
-        // Increment minor version (e.g. v2.4 -> v2.5)
+      if (p.policyKey == policyKey || p.id == policyKey) {
         final currentParts = p.version.replaceAll('v', '').split('.');
         final major = currentParts.isNotEmpty ? currentParts[0] : '1';
-        final minor = currentParts.length > 1 ? (int.tryParse(currentParts[1]) ?? 0) + 1 : 1;
+        final minor = currentParts.length > 1
+            ? (int.tryParse(currentParts[1]) ?? 0) + 1
+            : 1;
         final nextVersion = 'v$major.$minor';
 
         final newHistory = [
@@ -693,7 +1027,7 @@ class AdminSettingsService {
           ...p.history,
         ];
 
-        return p.copyWith(
+        updatedPolicy = p.copyWith(
           title: title.trim(),
           content: content.trim(),
           version: nextVersion,
@@ -701,11 +1035,98 @@ class AdminSettingsService {
           updatedByAdmin: adminEmail,
           history: newHistory,
         );
+        return updatedPolicy!;
       }
       return p;
     }).toList();
 
-    _logAction(adminEmail, 'POLICY_UPDATE', title, 'Published version update with audit changelog.');
+    if (updatedPolicy != null) {
+      final pol = updatedPolicy!;
+      _persistAsync(() async {
+        final supabase = SupabaseHelper.clientOrNull;
+        if (supabase != null && SupabaseHelper.isUuid(pol.id)) {
+          await supabase.from('platform_taxonomies').update({
+            'name': pol.title,
+            'description': pol.content,
+            'metadata': {
+              'policy_key': pol.policyKey,
+              'version': pol.version,
+              'last_updated_at': pol.lastUpdatedAt.toIso8601String(),
+              'updated_by_admin': pol.updatedByAdmin,
+              'history': pol.history
+                  .map((h) => {
+                        'version': h.version,
+                        'updated_at': h.updatedAt.toIso8601String(),
+                        'updated_by_admin': h.updatedByAdmin,
+                        'change_summary': h.changeSummary,
+                      })
+                  .toList(),
+            },
+          }).eq('id', pol.id);
+        }
+      });
+    }
+
+    _logAction(
+      adminEmail,
+      'POLICY_UPDATE',
+      title.trim(),
+      'Published version update with audit changelog.',
+    );
+  }
+
+  /// Create a brand-new policy when policy table starts empty.
+  bool createPolicy({
+    required String policyKey,
+    required String title,
+    required String content,
+    required String adminEmail,
+  }) {
+    final newId = SupabaseHelper.generateUuid();
+    final now = DateTime.now();
+    final item = PlatformPolicyItem(
+      id: newId,
+      title: title.trim(),
+      policyKey: policyKey.trim(),
+      version: 'v1.0',
+      lastUpdatedAt: now,
+      updatedByAdmin: adminEmail,
+      content: content.trim(),
+      history: [
+        PolicyVersionRecord(
+          version: 'v1.0',
+          updatedAt: now,
+          updatedByAdmin: adminEmail,
+          changeSummary: 'Initial policy publication.',
+        ),
+      ],
+    );
+    policiesNotifier.value = [...policiesNotifier.value, item];
+    _persistAsync(() async {
+      final supabase = SupabaseHelper.clientOrNull;
+      if (supabase != null) {
+        await supabase.from('platform_taxonomies').insert({
+          'id': newId,
+          'item_type': 'policy',
+          'name': item.title,
+          'description': item.content,
+          'is_active': true,
+          'metadata': {
+            'policy_key': item.policyKey,
+            'version': item.version,
+            'last_updated_at': now.toIso8601String(),
+            'updated_by_admin': adminEmail,
+          },
+        });
+      }
+    });
+    _logAction(
+      adminEmail,
+      'POLICY_CREATE',
+      item.title,
+      'Created initial governance policy document.',
+    );
+    return true;
   }
 
   // --- 7. ADMIN ACCESS & RBAC ---
@@ -723,40 +1144,60 @@ class AdminSettingsService {
       return false;
     }
 
-    final initials = fullName.trim().split(' ').map((w) => w.isNotEmpty ? w[0] : '').take(2).join().toUpperCase();
-
     final newAdmin = AdminUserModel(
-      id: 'adm_${Random().nextInt(9000) + 1000}',
+      id: SupabaseHelper.generateUuid(),
       fullName: fullName.trim(),
       email: normalized,
       role: role,
       roleDisplayName: roleDisplayName,
       department: department.trim(),
-      avatarInitial: initials.isNotEmpty ? initials : 'AD',
+      avatarInitial: SupabaseHelper.initialsFor(fullName, fallback: 'AD'),
       permissions: permissions,
-      lastLoginAt: 'Never (Pending Activation)',
+      lastLoginAt: 'Pending Auth Activation',
       isActive: true,
     );
 
     adminsNotifier.value = [...adminsNotifier.value, newAdmin];
-    _logAction(adminEmail, 'ADMIN_PROVISION', normalized, 'Provisioned trusted administrative account ($role).');
+    _logAction(
+      adminEmail,
+      'ADMIN_PROVISION',
+      normalized,
+      'Provisioned trusted administrative role ($role).',
+    );
     return true;
   }
 
   bool toggleAdminActive(String id, String adminEmail) {
-    final target = adminsNotifier.value.firstWhere((a) => a.id == id);
+    final idx = adminsNotifier.value.indexWhere((a) => a.id == id);
+    if (idx == -1) return false;
+    final target = adminsNotifier.value[idx];
     if (target.role == 'SUPER_ADMIN') {
-      return false; // Root superadmin cannot be deactivated
+      return false;
     }
 
+    final newStatus = !target.isActive;
     adminsNotifier.value = adminsNotifier.value.map((a) {
       if (a.id == id) {
-        final newStatus = !a.isActive;
-        _logAction(adminEmail, 'ADMIN_STATUS', a.email, 'Changed account state to ${newStatus ? 'Active' : 'Suspended'}.');
         return a.copyWith(isActive: newStatus);
       }
       return a;
     }).toList();
+
+    _persistAsync(() async {
+      final supabase = SupabaseHelper.clientOrNull;
+      if (supabase != null && SupabaseHelper.isUuid(id)) {
+        await supabase.from('profiles').update({
+          'account_status': newStatus ? 'active' : 'suspended',
+          'updated_at': DateTime.now().toIso8601String(),
+        }).eq('id', id);
+      }
+    });
+    _logAction(
+      adminEmail,
+      'ADMIN_STATUS',
+      target.email,
+      'Changed account state to ${newStatus ? 'Active' : 'Suspended'}.',
+    );
     return true;
   }
 
@@ -767,14 +1208,19 @@ class AdminSettingsService {
   }) {
     adminsNotifier.value = adminsNotifier.value.map((a) {
       if (a.id == id) {
-        _logAction(adminEmail, 'ADMIN_PERMISSIONS', a.email, 'Updated assigned granular roles.');
+        _logAction(
+          adminEmail,
+          'ADMIN_PERMISSIONS',
+          a.email,
+          'Updated assigned granular roles.',
+        );
         return a.copyWith(permissions: permissions);
       }
       return a;
     }).toList();
   }
 
-  // --- 8. ADMIN PROFILE & SESSIONS ---
+  // --- 8. ADMIN PROFILE, PASSWORD & SESSIONS ---
   void updateProfile({
     required String fullName,
     required String department,
@@ -785,41 +1231,117 @@ class AdminSettingsService {
     final updated = current.copyWith(
       fullName: fullName.trim(),
       department: department.trim(),
+      avatarInitial: SupabaseHelper.initialsFor(fullName, fallback: 'EA'),
     );
 
     AdminAuthService().currentAdminNotifier.value = updated;
-    _logAction(current.email, 'PROFILE_UPDATE', current.email, 'Updated administrative profile contact info.');
+
+    _persistAsync(() async {
+      final supabase = SupabaseHelper.clientOrNull;
+      final uid = supabase?.auth.currentUser?.id;
+      if (supabase != null && uid != null) {
+        await supabase.from('profiles').update({
+          'name': fullName.trim(),
+          'university': department.trim(),
+          'updated_at': DateTime.now().toIso8601String(),
+        }).eq('id', uid);
+      }
+    });
+
+    _logAction(
+      current.email,
+      'PROFILE_UPDATE',
+      current.email,
+      'Updated administrative profile contact info.',
+    );
   }
 
-  bool changePassword({
+  Future<bool> changePassword({
     required String currentPassword,
     required String newPassword,
     required String adminEmail,
-  }) {
-    // Basic verification - password changed
+  }) async {
     if (newPassword.length < 8) return false;
 
-    _logAction(adminEmail, 'PASSWORD_CHANGE', adminEmail, 'Cryptographic password hash rotated.');
+    final supabase = SupabaseHelper.clientOrNull;
+    if (supabase != null && supabase.auth.currentUser != null) {
+      try {
+        await supabase.auth.updateUser(UserAttributes(password: newPassword));
+      } catch (e) {
+        debugPrint('AdminSettingsService changePassword error: $e');
+        return false;
+      }
+    }
+
+    _logAction(
+      adminEmail,
+      'PASSWORD_CHANGE',
+      adminEmail,
+      'Administrator password updated.',
+    );
     return true;
   }
 
   void terminateSession(String sessionId, String adminEmail) {
-    sessionsNotifier.value = sessionsNotifier.value.where((s) => s.sessionId != sessionId).toList();
-    _logAction(adminEmail, 'SESSION_TERMINATE', sessionId, 'Remotely revoked active session token.');
+    sessionsNotifier.value = sessionsNotifier.value
+        .where((s) => s.sessionId != sessionId)
+        .toList();
+    _logAction(
+      adminEmail,
+      'SESSION_TERMINATE',
+      sessionId,
+      'Terminated active session token.',
+    );
   }
 
-  // Private helper to log immutable audit records
-  void _logAction(String adminEmail, String action, String target, String details) {
+  void _logAction(
+    String adminEmail,
+    String action,
+    String target,
+    String details,
+  ) {
     final log = AdminAuditLogItem(
-      id: 'LOG-2026-${Random().nextInt(9000) + 1000}',
+      id: SupabaseHelper.generateUuid(),
       adminEmail: adminEmail,
       action: action,
       target: target,
       timestamp: DateTime.now(),
       details: details,
-      ipAddress: '111.68.102.45',
+      ipAddress: 'Supabase Audit Vault',
     );
 
     auditLogsNotifier.value = [log, ...auditLogsNotifier.value];
+    _persistAsync(() async {
+      final supabase = SupabaseHelper.clientOrNull;
+      if (supabase != null) {
+        await supabase.from('admin_audit_logs').insert({
+          'admin_email': adminEmail,
+          'action': action,
+          'target': target,
+          'details': details,
+        });
+      }
+    });
+  }
+
+  void _persistAsync(Future<void> Function() task) {
+    unawaited(
+      task().catchError((e) {
+        debugPrint('AdminSettingsService background persist error: $e');
+      }),
+    );
+  }
+
+  void reset() {
+    categoriesNotifier.value = [];
+    skillsNotifier.value = [];
+    universitiesNotifier.value = [];
+    helpRequestsNotifier.value = [];
+    complaintsNotifier.value = [];
+    policiesNotifier.value = [];
+    adminsNotifier.value = [];
+    sessionsNotifier.value = [];
+    auditLogsNotifier.value = [];
+    _ticketUserIds.clear();
   }
 }

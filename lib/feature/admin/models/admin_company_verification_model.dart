@@ -4,6 +4,7 @@ import 'package:link_vibe/feature/company/models/company_verification_model.dart
 class AdminCompanyVerificationItem {
   final String id;
   final String companyId;
+  final String? userId;
   final String companyName;
   final String logoInitial;
   final String industry;
@@ -15,6 +16,7 @@ class AdminCompanyVerificationItem {
   final String documentName;
   final String documentType;
   final String documentSize;
+  final String? documentUrl;
   final VerificationStatus status;
   final String submittedAt;
   final String? reviewedAt;
@@ -24,6 +26,7 @@ class AdminCompanyVerificationItem {
   const AdminCompanyVerificationItem({
     required this.id,
     required this.companyId,
+    this.userId,
     required this.companyName,
     required this.logoInitial,
     required this.industry,
@@ -35,6 +38,7 @@ class AdminCompanyVerificationItem {
     required this.documentName,
     required this.documentType,
     required this.documentSize,
+    this.documentUrl,
     required this.status,
     required this.submittedAt,
     this.reviewedAt,
@@ -45,6 +49,7 @@ class AdminCompanyVerificationItem {
   AdminCompanyVerificationItem copyWith({
     String? id,
     String? companyId,
+    String? userId,
     String? companyName,
     String? logoInitial,
     String? industry,
@@ -56,15 +61,18 @@ class AdminCompanyVerificationItem {
     String? documentName,
     String? documentType,
     String? documentSize,
+    String? documentUrl,
     VerificationStatus? status,
     String? submittedAt,
     String? reviewedAt,
     String? reviewerName,
     String? adminFeedback,
+    bool clearAdminFeedback = false,
   }) {
     return AdminCompanyVerificationItem(
       id: id ?? this.id,
       companyId: companyId ?? this.companyId,
+      userId: userId ?? this.userId,
       companyName: companyName ?? this.companyName,
       logoInitial: logoInitial ?? this.logoInitial,
       industry: industry ?? this.industry,
@@ -76,11 +84,13 @@ class AdminCompanyVerificationItem {
       documentName: documentName ?? this.documentName,
       documentType: documentType ?? this.documentType,
       documentSize: documentSize ?? this.documentSize,
+      documentUrl: documentUrl ?? this.documentUrl,
       status: status ?? this.status,
       submittedAt: submittedAt ?? this.submittedAt,
       reviewedAt: reviewedAt ?? this.reviewedAt,
       reviewerName: reviewerName ?? this.reviewerName,
-      adminFeedback: adminFeedback ?? this.adminFeedback,
+      adminFeedback:
+          clearAdminFeedback ? null : (adminFeedback ?? this.adminFeedback),
     );
   }
 }

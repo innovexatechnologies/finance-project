@@ -79,14 +79,19 @@ class _HelpCenterScreenState extends State<HelpCenterScreen> {
       backgroundColor: AppColors.background,
       appBar: AppBar(
         title: const Text('Help Center & FAQs'),
-        leading: IconButton(
-          icon: const Icon(Icons.arrow_back_ios_new_rounded, size: 20),
-          onPressed: () => Navigator.pop(context),
-        ),
+        leading: Navigator.canPop(context)
+            ? IconButton(
+                icon: const Icon(Icons.arrow_back_ios_new_rounded, size: 20),
+                onPressed: () => Navigator.pop(context),
+              )
+            : null,
       ),
-      body: ListView(
-        padding: const EdgeInsets.all(20),
-        children: [
+      body: Center(
+        child: ConstrainedBox(
+          constraints: const BoxConstraints(maxWidth: 780),
+          child: ListView(
+            padding: const EdgeInsets.all(20),
+            children: [
           // Search box
           Container(
             decoration: BoxDecoration(
@@ -215,12 +220,14 @@ class _HelpCenterScreenState extends State<HelpCenterScreen> {
                   children: [
                     const Icon(Icons.headset_mic_rounded, color: Colors.white, size: 28),
                     const SizedBox(width: 12),
-                    Text(
-                      'Still need help?',
-                      style: GoogleFonts.poppins(
-                        fontSize: 16,
-                        fontWeight: FontWeight.bold,
-                        color: Colors.white,
+                    Expanded(
+                      child: Text(
+                        'Still need help?',
+                        style: GoogleFonts.poppins(
+                          fontSize: 16,
+                          fontWeight: FontWeight.bold,
+                          color: Colors.white,
+                        ),
                       ),
                     ),
                   ],
@@ -253,7 +260,9 @@ class _HelpCenterScreenState extends State<HelpCenterScreen> {
               ],
             ),
           ),
-        ],
+            ],
+          ),
+        ),
       ),
     );
   }

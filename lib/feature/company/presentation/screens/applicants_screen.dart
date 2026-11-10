@@ -1,7 +1,12 @@
 import 'package:flutter/material.dart';
+import 'package:google_fonts/google_fonts.dart';
 import 'package:link_vibe/core/constants/app_colors.dart';
+import 'package:link_vibe/core/widgets/app_empty_state.dart';
+import 'package:link_vibe/core/widgets/status_badge.dart';
 import 'package:link_vibe/feature/company/models/applicant_model.dart';
+import 'package:link_vibe/feature/company/models/project_model.dart';
 import 'package:link_vibe/feature/company/services/company_applicant_service.dart';
+import 'package:link_vibe/feature/company/services/company_profile_service.dart';
 import 'package:link_vibe/feature/company/services/company_project_service.dart';
 import 'applicant_detail_screen.dart';
 
@@ -20,11 +25,13 @@ class ApplicantsScreen extends StatefulWidget {
 class _ApplicantsScreenState extends State<ApplicantsScreen> {
   final _applicantService = CompanyApplicantService();
   final _projectService = CompanyProjectService();
+  final _profileService = CompanyProfileService();
 
   late String? _currentProjectId;
   String _selectedStatus = 'All';
   final TextEditingController _searchController = TextEditingController();
   String _searchQuery = '';
+  bool _isRefreshing = false;
 
   final List<String> _statusFilters = [
     'All',
@@ -52,372 +59,467 @@ class _ApplicantsScreenState extends State<ApplicantsScreen> {
     super.dispose();
   }
 
-  // Open Screen 29 (Applicant Profile Detail Screen)
+  Future<void> _refreshData() async {
+    setState(() => _isRefreshing = true);
+    await CompanyProfileService.loadAllCompanyPanelData();
+    if (mounted) setState(() => _isRefreshing = false);
+  }
+
   void _openStudentProfileModal(ApplicantModel applicant) {
     Navigator.push(
       context,
       MaterialPageRoute(
         builder: (_) => ApplicantDetailScreen(
           applicantId: applicant.id,
-          projectId: _currentProjectId,
+          projectId: applicant.projectId,
           initialApplicant: applicant,
         ),
       ),
     );
   }
 
-  // Action: Shortlist Applicant
-  Future<void> _handleShortlist(ApplicantModel applicant) async {
-    final success = await _applicantService.updateApplicantStatus(
-      applicantId: applicant.id,
-      newStatus: 'Shortlisted',
-    );
-
-    if (success && mounted) {
-      ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(
-          content: Text('${applicant.name} has been added to Shortlist!'),
-          backgroundColor: const Color(0xFF7C3AED),
-        ),
-      );
+  ProjectModel? _findProject(List<ProjectModel> projects, String? id) {
+    if (id == null || id.isEmpty) return null;
+    for (final p in projects) {
+      if (p.id == id) return p;
     }
+    return null;
   }
 
-  // Action: Accept / Hire Candidate with Openings Limit Check
-  Future<void> _handleAccept(ApplicantModel applicant) async {
-    final project = _projectService.allProjects.firstWhere(
-      (p) => p.id == applicant.projectId,
-      orElse: () => _projectService.allProjects.first,
-    );
-
-    final acceptedCount = _applicantService.getAcceptedCount(applicant.projectId);
-
-    // Functional Constraint: Prevent accepting more students than available openings
-    if (acceptedCount >= project.openings) {
-      showDialog(
-        context: context,
-        builder: (ctx) => AlertDialog(
-          shape:
-              RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
-          title: const Row(
-            children: [
-              Icon(Icons.warning_amber_rounded, color: AppColors.warning),
-              SizedBox(width: 8),
-              Text('Openings Full',
-                  style: TextStyle(fontSize: 18, fontWeight: FontWeight.bold)),
-            ],
-          ),
-          content: Text(
-            'All ${project.openings} opening(s) for "${project.title}" are already filled with accepted students.\n\nTo accept additional candidates, increase student openings in project settings.',
-            style: const TextStyle(fontSize: 13.5, height: 1.4),
-          ),
-          actions: [
-            TextButton(
-              onPressed: () => Navigator.pop(ctx),
-              child: const Text('OK'),
-            ),
-          ],
-        ),
-      );
-      return;
-    }
-
-    // Confirmation dialog before acceptance
-    final confirmed = await showDialog<bool>(
-      context: context,
-      builder: (ctx) => AlertDialog(
-        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
-        title: const Row(
-          children: [
-            Icon(Icons.check_circle_outline, color: AppColors.success),
-            SizedBox(width: 8),
-            Text('Confirm Candidate Acceptance',
-                style: TextStyle(fontSize: 16, fontWeight: FontWeight.bold)),
-          ],
-        ),
-        content: Text(
-          'Are you sure you want to officially accept and hire "${applicant.name}" for "${project.title}"?\n\nThis will assign the candidate to the project, update project status to In Progress, and reflect in Screen 30.',
-          style: const TextStyle(fontSize: 13.5, height: 1.4),
-        ),
-        actions: [
-          TextButton(
-            onPressed: () => Navigator.pop(ctx, false),
-            child: const Text('Cancel'),
-          ),
-          ElevatedButton(
-            style: ElevatedButton.styleFrom(
-              backgroundColor: AppColors.success,
-              foregroundColor: Colors.white,
-            ),
-            onPressed: () => Navigator.pop(ctx, true),
-            child: const Text('Confirm & Accept'),
-          ),
-        ],
-      ),
-    );
-
-    if (confirmed == true) {
-      final success = await _applicantService.updateApplicantStatus(
-        applicantId: applicant.id,
-        newStatus: 'Accepted',
-      );
-
-      if (success && mounted) {
+  Future<void> _updateStatus(ApplicantModel applicant, String newStatus) async {
+    if (newStatus == 'Accepted') {
+      final project = _findProject(_projectService.allProjects, applicant.projectId);
+      final openings = project?.openings ?? 1;
+      final acceptedCount =
+          _applicantService.getAcceptedCount(applicant.projectId);
+      if (acceptedCount >= openings && applicant.status != 'Accepted') {
+        if (!mounted) return;
         ScaffoldMessenger.of(context).showSnackBar(
           SnackBar(
             content: Text(
-              '${applicant.name} accepted! Assigned to "${project.title}" (Reflected in Screen 30).',
+              'All $openings opening(s) for "${applicant.projectTitle}" are already filled.',
             ),
-            backgroundColor: AppColors.success,
+            backgroundColor: AppColors.statusPending,
+            behavior: SnackBarBehavior.floating,
           ),
         );
+        return;
       }
-    }
-  }
 
-  // Action: Reject Candidate with Confirmation
-  Future<void> _handleReject(ApplicantModel applicant) async {
-    final confirmed = await showDialog<bool>(
-      context: context,
-      builder: (ctx) => AlertDialog(
-        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
-        title: const Row(
-          children: [
-            Icon(Icons.cancel_outlined, color: AppColors.error),
-            SizedBox(width: 8),
-            Text('Confirm Rejection',
-                style: TextStyle(fontSize: 17, fontWeight: FontWeight.bold)),
+      final confirmed = await showDialog<bool>(
+        context: context,
+        builder: (ctx) => AlertDialog(
+          shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(18)),
+          title: Row(
+            children: [
+              const Icon(Icons.check_circle_outline_rounded,
+                  color: AppColors.statusOpen),
+              const SizedBox(width: 8),
+              Expanded(
+                child: Text(
+                  'Accept & Assign Student?',
+                  style: GoogleFonts.poppins(
+                    fontSize: 16,
+                    fontWeight: FontWeight.w700,
+                    color: AppColors.deepNavy,
+                  ),
+                ),
+              ),
+            ],
+          ),
+          content: Text(
+            'Accept "${applicant.name}" for "${applicant.projectTitle}"? They will be assigned immediately and notified to begin project milestones.',
+            style: GoogleFonts.inter(fontSize: 13.5, height: 1.45),
+          ),
+          actions: [
+            TextButton(
+              onPressed: () => Navigator.pop(ctx, false),
+              child: const Text('Cancel'),
+            ),
+            ElevatedButton(
+              style: ElevatedButton.styleFrom(
+                backgroundColor: AppColors.statusOpen,
+                foregroundColor: Colors.white,
+              ),
+              onPressed: () => Navigator.pop(ctx, true),
+              child: const Text('Accept Student'),
+            ),
           ],
         ),
-        content: Text(
-          'Are you sure you want to mark the application from "${applicant.name}" as Rejected?',
-          style: const TextStyle(fontSize: 13.5),
-        ),
-        actions: [
-          TextButton(
-            onPressed: () => Navigator.pop(ctx, false),
-            child: const Text('Cancel'),
-          ),
-          ElevatedButton(
-            style: ElevatedButton.styleFrom(
-              backgroundColor: AppColors.error,
-              foregroundColor: Colors.white,
+      );
+      if (confirmed != true) return;
+    } else if (newStatus == 'Rejected') {
+      final confirmed = await showDialog<bool>(
+        context: context,
+        builder: (ctx) => AlertDialog(
+          shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(18)),
+          title: Text(
+            'Decline Application?',
+            style: GoogleFonts.poppins(
+              fontSize: 16,
+              fontWeight: FontWeight.w700,
+              color: AppColors.deepNavy,
             ),
-            onPressed: () => Navigator.pop(ctx, true),
-            child: const Text('Reject Application'),
           ),
-        ],
-      ),
+          content: Text(
+            'Decline the application from "${applicant.name}" for "${applicant.projectTitle}"?',
+            style: GoogleFonts.inter(fontSize: 13.5, height: 1.45),
+          ),
+          actions: [
+            TextButton(
+              onPressed: () => Navigator.pop(ctx, false),
+              child: const Text('Cancel'),
+            ),
+            ElevatedButton(
+              style: ElevatedButton.styleFrom(
+                backgroundColor: AppColors.statusClosed,
+                foregroundColor: Colors.white,
+              ),
+              onPressed: () => Navigator.pop(ctx, true),
+              child: const Text('Decline'),
+            ),
+          ],
+        ),
+      );
+      if (confirmed != true) return;
+    }
+
+    final ok = await _applicantService.updateApplicantStatus(
+      applicantId: applicant.id,
+      newStatus: newStatus,
     );
 
-    if (confirmed == true) {
-      final success = await _applicantService.updateApplicantStatus(
-        applicantId: applicant.id,
-        newStatus: 'Rejected',
+    if (!mounted) return;
+    if (ok) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(
+          content: Text('${applicant.name} marked as $newStatus.'),
+          backgroundColor: StatusBadge.colorForStatus(newStatus),
+          behavior: SnackBarBehavior.floating,
+        ),
       );
-
-      if (success && mounted) {
-        ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(
-            content: Text('Application from ${applicant.name} marked as Rejected.'),
-            backgroundColor: AppColors.error,
-          ),
-        );
-      }
     }
   }
 
   @override
   Widget build(BuildContext context) {
+    final company = _profileService.currentProfile;
+    final companyTitle = company.companyName.isNotEmpty
+        ? company.companyName
+        : 'Talent Recruitment';
+
     return Scaffold(
       backgroundColor: AppColors.background,
       appBar: AppBar(
-        backgroundColor: Colors.white,
-        elevation: 0.5,
-        title: const Text('Project Applicants (Screen 28)'),
-      ),
-      body: ValueListenableBuilder<List<ApplicantModel>>(
-        valueListenable: _applicantService.applicantsNotifier,
-        builder: (context, allApplicants, _) {
-          // 1. Filter applicants for the selected project (or all if not specified)
-          final projectScoped = _currentProjectId != null
-              ? allApplicants.where((a) => a.projectId == _currentProjectId).toList()
-              : allApplicants;
-
-          // 2. Filter by status
-          final statusFiltered = _selectedStatus == 'All'
-              ? projectScoped
-              : projectScoped
-                  .where((a) =>
-                      a.status.toLowerCase() == _selectedStatus.toLowerCase())
-                  .toList();
-
-          // 3. Filter by search query
-          final displayedApplicants = _searchQuery.isEmpty
-              ? statusFiltered
-              : statusFiltered.where((a) {
-                  return a.name.toLowerCase().contains(_searchQuery) ||
-                      a.university.toLowerCase().contains(_searchQuery) ||
-                      a.skills.any((s) => s.toLowerCase().contains(_searchQuery));
-                }).toList();
-
-          return Column(
-            children: [
-              // Search & Filter Header Container
-              Container(
+        backgroundColor: AppColors.deepNavy,
+        foregroundColor: Colors.white,
+        elevation: 0,
+        leading: IconButton(
+          icon: const Icon(Icons.arrow_back_ios_new_rounded, size: 18),
+          onPressed: () => Navigator.pop(context),
+        ),
+        title: Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            Text(
+              'Student Applicants',
+              style: GoogleFonts.poppins(
+                fontSize: 17,
+                fontWeight: FontWeight.w700,
                 color: Colors.white,
-                padding: const EdgeInsets.fromLTRB(16, 12, 16, 8),
+              ),
+            ),
+            Text(
+              companyTitle,
+              style: GoogleFonts.inter(
+                fontSize: 11.5,
+                color: AppColors.lightAqua,
+                fontWeight: FontWeight.w500,
+              ),
+            ),
+          ],
+        ),
+        actions: [
+          IconButton(
+            icon: _isRefreshing
+                ? const SizedBox(
+                    width: 18,
+                    height: 18,
+                    child: CircularProgressIndicator(
+                      strokeWidth: 2,
+                      color: Colors.white,
+                    ),
+                  )
+                : const Icon(Icons.refresh_rounded),
+            tooltip: 'Sync Applicants',
+            onPressed: _isRefreshing ? null : _refreshData,
+          ),
+        ],
+      ),
+      body: ValueListenableBuilder<List<ProjectModel>>(
+        valueListenable: _projectService.projectsNotifier,
+        builder: (context, projects, _) {
+          return ValueListenableBuilder<List<ApplicantModel>>(
+            valueListenable: _applicantService.applicantsNotifier,
+            builder: (context, allApplicants, _) {
+              final hasValidProjectSelection = _currentProjectId != null &&
+                  projects.any((p) => p.id == _currentProjectId);
+              final effectiveProjectId =
+                  hasValidProjectSelection ? _currentProjectId : null;
+
+              final projectScoped = effectiveProjectId != null
+                  ? allApplicants
+                      .where((a) => a.projectId == effectiveProjectId)
+                      .toList()
+                  : allApplicants;
+
+              final statusScoped = _selectedStatus == 'All'
+                  ? projectScoped
+                  : projectScoped
+                      .where((a) =>
+                          a.status.toLowerCase() ==
+                          _selectedStatus.toLowerCase())
+                      .toList();
+
+              final filtered = _searchQuery.isEmpty
+                  ? statusScoped
+                  : statusScoped.where((a) {
+                      return a.name.toLowerCase().contains(_searchQuery) ||
+                          a.university.toLowerCase().contains(_searchQuery) ||
+                          a.degree.toLowerCase().contains(_searchQuery) ||
+                          a.projectTitle.toLowerCase().contains(_searchQuery) ||
+                          a.skills.any(
+                              (s) => s.toLowerCase().contains(_searchQuery));
+                    }).toList();
+
+              final selectedProject =
+                  _findProject(projects, effectiveProjectId);
+              final openingsBannerProject = selectedProject;
+
+              return RefreshIndicator(
+                onRefresh: _refreshData,
+                color: AppColors.primaryBlue,
                 child: Column(
                   children: [
-                    // Optional Project Context Selector (If opened with multiple projects)
-                    if (_currentProjectId == null)
-                      _buildProjectFilterDropdown()
-                    else
-                      _buildActiveProjectInfoBanner(),
-                    const SizedBox(height: 10),
-
-                    // Search Field
-                    TextField(
-                      controller: _searchController,
-                      style: const TextStyle(fontSize: 14),
-                      decoration: InputDecoration(
-                        hintText: 'Search by student name, university, skill...',
-                        hintStyle: const TextStyle(
-                            color: AppColors.textMuted, fontSize: 13),
-                        prefixIcon: const Icon(Icons.search,
-                            color: AppColors.primary, size: 20),
-                        suffixIcon: _searchQuery.isNotEmpty
-                            ? IconButton(
-                                icon: const Icon(Icons.clear, size: 18),
-                                onPressed: () => _searchController.clear(),
-                              )
-                            : null,
-                        filled: true,
-                        fillColor: AppColors.background,
-                        contentPadding: const EdgeInsets.symmetric(
-                            horizontal: 14, vertical: 10),
-                        border: OutlineInputBorder(
-                          borderRadius: BorderRadius.circular(10),
-                          borderSide: const BorderSide(color: AppColors.border),
-                        ),
-                      ),
+                    _buildTopFilters(
+                      projects: projects,
+                      effectiveProjectId: effectiveProjectId,
+                      totalCount: projectScoped.length,
+                      filteredCount: filtered.length,
+                      openingsProject: openingsBannerProject,
                     ),
-                    const SizedBox(height: 12),
-
-                    // Status Filter Chips
-                    SizedBox(
-                      height: 38,
-                      child: ListView.separated(
-                        scrollDirection: Axis.horizontal,
-                        itemCount: _statusFilters.length,
-                        separatorBuilder: (context, index) =>
-                            const SizedBox(width: 8),
-                        itemBuilder: (context, index) {
-                          final status = _statusFilters[index];
-                          final isSelected = _selectedStatus == status;
-
-                          final count = status == 'All'
-                              ? projectScoped.length
-                              : projectScoped
-                                  .where((a) =>
-                                      a.status.toLowerCase() ==
-                                      status.toLowerCase())
-                                  .length;
-
-                          return ChoiceChip(
-                            label: Text('$status ($count)'),
-                            selected: isSelected,
-                            selectedColor: AppColors.primary,
-                            backgroundColor: AppColors.background,
-                            labelStyle: TextStyle(
-                              color: isSelected
-                                  ? Colors.white
-                                  : AppColors.textPrimary,
-                              fontWeight: isSelected
-                                  ? FontWeight.bold
-                                  : FontWeight.normal,
-                              fontSize: 12,
+                    Expanded(
+                      child: filtered.isEmpty
+                          ? ListView(
+                              physics: const AlwaysScrollableScrollPhysics(),
+                              padding: const EdgeInsets.all(24),
+                              children: [
+                                const SizedBox(height: 24),
+                                AppEmptyState(
+                                  icon: Icons.people_outline_rounded,
+                                  title: allApplicants.isEmpty
+                                      ? 'No Applications Received Yet'
+                                      : 'No Matching Applicants',
+                                  subtitle: allApplicants.isEmpty
+                                      ? 'When students apply to your published project challenges, their profiles and proposals will appear here.'
+                                      : 'Try clearing your search term or switching status filters.',
+                                ),
+                              ],
+                            )
+                          : ListView.separated(
+                              physics: const AlwaysScrollableScrollPhysics(),
+                              padding: const EdgeInsets.fromLTRB(16, 12, 16, 28),
+                              itemCount: filtered.length,
+                              separatorBuilder: (_, _) =>
+                                  const SizedBox(height: 12),
+                              itemBuilder: (context, index) =>
+                                  _buildApplicantCard(filtered[index]),
                             ),
-                            shape: RoundedRectangleBorder(
-                              borderRadius: BorderRadius.circular(8),
-                              side: BorderSide(
-                                color: isSelected
-                                    ? AppColors.primary
-                                    : AppColors.border,
-                              ),
-                            ),
-                            onSelected: (selected) {
-                              if (selected) {
-                                setState(() {
-                                  _selectedStatus = status;
-                                });
-                              }
-                            },
-                          );
-                        },
-                      ),
                     ),
                   ],
                 ),
-              ),
-
-              const Divider(height: 1, color: AppColors.border),
-
-              // Applicants List / Empty State
-              Expanded(
-                child: displayedApplicants.isEmpty
-                    ? _buildEmptyState(projectScoped.isEmpty)
-                    : ListView.builder(
-                        padding: const EdgeInsets.fromLTRB(16, 14, 16, 24),
-                        itemCount: displayedApplicants.length,
-                        itemBuilder: (context, index) {
-                          final applicant = displayedApplicants[index];
-                          return _buildApplicantCard(applicant);
-                        },
-                      ),
-              ),
-            ],
+              );
+            },
           );
         },
       ),
     );
   }
 
-  // Active Project Banner when scoped
-  Widget _buildActiveProjectInfoBanner() {
-    final project = _projectService.allProjects.firstWhere(
-      (p) => p.id == _currentProjectId,
-      orElse: () => _projectService.allProjects.first,
-    );
-    final acceptedCount = _applicantService.getAcceptedCount(project.id);
+  Widget _buildTopFilters({
+    required List<ProjectModel> projects,
+    required String? effectiveProjectId,
+    required int totalCount,
+    required int filteredCount,
+    required ProjectModel? openingsProject,
+  }) {
+    final acceptedForProject = openingsProject != null
+        ? _applicantService.getAcceptedCount(openingsProject.id)
+        : 0;
 
     return Container(
-      padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
-      decoration: BoxDecoration(
-        color: AppColors.lightIceBlue,
-        borderRadius: BorderRadius.circular(8),
+      decoration: const BoxDecoration(
+        color: AppColors.cardWhite,
+        border: Border(bottom: BorderSide(color: AppColors.lightGray)),
       ),
-      child: Row(
-        mainAxisAlignment: MainAxisAlignment.spaceBetween,
+      padding: const EdgeInsets.fromLTRB(16, 12, 16, 12),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
         children: [
-          Expanded(
-            child: Text(
-              'Project: ${project.title}',
-              style: const TextStyle(
-                fontSize: 12.5,
-                fontWeight: FontWeight.bold,
-                color: AppColors.darkNavy,
+          if (projects.isNotEmpty) ...[
+            Container(
+              padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 2),
+              decoration: BoxDecoration(
+                color: AppColors.background,
+                borderRadius: BorderRadius.circular(12),
+                border: Border.all(color: AppColors.lightGray),
               ),
-              maxLines: 1,
-              overflow: TextOverflow.ellipsis,
+              child: DropdownButtonHideUnderline(
+                child: DropdownButton<String?>(
+                  isExpanded: true,
+                  value: effectiveProjectId,
+                  icon: const Icon(Icons.keyboard_arrow_down_rounded,
+                      color: AppColors.deepNavy),
+                  hint: Text(
+                    'All Published Projects',
+                    style: GoogleFonts.inter(
+                      fontSize: 13.5,
+                      fontWeight: FontWeight.w600,
+                      color: AppColors.deepNavy,
+                    ),
+                  ),
+                  items: [
+                    DropdownMenuItem<String?>(
+                      value: null,
+                      child: Text(
+                        'All Projects ($totalCount applicants)',
+                        style: GoogleFonts.inter(
+                          fontSize: 13.5,
+                          fontWeight: FontWeight.w600,
+                          color: AppColors.deepNavy,
+                        ),
+                      ),
+                    ),
+                    ...projects.map(
+                      (proj) => DropdownMenuItem<String?>(
+                        value: proj.id,
+                        child: Text(
+                          proj.title,
+                          overflow: TextOverflow.ellipsis,
+                          style: GoogleFonts.inter(
+                            fontSize: 13.5,
+                            fontWeight: FontWeight.w500,
+                            color: AppColors.darkText,
+                          ),
+                        ),
+                      ),
+                    ),
+                  ],
+                  onChanged: (val) {
+                    setState(() {
+                      _currentProjectId = val;
+                    });
+                  },
+                ),
+              ),
+            ),
+            const SizedBox(height: 10),
+          ],
+          if (openingsProject != null) ...[
+            Container(
+              width: double.infinity,
+              margin: const EdgeInsets.only(bottom: 10),
+              padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
+              decoration: BoxDecoration(
+                color: acceptedForProject >= openingsProject.openings
+                    ? AppColors.warningBg
+                    : AppColors.lightAqua.withValues(alpha: 0.65),
+                borderRadius: BorderRadius.circular(10),
+              ),
+              child: Row(
+                children: [
+                  Icon(
+                    acceptedForProject >= openingsProject.openings
+                        ? Icons.group_rounded
+                        : Icons.assignment_ind_outlined,
+                    size: 16,
+                    color: acceptedForProject >= openingsProject.openings
+                        ? AppColors.statusPending
+                        : AppColors.primaryBlue,
+                  ),
+                  const SizedBox(width: 8),
+                  Expanded(
+                    child: Text(
+                      'Assigned Seats: $acceptedForProject / ${openingsProject.openings} Openings',
+                      style: GoogleFonts.inter(
+                        fontSize: 12.5,
+                        fontWeight: FontWeight.w600,
+                        color: AppColors.deepNavy,
+                      ),
+                    ),
+                  ),
+                ],
+              ),
+            ),
+          ],
+          TextField(
+            controller: _searchController,
+            style: GoogleFonts.inter(fontSize: 13.5),
+            decoration: InputDecoration(
+              hintText: 'Search by student name, university, degree, or skill...',
+              prefixIcon: const Icon(Icons.search_rounded, size: 20),
+              suffixIcon: _searchQuery.isNotEmpty
+                  ? IconButton(
+                      icon: const Icon(Icons.close_rounded, size: 18),
+                      onPressed: () => _searchController.clear(),
+                    )
+                  : null,
+              isDense: true,
+              contentPadding:
+                  const EdgeInsets.symmetric(horizontal: 14, vertical: 11),
             ),
           ),
+          const SizedBox(height: 10),
+          SizedBox(
+            height: 36,
+            child: ListView.separated(
+              scrollDirection: Axis.horizontal,
+              itemCount: _statusFilters.length,
+              separatorBuilder: (_, _) => const SizedBox(width: 8),
+              itemBuilder: (context, index) {
+                final filter = _statusFilters[index];
+                final isSelected = _selectedStatus == filter;
+                return ChoiceChip(
+                  label: Text(
+                    filter,
+                    style: GoogleFonts.inter(
+                      fontSize: 12,
+                      fontWeight:
+                          isSelected ? FontWeight.w700 : FontWeight.w500,
+                      color: isSelected ? Colors.white : AppColors.darkText,
+                    ),
+                  ),
+                  selected: isSelected,
+                  onSelected: (_) => setState(() => _selectedStatus = filter),
+                  selectedColor: AppColors.deepNavy,
+                  backgroundColor: AppColors.surfaceAlt,
+                  side: BorderSide(
+                    color: isSelected
+                        ? AppColors.deepNavy
+                        : AppColors.lightGray,
+                  ),
+                  visualDensity: VisualDensity.compact,
+                );
+              },
+            ),
+          ),
+          const SizedBox(height: 8),
           Text(
-            'Hired: $acceptedCount/${project.openings}',
-            style: const TextStyle(
-              fontSize: 11.5,
-              fontWeight: FontWeight.bold,
-              color: AppColors.primary,
+            'Showing $filteredCount of $totalCount applicants',
+            style: GoogleFonts.inter(
+              fontSize: 12,
+              fontWeight: FontWeight.w500,
+              color: AppColors.grayText,
             ),
           ),
         ],
@@ -425,370 +527,215 @@ class _ApplicantsScreenState extends State<ApplicantsScreen> {
     );
   }
 
-  // Project selector if opened globally
-  Widget _buildProjectFilterDropdown() {
-    final projects = _projectService.allProjects;
+  Widget _buildApplicantCard(ApplicantModel applicant) {
+    final bool canDecide =
+        applicant.status != 'Accepted' && applicant.status != 'Rejected';
 
     return Container(
-      padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 2),
       decoration: BoxDecoration(
-        color: AppColors.background,
-        borderRadius: BorderRadius.circular(8),
-        border: Border.all(color: AppColors.border),
+        color: AppColors.cardWhite,
+        borderRadius: BorderRadius.circular(18),
+        border: Border.all(color: AppColors.lightGray),
+        boxShadow: AppColors.softShadow,
       ),
-      child: DropdownButtonHideUnderline(
-        child: DropdownButton<String?>(
-          isExpanded: true,
-          value: _currentProjectId,
-          hint: const Text('Filter applicants by project...',
-              style: TextStyle(fontSize: 13)),
-          items: [
-            const DropdownMenuItem<String?>(
-              value: null,
-              child: Text('All Company Projects',
-                  style: TextStyle(fontSize: 13, fontWeight: FontWeight.bold)),
-            ),
-            ...projects.map((p) => DropdownMenuItem<String?>(
-                  value: p.id,
-                  child: Text(p.title,
-                      style: const TextStyle(fontSize: 13),
-                      overflow: TextOverflow.ellipsis),
-                )),
-          ],
-          onChanged: (val) {
-            setState(() {
-              _currentProjectId = val;
-            });
-          },
-        ),
-      ),
-    );
-  }
-
-  // Applicant Card (Requirements 1-8 + Actions)
-  Widget _buildApplicantCard(ApplicantModel applicant) {
-    final isPending = applicant.status == 'Pending';
-    final isUnderReview = applicant.status == 'Under Review';
-    final isAccepted = applicant.status == 'Accepted';
-    final isRejected = applicant.status == 'Rejected';
-
-    return Card(
-      elevation: 1,
-      margin: const EdgeInsets.only(bottom: 14),
-      shape: RoundedRectangleBorder(
-        borderRadius: BorderRadius.circular(14),
-        side: const BorderSide(color: AppColors.border, width: 0.9),
-      ),
-      child: Padding(
-        padding: const EdgeInsets.all(16.0),
-        child: Column(
-          crossAxisAlignment: CrossAxisAlignment.start,
-          children: [
-            // Row 1: Profile picture, Student Name, Degree, Status Badge
-            Row(
-              crossAxisAlignment: CrossAxisAlignment.start,
-              children: [
-                // 2. Profile Picture / Avatar initial
-                CircleAvatar(
-                  radius: 24,
-                  backgroundColor: AppColors.primary,
-                  child: Text(
-                    applicant.avatarInitial,
-                    style: const TextStyle(
-                      color: Colors.white,
-                      fontWeight: FontWeight.bold,
-                      fontSize: 15,
+      child: InkWell(
+        borderRadius: BorderRadius.circular(18),
+        onTap: () => _openStudentProfileModal(applicant),
+        child: Padding(
+          padding: const EdgeInsets.all(16),
+          child: Column(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              Row(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  CircleAvatar(
+                    radius: 24,
+                    backgroundColor: AppColors.deepNavy,
+                    child: Text(
+                      applicant.avatarInitial,
+                      style: GoogleFonts.poppins(
+                        color: Colors.white,
+                        fontWeight: FontWeight.w700,
+                        fontSize: 15,
+                      ),
                     ),
                   ),
-                ),
-                const SizedBox(width: 12),
-
-                // 1, 3, 4. Student Name, University, Degree
-                Expanded(
-                  child: Column(
-                    crossAxisAlignment: CrossAxisAlignment.start,
-                    children: [
-                      Row(
-                        mainAxisAlignment: MainAxisAlignment.spaceBetween,
-                        children: [
-                          Expanded(
-                            child: Text(
-                              applicant.name,
-                              style: const TextStyle(
-                                fontSize: 16,
-                                fontWeight: FontWeight.bold,
-                                color: AppColors.darkNavy,
+                  const SizedBox(width: 12),
+                  Expanded(
+                    child: Column(
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      children: [
+                        Row(
+                          children: [
+                            Expanded(
+                              child: Text(
+                                applicant.name,
+                                maxLines: 1,
+                                overflow: TextOverflow.ellipsis,
+                                style: GoogleFonts.poppins(
+                                  fontSize: 15,
+                                  fontWeight: FontWeight.w700,
+                                  color: AppColors.deepNavy,
+                                ),
                               ),
                             ),
+                            if (applicant.isEducationVerified)
+                              const Padding(
+                                padding: EdgeInsets.only(left: 4),
+                                child: Icon(
+                                  Icons.verified_rounded,
+                                  size: 16,
+                                  color: AppColors.primaryBlue,
+                                ),
+                              ),
+                          ],
+                        ),
+                        const SizedBox(height: 2),
+                        Text(
+                          [
+                            if (applicant.degree.isNotEmpty) applicant.degree,
+                            if (applicant.university.isNotEmpty)
+                              applicant.university,
+                          ].join(' • '),
+                          maxLines: 1,
+                          overflow: TextOverflow.ellipsis,
+                          style: GoogleFonts.inter(
+                            fontSize: 12.5,
+                            color: AppColors.grayText,
                           ),
-                          // 8. Application Status Badge
-                          _buildStatusBadge(applicant.status),
-                        ],
-                      ),
-                      const SizedBox(height: 2),
-                      Text(
-                        applicant.university,
-                        style: const TextStyle(
-                          fontSize: 12.5,
+                        ),
+                      ],
+                    ),
+                  ),
+                  const SizedBox(width: 8),
+                  StatusBadge(label: applicant.status),
+                ],
+              ),
+              const SizedBox(height: 12),
+              Container(
+                padding:
+                    const EdgeInsets.symmetric(horizontal: 10, vertical: 6),
+                decoration: BoxDecoration(
+                  color: AppColors.background,
+                  borderRadius: BorderRadius.circular(10),
+                  border: Border.all(color: AppColors.lightGray),
+                ),
+                child: Row(
+                  children: [
+                    const Icon(Icons.work_outline_rounded,
+                        size: 14, color: AppColors.primaryBlue),
+                    const SizedBox(width: 6),
+                    Expanded(
+                      child: Text(
+                        applicant.projectTitle,
+                        maxLines: 1,
+                        overflow: TextOverflow.ellipsis,
+                        style: GoogleFonts.inter(
+                          fontSize: 12,
                           fontWeight: FontWeight.w600,
-                          color: AppColors.textPrimary,
+                          color: AppColors.deepNavy,
                         ),
                       ),
+                    ),
+                    if (applicant.cgpa > 0) ...[
+                      const SizedBox(width: 8),
                       Text(
-                        '${applicant.degree} • CGPA: ${applicant.cgpa.toStringAsFixed(2)}',
-                        style: const TextStyle(
+                        'CGPA ${applicant.cgpa.toStringAsFixed(2)}',
+                        style: GoogleFonts.inter(
                           fontSize: 11.5,
-                          color: AppColors.textSecondary,
+                          fontWeight: FontWeight.w700,
+                          color: AppColors.primaryBlue,
                         ),
                       ),
                     ],
-                  ),
-                ),
-              ],
-            ),
-            const SizedBox(height: 12),
-
-            // 6. Application Date & Applied Project Context
-            Row(
-              mainAxisAlignment: MainAxisAlignment.spaceBetween,
-              children: [
-                Row(
-                  children: [
-                    const Icon(Icons.event_outlined,
-                        size: 14, color: AppColors.textSecondary),
-                    const SizedBox(width: 4),
-                    Text(
-                      'Applied: ${applicant.appliedDate}',
-                      style: const TextStyle(
-                        fontSize: 11.5,
-                        color: AppColors.textSecondary,
-                      ),
-                    ),
                   ],
                 ),
-                Text(
-                  applicant.projectTitle,
-                  style: const TextStyle(
-                    fontSize: 11,
-                    fontWeight: FontWeight.w600,
-                    color: AppColors.primary,
-                  ),
-                  maxLines: 1,
-                  overflow: TextOverflow.ellipsis,
-                ),
-              ],
-            ),
-            const SizedBox(height: 10),
-
-            // 7. Proposal Summary
-            Container(
-              width: double.infinity,
-              padding: const EdgeInsets.all(10),
-              decoration: BoxDecoration(
-                color: AppColors.background,
-                borderRadius: BorderRadius.circular(8),
               ),
-              child: Text(
-                '"${applicant.proposalSummary}"',
+              const SizedBox(height: 10),
+              Text(
+                applicant.proposalSummary,
                 maxLines: 2,
                 overflow: TextOverflow.ellipsis,
-                style: const TextStyle(
+                style: GoogleFonts.inter(
                   fontSize: 12.5,
-                  fontStyle: FontStyle.italic,
-                  color: AppColors.textPrimary,
-                  height: 1.35,
+                  height: 1.45,
+                  color: AppColors.darkText,
                 ),
               ),
-            ),
-            const SizedBox(height: 10),
-
-            // 5. Skills Chips
-            Wrap(
-              spacing: 6,
-              runSpacing: 4,
-              children: applicant.skills.take(4).map((s) {
-                return Container(
-                  padding:
-                      const EdgeInsets.symmetric(horizontal: 7, vertical: 3),
-                  decoration: BoxDecoration(
-                    color: AppColors.lightIceBlue,
-                    borderRadius: BorderRadius.circular(6),
-                  ),
-                  child: Text(
-                    s,
-                    style: const TextStyle(
-                      fontSize: 11,
-                      fontWeight: FontWeight.bold,
-                      color: AppColors.primary,
-                    ),
-                  ),
-                );
-              }).toList(),
-            ),
-            const SizedBox(height: 14),
-            const Divider(height: 1, color: AppColors.border),
-            const SizedBox(height: 10),
-
-            // AVAILABLE ACTIONS: View Profile, Shortlist, Accept, Reject
-            Row(
-              children: [
-                // View Profile (Screen 29)
-                OutlinedButton(
-                  style: OutlinedButton.styleFrom(
-                    padding:
-                        const EdgeInsets.symmetric(horizontal: 10, vertical: 8),
-                    side: const BorderSide(color: AppColors.border),
-                    shape: RoundedRectangleBorder(
-                      borderRadius: BorderRadius.circular(8),
-                    ),
-                  ),
-                  onPressed: () => _openStudentProfileModal(applicant),
-                  child: const Text('View Profile',
-                      style: TextStyle(fontSize: 12, fontWeight: FontWeight.bold)),
-                ),
-                const Spacer(),
-
-                // Shortlist Button (if pending or under review)
-                if (isPending || isUnderReview)
-                  TextButton.icon(
-                    style: TextButton.styleFrom(
-                      foregroundColor: const Color(0xFF7C3AED),
-                      padding: const EdgeInsets.symmetric(horizontal: 8),
-                    ),
-                    onPressed: () => _handleShortlist(applicant),
-                    icon: const Icon(Icons.bookmark_add_outlined, size: 16),
-                    label: const Text('Shortlist',
-                        style: TextStyle(fontSize: 12, fontWeight: FontWeight.bold)),
-                  ),
-
-                // Reject Button (if not already rejected or accepted)
-                if (!isRejected && !isAccepted)
-                  TextButton(
-                    style: TextButton.styleFrom(
-                      foregroundColor: AppColors.error,
-                      padding: const EdgeInsets.symmetric(horizontal: 8),
-                    ),
-                    onPressed: () => _handleReject(applicant),
-                    child: const Text('Reject',
-                        style: TextStyle(fontSize: 12, fontWeight: FontWeight.bold)),
-                  ),
-
-                // Accept Button (if not accepted)
-                if (!isAccepted)
-                  ElevatedButton(
-                    style: ElevatedButton.styleFrom(
-                      backgroundColor: AppColors.success,
-                      foregroundColor: Colors.white,
-                      padding:
-                          const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
-                      shape: RoundedRectangleBorder(
-                        borderRadius: BorderRadius.circular(8),
+              if (applicant.skills.isNotEmpty) ...[
+                const SizedBox(height: 10),
+                Wrap(
+                  spacing: 6,
+                  runSpacing: 6,
+                  children: applicant.skills.take(5).map((skill) {
+                    return Container(
+                      padding: const EdgeInsets.symmetric(
+                          horizontal: 9, vertical: 4),
+                      decoration: BoxDecoration(
+                        color: AppColors.lightAqua.withValues(alpha: 0.75),
+                        borderRadius: BorderRadius.circular(12),
                       ),
-                    ),
-                    onPressed: () => _handleAccept(applicant),
-                    child: const Text('Accept',
-                        style: TextStyle(fontSize: 12, fontWeight: FontWeight.bold)),
-                  ),
+                      child: Text(
+                        skill,
+                        style: GoogleFonts.inter(
+                          fontSize: 11,
+                          fontWeight: FontWeight.w600,
+                          color: AppColors.deepNavy,
+                        ),
+                      ),
+                    );
+                  }).toList(),
+                ),
               ],
-            ),
-          ],
-        ),
-      ),
-    );
-  }
-
-  // Status Badge Widget
-  Widget _buildStatusBadge(String status) {
-    Color bg;
-    Color textColor;
-
-    switch (status) {
-      case 'Pending':
-        bg = AppColors.warningBg;
-        textColor = AppColors.warning;
-        break;
-      case 'Under Review':
-        bg = AppColors.infoBg;
-        textColor = AppColors.info;
-        break;
-      case 'Shortlisted':
-        bg = const Color(0xFFEDE9FE);
-        textColor = const Color(0xFF7C3AED);
-        break;
-      case 'Accepted':
-        bg = AppColors.successBg;
-        textColor = AppColors.success;
-        break;
-      case 'Rejected':
-        bg = AppColors.errorBg;
-        textColor = AppColors.error;
-        break;
-      default:
-        bg = AppColors.background;
-        textColor = AppColors.textPrimary;
-    }
-
-    return Container(
-      padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 3),
-      decoration: BoxDecoration(
-        color: bg,
-        borderRadius: BorderRadius.circular(6),
-      ),
-      child: Text(
-        status,
-        style: TextStyle(
-          color: textColor,
-          fontSize: 11,
-          fontWeight: FontWeight.bold,
-        ),
-      ),
-    );
-  }
-
-  // Empty State Widget
-  Widget _buildEmptyState(bool noApplicantsAtAll) {
-    return Center(
-      child: Padding(
-        padding: const EdgeInsets.all(28.0),
-        child: Column(
-          mainAxisAlignment: MainAxisAlignment.center,
-          children: [
-            Container(
-              padding: const EdgeInsets.all(18),
-              decoration: const BoxDecoration(
-                color: AppColors.lightIceBlue,
-                shape: BoxShape.circle,
+              const SizedBox(height: 12),
+              const Divider(height: 1, color: AppColors.lightGray),
+              const SizedBox(height: 10),
+              Row(
+                children: [
+                  Text(
+                    'Applied ${applicant.appliedDate}',
+                    style: GoogleFonts.inter(
+                      fontSize: 11.5,
+                      color: AppColors.grayText,
+                    ),
+                  ),
+                  const Spacer(),
+                  TextButton(
+                    onPressed: () => _openStudentProfileModal(applicant),
+                    child: const Text('Review Profile'),
+                  ),
+                  if (canDecide) ...[
+                    if (applicant.status != 'Shortlisted') ...[
+                      const SizedBox(width: 4),
+                      OutlinedButton(
+                        style: OutlinedButton.styleFrom(
+                          padding: const EdgeInsets.symmetric(
+                              horizontal: 10, vertical: 6),
+                          minimumSize: Size.zero,
+                        ),
+                        onPressed: () =>
+                            _updateStatus(applicant, 'Shortlisted'),
+                        child: const Text('Shortlist'),
+                      ),
+                    ],
+                    const SizedBox(width: 6),
+                    ElevatedButton(
+                      style: ElevatedButton.styleFrom(
+                        backgroundColor: AppColors.statusOpen,
+                        foregroundColor: Colors.white,
+                        padding: const EdgeInsets.symmetric(
+                            horizontal: 12, vertical: 6),
+                        minimumSize: Size.zero,
+                      ),
+                      onPressed: () => _updateStatus(applicant, 'Accepted'),
+                      child: const Text('Accept'),
+                    ),
+                  ],
+                ],
               ),
-              child: const Icon(
-                Icons.person_search_outlined,
-                size: 48,
-                color: AppColors.primary,
-              ),
-            ),
-            const SizedBox(height: 16),
-            Text(
-              noApplicantsAtAll
-                  ? 'No Student Applications Yet'
-                  : 'No Applicants Match Your Filters',
-              style: const TextStyle(
-                fontSize: 17,
-                fontWeight: FontWeight.bold,
-                color: AppColors.darkNavy,
-              ),
-            ),
-            const SizedBox(height: 8),
-            Text(
-              noApplicantsAtAll
-                  ? 'University students have not submitted proposals for this project yet. Published projects receive applications as students browse campus challenges.'
-                  : 'Try searching by other keywords or switching your applicant status filter.',
-              textAlign: TextAlign.center,
-              style: const TextStyle(
-                fontSize: 13,
-                color: AppColors.textSecondary,
-                height: 1.4,
-              ),
-            ),
-          ],
+            ],
+          ),
         ),
       ),
     );

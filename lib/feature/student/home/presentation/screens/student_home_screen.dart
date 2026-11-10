@@ -1,13 +1,17 @@
 import 'package:flutter/material.dart';
 import 'package:google_fonts/google_fonts.dart';
-import 'package:supabase_flutter/supabase_flutter.dart';
 import 'package:link_vibe/core/constants/app_colors.dart';
 import 'package:link_vibe/core/services/app_data_service.dart';
 import 'package:link_vibe/core/services/share_service.dart';
-import 'package:link_vibe/feature/student/explore/presentation/screens/explore_projects_screen.dart';
-import 'package:link_vibe/feature/student/project_details/presentation/screens/student_project_details_screen.dart';
-import 'package:link_vibe/feature/student/notifications/presentation/screens/notifications_screen.dart';
+import 'package:link_vibe/core/services/supabase_helper.dart';
+import 'package:link_vibe/core/widgets/app_empty_state.dart';
+import 'package:link_vibe/core/widgets/section_header.dart';
+import 'package:link_vibe/core/widgets/status_badge.dart';
+import 'package:link_vibe/feature/student/applications/presentation/screens/my_applications_screen.dart';
 import 'package:link_vibe/feature/student/certificates/presentation/screens/certificates_screen.dart';
+import 'package:link_vibe/feature/student/explore/presentation/screens/explore_projects_screen.dart';
+import 'package:link_vibe/feature/student/notifications/presentation/screens/notifications_screen.dart';
+import 'package:link_vibe/feature/student/project_details/presentation/screens/student_project_details_screen.dart';
 
 class StudentHomeScreen extends StatefulWidget {
   final Function(int)? onTabChange;
@@ -23,27 +27,65 @@ class _StudentHomeScreenState extends State<StudentHomeScreen> {
   void initState() {
     super.initState();
     WidgetsBinding.instance.addPostFrameCallback((_) {
-      if (mounted) _syncUserWithProfile();
+      if (mounted) _hydrateDashboard();
     });
   }
 
-  void _syncUserWithProfile() {
-    final user = Supabase.instance.client.auth.currentUser;
-    if (user != null) {
-      final name = user.userMetadata?['name'];
-      final email = user.email;
-      final university = user.userMetadata?['university'];
-      final currentProfile = AppDataService.instance.getProfile();
-      final currentName = currentProfile['name']?.toString() ?? '';
-      final isGeneric = currentName.isEmpty || currentName == 'Ahmed Khan';
+  Future<void> _hydrateDashboard() async {
+    _syncUserWithProfile();
+    await AppDataService.instance.syncFromSupabase(forceRefresh: true);
+  }
 
-      AppDataService.instance.updateProfile({
-        if (name != null && name.toString().isNotEmpty && isGeneric)
-          'name': name.toString(),
-        if (email != null && email.isNotEmpty) 'email': email,
-        if (university != null && university.toString().isNotEmpty)
-          'university': university.toString(),
-      });
+  void _syncUserWithProfile() {
+    final user = SupabaseHelper.currentUser;
+    if (user == null) return;
+
+    final name = user.userMetadata?['name']?.toString().trim() ?? '';
+    final email = user.email?.trim() ?? '';
+    final university =
+        user.userMetadata?['university']?.toString().trim() ?? '';
+    final currentProfile = AppDataService.instance.getProfile();
+    final currentName = currentProfile['name']?.toString().trim() ?? '';
+    final currentUni = currentProfile['university']?.toString().trim() ?? '';
+
+    final updates = <String, dynamic>{};
+    if (currentName.isEmpty && name.isNotEmpty) {
+      updates['name'] = name;
+    }
+    if ((currentProfile['email']?.toString().trim() ?? '').isEmpty &&
+        email.isNotEmpty) {
+      updates['email'] = email;
+    }
+    if (currentUni.isEmpty && university.isNotEmpty) {
+      updates['university'] = university;
+    }
+
+    if (updates.isNotEmpty) {
+      AppDataService.instance.updateProfile(updates);
+    }
+  }
+
+  String _resolveStudentName(Map<String, dynamic> profile) {
+    final pName = profile['name']?.toString().trim() ?? '';
+    if (pName.isNotEmpty) return pName;
+    if (AppDataService.instance.userName.trim().isNotEmpty) {
+      return AppDataService.instance.userName.trim();
+    }
+    final metaName =
+        SupabaseHelper.currentUser?.userMetadata?['name']?.toString().trim() ??
+            '';
+    if (metaName.isNotEmpty) return metaName;
+    return 'Student';
+  }
+
+  void _openExplore() {
+    if (widget.onTabChange != null) {
+      widget.onTabChange!(1);
+    } else {
+      Navigator.push(
+        context,
+        MaterialPageRoute(builder: (_) => const ExploreProjectsScreen()),
+      );
     }
   }
 
@@ -53,407 +95,496 @@ class _StudentHomeScreenState extends State<StudentHomeScreen> {
       listenable: AppDataService.instance,
       builder: (context, _) {
         final profile = AppDataService.instance.getProfile();
-        final studentName = (profile['name'] != null &&
-                profile['name'].toString().isNotEmpty &&
-                profile['name'].toString() != 'Ahmed Khan')
-            ? profile['name'].toString()
-            : (AppDataService.instance.userName.isNotEmpty
-                ? AppDataService.instance.userName
-                : (profile['name'] ?? 'Student'));
-        final recommendedProjects =
-            AppDataService.instance.getAllProjects().take(4).toList();
+        final studentName = _resolveStudentName(profile);
+        final initials =
+            SupabaseHelper.initialsFor(studentName, fallback: 'ST');
+        final university = profile['university']?.toString().trim() ?? '';
+
+        final openProjects = AppDataService.instance.getOpenProjects();
+        final recommendedProjects = openProjects.take(4).toList();
 
         final totalApps = AppDataService.instance.totalApplicationsCount;
         final activeProjects = AppDataService.instance.activeProjectsCount;
-        final completedProjects = AppDataService.instance.completedProjectsCount;
+        final completedProjects =
+            AppDataService.instance.completedProjectsCount;
         final certs = AppDataService.instance.certificatesCount;
+        final unreadCount = AppDataService.instance.unreadNotificationsCount;
 
         return Scaffold(
           backgroundColor: AppColors.background,
           body: SafeArea(
-            child: SingleChildScrollView(
-              padding: const EdgeInsets.all(20.0),
-              child: Column(
-                crossAxisAlignment: CrossAxisAlignment.start,
-                children: [
-                  // Header: Profile Avatar, Greeting, and Notification Icon
-                  Row(
-                    mainAxisAlignment: MainAxisAlignment.spaceBetween,
-                    children: [
-                      Row(
-                        children: [
-                          GestureDetector(
-                            onTap: () => widget.onTabChange?.call(4),
-                            child: Container(
-                              width: 50,
-                              height: 50,
-                              decoration: BoxDecoration(
-                                shape: BoxShape.circle,
-                                color: AppColors.lightAqua,
-                                border: Border.all(
-                                  color: AppColors.primaryBlue.withValues(alpha: 0.3),
-                                  width: 2,
-                                ),
-                              ),
-                              child: const Icon(
-                                Icons.person_rounded,
-                                size: 30,
-                                color: AppColors.primaryBlue,
-                              ),
-                            ),
-                          ),
-                          const SizedBox(width: 14),
-                          Column(
-                            crossAxisAlignment: CrossAxisAlignment.start,
-                            children: [
-                              Row(
-                                children: [
-                                  Text(
-                                    'Hello, $studentName!',
-                                    style: GoogleFonts.poppins(
-                                      fontSize: 18,
-                                      fontWeight: FontWeight.bold,
-                                      color: AppColors.deepNavy,
-                                    ),
-                                  ),
-                                  const SizedBox(width: 4),
-                                  const Text('👋', style: TextStyle(fontSize: 16)),
-                                ],
-                              ),
-                              Text(
-                                'Explore projects and grow your skills',
-                                style: GoogleFonts.inter(
-                                  fontSize: 12,
-                                  color: AppColors.grayText,
-                                ),
-                              ),
-                            ],
-                          ),
-                        ],
-                      ),
-                      Stack(
-                        clipBehavior: Clip.none,
-                        children: [
-                          Container(
-                            decoration: BoxDecoration(
-                              color: AppColors.cardWhite,
-                              shape: BoxShape.circle,
-                              border: Border.all(color: AppColors.lightGray),
-                            ),
-                            child: IconButton(
-                              icon: const Icon(
-                                Icons.notifications_none_rounded,
-                                color: AppColors.deepNavy,
-                                size: 22,
-                              ),
-                              onPressed: () {
-                                Navigator.push(
-                                  context,
-                                  MaterialPageRoute(
-                                    builder: (context) =>
-                                        const NotificationsScreen(),
-                                  ),
-                                );
-                              },
-                            ),
-                          ),
-                          if (AppDataService.instance.unreadNotificationsCount > 0)
-                            Positioned(
-                              top: 6,
-                              right: 6,
-                              child: Container(
-                                width: 10,
-                                height: 10,
-                                decoration: BoxDecoration(
-                                  color: AppColors.primaryBlue,
-                                  shape: BoxShape.circle,
-                                  border: Border.all(
-                                    color: Colors.white,
-                                    width: 1.5,
-                                  ),
-                                ),
-                              ),
-                            ),
-                        ],
-                      ),
-                    ],
-                  ),
-                  const SizedBox(height: 20),
-
-                  // Search Bar Navigation Anchor
-                  GestureDetector(
-                    onTap: () => widget.onTabChange?.call(1),
-                    child: Container(
-                      padding: const EdgeInsets.symmetric(
-                          horizontal: 16, vertical: 12),
-                      decoration: BoxDecoration(
-                        color: AppColors.cardWhite,
-                        borderRadius: BorderRadius.circular(14),
-                        border: Border.all(color: AppColors.lightGray),
-                      ),
-                      child: Row(
-                        children: [
-                          const Icon(Icons.search_rounded,
-                              color: AppColors.grayText, size: 20),
-                          const SizedBox(width: 10),
-                          Text(
-                            'Search for projects, companies...',
-                            style: GoogleFonts.inter(
-                              fontSize: 13,
-                              color: AppColors.grayText,
-                            ),
-                          ),
-                        ],
-                      ),
-                    ),
-                  ),
-                  const SizedBox(height: 20),
-
-                  // Hero Banner Card: "Turn Your Skills Into Earning"
-                  Container(
-                    width: double.infinity,
-                    padding: const EdgeInsets.all(20),
-                    decoration: BoxDecoration(
-                      gradient: const LinearGradient(
-                        begin: Alignment.topLeft,
-                        end: Alignment.bottomRight,
-                        colors: [
-                          Color(0xFF0F3A70),
-                          AppColors.primaryBlue,
-                          AppColors.teal,
-                        ],
-                      ),
-                      borderRadius: BorderRadius.circular(20),
-                      boxShadow: [
-                        BoxShadow(
-                          color: AppColors.primaryBlue.withValues(alpha: 0.25),
-                          blurRadius: 16,
-                          offset: const Offset(0, 8),
-                        ),
-                      ],
-                    ),
-                    child: Row(
+            child: RefreshIndicator(
+              color: AppColors.primaryBlue,
+              onRefresh: () =>
+                  AppDataService.instance.syncFromSupabase(forceRefresh: true),
+              child: SingleChildScrollView(
+                physics: const AlwaysScrollableScrollPhysics(),
+                padding: const EdgeInsets.all(20),
+                child: Center(
+                  child: ConstrainedBox(
+                    constraints: const BoxConstraints(maxWidth: 920),
+                    child: Column(
+                      crossAxisAlignment: CrossAxisAlignment.start,
                       children: [
-                        Expanded(
-                          flex: 3,
-                          child: Column(
-                            crossAxisAlignment: CrossAxisAlignment.start,
-                            children: [
-                              Text(
-                                'Turn Your Skills\nInto Earning',
-                                style: GoogleFonts.poppins(
-                                  fontSize: 18,
-                                  fontWeight: FontWeight.bold,
-                                  color: Colors.white,
-                                  height: 1.25,
-                                ),
-                              ),
-                              const SizedBox(height: 6),
-                              Text(
-                                'Work on real projects from top companies',
-                                style: GoogleFonts.inter(
-                                  fontSize: 12,
-                                  color: Colors.white.withValues(alpha: 0.9),
-                                ),
-                              ),
-                              const SizedBox(height: 14),
-                              ElevatedButton(
-                                style: ElevatedButton.styleFrom(
-                                  backgroundColor: Colors.white,
-                                  foregroundColor: AppColors.deepNavy,
-                                  elevation: 0,
-                                  padding: const EdgeInsets.symmetric(
-                                      horizontal: 14, vertical: 8),
-                                  shape: RoundedRectangleBorder(
-                                    borderRadius: BorderRadius.circular(20),
-                                  ),
-                                ),
-                                onPressed: () {
-                                  if (widget.onTabChange != null) {
-                                    widget.onTabChange!(1);
-                                  } else {
-                                    Navigator.push(
-                                      context,
-                                      MaterialPageRoute(
-                                        builder: (context) =>
-                                            const ExploreProjectsScreen(),
-                                      ),
-                                    );
-                                  }
-                                },
-                                child: Row(
-                                  mainAxisSize: MainAxisSize.min,
-                                  children: [
-                                    Text(
-                                      'Explore Now',
-                                      style: GoogleFonts.poppins(
-                                        fontSize: 12,
-                                        fontWeight: FontWeight.bold,
-                                        color: AppColors.deepNavy,
-                                      ),
-                                    ),
-                                    const SizedBox(width: 4),
-                                    const Icon(
-                                      Icons.arrow_forward_rounded,
-                                      size: 14,
-                                      color: AppColors.deepNavy,
+                        // Header Row
+                        Row(
+                          children: [
+                            GestureDetector(
+                              onTap: () => widget.onTabChange?.call(4),
+                              child: Container(
+                                width: 48,
+                                height: 48,
+                                decoration: BoxDecoration(
+                                  shape: BoxShape.circle,
+                                  gradient: AppColors.brandGradient,
+                                  boxShadow: [
+                                    BoxShadow(
+                                      color: AppColors.primaryBlue
+                                          .withValues(alpha: 0.2),
+                                      blurRadius: 10,
+                                      offset: const Offset(0, 4),
                                     ),
                                   ],
                                 ),
-                              ),
-                            ],
-                          ),
-                        ),
-                        Expanded(
-                          flex: 2,
-                          child: Center(
-                            child: Container(
-                              padding: const EdgeInsets.all(14),
-                              decoration: BoxDecoration(
-                                color: Colors.white.withValues(alpha: 0.15),
-                                shape: BoxShape.circle,
-                              ),
-                              child: const Icon(
-                                Icons.laptop_chromebook_rounded,
-                                size: 52,
-                                color: Colors.white,
+                                child: Center(
+                                  child: Text(
+                                    initials,
+                                    style: GoogleFonts.poppins(
+                                      fontSize: 16,
+                                      fontWeight: FontWeight.bold,
+                                      color: Colors.white,
+                                    ),
+                                  ),
+                                ),
                               ),
                             ),
-                          ),
-                        ),
-                      ],
-                    ),
-                  ),
-                  const SizedBox(height: 24),
-
-                  // Quick Access 4 Buttons Row
-                  Row(
-                    mainAxisAlignment: MainAxisAlignment.spaceBetween,
-                    children: [
-                      _buildQuickAction(
-                        Icons.folder_open_rounded,
-                        'Projects',
-                        AppColors.lightAqua,
-                        AppColors.primaryBlue,
-                        () => widget.onTabChange?.call(1),
-                      ),
-                      _buildQuickAction(
-                        Icons.workspace_premium_rounded,
-                        'Certificates',
-                        const Color(0xFFE0F7FA),
-                        AppColors.teal,
-                        () {
-                          Navigator.push(
-                            context,
-                            MaterialPageRoute(
-                              builder: (context) => const CertificatesScreen(),
-                            ),
-                          );
-                        },
-                      ),
-                      _buildQuickAction(
-                        Icons.assignment_turned_in_rounded,
-                        'My Work',
-                        const Color(0xFFFEF3C7),
-                        const Color(0xFFD97706),
-                        () => widget.onTabChange?.call(2),
-                      ),
-                      _buildQuickAction(
-                        Icons.person_outline_rounded,
-                        'Profile',
-                        const Color(0xFFEDE9FE),
-                        const Color(0xFF7C3AED),
-                        () => widget.onTabChange?.call(4),
-                      ),
-                    ],
-                  ),
-                  const SizedBox(height: 24),
-
-                  // Live Reactive Stats Cards Grid
-                  Row(
-                    children: [
-                      Expanded(
-                        child: _buildStatCard(
-                          'Total Applications',
-                          totalApps.toString(),
-                          Icons.send_rounded,
-                          AppColors.primaryBlue,
-                        ),
-                      ),
-                      const SizedBox(width: 12),
-                      Expanded(
-                        child: _buildStatCard(
-                          'Active Projects',
-                          activeProjects.toString(),
-                          Icons.play_circle_outline_rounded,
-                          AppColors.teal,
-                        ),
-                      ),
-                    ],
-                  ),
-                  const SizedBox(height: 12),
-                  Row(
-                    children: [
-                      Expanded(
-                        child: _buildStatCard(
-                          'Completed Projects',
-                          completedProjects.toString(),
-                          Icons.check_circle_outline_rounded,
-                          AppColors.statusOpen,
-                        ),
-                      ),
-                      const SizedBox(width: 12),
-                      Expanded(
-                        child: _buildStatCard(
-                          'Certificates',
-                          certs.toString(),
-                          Icons.military_tech_rounded,
-                          const Color(0xFFF59E0B),
-                        ),
-                      ),
-                    ],
-                  ),
-                  const SizedBox(height: 28),
-
-                  // Recommended Projects Section Header
-                  Row(
-                    mainAxisAlignment: MainAxisAlignment.spaceBetween,
-                    children: [
-                      Text(
-                        'Recommended Projects',
-                        style: GoogleFonts.poppins(
-                          fontSize: 16,
-                          fontWeight: FontWeight.bold,
-                          color: AppColors.deepNavy,
-                        ),
-                      ),
-                      TextButton(
-                        onPressed: () => widget.onTabChange?.call(1),
-                        child: Row(
-                          children: [
-                            Text(
-                              'See All',
-                              style: GoogleFonts.inter(
-                                fontSize: 13,
-                                fontWeight: FontWeight.bold,
-                                color: AppColors.primaryBlue,
+                            const SizedBox(width: 14),
+                            Expanded(
+                              child: Column(
+                                crossAxisAlignment: CrossAxisAlignment.start,
+                                children: [
+                                  Text(
+                                    'Hello, $studentName',
+                                    maxLines: 1,
+                                    overflow: TextOverflow.ellipsis,
+                                    style: GoogleFonts.poppins(
+                                      fontSize: 18,
+                                      fontWeight: FontWeight.w700,
+                                      color: AppColors.deepNavy,
+                                    ),
+                                  ),
+                                  Text(
+                                    university.isNotEmpty
+                                        ? university
+                                        : 'Explore corporate projects & verify your skills',
+                                    maxLines: 1,
+                                    overflow: TextOverflow.ellipsis,
+                                    style: GoogleFonts.inter(
+                                      fontSize: 12.5,
+                                      color: AppColors.grayText,
+                                    ),
+                                  ),
+                                ],
                               ),
                             ),
-                            const Icon(
-                              Icons.arrow_forward_ios_rounded,
-                              size: 11,
-                              color: AppColors.primaryBlue,
+                            const SizedBox(width: 10),
+                            Stack(
+                              clipBehavior: Clip.none,
+                              children: [
+                                Container(
+                                  decoration: BoxDecoration(
+                                    color: AppColors.cardWhite,
+                                    shape: BoxShape.circle,
+                                    border:
+                                        Border.all(color: AppColors.lightGray),
+                                    boxShadow: AppColors.softShadow,
+                                  ),
+                                  child: IconButton(
+                                    tooltip: 'Notifications',
+                                    icon: const Icon(
+                                      Icons.notifications_none_rounded,
+                                      color: AppColors.deepNavy,
+                                      size: 22,
+                                    ),
+                                    onPressed: () {
+                                      Navigator.push(
+                                        context,
+                                        MaterialPageRoute(
+                                          builder: (_) =>
+                                              const NotificationsScreen(),
+                                        ),
+                                      );
+                                    },
+                                  ),
+                                ),
+                                if (unreadCount > 0)
+                                  Positioned(
+                                    top: 4,
+                                    right: 4,
+                                    child: Container(
+                                      padding: const EdgeInsets.all(4),
+                                      decoration: BoxDecoration(
+                                        color: AppColors.primaryBlue,
+                                        shape: BoxShape.circle,
+                                        border: Border.all(
+                                          color: Colors.white,
+                                          width: 1.5,
+                                        ),
+                                      ),
+                                      child: Text(
+                                        unreadCount > 9 ? '9+' : '$unreadCount',
+                                        style: const TextStyle(
+                                          color: Colors.white,
+                                          fontSize: 9,
+                                          fontWeight: FontWeight.bold,
+                                        ),
+                                      ),
+                                    ),
+                                  ),
+                              ],
                             ),
                           ],
                         ),
-                      ),
-                    ],
-                  ),
-                  const SizedBox(height: 8),
+                        const SizedBox(height: 20),
 
-                  // Recommended Projects List
-                  ...recommendedProjects.map((p) => _buildProjectCard(p)),
-                ],
+                        // Search Bar Trigger
+                        GestureDetector(
+                          onTap: _openExplore,
+                          child: Container(
+                            padding: const EdgeInsets.symmetric(
+                              horizontal: 16,
+                              vertical: 13,
+                            ),
+                            decoration: BoxDecoration(
+                              color: AppColors.cardWhite,
+                              borderRadius: BorderRadius.circular(14),
+                              border: Border.all(color: AppColors.lightGray),
+                              boxShadow: AppColors.softShadow,
+                            ),
+                            child: Row(
+                              children: [
+                                const Icon(
+                                  Icons.search_rounded,
+                                  color: AppColors.grayText,
+                                  size: 20,
+                                ),
+                                const SizedBox(width: 10),
+                                Expanded(
+                                  child: Text(
+                                    'Search corporate projects, skills, companies...',
+                                    maxLines: 1,
+                                    overflow: TextOverflow.ellipsis,
+                                    style: GoogleFonts.inter(
+                                      fontSize: 13.5,
+                                      color: AppColors.grayText,
+                                    ),
+                                  ),
+                                ),
+                                Container(
+                                  padding: const EdgeInsets.symmetric(
+                                    horizontal: 8,
+                                    vertical: 4,
+                                  ),
+                                  decoration: BoxDecoration(
+                                    color: AppColors.lightAqua,
+                                    borderRadius: BorderRadius.circular(8),
+                                  ),
+                                  child: Text(
+                                    '${openProjects.length} Open',
+                                    style: GoogleFonts.inter(
+                                      fontSize: 11,
+                                      fontWeight: FontWeight.w700,
+                                      color: AppColors.primaryBlue,
+                                    ),
+                                  ),
+                                ),
+                              ],
+                            ),
+                          ),
+                        ),
+                        const SizedBox(height: 20),
+
+                        // Hero Banner
+                        Container(
+                          width: double.infinity,
+                          padding: const EdgeInsets.all(22),
+                          decoration: BoxDecoration(
+                            gradient: const LinearGradient(
+                              begin: Alignment.topLeft,
+                              end: Alignment.bottomRight,
+                              colors: [
+                                AppColors.deepNavy,
+                                AppColors.primaryBlue,
+                                AppColors.teal,
+                              ],
+                            ),
+                            borderRadius: BorderRadius.circular(20),
+                            boxShadow: [
+                              BoxShadow(
+                                color: AppColors.primaryBlue
+                                    .withValues(alpha: 0.22),
+                                blurRadius: 18,
+                                offset: const Offset(0, 8),
+                              ),
+                            ],
+                          ),
+                          child: LayoutBuilder(
+                            builder: (context, constraints) {
+                              final compactHero = constraints.maxWidth < 340;
+                              return Row(
+                                children: [
+                                  Expanded(
+                                    child: Column(
+                                      crossAxisAlignment:
+                                          CrossAxisAlignment.start,
+                                      children: [
+                                        Container(
+                                          padding: const EdgeInsets.symmetric(
+                                            horizontal: 10,
+                                            vertical: 4,
+                                          ),
+                                          decoration: BoxDecoration(
+                                            color: Colors.white
+                                                .withValues(alpha: 0.16),
+                                            borderRadius:
+                                                BorderRadius.circular(20),
+                                          ),
+                                          child: Text(
+                                            'STUDENT WORKSPACE',
+                                            style: GoogleFonts.inter(
+                                              fontSize: 10,
+                                              fontWeight: FontWeight.w700,
+                                              letterSpacing: 0.8,
+                                              color: Colors.white,
+                                            ),
+                                          ),
+                                        ),
+                                        const SizedBox(height: 10),
+                                        Text(
+                                          'Turn Academic Skills Into Real Industry Experience',
+                                          style: GoogleFonts.poppins(
+                                            fontSize: compactHero ? 16 : 18,
+                                            fontWeight: FontWeight.w700,
+                                            color: Colors.white,
+                                            height: 1.25,
+                                          ),
+                                        ),
+                                        const SizedBox(height: 6),
+                                        Text(
+                                          'Collaborate with verified companies and earn cryptographic completion certificates.',
+                                          style: GoogleFonts.inter(
+                                            fontSize: 12.5,
+                                            color: Colors.white
+                                                .withValues(alpha: 0.9),
+                                            height: 1.4,
+                                          ),
+                                        ),
+                                        const SizedBox(height: 16),
+                                        ElevatedButton.icon(
+                                          style: ElevatedButton.styleFrom(
+                                            backgroundColor: Colors.white,
+                                            foregroundColor: AppColors.deepNavy,
+                                            elevation: 0,
+                                            padding: const EdgeInsets.symmetric(
+                                              horizontal: 16,
+                                              vertical: 10,
+                                            ),
+                                            shape: RoundedRectangleBorder(
+                                              borderRadius:
+                                                  BorderRadius.circular(12),
+                                            ),
+                                          ),
+                                          onPressed: _openExplore,
+                                          icon: const Icon(
+                                            Icons.explore_rounded,
+                                            size: 16,
+                                          ),
+                                          label: Text(
+                                            'Explore Projects',
+                                            style: GoogleFonts.poppins(
+                                              fontSize: 12.5,
+                                              fontWeight: FontWeight.w700,
+                                            ),
+                                          ),
+                                        ),
+                                      ],
+                                    ),
+                                  ),
+                                  if (!compactHero) ...[
+                                    const SizedBox(width: 14),
+                                    Container(
+                                      padding: const EdgeInsets.all(18),
+                                      decoration: BoxDecoration(
+                                        color: Colors.white
+                                            .withValues(alpha: 0.14),
+                                        shape: BoxShape.circle,
+                                        border: Border.all(
+                                          color: Colors.white
+                                              .withValues(alpha: 0.22),
+                                        ),
+                                      ),
+                                      child: const Icon(
+                                        Icons.workspace_premium_rounded,
+                                        size: 46,
+                                        color: Colors.white,
+                                      ),
+                                    ),
+                                  ],
+                                ],
+                              );
+                            },
+                          ),
+                        ),
+                        const SizedBox(height: 22),
+
+                        // Quick Actions
+                        Row(
+                          children: [
+                            Expanded(
+                              child: _buildQuickAction(
+                                Icons.folder_open_rounded,
+                                'Projects',
+                                AppColors.lightAqua,
+                                AppColors.primaryBlue,
+                                _openExplore,
+                              ),
+                            ),
+                            const SizedBox(width: 10),
+                            Expanded(
+                              child: _buildQuickAction(
+                                Icons.workspace_premium_rounded,
+                                'Certificates',
+                                const Color(0xFFE0F7FA),
+                                AppColors.teal,
+                                () {
+                                  Navigator.push(
+                                    context,
+                                    MaterialPageRoute(
+                                      builder: (_) =>
+                                          const CertificatesScreen(),
+                                    ),
+                                  );
+                                },
+                              ),
+                            ),
+                            const SizedBox(width: 10),
+                            Expanded(
+                              child: _buildQuickAction(
+                                Icons.assignment_turned_in_rounded,
+                                'My Work',
+                                AppColors.warningBg,
+                                const Color(0xFFD97706),
+                                () => widget.onTabChange?.call(2),
+                              ),
+                            ),
+                            const SizedBox(width: 10),
+                            Expanded(
+                              child: _buildQuickAction(
+                                Icons.person_outline_rounded,
+                                'Profile',
+                                const Color(0xFFEDE9FE),
+                                const Color(0xFF7C3AED),
+                                () => widget.onTabChange?.call(4),
+                              ),
+                            ),
+                          ],
+                        ),
+                        const SizedBox(height: 22),
+
+                        // Stats Cards Grid
+                        Row(
+                          children: [
+                            Expanded(
+                              child: _buildStatCard(
+                                'Applications',
+                                totalApps.toString(),
+                                Icons.send_rounded,
+                                AppColors.primaryBlue,
+                                () {
+                                  Navigator.push(
+                                    context,
+                                    MaterialPageRoute(
+                                      builder: (_) =>
+                                          const MyApplicationsScreen(),
+                                    ),
+                                  );
+                                },
+                              ),
+                            ),
+                            const SizedBox(width: 12),
+                            Expanded(
+                              child: _buildStatCard(
+                                'Active Work',
+                                activeProjects.toString(),
+                                Icons.play_circle_outline_rounded,
+                                AppColors.teal,
+                                () => widget.onTabChange?.call(2),
+                              ),
+                            ),
+                          ],
+                        ),
+                        const SizedBox(height: 12),
+                        Row(
+                          children: [
+                            Expanded(
+                              child: _buildStatCard(
+                                'Completed',
+                                completedProjects.toString(),
+                                Icons.check_circle_outline_rounded,
+                                AppColors.statusOpen,
+                                () => widget.onTabChange?.call(2),
+                              ),
+                            ),
+                            const SizedBox(width: 12),
+                            Expanded(
+                              child: _buildStatCard(
+                                'Certificates',
+                                certs.toString(),
+                                Icons.military_tech_rounded,
+                                AppColors.statusPending,
+                                () {
+                                  Navigator.push(
+                                    context,
+                                    MaterialPageRoute(
+                                      builder: (_) =>
+                                          const CertificatesScreen(),
+                                    ),
+                                  );
+                                },
+                              ),
+                            ),
+                          ],
+                        ),
+                        const SizedBox(height: 26),
+
+                        // Recommended Projects Section Header
+                        SectionHeader(
+                          title: 'Live Open Opportunities',
+                          subtitle: openProjects.isEmpty
+                              ? 'Synced from Supabase partner projects'
+                              : '${openProjects.length} active company project${openProjects.length == 1 ? '' : 's'}',
+                          actionLabel: 'See All',
+                          onAction: _openExplore,
+                        ),
+                        const SizedBox(height: 12),
+
+                        if (recommendedProjects.isEmpty)
+                          AppEmptyState(
+                            compact: true,
+                            icon: Icons.explore_outlined,
+                            title: 'No Open Projects Right Now',
+                            subtitle:
+                                'Pull down to refresh or open Explore once partner companies publish new live opportunities.',
+                            actionLabel: 'Explore Catalog',
+                            actionIcon: Icons.explore_rounded,
+                            onAction: _openExplore,
+                          )
+                        else
+                          ...recommendedProjects.map(_buildProjectCard),
+                      ],
+                    ),
+                  ),
+                ),
               ),
             ),
           ),
@@ -469,29 +600,35 @@ class _StudentHomeScreenState extends State<StudentHomeScreen> {
     Color iconColor,
     VoidCallback onTap,
   ) {
-    return GestureDetector(
+    return InkWell(
       onTap: onTap,
-      child: Column(
-        children: [
-          Container(
-            width: 54,
-            height: 54,
-            decoration: BoxDecoration(
-              color: bgColor,
-              borderRadius: BorderRadius.circular(16),
+      borderRadius: BorderRadius.circular(16),
+      child: Padding(
+        padding: const EdgeInsets.symmetric(vertical: 4),
+        child: Column(
+          children: [
+            Container(
+              width: 52,
+              height: 52,
+              decoration: BoxDecoration(
+                color: bgColor,
+                borderRadius: BorderRadius.circular(16),
+              ),
+              child: Icon(icon, color: iconColor, size: 25),
             ),
-            child: Icon(icon, color: iconColor, size: 26),
-          ),
-          const SizedBox(height: 6),
-          Text(
-            label,
-            style: GoogleFonts.inter(
-              fontSize: 12,
-              fontWeight: FontWeight.w600,
-              color: AppColors.darkText,
+            const SizedBox(height: 6),
+            Text(
+              label,
+              maxLines: 1,
+              overflow: TextOverflow.ellipsis,
+              style: GoogleFonts.inter(
+                fontSize: 12,
+                fontWeight: FontWeight.w600,
+                color: AppColors.darkText,
+              ),
             ),
-          ),
-        ],
+          ],
+        ),
       ),
     );
   }
@@ -501,50 +638,56 @@ class _StudentHomeScreenState extends State<StudentHomeScreen> {
     String count,
     IconData icon,
     Color accentColor,
+    VoidCallback onTap,
   ) {
-    return Container(
-      padding: const EdgeInsets.all(14),
-      decoration: BoxDecoration(
-        color: AppColors.cardWhite,
-        borderRadius: BorderRadius.circular(16),
-        border: Border.all(color: AppColors.lightGray),
-      ),
-      child: Row(
-        children: [
-          Container(
-            padding: const EdgeInsets.all(8),
-            decoration: BoxDecoration(
-              color: accentColor.withValues(alpha: 0.12),
-              borderRadius: BorderRadius.circular(10),
+    return InkWell(
+      onTap: onTap,
+      borderRadius: BorderRadius.circular(16),
+      child: Container(
+        padding: const EdgeInsets.all(14),
+        decoration: BoxDecoration(
+          color: AppColors.cardWhite,
+          borderRadius: BorderRadius.circular(16),
+          border: Border.all(color: AppColors.lightGray),
+          boxShadow: AppColors.softShadow,
+        ),
+        child: Row(
+          children: [
+            Container(
+              padding: const EdgeInsets.all(9),
+              decoration: BoxDecoration(
+                color: accentColor.withValues(alpha: 0.12),
+                borderRadius: BorderRadius.circular(11),
+              ),
+              child: Icon(icon, size: 20, color: accentColor),
             ),
-            child: Icon(icon, size: 20, color: accentColor),
-          ),
-          const SizedBox(width: 12),
-          Expanded(
-            child: Column(
-              crossAxisAlignment: CrossAxisAlignment.start,
-              children: [
-                Text(
-                  count,
-                  style: GoogleFonts.poppins(
-                    fontSize: 18,
-                    fontWeight: FontWeight.bold,
-                    color: AppColors.deepNavy,
+            const SizedBox(width: 12),
+            Expanded(
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  Text(
+                    count,
+                    style: GoogleFonts.poppins(
+                      fontSize: 18,
+                      fontWeight: FontWeight.bold,
+                      color: AppColors.deepNavy,
+                    ),
                   ),
-                ),
-                Text(
-                  label,
-                  maxLines: 1,
-                  overflow: TextOverflow.ellipsis,
-                  style: GoogleFonts.inter(
-                    fontSize: 11,
-                    color: AppColors.grayText,
+                  Text(
+                    label,
+                    maxLines: 1,
+                    overflow: TextOverflow.ellipsis,
+                    style: GoogleFonts.inter(
+                      fontSize: 11.5,
+                      color: AppColors.grayText,
+                    ),
                   ),
-                ),
-              ],
+                ],
+              ),
             ),
-          ),
-        ],
+          ],
+        ),
       ),
     );
   }
@@ -552,25 +695,27 @@ class _StudentHomeScreenState extends State<StudentHomeScreen> {
   Widget _buildProjectCard(Map<String, dynamic> project) {
     final id = project['id']?.toString() ?? '';
     final isSaved = AppDataService.instance.isProjectSaved(id);
+    final companyName =
+        (project['company']?.toString().trim().isNotEmpty == true)
+            ? project['company'].toString().trim()
+            : 'Partner Company';
+    final duration = project['duration']?.toString().trim() ?? 'Flexible';
+    final status = project['status']?.toString() ?? 'Open';
 
     return Card(
       margin: const EdgeInsets.only(bottom: 12),
-      shape: RoundedRectangleBorder(
-        borderRadius: BorderRadius.circular(14),
-        side: const BorderSide(color: AppColors.lightGray, width: 0.8),
-      ),
       child: InkWell(
-        borderRadius: BorderRadius.circular(14),
+        borderRadius: BorderRadius.circular(16),
         onTap: () {
           Navigator.push(
             context,
             MaterialPageRoute(
-              builder: (context) => StudentProjectDetailsScreen(project: project),
+              builder: (_) => StudentProjectDetailsScreen(project: project),
             ),
           );
         },
         child: Padding(
-          padding: const EdgeInsets.all(14.0),
+          padding: const EdgeInsets.all(14),
           child: Row(
             children: [
               Container(
@@ -582,9 +727,9 @@ class _StudentHomeScreenState extends State<StudentHomeScreen> {
                 ),
                 child: Center(
                   child: Text(
-                    (project['company'] ?? 'C')[0].toUpperCase(),
+                    SupabaseHelper.initialsFor(companyName, fallback: 'CO'),
                     style: GoogleFonts.poppins(
-                      fontSize: 18,
+                      fontSize: 15,
                       fontWeight: FontWeight.bold,
                       color: AppColors.primaryBlue,
                     ),
@@ -597,16 +742,20 @@ class _StudentHomeScreenState extends State<StudentHomeScreen> {
                   crossAxisAlignment: CrossAxisAlignment.start,
                   children: [
                     Text(
-                      project['title'] ?? 'Title',
+                      project['title']?.toString() ?? 'Untitled Project',
+                      maxLines: 1,
+                      overflow: TextOverflow.ellipsis,
                       style: GoogleFonts.poppins(
                         fontSize: 14,
                         fontWeight: FontWeight.bold,
                         color: AppColors.deepNavy,
                       ),
                     ),
-                    const SizedBox(height: 4),
+                    const SizedBox(height: 3),
                     Text(
-                      '${project['company']} • ${project['duration']}',
+                      '$companyName • $duration',
+                      maxLines: 1,
+                      overflow: TextOverflow.ellipsis,
                       style: GoogleFonts.inter(
                         fontSize: 12,
                         color: AppColors.grayText,
@@ -615,29 +764,15 @@ class _StudentHomeScreenState extends State<StudentHomeScreen> {
                   ],
                 ),
               ),
-              Container(
-                padding:
-                    const EdgeInsets.symmetric(horizontal: 8, vertical: 3),
-                decoration: BoxDecoration(
-                  color: AppColors.statusOpen.withValues(alpha: 0.12),
-                  borderRadius: BorderRadius.circular(6),
-                ),
-                child: Text(
-                  project['status'] ?? 'Open',
-                  style: GoogleFonts.inter(
-                    fontSize: 11,
-                    fontWeight: FontWeight.bold,
-                    color: AppColors.statusOpen,
-                  ),
-                ),
-              ),
+              const SizedBox(width: 6),
+              StatusBadge(label: status),
               const SizedBox(width: 4),
               IconButton(
                 constraints: const BoxConstraints(),
-                padding: EdgeInsets.zero,
+                padding: const EdgeInsets.all(4),
                 icon: const Icon(
                   Icons.share_outlined,
-                  size: 20,
+                  size: 19,
                   color: AppColors.grayText,
                 ),
                 onPressed: () {
@@ -647,19 +782,19 @@ class _StudentHomeScreenState extends State<StudentHomeScreen> {
                   );
                 },
               ),
-              const SizedBox(width: 4),
               IconButton(
                 constraints: const BoxConstraints(),
-                padding: EdgeInsets.zero,
+                padding: const EdgeInsets.all(4),
                 icon: Icon(
                   isSaved
                       ? Icons.bookmark_rounded
                       : Icons.bookmark_border_rounded,
-                  size: 22,
+                  size: 21,
                   color: isSaved ? AppColors.teal : AppColors.grayText,
                 ),
                 onPressed: () {
                   AppDataService.instance.toggleSaveProject(project);
+                  ScaffoldMessenger.of(context).hideCurrentSnackBar();
                   ScaffoldMessenger.of(context).showSnackBar(
                     SnackBar(
                       content: Text(

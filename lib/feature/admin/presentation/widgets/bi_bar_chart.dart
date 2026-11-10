@@ -1,12 +1,14 @@
 import 'dart:math';
 import 'package:flutter/material.dart';
+import 'package:google_fonts/google_fonts.dart';
 import 'package:link_vibe/core/constants/app_colors.dart';
+import 'package:link_vibe/core/widgets/app_empty_state.dart';
 
 /// Data model for paired bar entries
 class BiBarDataGroup {
   final String label;
-  final double value1; // First series (e.g. Published / Approved)
-  final double value2; // Second series (e.g. Completed / Rejected)
+  final double value1;
+  final double value2;
 
   const BiBarDataGroup({
     required this.label,
@@ -28,7 +30,7 @@ class BiBarChart extends StatefulWidget {
     super.key,
     required this.dataGroups,
     required this.series1Label,
-    this.series1Color = const Color(0xFF6366F1), // Indigo
+    this.series1Color = const Color(0xFF6366F1),
     required this.series2Label,
     this.series2Color = AppColors.success,
     this.height = 240,
@@ -44,10 +46,16 @@ class _BiBarChartState extends State<BiBarChart> {
   @override
   Widget build(BuildContext context) {
     if (widget.dataGroups.isEmpty) {
-      return Container(
+      return SizedBox(
         height: widget.height,
-        alignment: Alignment.center,
-        child: const Text('No bar data available'),
+        child: const Center(
+          child: AppEmptyState(
+            compact: true,
+            icon: Icons.bar_chart_rounded,
+            title: 'No Comparison Data Yet',
+            subtitle: 'Bar comparison metrics will render automatically as records populate.',
+          ),
+        ),
       );
     }
 
@@ -60,17 +68,16 @@ class _BiBarChartState extends State<BiBarChart> {
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
-        // Legend
-        Row(
+        Wrap(
+          spacing: 16,
+          runSpacing: 6,
           children: [
             _buildLegendPill(widget.series1Label, widget.series1Color),
-            const SizedBox(width: 16),
             _buildLegendPill(widget.series2Label, widget.series2Color),
           ],
         ),
         const SizedBox(height: 16),
 
-        // Chart Canvas Area
         SizedBox(
           height: widget.height,
           child: LayoutBuilder(
@@ -81,9 +88,11 @@ class _BiBarChartState extends State<BiBarChart> {
                   const leftPad = 40.0;
                   final chartWidth = width - leftPad;
                   final localX = event.localPosition.dx - leftPad;
-                  if (localX >= 0 && localX <= chartWidth) {
+                  if (localX >= 0 && localX <= chartWidth && chartWidth > 0) {
                     final groupWidth = chartWidth / widget.dataGroups.length;
-                    final idx = (localX / groupWidth).floor().clamp(0, widget.dataGroups.length - 1);
+                    final idx = (localX / groupWidth)
+                        .floor()
+                        .clamp(0, widget.dataGroups.length - 1);
                     if (_hoveredGroupIndex != idx) {
                       setState(() => _hoveredGroupIndex = idx);
                     }
@@ -105,8 +114,8 @@ class _BiBarChartState extends State<BiBarChart> {
           ),
         ),
 
-        // Hover tooltip
-        if (_hoveredGroupIndex != null && _hoveredGroupIndex! < widget.dataGroups.length) ...[
+        if (_hoveredGroupIndex != null &&
+            _hoveredGroupIndex! < widget.dataGroups.length) ...[
           const SizedBox(height: 8),
           _buildTooltipPill(widget.dataGroups[_hoveredGroupIndex!]),
         ],
@@ -129,7 +138,7 @@ class _BiBarChartState extends State<BiBarChart> {
         const SizedBox(width: 6),
         Text(
           label,
-          style: const TextStyle(
+          style: GoogleFonts.inter(
             fontSize: 12,
             fontWeight: FontWeight.w600,
             color: AppColors.textPrimary,
@@ -146,17 +155,55 @@ class _BiBarChartState extends State<BiBarChart> {
         color: AppColors.darkNavy,
         borderRadius: BorderRadius.circular(6),
       ),
-      child: Row(
-        mainAxisSize: MainAxisSize.min,
+      child: Wrap(
+        spacing: 10,
+        runSpacing: 4,
+        crossAxisAlignment: WrapCrossAlignment.center,
         children: [
-          Text('${g.label}: ', style: const TextStyle(color: Colors.white, fontWeight: FontWeight.bold, fontSize: 11)),
-          Container(width: 8, height: 8, decoration: BoxDecoration(color: widget.series1Color, shape: BoxShape.circle)),
-          const SizedBox(width: 4),
-          Text('${widget.series1Label}: ${g.value1.toInt()}', style: const TextStyle(color: Colors.white, fontSize: 11)),
-          const SizedBox(width: 10),
-          Container(width: 8, height: 8, decoration: BoxDecoration(color: widget.series2Color, shape: BoxShape.circle)),
-          const SizedBox(width: 4),
-          Text('${widget.series2Label}: ${g.value2.toInt()}', style: const TextStyle(color: Colors.white, fontSize: 11)),
+          Text(
+            '${g.label}: ',
+            style: GoogleFonts.inter(
+              color: Colors.white,
+              fontWeight: FontWeight.bold,
+              fontSize: 11,
+            ),
+          ),
+          Row(
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              Container(
+                width: 8,
+                height: 8,
+                decoration: BoxDecoration(
+                  color: widget.series1Color,
+                  shape: BoxShape.circle,
+                ),
+              ),
+              const SizedBox(width: 4),
+              Text(
+                '${widget.series1Label}: ${g.value1.toInt()}',
+                style: GoogleFonts.inter(color: Colors.white, fontSize: 11),
+              ),
+            ],
+          ),
+          Row(
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              Container(
+                width: 8,
+                height: 8,
+                decoration: BoxDecoration(
+                  color: widget.series2Color,
+                  shape: BoxShape.circle,
+                ),
+              ),
+              const SizedBox(width: 4),
+              Text(
+                '${widget.series2Label}: ${g.value2.toInt()}',
+                style: GoogleFonts.inter(color: Colors.white, fontSize: 11),
+              ),
+            ],
+          ),
         ],
       ),
     );
@@ -184,10 +231,10 @@ class _BarChartPainter extends CustomPainter {
     const bottomPad = 26.0;
     const topPad = 12.0;
 
-    final chartWidth = size.width - leftPad;
-    final chartHeight = size.height - bottomPad - topPad;
+    final chartWidth = (size.width - leftPad).clamp(1.0, double.infinity);
+    final chartHeight =
+        (size.height - bottomPad - topPad).clamp(1.0, double.infinity);
 
-    // 1. Gridlines
     final gridPaint = Paint()
       ..color = AppColors.border.withValues(alpha: 0.5)
       ..strokeWidth = 1.0;
@@ -206,7 +253,10 @@ class _BarChartPainter extends CustomPainter {
         style: const TextStyle(color: AppColors.textMuted, fontSize: 10),
       );
       textPainter.layout();
-      textPainter.paint(canvas, Offset(leftPad - textPainter.width - 6, y - (textPainter.height / 2)));
+      textPainter.paint(
+        canvas,
+        Offset(leftPad - textPainter.width - 6, y - (textPainter.height / 2)),
+      );
     }
 
     if (groups.isEmpty) return;
@@ -220,18 +270,21 @@ class _BarChartPainter extends CustomPainter {
       final groupCenterX = leftPad + (i * groupStep) + (groupStep / 2);
       final isHovered = hoveredIndex == i;
 
-      // Group hover background highlight
       if (isHovered) {
         final highlightPaint = Paint()
           ..color = AppColors.primary.withValues(alpha: 0.05);
         canvas.drawRect(
-          Rect.fromLTWH(leftPad + (i * groupStep), topPad, groupStep, chartHeight),
+          Rect.fromLTWH(
+            leftPad + (i * groupStep),
+            topPad,
+            groupStep,
+            chartHeight,
+          ),
           highlightPaint,
         );
       }
 
-      // Bar 1
-      final h1 = (g.value1 / yCeiling).clamp(0.0, 1.0) * chartHeight;
+      final h1 = (g.value1 / (yCeiling <= 0 ? 1 : yCeiling)).clamp(0.0, 1.0) * chartHeight;
       final bar1X = groupCenterX - barWidth - (barGap / 2);
       final bar1Y = topPad + chartHeight - h1;
       final bar1Rect = RRect.fromRectAndCorners(
@@ -239,11 +292,11 @@ class _BarChartPainter extends CustomPainter {
         topLeft: const Radius.circular(4),
         topRight: const Radius.circular(4),
       );
-      final paint1 = Paint()..color = isHovered ? series1Color : series1Color.withValues(alpha: 0.88);
+      final paint1 = Paint()
+        ..color = isHovered ? series1Color : series1Color.withValues(alpha: 0.88);
       canvas.drawRRect(bar1Rect, paint1);
 
-      // Bar 2
-      final h2 = (g.value2 / yCeiling).clamp(0.0, 1.0) * chartHeight;
+      final h2 = (g.value2 / (yCeiling <= 0 ? 1 : yCeiling)).clamp(0.0, 1.0) * chartHeight;
       final bar2X = groupCenterX + (barGap / 2);
       final bar2Y = topPad + chartHeight - h2;
       final bar2Rect = RRect.fromRectAndCorners(
@@ -251,10 +304,10 @@ class _BarChartPainter extends CustomPainter {
         topLeft: const Radius.circular(4),
         topRight: const Radius.circular(4),
       );
-      final paint2 = Paint()..color = isHovered ? series2Color : series2Color.withValues(alpha: 0.88);
+      final paint2 = Paint()
+        ..color = isHovered ? series2Color : series2Color.withValues(alpha: 0.88);
       canvas.drawRRect(bar2Rect, paint2);
 
-      // X-axis label
       textPainter.text = TextSpan(
         text: g.label,
         style: TextStyle(
@@ -264,7 +317,10 @@ class _BarChartPainter extends CustomPainter {
         ),
       );
       textPainter.layout();
-      textPainter.paint(canvas, Offset(groupCenterX - (textPainter.width / 2), size.height - 18));
+      textPainter.paint(
+        canvas,
+        Offset(groupCenterX - (textPainter.width / 2), size.height - 18),
+      );
     }
   }
 

@@ -1,13 +1,15 @@
 import 'dart:math';
 import 'package:flutter/material.dart';
+import 'package:google_fonts/google_fonts.dart';
 import 'package:link_vibe/core/constants/app_colors.dart';
+import 'package:link_vibe/core/widgets/app_empty_state.dart';
 
 /// Data model for a point in the BI Line Chart
 class BiLineDataPoint {
   final String label;
-  final double value1; // Primary metric (e.g. Students)
-  final double value2; // Secondary metric (e.g. Companies)
-  final double? value3; // Tertiary metric (e.g. Applications)
+  final double value1;
+  final double value2;
+  final double? value3;
 
   const BiLineDataPoint({
     required this.label,
@@ -53,27 +55,30 @@ class _BiLineChartState extends State<BiLineChart> {
   @override
   Widget build(BuildContext context) {
     if (widget.points.isEmpty) {
-      return Container(
+      return SizedBox(
         height: widget.height,
-        alignment: Alignment.center,
-        child: const Text('No data available for selected timeframe'),
+        child: const Center(
+          child: AppEmptyState(
+            compact: true,
+            icon: Icons.show_chart_rounded,
+            title: 'No Trend Data Available',
+            subtitle: 'Metrics for the selected timeframe will appear as data grows.',
+          ),
+        ),
       );
     }
 
-    // Determine max value for Y axis scaling
     double maxVal = 10;
     for (final p in widget.points) {
       if (_showSeries1) maxVal = max(maxVal, p.value1);
       if (_showSeries2) maxVal = max(maxVal, p.value2);
       if (_showSeries3 && p.value3 != null) maxVal = max(maxVal, p.value3!);
     }
-    // Round maxVal upwards to nice interval
     final double yCeiling = (maxVal * 1.15).ceilToDouble();
 
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
-        // Legend & Series Visibility Toggles
         Wrap(
           spacing: 16,
           runSpacing: 8,
@@ -101,7 +106,6 @@ class _BiLineChartState extends State<BiLineChart> {
         ),
         const SizedBox(height: 16),
 
-        // Chart Canvas Area with gesture/hover detection
         SizedBox(
           height: widget.height,
           child: LayoutBuilder(
@@ -109,11 +113,17 @@ class _BiLineChartState extends State<BiLineChart> {
               final width = constraints.maxWidth;
               return MouseRegion(
                 onHover: (event) {
-                  final chartWidth = width - 40; // left padding for Y axis
+                  final chartWidth = width - 40;
                   final localX = event.localPosition.dx - 40;
                   if (localX >= 0 && localX <= chartWidth) {
+                    if (widget.points.length == 1) {
+                      if (_hoveredIndex != 0) setState(() => _hoveredIndex = 0);
+                      return;
+                    }
                     final segmentWidth = chartWidth / (widget.points.length - 1);
-                    final index = (localX / segmentWidth).round().clamp(0, widget.points.length - 1);
+                    final index = (localX / segmentWidth)
+                        .round()
+                        .clamp(0, widget.points.length - 1);
                     if (_hoveredIndex != index) {
                       setState(() => _hoveredIndex = index);
                     }
@@ -139,7 +149,6 @@ class _BiLineChartState extends State<BiLineChart> {
           ),
         ),
 
-        // Hover Tooltip Display Pill below if hovered
         if (_hoveredIndex != null && _hoveredIndex! < widget.points.length) ...[
           const SizedBox(height: 10),
           _buildHoverTooltip(widget.points[_hoveredIndex!]),
@@ -174,11 +183,12 @@ class _BiLineChartState extends State<BiLineChart> {
             const SizedBox(width: 6),
             Text(
               label,
-              style: TextStyle(
+              style: GoogleFonts.inter(
                 fontSize: 12,
                 fontWeight: FontWeight.w600,
                 color: isActive ? AppColors.textPrimary : AppColors.textMuted,
-                decoration: isActive ? TextDecoration.none : TextDecoration.lineThrough,
+                decoration:
+                    isActive ? TextDecoration.none : TextDecoration.lineThrough,
               ),
             ),
           ],
@@ -201,39 +211,76 @@ class _BiLineChartState extends State<BiLineChart> {
           ),
         ],
       ),
-      child: Row(
-        mainAxisSize: MainAxisSize.min,
+      child: Wrap(
+        spacing: 12,
+        runSpacing: 4,
+        crossAxisAlignment: WrapCrossAlignment.center,
         children: [
           Text(
             '${p.label}: ',
-            style: const TextStyle(color: Colors.white, fontWeight: FontWeight.bold, fontSize: 12),
+            style: GoogleFonts.inter(
+              color: Colors.white,
+              fontWeight: FontWeight.bold,
+              fontSize: 12,
+            ),
           ),
-          if (_showSeries1) ...[
-            Container(width: 8, height: 8, decoration: BoxDecoration(color: widget.metric1Color, shape: BoxShape.circle)),
-            const SizedBox(width: 4),
-            Text(
-              '${widget.metric1Label}: ${p.value1.toInt()}',
-              style: const TextStyle(color: Colors.white, fontSize: 12),
+          if (_showSeries1)
+            Row(
+              mainAxisSize: MainAxisSize.min,
+              children: [
+                Container(
+                  width: 8,
+                  height: 8,
+                  decoration: BoxDecoration(
+                    color: widget.metric1Color,
+                    shape: BoxShape.circle,
+                  ),
+                ),
+                const SizedBox(width: 4),
+                Text(
+                  '${widget.metric1Label}: ${p.value1.toInt()}',
+                  style: GoogleFonts.inter(color: Colors.white, fontSize: 12),
+                ),
+              ],
             ),
-            const SizedBox(width: 12),
-          ],
-          if (_showSeries2) ...[
-            Container(width: 8, height: 8, decoration: BoxDecoration(color: widget.metric2Color, shape: BoxShape.circle)),
-            const SizedBox(width: 4),
-            Text(
-              '${widget.metric2Label}: ${p.value2.toInt()}',
-              style: const TextStyle(color: Colors.white, fontSize: 12),
+          if (_showSeries2)
+            Row(
+              mainAxisSize: MainAxisSize.min,
+              children: [
+                Container(
+                  width: 8,
+                  height: 8,
+                  decoration: BoxDecoration(
+                    color: widget.metric2Color,
+                    shape: BoxShape.circle,
+                  ),
+                ),
+                const SizedBox(width: 4),
+                Text(
+                  '${widget.metric2Label}: ${p.value2.toInt()}',
+                  style: GoogleFonts.inter(color: Colors.white, fontSize: 12),
+                ),
+              ],
             ),
-            const SizedBox(width: 12),
-          ],
-          if (_showSeries3 && p.value3 != null && widget.metric3Label != null) ...[
-            Container(width: 8, height: 8, decoration: BoxDecoration(color: widget.metric3Color, shape: BoxShape.circle)),
-            const SizedBox(width: 4),
-            Text(
-              '${widget.metric3Label}: ${p.value3!.toInt()}',
-              style: const TextStyle(color: Colors.white, fontSize: 12),
+          if (_showSeries3 && p.value3 != null && widget.metric3Label != null)
+            Row(
+              mainAxisSize: MainAxisSize.min,
+              children: [
+                Container(
+                  width: 8,
+                  height: 8,
+                  decoration: BoxDecoration(
+                    color: widget.metric3Color,
+                    shape: BoxShape.circle,
+                  ),
+                ),
+                const SizedBox(width: 4),
+                Text(
+                  '${widget.metric3Label}: ${p.value3!.toInt()}',
+                  style: GoogleFonts.inter(color: Colors.white, fontSize: 12),
+                ),
+              ],
             ),
-          ],
         ],
       ),
     );
@@ -269,10 +316,10 @@ class _BiLineChartPainter extends CustomPainter {
     const bottomPad = 26.0;
     const topPad = 12.0;
 
-    final chartWidth = size.width - leftPad;
-    final chartHeight = size.height - bottomPad - topPad;
+    final chartWidth = (size.width - leftPad).clamp(1.0, double.infinity);
+    final chartHeight =
+        (size.height - bottomPad - topPad).clamp(1.0, double.infinity);
 
-    // 1. Draw horizontal gridlines & Y axis values
     final gridPaint = Paint()
       ..color = AppColors.border.withValues(alpha: 0.5)
       ..strokeWidth = 1.0;
@@ -284,10 +331,8 @@ class _BiLineChartPainter extends CustomPainter {
       final y = topPad + (chartHeight / divisions) * i;
       final val = (yCeiling * (1 - (i / divisions))).round();
 
-      // Horizontal dashed/subtle line
       canvas.drawLine(Offset(leftPad, y), Offset(size.width, y), gridPaint);
 
-      // Label
       textPainter.text = TextSpan(
         text: '$val',
         style: const TextStyle(
@@ -297,16 +342,27 @@ class _BiLineChartPainter extends CustomPainter {
         ),
       );
       textPainter.layout();
-      textPainter.paint(canvas, Offset(leftPad - textPainter.width - 6, y - (textPainter.height / 2)));
+      textPainter.paint(
+        canvas,
+        Offset(leftPad - textPainter.width - 6, y - (textPainter.height / 2)),
+      );
     }
 
-    if (points.length < 2) return;
+    if (points.isEmpty) return;
 
-    final stepX = chartWidth / (points.length - 1);
+    // Handle 1 data point safely without division by zero
+    final bool singlePoint = points.length == 1;
+    final double stepX = singlePoint ? 0.0 : chartWidth / (points.length - 1);
 
-    // 2. Draw X-axis date labels
+    Offset getCoord(int i, double val) {
+      final x = singlePoint ? leftPad + (chartWidth / 2) : leftPad + (i * stepX);
+      final normalizedVal = (val / (yCeiling <= 0 ? 1 : yCeiling)).clamp(0.0, 1.0);
+      final y = topPad + chartHeight * (1 - normalizedVal);
+      return Offset(x, y);
+    }
+
     for (int i = 0; i < points.length; i++) {
-      final x = leftPad + (i * stepX);
+      final x = singlePoint ? leftPad + (chartWidth / 2) : leftPad + (i * stepX);
       textPainter.text = TextSpan(
         text: points[i].label,
         style: TextStyle(
@@ -316,28 +372,39 @@ class _BiLineChartPainter extends CustomPainter {
         ),
       );
       textPainter.layout();
-      textPainter.paint(canvas, Offset(x - (textPainter.width / 2), size.height - 18));
+      textPainter.paint(
+        canvas,
+        Offset(x - (textPainter.width / 2), size.height - 18),
+      );
     }
 
-    // Helper to calculate (x, y) coordinates
-    Offset getCoord(int i, double val) {
-      final x = leftPad + (i * stepX);
-      final normalizedVal = (val / yCeiling).clamp(0.0, 1.0);
-      final y = topPad + chartHeight * (1 - normalizedVal);
-      return Offset(x, y);
-    }
-
-    // 3. Draw Vertical Crosshair if hovered
     if (hoveredIndex != null && hoveredIndex! < points.length) {
-      final crossX = leftPad + (hoveredIndex! * stepX);
+      final crossX = singlePoint
+          ? leftPad + (chartWidth / 2)
+          : leftPad + (hoveredIndex! * stepX);
       final crossPaint = Paint()
         ..color = AppColors.primary.withValues(alpha: 0.3)
         ..strokeWidth = 1.5;
-      canvas.drawLine(Offset(crossX, topPad), Offset(crossX, topPad + chartHeight), crossPaint);
+      canvas.drawLine(
+        Offset(crossX, topPad),
+        Offset(crossX, topPad + chartHeight),
+        crossPaint,
+      );
     }
 
-    // 4. Draw Line Series
     void drawSeries(List<double> values, Color color, bool filled) {
+      if (values.isEmpty) return;
+      final dotPaint = Paint()..color = color;
+      final whitePaint = Paint()..color = Colors.white;
+
+      if (values.length == 1) {
+        final pt = getCoord(0, values[0]);
+        final r = hoveredIndex == 0 ? 7.0 : 5.0;
+        canvas.drawCircle(pt, r + 2, whitePaint);
+        canvas.drawCircle(pt, r, dotPaint);
+        return;
+      }
+
       final path = Path();
       final fillPath = Path();
 
@@ -350,7 +417,6 @@ class _BiLineChartPainter extends CustomPainter {
         final current = getCoord(i, values[i]);
         final next = getCoord(i + 1, values[i + 1]);
 
-        // Smooth cubic Bézier interpolation
         final controlX1 = current.dx + (next.dx - current.dx) / 2;
         final controlY1 = current.dy;
         final controlX2 = current.dx + (next.dx - current.dx) / 2;
@@ -364,7 +430,6 @@ class _BiLineChartPainter extends CustomPainter {
       fillPath.lineTo(last.dx, topPad + chartHeight);
       fillPath.close();
 
-      // Shaded area under primary line
       if (filled) {
         final fillPaint = Paint()
           ..shader = LinearGradient(
@@ -378,17 +443,12 @@ class _BiLineChartPainter extends CustomPainter {
         canvas.drawPath(fillPath, fillPaint);
       }
 
-      // Line Stroke
       final strokePaint = Paint()
         ..color = color
         ..strokeWidth = 2.5
         ..style = PaintingStyle.stroke
         ..strokeCap = StrokeCap.round;
       canvas.drawPath(path, strokePaint);
-
-      // Data Point Dots
-      final dotPaint = Paint()..color = color;
-      final whitePaint = Paint()..color = Colors.white;
 
       for (int i = 0; i < values.length; i++) {
         final pt = getCoord(i, values[i]);

@@ -1,6 +1,10 @@
 import 'package:flutter/material.dart';
+import 'package:google_fonts/google_fonts.dart';
 import 'package:link_vibe/core/constants/app_colors.dart';
+import 'package:link_vibe/core/services/supabase_helper.dart';
+import 'package:link_vibe/core/widgets/status_badge.dart';
 import 'package:link_vibe/feature/company/models/company_profile_model.dart';
+import 'package:link_vibe/feature/company/presentation/screens/company_verification_screen.dart';
 import 'package:link_vibe/feature/company/services/company_profile_service.dart';
 
 class CompanyProfileScreen extends StatefulWidget {
@@ -22,7 +26,6 @@ class _CompanyProfileScreenState extends State<CompanyProfileScreen> {
   late bool _isEditing;
   bool _isSaving = false;
 
-  // Form Field Controllers
   late TextEditingController _nameController;
   late TextEditingController _descriptionController;
   late TextEditingController _emailController;
@@ -32,12 +35,11 @@ class _CompanyProfileScreenState extends State<CompanyProfileScreen> {
   late TextEditingController _cityController;
   late TextEditingController _addressController;
 
-  // Selected State
   late String _selectedIndustry;
   late String _selectedLogoInitial;
-  late Color _selectedLogoColor;
+  Color _selectedLogoColor = AppColors.primaryBlue;
 
-  final List<String> _industryOptions = [
+  static const List<String> _industryOptions = [
     'Software & Cloud Services',
     'Artificial Intelligence & Data',
     'FinTech & Banking',
@@ -49,12 +51,12 @@ class _CompanyProfileScreenState extends State<CompanyProfileScreen> {
     'Design & Creative Media',
   ];
 
-  final List<Map<String, dynamic>> _logoPresets = [
-    {'label': 'TV (Default)', 'initial': 'TV', 'color': AppColors.primary},
-    {'label': 'Cloud Tech', 'initial': 'CT', 'color': AppColors.accentTeal},
-    {'label': 'AI Systems', 'initial': 'AI', 'color': Color(0xFF7C3AED)},
-    {'label': 'Data Labs', 'initial': 'DL', 'color': Color(0xFF059669)},
-    {'label': 'Global Soft', 'initial': 'GS', 'color': AppColors.darkNavy},
+  static const List<Color> _brandColors = [
+    AppColors.primaryBlue,
+    AppColors.deepNavy,
+    AppColors.teal,
+    AppColors.indigoAccent,
+    AppColors.statusOpen,
   ];
 
   @override
@@ -73,11 +75,23 @@ class _CompanyProfileScreenState extends State<CompanyProfileScreen> {
     _cityController = TextEditingController(text: current.city);
     _addressController = TextEditingController(text: current.completeAddress);
 
-    _selectedIndustry = current.industry.isNotEmpty
+    _selectedIndustry = _industryOptions.contains(current.industry)
         ? current.industry
         : _industryOptions.first;
-    _selectedLogoInitial = current.logoInitial;
-    _selectedLogoColor = AppColors.primary;
+    _selectedLogoInitial = current.logoInitial.isNotEmpty
+        ? current.logoInitial
+        : SupabaseHelper.initialsFor(current.companyName, fallback: 'CO');
+
+    _nameController.addListener(() {
+      if (_isEditing) {
+        setState(() {
+          _selectedLogoInitial = SupabaseHelper.initialsFor(
+            _nameController.text,
+            fallback: 'CO',
+          );
+        });
+      }
+    });
   }
 
   @override
@@ -93,26 +107,24 @@ class _CompanyProfileScreenState extends State<CompanyProfileScreen> {
     super.dispose();
   }
 
-  // Email format validator
   String? _validateEmail(String? value) {
     if (value == null || value.trim().isEmpty) {
       return 'Official email is required';
     }
     final emailRegex = RegExp(r'^[\w-\.]+@([\w-]+\.)+[\w-]{2,4}$');
     if (!emailRegex.hasMatch(value.trim())) {
-      return 'Enter a valid corporate email (e.g. name@company.com)';
+      return 'Enter a valid corporate email (e.g. contact@yourcompany.com)';
     }
     return null;
   }
 
-  // Website URL validator
   String? _validateWebsite(String? value) {
     if (value == null || value.trim().isEmpty) {
-      return 'Website URL is required';
+      return null;
     }
     final trimmed = value.trim();
     if (!trimmed.contains('.') || trimmed.length < 5) {
-      return 'Enter a valid website URL (e.g. https://company.com)';
+      return 'Enter a valid website URL (e.g. https://yourcompany.com)';
     }
     if (!trimmed.startsWith('http://') &&
         !trimmed.startsWith('https://') &&
@@ -122,7 +134,6 @@ class _CompanyProfileScreenState extends State<CompanyProfileScreen> {
     return null;
   }
 
-  // Phone number validator
   String? _validatePhone(String? value) {
     if (value == null || value.trim().isEmpty) {
       return 'Official phone number is required';
@@ -137,25 +148,28 @@ class _CompanyProfileScreenState extends State<CompanyProfileScreen> {
     return null;
   }
 
-  // Save profile changes
   Future<void> _handleSaveProfile() async {
     if (!_formKey.currentState!.validate()) {
       ScaffoldMessenger.of(context).showSnackBar(
         const SnackBar(
-          content: Text('Please correct the validation errors below.'),
-          backgroundColor: AppColors.error,
+          content: Text('Please fix the highlighted validation fields.'),
+          backgroundColor: AppColors.statusClosed,
         ),
       );
       return;
     }
 
-    setState(() {
-      _isSaving = true;
-    });
+    setState(() => _isSaving = true);
 
     try {
+      final existing = _profileService.currentProfile;
+      final derivedInitial = SupabaseHelper.initialsFor(
+        _nameController.text,
+        fallback: _selectedLogoInitial.isNotEmpty ? _selectedLogoInitial : 'CO',
+      );
+
       final updatedProfile = CompanyProfileModel(
-        id: _profileService.currentProfile.id,
+        id: existing.id,
         companyName: _nameController.text.trim(),
         industry: _selectedIndustry,
         description: _descriptionController.text.trim(),
@@ -165,41 +179,41 @@ class _CompanyProfileScreenState extends State<CompanyProfileScreen> {
         phoneNumber: _phoneController.text.trim(),
         city: _cityController.text.trim(),
         completeAddress: _addressController.text.trim(),
-        logoInitial: _selectedLogoInitial,
-        isVerified: true,
+        logoUrl: existing.logoUrl,
+        logoInitial: derivedInitial,
+        isVerified: existing.isVerified,
       );
 
       await _profileService.updateProfile(updatedProfile);
 
       if (!mounted) return;
-
       setState(() {
+        _selectedLogoInitial = derivedInitial;
         _isSaving = false;
         _isEditing = false;
       });
 
       ScaffoldMessenger.of(context).showSnackBar(
         const SnackBar(
-          content: Text('Company profile successfully updated!'),
-          backgroundColor: AppColors.success,
+          content: Text('Company profile saved to database.'),
+          backgroundColor: AppColors.statusOpen,
+          behavior: SnackBarBehavior.floating,
         ),
       );
     } catch (e) {
       if (!mounted) return;
-      setState(() {
-        _isSaving = false;
-      });
+      setState(() => _isSaving = false);
       ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(
-          content: Text('An error occurred while saving. Please try again.'),
-          backgroundColor: AppColors.error,
+        SnackBar(
+          content: Text('Failed to update profile: $e'),
+          backgroundColor: AppColors.statusClosed,
+          behavior: SnackBarBehavior.floating,
         ),
       );
     }
   }
 
-  // Logo selection bottom sheet
-  void _openLogoPickerBottomSheet() {
+  void _openLogoColorSheet() {
     if (!_isEditing) return;
 
     showModalBottomSheet(
@@ -209,73 +223,57 @@ class _CompanyProfileScreenState extends State<CompanyProfileScreen> {
       ),
       builder: (ctx) {
         return Padding(
-          padding: const EdgeInsets.all(20.0),
+          padding: const EdgeInsets.all(22),
           child: Column(
             mainAxisSize: MainAxisSize.min,
             crossAxisAlignment: CrossAxisAlignment.start,
             children: [
-              Row(
-                mainAxisAlignment: MainAxisAlignment.spaceBetween,
-                children: [
-                  const Text(
-                    'Select Organization Logo',
-                    style: TextStyle(
-                      fontSize: 18,
-                      fontWeight: FontWeight.bold,
-                      color: AppColors.darkNavy,
-                    ),
-                  ),
-                  IconButton(
-                    icon: const Icon(Icons.close),
-                    onPressed: () => Navigator.pop(ctx),
-                  ),
-                ],
-              ),
-              const SizedBox(height: 6),
-              const Text(
-                'Choose a verified corporate brand icon or customize monogram:',
-                style: TextStyle(
-                  fontSize: 13,
-                  color: AppColors.textSecondary,
+              Text(
+                'Monogram Accent Color',
+                style: GoogleFonts.poppins(
+                  fontSize: 17,
+                  fontWeight: FontWeight.w700,
+                  color: AppColors.deepNavy,
                 ),
               ),
-              const SizedBox(height: 16),
-              ..._logoPresets.map((preset) {
-                final isSelected = _selectedLogoInitial == preset['initial'];
-                return ListTile(
-                  contentPadding: EdgeInsets.zero,
-                  leading: CircleAvatar(
-                    backgroundColor: preset['color'] as Color,
-                    child: Text(
-                      preset['initial'] as String,
-                      style: const TextStyle(
-                        color: Colors.white,
-                        fontWeight: FontWeight.bold,
+              const SizedBox(height: 6),
+              Text(
+                'Your monogram badge "$_selectedLogoInitial" updates automatically from your company name.',
+                style: GoogleFonts.inter(
+                  fontSize: 13,
+                  color: AppColors.grayText,
+                ),
+              ),
+              const SizedBox(height: 18),
+              Row(
+                mainAxisAlignment: MainAxisAlignment.spaceEvenly,
+                children: _brandColors.map((color) {
+                  final isSelected = _selectedLogoColor == color;
+                  return InkWell(
+                    borderRadius: BorderRadius.circular(30),
+                    onTap: () {
+                      setState(() => _selectedLogoColor = color);
+                      Navigator.pop(ctx);
+                    },
+                    child: Container(
+                      width: 50,
+                      height: 50,
+                      decoration: BoxDecoration(
+                        color: color,
+                        shape: BoxShape.circle,
+                        border: Border.all(
+                          color: isSelected ? AppColors.darkText : Colors.white,
+                          width: isSelected ? 3 : 1.5,
+                        ),
                       ),
+                      child: isSelected
+                          ? const Icon(Icons.check_rounded, color: Colors.white)
+                          : null,
                     ),
-                  ),
-                  title: Text(
-                    preset['label'] as String,
-                    style: TextStyle(
-                      fontWeight:
-                          isSelected ? FontWeight.bold : FontWeight.w500,
-                      color: isSelected
-                          ? AppColors.primary
-                          : AppColors.textPrimary,
-                    ),
-                  ),
-                  trailing: isSelected
-                      ? const Icon(Icons.check_circle, color: AppColors.primary)
-                      : null,
-                  onTap: () {
-                    setState(() {
-                      _selectedLogoInitial = preset['initial'] as String;
-                      _selectedLogoColor = preset['color'] as Color;
-                    });
-                    Navigator.pop(ctx);
-                  },
-                );
-              }),
+                  );
+                }).toList(),
+              ),
+              const SizedBox(height: 12),
             ],
           ),
         );
@@ -285,518 +283,398 @@ class _CompanyProfileScreenState extends State<CompanyProfileScreen> {
 
   @override
   Widget build(BuildContext context) {
-    return Scaffold(
-      backgroundColor: AppColors.background,
-      appBar: AppBar(
-        backgroundColor: Colors.white,
-        elevation: 0.5,
-        title: const Text('Company Profile (Screen 23)'),
-        actions: [
-          TextButton.icon(
-            style: TextButton.styleFrom(
-              foregroundColor: _isEditing ? AppColors.error : AppColors.primary,
-            ),
-            icon: Icon(
-              _isEditing ? Icons.close_rounded : Icons.edit_rounded,
-              size: 18,
-            ),
-            label: Text(
-              _isEditing ? 'Cancel' : 'Edit Profile',
-              style: const TextStyle(fontWeight: FontWeight.bold),
-            ),
-            onPressed: () {
-              setState(() {
-                if (_isEditing) {
-                  // Reset form to saved profile
-                  final current = _profileService.currentProfile;
-                  _nameController.text = current.companyName;
-                  _descriptionController.text = current.description;
-                  _emailController.text = current.officialEmail;
-                  _websiteController.text = current.websiteUrl;
-                  _contactPersonController.text = current.contactPersonName;
-                  _phoneController.text = current.phoneNumber;
-                  _cityController.text = current.city;
-                  _addressController.text = current.completeAddress;
-                  _selectedIndustry = current.industry;
-                  _selectedLogoInitial = current.logoInitial;
-                }
-                _isEditing = !_isEditing;
-              });
-            },
-          ),
-          const SizedBox(width: 8),
-        ],
-      ),
-      body: Form(
-        key: _formKey,
-        child: ListView(
-          padding: const EdgeInsets.symmetric(horizontal: 16.0, vertical: 20.0),
-          children: [
-            // 1. Logo Upload & Identity Header
-            _buildLogoAndHeaderSection(),
-            const SizedBox(height: 20),
+    return ValueListenableBuilder<CompanyProfileModel>(
+      valueListenable: _profileService.currentProfileNotifier,
+      builder: (context, profile, _) {
+        final displayName = profile.companyName.trim().isNotEmpty
+            ? profile.companyName.trim()
+            : 'Your Organization';
 
-            // 2. Organization Information Card
-            _buildSectionCard(
-              title: 'Organization Identity',
-              icon: Icons.business_outlined,
-              children: [
-                _buildTextField(
-                  controller: _nameController,
-                  label: 'Company Name',
-                  hint: 'e.g. TechVista Innovations',
-                  icon: Icons.corporate_fare_rounded,
-                  validator: (val) {
-                    if (val == null || val.trim().isEmpty) {
-                      return 'Company name is required';
-                    }
-                    if (val.trim().length < 3) {
-                      return 'Company name must be at least 3 characters';
-                    }
-                    return null;
-                  },
-                ),
-                const SizedBox(height: 16),
-                _buildIndustryDropdown(),
-                const SizedBox(height: 16),
-                _buildTextField(
-                  controller: _descriptionController,
-                  label: 'Company Description',
-                  hint:
-                      'Provide an overview of your organization and the domain of challenges you offer...',
-                  icon: Icons.notes_rounded,
-                  maxLines: 4,
-                  validator: (val) {
-                    if (val == null || val.trim().isEmpty) {
-                      return 'Company description is required';
-                    }
-                    if (val.trim().length < 20) {
-                      return 'Description must be at least 20 characters';
-                    }
-                    return null;
-                  },
-                ),
-              ],
+        return Scaffold(
+          backgroundColor: AppColors.background,
+          appBar: AppBar(
+            backgroundColor: AppColors.deepNavy,
+            foregroundColor: Colors.white,
+            elevation: 0,
+            leading: IconButton(
+              icon: const Icon(Icons.arrow_back_ios_new_rounded, size: 18),
+              onPressed: () => Navigator.pop(context),
             ),
-            const SizedBox(height: 20),
-
-            // 3. Official Contact & Web Presence Card
-            _buildSectionCard(
-              title: 'Official Contact & Web Presence',
-              icon: Icons.contact_mail_outlined,
-              children: [
-                _buildTextField(
-                  controller: _emailController,
-                  label: 'Official Email',
-                  hint: 'e.g. partnerships@company.com',
-                  icon: Icons.alternate_email_rounded,
-                  keyboardType: TextInputType.emailAddress,
-                  validator: _validateEmail,
-                ),
-                const SizedBox(height: 16),
-                _buildTextField(
-                  controller: _websiteController,
-                  label: 'Website URL',
-                  hint: 'e.g. https://techvistainnovations.com',
-                  icon: Icons.language_rounded,
-                  keyboardType: TextInputType.url,
-                  validator: _validateWebsite,
-                ),
-                const SizedBox(height: 16),
-                _buildTextField(
-                  controller: _phoneController,
-                  label: 'Official Phone Number',
-                  hint: 'e.g. +92 300 1234567',
-                  icon: Icons.phone_outlined,
-                  keyboardType: TextInputType.phone,
-                  validator: _validatePhone,
-                ),
-              ],
+            title: Text(
+              _isEditing ? 'Edit Organization Profile' : 'Organization Profile',
+              style: GoogleFonts.poppins(
+                fontSize: 17,
+                fontWeight: FontWeight.w700,
+              ),
             ),
-            const SizedBox(height: 20),
-
-            // 4. Point of Contact (Representative) Card
-            _buildSectionCard(
-              title: 'Authorized Representative',
-              icon: Icons.badge_outlined,
-              children: [
-                _buildTextField(
-                  controller: _contactPersonController,
-                  label: 'Contact Person Name',
-                  hint: 'e.g. Danish Ali Rajpoot (HR / Project Lead)',
-                  icon: Icons.person_outline_rounded,
-                  validator: (val) {
-                    if (val == null || val.trim().isEmpty) {
-                      return 'Contact person name is required';
-                    }
-                    return null;
-                  },
-                ),
-              ],
-            ),
-            const SizedBox(height: 20),
-
-            // 5. Office Location & Address Card
-            _buildSectionCard(
-              title: 'Headquarters & Location',
-              icon: Icons.location_on_outlined,
-              children: [
-                _buildTextField(
-                  controller: _cityController,
-                  label: 'City / Region',
-                  hint: 'e.g. Islamabad, Pakistan',
-                  icon: Icons.location_city_rounded,
-                  validator: (val) {
-                    if (val == null || val.trim().isEmpty) {
-                      return 'City or region is required';
-                    }
-                    return null;
-                  },
-                ),
-                const SizedBox(height: 16),
-                _buildTextField(
-                  controller: _addressController,
-                  label: 'Complete Office Address',
-                  hint: 'e.g. Plot 42, Executive Tech Park, Sector I-9/3',
-                  icon: Icons.map_outlined,
-                  maxLines: 2,
-                  validator: (val) {
-                    if (val == null || val.trim().isEmpty) {
-                      return 'Complete office address is required';
-                    }
-                    return null;
-                  },
-                ),
-              ],
-            ),
-            const SizedBox(height: 30),
-
-            // Save / Action Button
-            if (_isEditing)
-              SizedBox(
-                width: double.infinity,
-                height: 52,
-                child: ElevatedButton.icon(
-                  style: ElevatedButton.styleFrom(
-                    backgroundColor: AppColors.primary,
-                    foregroundColor: Colors.white,
-                    shape: RoundedRectangleBorder(
-                      borderRadius: BorderRadius.circular(12),
-                    ),
-                    elevation: 2,
-                  ),
-                  onPressed: _isSaving ? null : _handleSaveProfile,
-                  icon: _isSaving
-                      ? const SizedBox(
-                          width: 20,
-                          height: 20,
-                          child: CircularProgressIndicator(
-                            color: Colors.white,
-                            strokeWidth: 2,
-                          ),
-                        )
-                      : const Icon(Icons.check_circle_outline_rounded),
+            actions: [
+              if (!_isEditing)
+                TextButton.icon(
+                  onPressed: () => setState(() => _isEditing = true),
+                  icon: const Icon(Icons.edit_outlined,
+                      size: 18, color: Colors.white),
                   label: Text(
-                    _isSaving ? 'Saving Profile...' : 'Save Profile Changes',
-                    style: const TextStyle(
-                      fontSize: 16,
-                      fontWeight: FontWeight.bold,
+                    'Edit',
+                    style: GoogleFonts.inter(
+                      color: Colors.white,
+                      fontWeight: FontWeight.w600,
                     ),
                   ),
+                )
+              else
+                TextButton(
+                  onPressed: _isSaving
+                      ? null
+                      : () {
+                          final current = _profileService.currentProfile;
+                          _nameController.text = current.companyName;
+                          _descriptionController.text = current.description;
+                          _emailController.text = current.officialEmail;
+                          _websiteController.text = current.websiteUrl;
+                          _contactPersonController.text =
+                              current.contactPersonName;
+                          _phoneController.text = current.phoneNumber;
+                          _cityController.text = current.city;
+                          _addressController.text = current.completeAddress;
+                          setState(() => _isEditing = false);
+                        },
+                  child: Text(
+                    'Cancel',
+                    style: GoogleFonts.inter(color: Colors.white70),
+                  ),
                 ),
-              )
-            else
-              Container(
-                padding: const EdgeInsets.all(14),
-                decoration: BoxDecoration(
-                  color: AppColors.lightIceBlue,
-                  borderRadius: BorderRadius.circular(12),
-                  border: Border.all(color: AppColors.primary.withValues(alpha: 0.3)),
-                ),
-                child: Row(
-                  children: [
-                    const Icon(Icons.info_outline, color: AppColors.primary),
-                    const SizedBox(width: 12),
-                    const Expanded(
-                      child: Text(
-                        'Profile is in view mode. Tap "Edit Profile" in top-right to update organization details.',
-                        style: TextStyle(
-                          fontSize: 12,
-                          color: AppColors.darkNavy,
+            ],
+          ),
+          body: Form(
+            key: _formKey,
+            child: SingleChildScrollView(
+              padding: const EdgeInsets.fromLTRB(16, 16, 16, 36),
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  _buildHeaderBanner(profile, displayName),
+                  const SizedBox(height: 18),
+                  _buildSectionCard(
+                    title: 'Organization Identity',
+                    icon: Icons.business_rounded,
+                    child: Column(
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      children: [
+                        _buildTextField(
+                          controller: _nameController,
+                          label: 'Registered Company Name *',
+                          hint: 'e.g. Acme Software Solutions',
+                          enabled: _isEditing,
+                          validator: (v) => (v == null || v.trim().isEmpty)
+                              ? 'Company name is required'
+                              : null,
                         ),
+                        const SizedBox(height: 14),
+                        DropdownButtonFormField<String>(
+                          initialValue: _selectedIndustry,
+                          decoration: const InputDecoration(
+                            labelText: 'Industry Sector',
+                          ),
+                          items: _industryOptions
+                              .map(
+                                (ind) => DropdownMenuItem(
+                                  value: ind,
+                                  child: Text(ind),
+                                ),
+                              )
+                              .toList(),
+                          onChanged: _isEditing
+                              ? (val) {
+                                  if (val != null) {
+                                    setState(() => _selectedIndustry = val);
+                                  }
+                                }
+                              : null,
+                        ),
+                        const SizedBox(height: 14),
+                        _buildTextField(
+                          controller: _descriptionController,
+                          label: 'Company Overview',
+                          hint:
+                              'Briefly describe your engineering focus, product mission, and student collaboration style...',
+                          maxLines: 4,
+                          enabled: _isEditing,
+                        ),
+                      ],
+                    ),
+                  ),
+                  const SizedBox(height: 16),
+                  _buildSectionCard(
+                    title: 'Contact & Leadership',
+                    icon: Icons.contact_mail_outlined,
+                    child: Column(
+                      children: [
+                        _buildTextField(
+                          controller: _contactPersonController,
+                          label: 'Primary Contact Person *',
+                          hint: 'e.g. Ayesha Khan (Engineering Lead)',
+                          enabled: _isEditing,
+                          validator: (v) => (v == null || v.trim().isEmpty)
+                              ? 'Contact person name is required'
+                              : null,
+                        ),
+                        const SizedBox(height: 14),
+                        _buildTextField(
+                          controller: _emailController,
+                          label: 'Official Corporate Email *',
+                          hint: 'talent@yourcompany.com',
+                          keyboardType: TextInputType.emailAddress,
+                          enabled: _isEditing,
+                          validator: _validateEmail,
+                        ),
+                        const SizedBox(height: 14),
+                        _buildTextField(
+                          controller: _phoneController,
+                          label: 'Official Phone Number *',
+                          hint: '+92 300 1234567',
+                          keyboardType: TextInputType.phone,
+                          enabled: _isEditing,
+                          validator: _validatePhone,
+                        ),
+                        const SizedBox(height: 14),
+                        _buildTextField(
+                          controller: _websiteController,
+                          label: 'Official Website',
+                          hint: 'https://yourcompany.com',
+                          keyboardType: TextInputType.url,
+                          enabled: _isEditing,
+                          validator: _validateWebsite,
+                        ),
+                      ],
+                    ),
+                  ),
+                  const SizedBox(height: 16),
+                  _buildSectionCard(
+                    title: 'Headquarters & Location',
+                    icon: Icons.location_on_outlined,
+                    child: Column(
+                      children: [
+                        _buildTextField(
+                          controller: _cityController,
+                          label: 'City / Region',
+                          hint: 'e.g. Lahore, Islamabad, Remote',
+                          enabled: _isEditing,
+                        ),
+                        const SizedBox(height: 14),
+                        _buildTextField(
+                          controller: _addressController,
+                          label: 'Office Address',
+                          hint: 'Suite / Floor, Business Center',
+                          maxLines: 2,
+                          enabled: _isEditing,
+                        ),
+                      ],
+                    ),
+                  ),
+                  if (_isEditing) ...[
+                    const SizedBox(height: 24),
+                    SizedBox(
+                      width: double.infinity,
+                      child: ElevatedButton.icon(
+                        style: ElevatedButton.styleFrom(
+                          padding: const EdgeInsets.symmetric(vertical: 15),
+                        ),
+                        onPressed: _isSaving ? null : _handleSaveProfile,
+                        icon: _isSaving
+                            ? const SizedBox(
+                                width: 18,
+                                height: 18,
+                                child: CircularProgressIndicator(
+                                  strokeWidth: 2,
+                                  color: Colors.white,
+                                ),
+                              )
+                            : const Icon(Icons.save_outlined),
+                        label: Text(
+                          _isSaving ? 'Saving Profile...' : 'Save Organization Profile',
+                        ),
+                      ),
+                    ),
+                  ],
+                ],
+              ),
+            ),
+          ),
+        );
+      },
+    );
+  }
+
+  Widget _buildHeaderBanner(CompanyProfileModel profile, String displayName) {
+    return Container(
+      width: double.infinity,
+      padding: const EdgeInsets.all(20),
+      decoration: BoxDecoration(
+        gradient: AppColors.brandGradient,
+        borderRadius: BorderRadius.circular(20),
+        boxShadow: AppColors.softShadow,
+      ),
+      child: Column(
+        children: [
+          Row(
+            children: [
+              GestureDetector(
+                onTap: _openLogoColorSheet,
+                child: Stack(
+                  children: [
+                    CircleAvatar(
+                      radius: 32,
+                      backgroundColor: _selectedLogoColor,
+                      child: Text(
+                        _selectedLogoInitial,
+                        style: GoogleFonts.poppins(
+                          color: Colors.white,
+                          fontSize: 22,
+                          fontWeight: FontWeight.w700,
+                        ),
+                      ),
+                    ),
+                    if (_isEditing)
+                      Positioned(
+                        right: 0,
+                        bottom: 0,
+                        child: Container(
+                          padding: const EdgeInsets.all(4),
+                          decoration: const BoxDecoration(
+                            color: Colors.white,
+                            shape: BoxShape.circle,
+                          ),
+                          child: const Icon(
+                            Icons.palette_outlined,
+                            size: 14,
+                            color: AppColors.deepNavy,
+                          ),
+                        ),
+                      ),
+                  ],
+                ),
+              ),
+              const SizedBox(width: 16),
+              Expanded(
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    Text(
+                      displayName,
+                      style: GoogleFonts.poppins(
+                        fontSize: 18,
+                        fontWeight: FontWeight.w700,
+                        color: Colors.white,
+                      ),
+                    ),
+                    const SizedBox(height: 2),
+                    Text(
+                      profile.industry.isNotEmpty
+                          ? profile.industry
+                          : 'Corporate Partner',
+                      style: GoogleFonts.inter(
+                        fontSize: 12.5,
+                        color: AppColors.lightAqua,
+                      ),
+                    ),
+                    const SizedBox(height: 8),
+                    InkWell(
+                      onTap: () {
+                        Navigator.push(
+                          context,
+                          MaterialPageRoute(
+                            builder: (_) => const CompanyVerificationScreen(),
+                          ),
+                        );
+                      },
+                      child: StatusBadge(
+                        label: profile.isVerified
+                            ? 'Verified Partner'
+                            : 'Complete Verification',
                       ),
                     ),
                   ],
                 ),
               ),
-            const SizedBox(height: 24),
-          ],
-        ),
-      ),
-    );
-  }
-
-  // 1. Logo Upload & Identity Header
-  Widget _buildLogoAndHeaderSection() {
-    return Container(
-      padding: const EdgeInsets.all(20),
-      decoration: BoxDecoration(
-        color: Colors.white,
-        borderRadius: BorderRadius.circular(16),
-        border: Border.all(color: AppColors.border),
-        boxShadow: [
-          BoxShadow(
-            color: Colors.black.withValues(alpha: 0.04),
-            blurRadius: 10,
-            offset: const Offset(0, 3),
+            ],
           ),
-        ],
-      ),
-      child: Column(
-        children: [
-          Center(
-            child: Stack(
-              children: [
-                GestureDetector(
-                  onTap: _openLogoPickerBottomSheet,
-                  child: Container(
-                    width: 86,
-                    height: 86,
-                    decoration: BoxDecoration(
-                      color: _selectedLogoColor,
-                      shape: BoxShape.circle,
-                      border: Border.all(
-                        color: AppColors.lightIceBlue,
-                        width: 4,
-                      ),
-                      boxShadow: [
-                        BoxShadow(
-                          color: _selectedLogoColor.withValues(alpha: 0.3),
-                          blurRadius: 12,
-                          offset: const Offset(0, 4),
-                        ),
-                      ],
-                    ),
-                    child: Center(
-                      child: Text(
-                        _selectedLogoInitial,
-                        style: const TextStyle(
-                          color: Colors.white,
-                          fontSize: 28,
-                          fontWeight: FontWeight.bold,
-                          letterSpacing: 1.2,
-                        ),
-                      ),
-                    ),
-                  ),
-                ),
-                if (_isEditing)
-                  Positioned(
-                    bottom: 0,
-                    right: 0,
-                    child: GestureDetector(
-                      onTap: _openLogoPickerBottomSheet,
-                      child: Container(
-                        padding: const EdgeInsets.all(7),
-                        decoration: BoxDecoration(
-                          color: AppColors.accentTeal,
-                          shape: BoxShape.circle,
-                          border: Border.all(color: Colors.white, width: 2),
-                        ),
-                        child: const Icon(
-                          Icons.camera_alt_rounded,
-                          color: Colors.white,
-                          size: 16,
-                        ),
-                      ),
-                    ),
-                  ),
-              ],
-            ),
-          ),
-          const SizedBox(height: 14),
-          Text(
-            _nameController.text.isNotEmpty
-                ? _nameController.text
-                : 'TechVista Innovations',
-            textAlign: TextAlign.center,
-            style: const TextStyle(
-              fontSize: 18,
-              fontWeight: FontWeight.bold,
-              color: AppColors.darkNavy,
-            ),
-          ),
-          const SizedBox(height: 4),
-          Container(
-            padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 3),
-            decoration: BoxDecoration(
-              color: AppColors.successBg,
-              borderRadius: BorderRadius.circular(12),
-            ),
-            child: const Row(
-              mainAxisSize: MainAxisSize.min,
-              children: [
-                Icon(Icons.verified, color: AppColors.success, size: 14),
-                SizedBox(width: 4),
-                Text(
-                  'Verified Campus Corporate Partner',
-                  style: TextStyle(
-                    fontSize: 11,
-                    fontWeight: FontWeight.bold,
-                    color: AppColors.success,
-                  ),
-                ),
-              ],
-            ),
-          ),
-          if (_isEditing)
-            Padding(
-              padding: const EdgeInsets.only(top: 8.0),
-              child: TextButton.icon(
-                onPressed: _openLogoPickerBottomSheet,
-                icon: const Icon(Icons.upload, size: 16),
-                label: const Text('Change Brand Logo'),
+          const SizedBox(height: 12),
+          Align(
+            alignment: Alignment.centerRight,
+            child: Text(
+              'Last updated: ${profile.lastUpdated}',
+              style: GoogleFonts.inter(
+                fontSize: 11,
+                color: Colors.white70,
               ),
             ),
+          ),
         ],
       ),
     );
   }
 
-  // Section Card wrapper
   Widget _buildSectionCard({
     required String title,
     required IconData icon,
-    required List<Widget> children,
+    required Widget child,
   }) {
     return Container(
+      width: double.infinity,
       padding: const EdgeInsets.all(18),
       decoration: BoxDecoration(
-        color: Colors.white,
-        borderRadius: BorderRadius.circular(14),
-        border: Border.all(color: AppColors.border, width: 0.9),
+        color: AppColors.cardWhite,
+        borderRadius: BorderRadius.circular(18),
+        border: Border.all(color: AppColors.lightGray),
+        boxShadow: AppColors.softShadow,
       ),
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
           Row(
             children: [
-              Icon(icon, color: AppColors.primary, size: 20),
-              const SizedBox(width: 10),
+              Icon(icon, size: 18, color: AppColors.primaryBlue),
+              const SizedBox(width: 8),
               Text(
                 title,
-                style: const TextStyle(
+                style: GoogleFonts.poppins(
                   fontSize: 15,
-                  fontWeight: FontWeight.bold,
-                  color: AppColors.darkNavy,
+                  fontWeight: FontWeight.w700,
+                  color: AppColors.deepNavy,
                 ),
               ),
             ],
           ),
-          const SizedBox(height: 6),
-          const Divider(height: 1, color: AppColors.border),
-          const SizedBox(height: 16),
-          ...children,
+          const SizedBox(height: 14),
+          child,
         ],
       ),
     );
   }
 
-  // Text Input field
   Widget _buildTextField({
     required TextEditingController controller,
     required String label,
     required String hint,
-    required IconData icon,
-    TextInputType keyboardType = TextInputType.text,
     int maxLines = 1,
+    bool enabled = true,
+    TextInputType? keyboardType,
     String? Function(String?)? validator,
   }) {
     return TextFormField(
       controller: controller,
-      enabled: _isEditing,
-      keyboardType: keyboardType,
       maxLines: maxLines,
+      enabled: enabled,
+      keyboardType: keyboardType,
       validator: validator,
-      style: TextStyle(
-        fontSize: 14,
-        color: _isEditing ? AppColors.textPrimary : AppColors.darkNavy,
-        fontWeight: _isEditing ? FontWeight.normal : FontWeight.w600,
+      style: GoogleFonts.inter(
+        fontSize: 13.5,
+        color: enabled ? AppColors.darkText : AppColors.grayText,
       ),
       decoration: InputDecoration(
         labelText: label,
         hintText: hint,
-        hintStyle: const TextStyle(color: AppColors.textMuted, fontSize: 13),
-        prefixIcon: Icon(icon, color: AppColors.primary, size: 20),
-        filled: true,
-        fillColor: _isEditing ? AppColors.background : const Color(0xFFF1F5F9),
-        contentPadding:
-            const EdgeInsets.symmetric(horizontal: 14, vertical: 12),
-        border: OutlineInputBorder(
-          borderRadius: BorderRadius.circular(10),
-          borderSide: const BorderSide(color: AppColors.border),
-        ),
-        enabledBorder: OutlineInputBorder(
-          borderRadius: BorderRadius.circular(10),
-          borderSide: const BorderSide(color: AppColors.border),
-        ),
-        focusedBorder: OutlineInputBorder(
-          borderRadius: BorderRadius.circular(10),
-          borderSide: const BorderSide(color: AppColors.primary, width: 1.5),
-        ),
-        disabledBorder: OutlineInputBorder(
-          borderRadius: BorderRadius.circular(10),
-          borderSide: BorderSide(color: AppColors.border.withValues(alpha: 0.5)),
-        ),
       ),
-    );
-  }
-
-  // Industry Dropdown
-  Widget _buildIndustryDropdown() {
-    return DropdownButtonFormField<String>(
-      initialValue: _selectedIndustry,
-      decoration: InputDecoration(
-        labelText: 'Industry Sector',
-        prefixIcon: const Icon(
-          Icons.domain_rounded,
-          color: AppColors.primary,
-          size: 20,
-        ),
-        filled: true,
-        fillColor: _isEditing ? AppColors.background : const Color(0xFFF1F5F9),
-        contentPadding:
-            const EdgeInsets.symmetric(horizontal: 14, vertical: 12),
-        border: OutlineInputBorder(
-          borderRadius: BorderRadius.circular(10),
-          borderSide: const BorderSide(color: AppColors.border),
-        ),
-        enabledBorder: OutlineInputBorder(
-          borderRadius: BorderRadius.circular(10),
-          borderSide: const BorderSide(color: AppColors.border),
-        ),
-      ),
-      items: _industryOptions
-          .map(
-            (ind) => DropdownMenuItem(
-              value: ind,
-              child: Text(
-                ind,
-                style: const TextStyle(fontSize: 14),
-              ),
-            ),
-          )
-          .toList(),
-      onChanged: _isEditing
-          ? (val) {
-              if (val != null) {
-                setState(() {
-                  _selectedIndustry = val;
-                });
-              }
-            }
-          : null,
     );
   }
 }
-

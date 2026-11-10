@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:google_fonts/google_fonts.dart';
 import 'package:link_vibe/core/constants/app_colors.dart';
+import 'package:link_vibe/core/services/app_data_service.dart';
 import 'package:link_vibe/feature/student/home/presentation/screens/student_home_screen.dart';
 import 'package:link_vibe/feature/student/explore/presentation/screens/explore_projects_screen.dart';
 import 'package:link_vibe/feature/student/my_projects/presentation/screens/my_projects_screen.dart';
@@ -82,8 +83,11 @@ class _StudentMainNavState extends State<StudentMainNav> {
             SnackBar(
               content: Row(
                 children: [
-                  const Icon(Icons.info_outline_rounded,
-                      color: Colors.white, size: 18),
+                  const Icon(
+                    Icons.info_outline_rounded,
+                    color: Colors.white,
+                    size: 18,
+                  ),
                   const SizedBox(width: 8),
                   Text(
                     'Press back again to exit CampusConnect',
@@ -109,10 +113,7 @@ class _StudentMainNavState extends State<StudentMainNav> {
         SystemNavigator.pop();
       },
       child: Scaffold(
-        body: IndexedStack(
-          index: _currentIndex,
-          children: screens,
-        ),
+        body: IndexedStack(index: _currentIndex, children: screens),
         bottomNavigationBar: Container(
           decoration: BoxDecoration(
             color: Colors.white,
@@ -126,51 +127,72 @@ class _StudentMainNavState extends State<StudentMainNav> {
           ),
           child: SafeArea(
             child: Padding(
-              padding:
-                  const EdgeInsets.symmetric(horizontal: 8.0, vertical: 6.0),
-              child: BottomNavigationBar(
-                currentIndex: _currentIndex,
-                onTap: _onTabChange,
-                backgroundColor: Colors.transparent,
-                elevation: 0,
-                type: BottomNavigationBarType.fixed,
-                selectedItemColor: AppColors.primaryBlue,
-                unselectedItemColor: AppColors.grayText,
-                selectedLabelStyle: GoogleFonts.inter(
-                  fontSize: 11,
-                  fontWeight: FontWeight.bold,
-                ),
-                unselectedLabelStyle: GoogleFonts.inter(
-                  fontSize: 11,
-                  fontWeight: FontWeight.w500,
-                ),
-                items: const [
-                  BottomNavigationBarItem(
-                    icon: Icon(Icons.home_outlined),
-                    activeIcon: Icon(Icons.home_rounded),
-                    label: 'Home',
-                  ),
-                  BottomNavigationBarItem(
-                    icon: Icon(Icons.explore_outlined),
-                    activeIcon: Icon(Icons.explore_rounded),
-                    label: 'Explore',
-                  ),
-                  BottomNavigationBarItem(
-                    icon: Icon(Icons.business_center_outlined),
-                    activeIcon: Icon(Icons.business_center_rounded),
-                    label: 'My Projects',
-                  ),
-                  BottomNavigationBarItem(
-                    icon: Icon(Icons.notifications_none_rounded),
-                    activeIcon: Icon(Icons.notifications_rounded),
-                    label: 'Alerts',
-                  ),
-                  BottomNavigationBarItem(
-                    icon: Icon(Icons.person_outline_rounded),
-                    activeIcon: Icon(Icons.person_rounded),
-                    label: 'Profile',
-                  ),
-                ],
+              padding: const EdgeInsets.symmetric(
+                horizontal: 8.0,
+                vertical: 6.0,
+              ),
+              child: ListenableBuilder(
+                listenable: AppDataService.instance,
+                builder: (context, _) {
+                  final unreadAlerts =
+                      AppDataService.instance.unreadNotificationsCount;
+                  return BottomNavigationBar(
+                    currentIndex: _currentIndex,
+                    onTap: _onTabChange,
+                    backgroundColor: Colors.transparent,
+                    elevation: 0,
+                    type: BottomNavigationBarType.fixed,
+                    selectedItemColor: AppColors.primaryBlue,
+                    unselectedItemColor: AppColors.grayText,
+                    selectedLabelStyle: GoogleFonts.inter(
+                      fontSize: 11,
+                      fontWeight: FontWeight.bold,
+                    ),
+                    unselectedLabelStyle: GoogleFonts.inter(
+                      fontSize: 11,
+                      fontWeight: FontWeight.w500,
+                    ),
+                    items: [
+                      const BottomNavigationBarItem(
+                        icon: Icon(Icons.home_outlined),
+                        activeIcon: Icon(Icons.home_rounded),
+                        label: 'Home',
+                      ),
+                      const BottomNavigationBarItem(
+                        icon: Icon(Icons.explore_outlined),
+                        activeIcon: Icon(Icons.explore_rounded),
+                        label: 'Explore',
+                      ),
+                      const BottomNavigationBarItem(
+                        icon: Icon(Icons.business_center_outlined),
+                        activeIcon: Icon(Icons.business_center_rounded),
+                        label: 'My Projects',
+                      ),
+                      BottomNavigationBarItem(
+                        icon: Badge(
+                          isLabelVisible: unreadAlerts > 0,
+                          label: Text(
+                            unreadAlerts > 99 ? '99+' : '$unreadAlerts',
+                          ),
+                          child: const Icon(Icons.notifications_none_rounded),
+                        ),
+                        activeIcon: Badge(
+                          isLabelVisible: unreadAlerts > 0,
+                          label: Text(
+                            unreadAlerts > 99 ? '99+' : '$unreadAlerts',
+                          ),
+                          child: const Icon(Icons.notifications_rounded),
+                        ),
+                        label: 'Alerts',
+                      ),
+                      const BottomNavigationBarItem(
+                        icon: Icon(Icons.person_outline_rounded),
+                        activeIcon: Icon(Icons.person_rounded),
+                        label: 'Profile',
+                      ),
+                    ],
+                  );
+                },
               ),
             ),
           ),

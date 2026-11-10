@@ -1,6 +1,8 @@
 import 'dart:math';
 import 'package:flutter/material.dart';
+import 'package:google_fonts/google_fonts.dart';
 import 'package:link_vibe/core/constants/app_colors.dart';
+import 'package:link_vibe/core/widgets/app_empty_state.dart';
 
 /// Data item for the BI Donut Chart
 class BiDonutSegment {
@@ -43,9 +45,18 @@ class _BiDonutChartState extends State<BiDonutChart> {
 
   @override
   Widget build(BuildContext context) {
-    final double totalValue = widget.segments.fold(0.0, (sum, item) => sum + item.value);
+    final double totalValue =
+        widget.segments.fold(0.0, (sum, item) => sum + item.value);
 
-    // Active hovered segment info for center label
+    if (widget.segments.isEmpty || totalValue <= 0) {
+      return const AppEmptyState(
+        compact: true,
+        icon: Icons.donut_large_rounded,
+        title: 'No Distribution Data',
+        subtitle: 'Breakdown segments will display here once records exist.',
+      );
+    }
+
     String centerPrimaryText = widget.centerTitle;
     String centerSubText = widget.centerSubtitle ?? '${totalValue.toInt()} Total';
 
@@ -77,13 +88,12 @@ class _BiDonutChartState extends State<BiDonutChart> {
                   hoveredIndex: _hoveredSegmentIndex,
                 ),
               ),
-              // Center KPI text
               Column(
                 mainAxisSize: MainAxisSize.min,
                 children: [
                   Text(
                     centerPrimaryText,
-                    style: const TextStyle(
+                    style: GoogleFonts.poppins(
                       fontSize: 18,
                       fontWeight: FontWeight.bold,
                       color: AppColors.textPrimary,
@@ -97,7 +107,7 @@ class _BiDonutChartState extends State<BiDonutChart> {
                       textAlign: TextAlign.center,
                       maxLines: 2,
                       overflow: TextOverflow.ellipsis,
-                      style: const TextStyle(
+                      style: GoogleFonts.inter(
                         fontSize: 10,
                         color: AppColors.textMuted,
                         fontWeight: FontWeight.w500,
@@ -140,7 +150,9 @@ class _BiDonutChartState extends State<BiDonutChart> {
       mainAxisSize: MainAxisSize.min,
       children: List.generate(widget.segments.length, (index) {
         final seg = widget.segments[index];
-        final pct = totalValue > 0 ? ((seg.value / totalValue) * 100).toStringAsFixed(1) : '0';
+        final pct = totalValue > 0
+            ? ((seg.value / totalValue) * 100).toStringAsFixed(1)
+            : '0';
         final isHovered = _hoveredSegmentIndex == index;
 
         return MouseRegion(
@@ -149,7 +161,8 @@ class _BiDonutChartState extends State<BiDonutChart> {
           child: InkWell(
             onTap: () {
               setState(() {
-                _hoveredSegmentIndex = _hoveredSegmentIndex == index ? null : index;
+                _hoveredSegmentIndex =
+                    _hoveredSegmentIndex == index ? null : index;
               });
             },
             borderRadius: BorderRadius.circular(6),
@@ -175,17 +188,20 @@ class _BiDonutChartState extends State<BiDonutChart> {
                       seg.label,
                       maxLines: 1,
                       overflow: TextOverflow.ellipsis,
-                      style: TextStyle(
+                      style: GoogleFonts.inter(
                         fontSize: 12,
-                        fontWeight: isHovered ? FontWeight.bold : FontWeight.w500,
-                        color: isHovered ? AppColors.textPrimary : AppColors.textSecondary,
+                        fontWeight:
+                            isHovered ? FontWeight.bold : FontWeight.w500,
+                        color: isHovered
+                            ? AppColors.textPrimary
+                            : AppColors.textSecondary,
                       ),
                     ),
                   ),
                   const SizedBox(width: 8),
                   Text(
                     '${seg.value.toInt()} ($pct%)',
-                    style: const TextStyle(
+                    style: GoogleFonts.inter(
                       fontSize: 11,
                       fontWeight: FontWeight.w600,
                       color: AppColors.textPrimary,
@@ -221,18 +237,24 @@ class _DonutChartPainter extends CustomPainter {
         ..color = AppColors.border
         ..style = PaintingStyle.stroke
         ..strokeWidth = strokeWidth;
-      canvas.drawCircle(Offset(size.width / 2, size.height / 2), (size.width - strokeWidth) / 2, emptyPaint);
+      canvas.drawCircle(
+        Offset(size.width / 2, size.height / 2),
+        (size.width - strokeWidth) / 2,
+        emptyPaint,
+      );
       return;
     }
 
     final center = Offset(size.width / 2, size.height / 2);
     final baseRadius = (size.width - strokeWidth) / 2;
 
-    double startAngle = -pi / 2; // Start from top 12 o'clock
-    const gapAngle = 0.04; // Angular gap between slices
+    double startAngle = -pi / 2;
+    final nonZeroCount = segments.where((s) => s.value > 0).length;
+    final double gapAngle = nonZeroCount > 1 ? 0.04 : 0.0;
 
     for (int i = 0; i < segments.length; i++) {
       final seg = segments[i];
+      if (seg.value <= 0) continue;
       final sweepAngle = (seg.value / totalValue) * (2 * pi);
 
       if (sweepAngle <= gapAngle) continue;
@@ -245,10 +267,16 @@ class _DonutChartPainter extends CustomPainter {
         ..color = seg.color
         ..style = PaintingStyle.stroke
         ..strokeWidth = currentStroke
-        ..strokeCap = StrokeCap.round;
+        ..strokeCap = nonZeroCount > 1 ? StrokeCap.round : StrokeCap.butt;
 
       final rect = Rect.fromCircle(center: center, radius: currentRadius);
-      canvas.drawArc(rect, startAngle + (gapAngle / 2), sweepAngle - gapAngle, false, paint);
+      canvas.drawArc(
+        rect,
+        startAngle + (gapAngle / 2),
+        sweepAngle - gapAngle,
+        false,
+        paint,
+      );
 
       startAngle += sweepAngle;
     }

@@ -1,41 +1,118 @@
 import 'package:flutter/material.dart';
 import 'package:google_fonts/google_fonts.dart';
+import 'package:url_launcher/url_launcher.dart';
 import 'package:link_vibe/core/constants/app_colors.dart';
 import 'package:link_vibe/core/services/app_data_service.dart';
 import 'package:link_vibe/core/services/share_service.dart';
+import 'package:link_vibe/core/services/supabase_helper.dart';
+import 'package:link_vibe/core/widgets/status_badge.dart';
 import 'package:link_vibe/feature/student/apply/presentation/screens/apply_project_screen.dart';
+import 'package:link_vibe/feature/student/chat/presentation/screens/chat_list_screen.dart';
 
 class StudentProjectDetailsScreen extends StatelessWidget {
   final Map<String, dynamic> project;
 
   const StudentProjectDetailsScreen({super.key, required this.project});
 
+  List<String> _splitLines(String raw) {
+    return raw
+        .split(RegExp(r'[\n;]'))
+        .map((e) => e.replaceFirst(RegExp(r'^[\-\•\*\d\.\)\s]+'), '').trim())
+        .where((e) => e.isNotEmpty)
+        .toList();
+  }
+
+  Future<void> _openAttachment(BuildContext context, String urlStr) async {
+    String normalized = urlStr.trim();
+    if (!normalized.startsWith('http://') &&
+        !normalized.startsWith('https://')) {
+      normalized = 'https://$normalized';
+    }
+    final uri = Uri.tryParse(normalized);
+    if (uri == null || !await launchUrl(uri, mode: LaunchMode.externalApplication)) {
+      if (!context.mounted) return;
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(content: Text('Could not open project attachment link.')),
+      );
+    }
+  }
+
+  Future<void> _messageCompany(BuildContext context) async {
+    final company = (project['company']?.toString().trim().isNotEmpty == true)
+        ? project['company'].toString().trim()
+        : 'Partner Company';
+    final peerUserId = project['companyUserId']?.toString() ?? '';
+    final title = project['title']?.toString() ?? '';
+
+    await AppDataService.instance.openOrCreateConversation(
+      companyName: company,
+      peerUserId: peerUserId,
+      supervisorName: '$company Lead',
+      projectTitle: title,
+    );
+
+    if (!context.mounted) return;
+    Navigator.push(
+      context,
+      MaterialPageRoute(builder: (_) => const ChatListScreen()),
+    );
+  }
+
   @override
   Widget build(BuildContext context) {
-    final id = project['id']?.toString() ?? '';
-    final title = project['title'] ?? 'Market Research on AI Tools';
-    final company = project['company'] ?? 'TechVista Corp';
-    final duration = project['duration'] ?? '3-5 days';
-    final workMode = project['workMode'] ?? 'Remote';
-    final stipend = project['stipend'] ?? project['budget'] ?? 'Competitive';
-    final description = project['description'] ??
-        'Conduct deep market analysis on latest AI tools and benchmark performance against industry standards.';
-    final skills = (project['skills'] as List?) ??
-        ['Research', 'Analysis', 'Report Writing', 'Presentation'];
+    final id = project['id']?.toString() ??
+        project['projectId']?.toString() ??
+        '';
+    final title = (project['title']?.toString().trim().isNotEmpty == true)
+        ? project['title'].toString().trim()
+        : 'Untitled Project';
+    final company = (project['company']?.toString().trim().isNotEmpty == true)
+        ? project['company'].toString().trim()
+        : 'Partner Company';
+    final category = project['category']?.toString().trim() ?? '';
+    final duration =
+        (project['duration']?.toString().trim().isNotEmpty == true)
+            ? project['duration'].toString().trim()
+            : 'Flexible';
+    final workMode =
+        (project['workMode']?.toString().trim().isNotEmpty == true)
+            ? project['workMode'].toString().trim()
+            : 'Remote';
+    final deadline = project['deadline']?.toString().trim() ?? '';
+    final openings = project['openings']?.toString().trim() ?? '';
+    final stipend = (project['stipend']?.toString().trim().isNotEmpty == true)
+        ? project['stipend'].toString().trim()
+        : (project['budget']?.toString().trim() ?? '');
+    final description =
+        (project['description']?.toString().trim().isNotEmpty == true)
+            ? project['description'].toString().trim()
+            : 'No detailed project summary was provided by the company.';
+    final requirementsRaw = project['requirements']?.toString().trim() ?? '';
+    final deliverablesRaw = project['deliverables']?.toString().trim() ?? '';
+    final instructionsRaw =
+        project['additionalInstructions']?.toString().trim() ?? '';
+    final attachmentUrl = project['attachmentUrl']?.toString().trim() ?? '';
+    final skills = SupabaseHelper.parseStringList(project['skills']);
+    final isVerified = project['isVerified'] == true;
+    final status = project['status']?.toString().trim() ?? 'Open';
+
+    final requirementBullets = _splitLines(requirementsRaw);
+    final deliverableBullets = _splitLines(deliverablesRaw);
 
     return ListenableBuilder(
       listenable: AppDataService.instance,
       builder: (context, _) {
         final isSaved = AppDataService.instance.isProjectSaved(id);
         final hasApplied = AppDataService.instance.hasApplied(id);
+        final isClosed = status.toLowerCase() == 'closed' ||
+            status.toLowerCase() == 'completed';
 
         return Scaffold(
           backgroundColor: AppColors.background,
           body: CustomScrollView(
             slivers: [
-              // Collapsible Image Header
               SliverAppBar(
-                expandedHeight: 200,
+                expandedHeight: 190,
                 pinned: true,
                 backgroundColor: AppColors.deepNavy,
                 leading: IconButton(
@@ -91,6 +168,7 @@ class StudentProjectDetailsScreen extends StatelessWidget {
                     ),
                     onPressed: () {
                       AppDataService.instance.toggleSaveProject(project);
+                      ScaffoldMessenger.of(context).hideCurrentSnackBar();
                       ScaffoldMessenger.of(context).showSnackBar(
                         SnackBar(
                           content: Text(
@@ -109,11 +187,11 @@ class StudentProjectDetailsScreen extends StatelessWidget {
                   background: Container(
                     decoration: const BoxDecoration(
                       gradient: LinearGradient(
-                        begin: Alignment.topCenter,
-                        end: Alignment.bottomCenter,
+                        begin: Alignment.topLeft,
+                        end: Alignment.bottomRight,
                         colors: [
-                          Color(0xFF0F3A70),
                           AppColors.deepNavy,
+                          AppColors.primaryBlue,
                         ],
                       ),
                     ),
@@ -123,28 +201,32 @@ class StudentProjectDetailsScreen extends StatelessWidget {
                           child: Icon(
                             Icons.business_center_rounded,
                             size: 72,
-                            color: Colors.white.withValues(alpha: 0.15),
+                            color: Colors.white.withValues(alpha: 0.14),
                           ),
                         ),
                         Positioned(
                           bottom: 20,
                           left: 20,
                           child: Container(
-                            padding: const EdgeInsets.all(10),
+                            width: 56,
+                            height: 56,
                             decoration: BoxDecoration(
                               color: Colors.white,
                               borderRadius: BorderRadius.circular(14),
-                              boxShadow: [
-                                BoxShadow(
-                                  color: Colors.black.withValues(alpha: 0.1),
-                                  blurRadius: 10,
-                                ),
-                              ],
+                              boxShadow: AppColors.softShadow,
                             ),
-                            child: Icon(
-                              Icons.school_rounded,
-                              size: 32,
-                              color: AppColors.primaryBlue,
+                            child: Center(
+                              child: Text(
+                                SupabaseHelper.initialsFor(
+                                  company,
+                                  fallback: 'CO',
+                                ),
+                                style: GoogleFonts.poppins(
+                                  fontSize: 18,
+                                  fontWeight: FontWeight.w800,
+                                  color: AppColors.primaryBlue,
+                                ),
+                              ),
                             ),
                           ),
                         ),
@@ -154,171 +236,271 @@ class StudentProjectDetailsScreen extends StatelessWidget {
                 ),
               ),
 
-              // Content Section
               SliverToBoxAdapter(
-                child: Padding(
-                  padding: const EdgeInsets.all(20.0),
-                  child: Column(
-                    crossAxisAlignment: CrossAxisAlignment.start,
-                    children: [
-                      // Title & Verification
-                      Text(
-                        title,
-                        style: GoogleFonts.poppins(
-                          fontSize: 20,
-                          fontWeight: FontWeight.bold,
-                          color: AppColors.deepNavy,
-                        ),
-                      ),
-                      const SizedBox(height: 6),
-
-                      Row(
+                child: Center(
+                  child: ConstrainedBox(
+                    constraints: const BoxConstraints(maxWidth: 820),
+                    child: Padding(
+                      padding: const EdgeInsets.all(20),
+                      child: Column(
+                        crossAxisAlignment: CrossAxisAlignment.start,
                         children: [
-                          Text(
-                            company,
-                            style: GoogleFonts.inter(
-                              fontSize: 14,
-                              fontWeight: FontWeight.w600,
-                              color: AppColors.grayText,
-                            ),
+                          Row(
+                            crossAxisAlignment: CrossAxisAlignment.start,
+                            children: [
+                              Expanded(
+                                child: Text(
+                                  title,
+                                  style: GoogleFonts.poppins(
+                                    fontSize: 20,
+                                    fontWeight: FontWeight.w700,
+                                    color: AppColors.deepNavy,
+                                  ),
+                                ),
+                              ),
+                              const SizedBox(width: 8),
+                              StatusBadge(label: status),
+                            ],
                           ),
-                          const SizedBox(width: 6),
-                          const Icon(Icons.verified_rounded,
-                              size: 16, color: AppColors.teal),
-                          const SizedBox(width: 4),
-                          Text(
-                            'Verified Partner',
-                            style: GoogleFonts.inter(
-                              fontSize: 11,
-                              color: AppColors.teal,
-                              fontWeight: FontWeight.bold,
-                            ),
+                          const SizedBox(height: 6),
+
+                          Wrap(
+                            spacing: 8,
+                            runSpacing: 4,
+                            crossAxisAlignment: WrapCrossAlignment.center,
+                            children: [
+                              Text(
+                                company,
+                                style: GoogleFonts.inter(
+                                  fontSize: 14,
+                                  fontWeight: FontWeight.w600,
+                                  color: AppColors.grayText,
+                                ),
+                              ),
+                              if (isVerified)
+                                Container(
+                                  padding: const EdgeInsets.symmetric(
+                                    horizontal: 8,
+                                    vertical: 3,
+                                  ),
+                                  decoration: BoxDecoration(
+                                    color: AppColors.lightAqua,
+                                    borderRadius: BorderRadius.circular(20),
+                                  ),
+                                  child: Row(
+                                    mainAxisSize: MainAxisSize.min,
+                                    children: [
+                                      const Icon(
+                                        Icons.verified_rounded,
+                                        size: 14,
+                                        color: AppColors.teal,
+                                      ),
+                                      const SizedBox(width: 4),
+                                      Text(
+                                        'Verified Partner',
+                                        style: GoogleFonts.inter(
+                                          fontSize: 11,
+                                          color: AppColors.deepNavy,
+                                          fontWeight: FontWeight.w700,
+                                        ),
+                                      ),
+                                    ],
+                                  ),
+                                ),
+                            ],
                           ),
-                        ],
-                      ),
-                      const SizedBox(height: 16),
+                          const SizedBox(height: 16),
 
-                      // Meta Chips Row: Duration, Remote, Stipend
-                      Row(
-                        children: [
-                          _buildMetaBadge(
-                              Icons.schedule_rounded, duration, AppColors.deepNavy),
-                          const SizedBox(width: 10),
-                          _buildMetaBadge(
-                              Icons.public_rounded, workMode, AppColors.primaryBlue),
-                          const SizedBox(width: 10),
-                          _buildMetaBadge(
-                              Icons.payments_outlined, stipend, AppColors.statusOpen),
-                        ],
-                      ),
-                      const SizedBox(height: 24),
+                          // Overflow-safe Meta Chips Wrap
+                          Wrap(
+                            spacing: 8,
+                            runSpacing: 8,
+                            children: [
+                              if (category.isNotEmpty)
+                                _buildMetaBadge(
+                                  Icons.category_outlined,
+                                  category,
+                                  AppColors.indigoAccent,
+                                ),
+                              _buildMetaBadge(
+                                Icons.schedule_rounded,
+                                duration,
+                                AppColors.deepNavy,
+                              ),
+                              _buildMetaBadge(
+                                Icons.public_rounded,
+                                workMode,
+                                AppColors.primaryBlue,
+                              ),
+                              if (stipend.isNotEmpty)
+                                _buildMetaBadge(
+                                  Icons.workspace_premium_outlined,
+                                  stipend,
+                                  AppColors.statusOpen,
+                                ),
+                              if (deadline.isNotEmpty)
+                                _buildMetaBadge(
+                                  Icons.event_outlined,
+                                  'Deadline: $deadline',
+                                  const Color(0xFFD97706),
+                                ),
+                              if (openings.isNotEmpty)
+                                _buildMetaBadge(
+                                  Icons.groups_outlined,
+                                  '$openings seat${openings == '1' ? '' : 's'}',
+                                  AppColors.teal,
+                                ),
+                            ],
+                          ),
+                          const SizedBox(height: 22),
 
-                      // About Project
-                      Text(
-                        'About this Project',
-                        style: GoogleFonts.poppins(
-                          fontSize: 16,
-                          fontWeight: FontWeight.bold,
-                          color: AppColors.deepNavy,
-                        ),
-                      ),
-                      const SizedBox(height: 8),
-                      Text(
-                        description,
-                        style: GoogleFonts.inter(
-                          fontSize: 14,
-                          color: AppColors.darkText,
-                          height: 1.5,
-                        ),
-                      ),
-                      const SizedBox(height: 24),
-
-                      // Project Objectives
-                      Text(
-                        'Project Objectives',
-                        style: GoogleFonts.poppins(
-                          fontSize: 16,
-                          fontWeight: FontWeight.bold,
-                          color: AppColors.deepNavy,
-                        ),
-                      ),
-                      const SizedBox(height: 8),
-                      _buildBulletItem(
-                          'Conduct structured survey and secondary research.'),
-                      _buildBulletItem(
-                          'Analyze key feature differentiation and user reception.'),
-                      _buildBulletItem(
-                          'Deliver clean summary deck with actionable insights.'),
-                      const SizedBox(height: 24),
-
-                      // Required Skills
-                      Text(
-                        'Skills Required',
-                        style: GoogleFonts.poppins(
-                          fontSize: 16,
-                          fontWeight: FontWeight.bold,
-                          color: AppColors.deepNavy,
-                        ),
-                      ),
-                      const SizedBox(height: 10),
-                      Wrap(
-                        spacing: 8,
-                        runSpacing: 8,
-                        children: skills.map((s) {
-                          return Container(
-                            padding: const EdgeInsets.symmetric(
-                                horizontal: 12, vertical: 6),
-                            decoration: BoxDecoration(
-                              color: AppColors.cardWhite,
-                              borderRadius: BorderRadius.circular(20),
-                              border: Border.all(color: AppColors.lightGray),
-                            ),
+                          _buildSectionCard(
+                            title: 'About this Project',
                             child: Text(
-                              s.toString(),
+                              description,
                               style: GoogleFonts.inter(
-                                fontSize: 12,
-                                fontWeight: FontWeight.w600,
+                                fontSize: 13.5,
                                 color: AppColors.darkText,
+                                height: 1.55,
                               ),
                             ),
-                          );
-                        }).toList(),
-                      ),
-                      const SizedBox(height: 24),
+                          ),
 
-                      // Deliverables
-                      Text(
-                        'Deliverables',
-                        style: GoogleFonts.poppins(
-                          fontSize: 16,
-                          fontWeight: FontWeight.bold,
-                          color: AppColors.deepNavy,
-                        ),
+                          if (requirementBullets.isNotEmpty) ...[
+                            const SizedBox(height: 14),
+                            _buildSectionCard(
+                              title: 'Requirements & Scope',
+                              child: Column(
+                                crossAxisAlignment: CrossAxisAlignment.start,
+                                children: requirementBullets
+                                    .map(_buildBulletItem)
+                                    .toList(),
+                              ),
+                            ),
+                          ],
+
+                          if (deliverableBullets.isNotEmpty) ...[
+                            const SizedBox(height: 14),
+                            _buildSectionCard(
+                              title: 'Expected Deliverables',
+                              child: Column(
+                                crossAxisAlignment: CrossAxisAlignment.start,
+                                children: deliverableBullets
+                                    .map(_buildBulletItem)
+                                    .toList(),
+                              ),
+                            ),
+                          ],
+
+                          if (skills.isNotEmpty) ...[
+                            const SizedBox(height: 14),
+                            _buildSectionCard(
+                              title: 'Skills Required',
+                              child: Wrap(
+                                spacing: 8,
+                                runSpacing: 8,
+                                children: skills.map((s) {
+                                  return Container(
+                                    padding: const EdgeInsets.symmetric(
+                                      horizontal: 12,
+                                      vertical: 6,
+                                    ),
+                                    decoration: BoxDecoration(
+                                      color: AppColors.surfaceAlt,
+                                      borderRadius: BorderRadius.circular(20),
+                                      border: Border.all(
+                                          color: AppColors.lightGray),
+                                    ),
+                                    child: Text(
+                                      s,
+                                      style: GoogleFonts.inter(
+                                        fontSize: 12,
+                                        fontWeight: FontWeight.w600,
+                                        color: AppColors.darkText,
+                                      ),
+                                    ),
+                                  );
+                                }).toList(),
+                              ),
+                            ),
+                          ],
+
+                          if (instructionsRaw.isNotEmpty) ...[
+                            const SizedBox(height: 14),
+                            _buildSectionCard(
+                              title: 'Additional Instructions',
+                              child: Text(
+                                instructionsRaw,
+                                style: GoogleFonts.inter(
+                                  fontSize: 13.5,
+                                  color: AppColors.darkText,
+                                  height: 1.5,
+                                ),
+                              ),
+                            ),
+                          ],
+
+                          if (attachmentUrl.isNotEmpty) ...[
+                            const SizedBox(height: 14),
+                            InkWell(
+                              onTap: () =>
+                                  _openAttachment(context, attachmentUrl),
+                              borderRadius: BorderRadius.circular(14),
+                              child: Container(
+                                padding: const EdgeInsets.all(14),
+                                decoration: BoxDecoration(
+                                  color: AppColors.cardWhite,
+                                  borderRadius: BorderRadius.circular(14),
+                                  border: Border.all(
+                                    color: AppColors.primaryBlue
+                                        .withValues(alpha: 0.3),
+                                  ),
+                                ),
+                                child: Row(
+                                  children: [
+                                    const Icon(Icons.attachment_rounded,
+                                        color: AppColors.primaryBlue),
+                                    const SizedBox(width: 10),
+                                    Expanded(
+                                      child: Text(
+                                        'Open Attached Project Specification',
+                                        style: GoogleFonts.inter(
+                                          fontSize: 13,
+                                          fontWeight: FontWeight.w600,
+                                          color: AppColors.primaryBlue,
+                                        ),
+                                      ),
+                                    ),
+                                    const Icon(
+                                      Icons.open_in_new_rounded,
+                                      size: 16,
+                                      color: AppColors.primaryBlue,
+                                    ),
+                                  ],
+                                ),
+                              ),
+                            ),
+                          ],
+                          const SizedBox(height: 28),
+                        ],
                       ),
-                      const SizedBox(height: 8),
-                      _buildBulletItem('Complete analytical report document (PDF).'),
-                      _buildBulletItem('Source data references and analysis sheet.'),
-                      _buildBulletItem('Verifiable certificate upon completion.'),
-                      const SizedBox(height: 36),
-                    ],
+                    ),
                   ),
                 ),
               ),
             ],
           ),
-
-          // Bottom Action Bar: "Apply Now" or "Already Applied"
           bottomNavigationBar: SafeArea(
             child: Container(
-              padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 12),
-              decoration: BoxDecoration(
+              padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
+              decoration: const BoxDecoration(
                 color: AppColors.cardWhite,
                 border: Border(top: BorderSide(color: AppColors.lightGray)),
               ),
               child: Row(
                 children: [
-                  // Bookmark Quick Button
                   IconButton(
+                    tooltip: isSaved ? 'Remove Bookmark' : 'Save Project',
                     icon: Icon(
                       isSaved
                           ? Icons.bookmark_rounded
@@ -327,21 +509,17 @@ class StudentProjectDetailsScreen extends StatelessWidget {
                     ),
                     onPressed: () {
                       AppDataService.instance.toggleSaveProject(project);
-                      ScaffoldMessenger.of(context).showSnackBar(
-                        SnackBar(
-                          content: Text(
-                            isSaved
-                                ? 'Removed from saved projects'
-                                : 'Project saved to bookmarks!',
-                          ),
-                          duration: const Duration(seconds: 1),
-                        ),
-                      );
                     },
                   ),
+                  IconButton(
+                    tooltip: 'Message Partner',
+                    icon: const Icon(
+                      Icons.chat_bubble_outline_rounded,
+                      color: AppColors.primaryBlue,
+                    ),
+                    onPressed: () => _messageCompany(context),
+                  ),
                   const SizedBox(width: 8),
-
-                  // Apply Now Button
                   Expanded(
                     child: SizedBox(
                       height: 48,
@@ -349,41 +527,48 @@ class StudentProjectDetailsScreen extends StatelessWidget {
                         style: ElevatedButton.styleFrom(
                           backgroundColor: hasApplied
                               ? AppColors.statusOpen
-                              : AppColors.primaryBlue,
+                              : (isClosed
+                                  ? AppColors.grayText
+                                  : AppColors.primaryBlue),
                           foregroundColor: Colors.white,
                           shape: RoundedRectangleBorder(
-                            borderRadius: BorderRadius.circular(24),
+                            borderRadius: BorderRadius.circular(14),
                           ),
                         ),
-                        onPressed: () {
-                          if (hasApplied) {
-                            ScaffoldMessenger.of(context).showSnackBar(
-                              const SnackBar(
-                                content: Text(
-                                    'You have already applied! Check status in My Applications.'),
-                              ),
-                            );
-                          } else {
-                            Navigator.push(
-                              context,
-                              MaterialPageRoute(
-                                builder: (context) =>
-                                    ApplyProjectScreen(project: project),
-                              ),
-                            );
-                          }
-                        },
+                        onPressed: isClosed && !hasApplied
+                            ? null
+                            : () {
+                                if (hasApplied) {
+                                  ScaffoldMessenger.of(context).showSnackBar(
+                                    const SnackBar(
+                                      content: Text(
+                                        'You have already applied! Check status in My Applications.',
+                                      ),
+                                    ),
+                                  );
+                                } else {
+                                  Navigator.push(
+                                    context,
+                                    MaterialPageRoute(
+                                      builder: (_) =>
+                                          ApplyProjectScreen(project: project),
+                                    ),
+                                  );
+                                }
+                              },
                         child: Row(
                           mainAxisAlignment: MainAxisAlignment.center,
                           children: [
                             Text(
-                              hasApplied ? 'Applied ✓' : 'Apply Now',
+                              hasApplied
+                                  ? 'Applied ✓'
+                                  : (isClosed ? 'Closed' : 'Apply Now'),
                               style: GoogleFonts.poppins(
                                 fontSize: 15,
                                 fontWeight: FontWeight.bold,
                               ),
                             ),
-                            if (!hasApplied) ...[
+                            if (!hasApplied && !isClosed) ...[
                               const SizedBox(width: 6),
                               const Icon(Icons.arrow_forward_rounded, size: 16),
                             ],
@@ -401,9 +586,36 @@ class StudentProjectDetailsScreen extends StatelessWidget {
     );
   }
 
+  Widget _buildSectionCard({required String title, required Widget child}) {
+    return Container(
+      width: double.infinity,
+      padding: const EdgeInsets.all(16),
+      decoration: BoxDecoration(
+        color: AppColors.cardWhite,
+        borderRadius: BorderRadius.circular(16),
+        border: Border.all(color: AppColors.lightGray),
+      ),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Text(
+            title,
+            style: GoogleFonts.poppins(
+              fontSize: 15,
+              fontWeight: FontWeight.w700,
+              color: AppColors.deepNavy,
+            ),
+          ),
+          const SizedBox(height: 8),
+          child,
+        ],
+      ),
+    );
+  }
+
   Widget _buildMetaBadge(IconData icon, String text, Color color) {
     return Container(
-      padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 5),
+      padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 6),
       decoration: BoxDecoration(
         color: color.withValues(alpha: 0.1),
         borderRadius: BorderRadius.circular(8),
@@ -412,13 +624,15 @@ class StudentProjectDetailsScreen extends StatelessWidget {
         mainAxisSize: MainAxisSize.min,
         children: [
           Icon(icon, size: 13, color: color),
-          const SizedBox(width: 4),
-          Text(
-            text,
-            style: GoogleFonts.inter(
-              fontSize: 12,
-              fontWeight: FontWeight.w600,
-              color: color,
+          const SizedBox(width: 5),
+          Flexible(
+            child: Text(
+              text,
+              style: GoogleFonts.inter(
+                fontSize: 12,
+                fontWeight: FontWeight.w600,
+                color: color,
+              ),
             ),
           ),
         ],
@@ -428,12 +642,12 @@ class StudentProjectDetailsScreen extends StatelessWidget {
 
   Widget _buildBulletItem(String text) {
     return Padding(
-      padding: const EdgeInsets.only(bottom: 6.0),
+      padding: const EdgeInsets.only(bottom: 6),
       child: Row(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
           const Padding(
-            padding: EdgeInsets.only(top: 6.0, right: 8.0),
+            padding: EdgeInsets.only(top: 6, right: 8),
             child: Icon(Icons.circle, size: 5, color: AppColors.primaryBlue),
           ),
           Expanded(
@@ -442,7 +656,7 @@ class StudentProjectDetailsScreen extends StatelessWidget {
               style: GoogleFonts.inter(
                 fontSize: 13,
                 color: AppColors.darkText,
-                height: 1.4,
+                height: 1.45,
               ),
             ),
           ),

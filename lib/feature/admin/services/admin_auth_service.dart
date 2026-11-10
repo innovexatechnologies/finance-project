@@ -1,7 +1,24 @@
 import 'dart:math';
 import 'package:flutter/foundation.dart';
+import 'package:supabase_flutter/supabase_flutter.dart';
+import 'package:link_vibe/core/services/app_data_service.dart';
+import 'package:link_vibe/core/services/supabase_helper.dart';
 import 'package:link_vibe/feature/admin/models/admin_user_model.dart';
+import 'package:link_vibe/feature/admin/services/admin_application_monitoring_service.dart';
+import 'package:link_vibe/feature/admin/services/admin_certificate_service.dart';
+import 'package:link_vibe/feature/admin/services/admin_company_service.dart';
+import 'package:link_vibe/feature/admin/services/admin_dashboard_service.dart';
 import 'package:link_vibe/feature/admin/services/admin_hash_util.dart';
+import 'package:link_vibe/feature/admin/services/admin_project_service.dart';
+import 'package:link_vibe/feature/admin/services/admin_settings_service.dart';
+import 'package:link_vibe/feature/admin/services/admin_student_service.dart';
+import 'package:link_vibe/feature/admin/services/admin_verification_service.dart';
+import 'package:link_vibe/feature/company/services/company_applicant_service.dart';
+import 'package:link_vibe/feature/company/services/company_assignment_service.dart';
+import 'package:link_vibe/feature/company/services/company_profile_service.dart';
+import 'package:link_vibe/feature/company/services/company_project_service.dart';
+import 'package:link_vibe/feature/company/services/company_settings_service.dart';
+import 'package:link_vibe/feature/company/services/company_verification_service.dart';
 
 /// Result envelope for administrative authentication attempts.
 class AdminAuthResult {
@@ -45,31 +62,22 @@ class AdminAuthResult {
   }
 }
 
-/// Internal credential record with cryptographic salt and SHA-256 hash
-class _AdminCredentialRecord {
-  final String salt;
-  final String passwordHash;
-  final AdminUserModel userModel;
-
-  const _AdminCredentialRecord({
-    required this.salt,
-    required this.passwordHash,
-    required this.userModel,
-  });
-}
-
-/// Enterprise Admin Authentication Service
-/// Manages trusted setup, brute-force throttling, cryptographic verification, and session state.
+/// Enterprise Admin Authentication Service backed by Supabase Auth & Profiles.
+/// Enforces role verification (`user_type == 'Admin'`), suspension checks,
+/// brute-force throttling, and full administrative audit logging.
 class AdminAuthService {
   static final AdminAuthService _instance = AdminAuthService._internal();
   factory AdminAuthService() => _instance;
 
-  AdminAuthService._internal() {
-    _initTrustedAdmins();
-  }
+  AdminAuthService._internal();
 
-  // Pre-provisioned administrative accounts (Never publicly registrable)
-  final Map<String, _AdminCredentialRecord> _trustedDirectory = {};
+  // Offline/test-only fallback hash for default provisioned admin when Supabase is uninitialized
+  static const String _defaultAdminEmail = 'admin@campusconnect.edu.pk';
+  static const String _defaultSalt = '7f9a8b2c4d1e3f5a';
+  static final String _defaultPassHash = AdminHashUtil.hashPassword(
+    'Admin@CampusConnect2026!',
+    _defaultSalt,
+  );
 
   // Brute-force mitigation tracking
   static const int _maxConsecutiveFailures = 5;
@@ -77,7 +85,6 @@ class AdminAuthService {
   final Map<String, int> _failedAttempts = {};
   final Map<String, DateTime> _lockoutUntil = {};
 
-  // Active Session State
   final ValueNotifier<AdminUserModel?> currentAdminNotifier =
       ValueNotifier<AdminUserModel?>(null);
 
@@ -87,49 +94,6 @@ class AdminAuthService {
   AdminUserModel? get currentAdmin => currentAdminNotifier.value;
   bool get isAuthenticated => currentAdminNotifier.value != null;
 
-  void _initTrustedAdmins() {
-    // 1. Super Administrator (Root Platform Council)
-    const superSalt = '7f9a8b2c4d1e3f5a';
-    final superHash = AdminHashUtil.hashPassword('Admin@CampusConnect2026!', superSalt);
-
-    _trustedDirectory['admin@campusconnect.edu.pk'] = _AdminCredentialRecord(
-      salt: superSalt,
-      passwordHash: superHash,
-      userModel: const AdminUserModel(
-        id: 'adm_root_001',
-        fullName: 'Dr. Tariq Mahmood',
-        email: 'admin@campusconnect.edu.pk',
-        role: 'SUPER_ADMIN',
-        roleDisplayName: 'Executive Super Administrator',
-        department: 'CampusConnect Governance Council',
-        avatarInitial: 'TM',
-        permissions: ['all', 'manage_companies', 'verify_students', 'audit_projects', 'manage_settings'],
-        lastLoginAt: 'Today at 09:15 AM',
-      ),
-    );
-
-    // 2. Operations & Compliance Administrator
-    const opsSalt = '3b8e1d5c9a7f2e4b';
-    final opsHash = AdminHashUtil.hashPassword('CampusOps2026!', opsSalt);
-
-    _trustedDirectory['ops@campusconnect.edu.pk'] = _AdminCredentialRecord(
-      salt: opsSalt,
-      passwordHash: opsHash,
-      userModel: const AdminUserModel(
-        id: 'adm_ops_002',
-        fullName: 'Syeda Fatima Noor',
-        email: 'ops@campusconnect.edu.pk',
-        role: 'OPERATIONS_ADMIN',
-        roleDisplayName: 'Verification & Operations Director',
-        department: 'Corporate & University Partnerships',
-        avatarInitial: 'FN',
-        permissions: ['verify_companies', 'verify_students', 'audit_projects'],
-        lastLoginAt: 'Yesterday at 04:30 PM',
-      ),
-    );
-  }
-
-  /// Check if the target email is currently under brute-force security lockout
   int getRemainingLockoutSeconds(String normalizedEmail) {
     final lockoutTime = _lockoutUntil[normalizedEmail];
     if (lockoutTime == null) return 0;
@@ -138,71 +102,254 @@ class AdminAuthService {
     if (now.isBefore(lockoutTime)) {
       return lockoutTime.difference(now).inSeconds + 1;
     } else {
-      // Lockout expired
       _lockoutUntil.remove(normalizedEmail);
       _failedAttempts[normalizedEmail] = 0;
       return 0;
     }
   }
 
-  /// Secure Login with cryptographic verification and brute-force mitigation
+  /// Secure Login backed by Supabase Auth + `public.profiles` Admin role verification.
   Future<AdminAuthResult> login({
     required String email,
     required String password,
     bool rememberMe = false,
   }) async {
-    // Artificial latency emulating backend TLS round-trip
-    await Future.delayed(const Duration(milliseconds: 650));
-
     final normalizedEmail = email.trim().toLowerCase();
 
-    // 1. Check Brute-Force Lockout
     final remainingSeconds = getRemainingLockoutSeconds(normalizedEmail);
     if (remainingSeconds > 0) {
       return AdminAuthResult.lockedOut(remainingSeconds);
     }
 
-    // 2. Validate against trusted administrative directory
-    final record = _trustedDirectory[normalizedEmail];
-    if (record == null) {
+    final supabase = SupabaseHelper.clientOrNull;
+
+    if (supabase != null) {
+      SupabaseHelper.isInteractiveAuthInProgress = true;
+      try {
+        final response = await supabase.auth.signInWithPassword(
+          email: normalizedEmail,
+          password: password,
+        );
+
+        final user = response.user;
+        if (user == null) {
+          _registerFailedAttempt(normalizedEmail);
+          return AdminAuthResult.failed(
+            'Authentication failed. Please check your credentials.',
+          );
+        }
+
+        // Verify Admin role from profiles table (or metadata fallback if row pending)
+        final profileRow = await supabase
+            .from('profiles')
+            .select()
+            .eq('id', user.id)
+            .maybeSingle();
+
+        final rawRole = (profileRow?['user_type']?.toString() ??
+                user.userMetadata?['user_type']?.toString() ??
+                '')
+            .trim()
+            .toLowerCase();
+
+        if (rawRole != 'admin') {
+          await supabase.auth.signOut();
+          _registerFailedAttempt(normalizedEmail);
+          return AdminAuthResult.failed(
+            'Access denied. This account does not have Administrator privileges.',
+          );
+        }
+
+        final accountStatus =
+            (profileRow?['account_status']?.toString() ?? 'active')
+                .trim()
+                .toLowerCase();
+        if (accountStatus == 'suspended') {
+          await supabase.auth.signOut();
+          return AdminAuthResult.failed(
+            'This administrator account is currently suspended. Contact root governance.',
+          );
+        }
+
+        final fullName = (profileRow?['name']?.toString().trim().isNotEmpty == true)
+            ? profileRow!['name'].toString().trim()
+            : (user.userMetadata?['name']?.toString().trim().isNotEmpty == true
+                ? user.userMetadata!['name'].toString().trim()
+                : 'Executive Administrator');
+        final department =
+            (profileRow?['university']?.toString().trim().isNotEmpty == true)
+                ? profileRow!['university'].toString().trim()
+                : 'CampusConnect Governance Council';
+
+        final authenticatedAdmin = AdminUserModel(
+          id: user.id,
+          fullName: fullName,
+          email: user.email ?? normalizedEmail,
+          role: 'SUPER_ADMIN',
+          roleDisplayName: 'Executive Super Administrator',
+          department: department,
+          avatarInitial: SupabaseHelper.initialsFor(fullName, fallback: 'EA'),
+          permissions: const [
+            'all',
+            'manage_companies',
+            'verify_students',
+            'audit_projects',
+            'manage_settings',
+          ],
+          lastLoginAt: 'Just now',
+          sessionToken: response.session?.accessToken,
+          isActive: true,
+        );
+
+        _failedAttempts.remove(normalizedEmail);
+        _lockoutUntil.remove(normalizedEmail);
+        _rememberMeEnabled = rememberMe;
+        currentAdminNotifier.value = authenticatedAdmin;
+
+        await AppDataService.instance.saveAuthSession(
+          userId: user.id,
+          role: 'Admin',
+          email: authenticatedAdmin.email,
+          name: authenticatedAdmin.fullName,
+        );
+
+        // Log sign-in event in immutable admin_audit_logs
+        try {
+          await supabase.from('admin_audit_logs').insert({
+            'admin_email': authenticatedAdmin.email,
+            'action': 'ADMIN_LOGIN',
+            'target': authenticatedAdmin.email,
+            'details': 'Administrative session authenticated via Supabase Auth.',
+          });
+        } catch (e) {
+          debugPrint('AdminAuthService audit insert warning: $e');
+        }
+
+        await AdminDashboardService().loadAllAdminData();
+
+        return AdminAuthResult.successful(authenticatedAdmin);
+      } on AuthException catch (e) {
+        final failures = _registerFailedAttempt(normalizedEmail);
+        final remainingAttempts = _maxConsecutiveFailures - failures;
+        if (remainingAttempts <= 0) {
+          return AdminAuthResult.lockedOut(60);
+        }
+        return AdminAuthResult.failed(
+          '${SupabaseHelper.friendlyError(e)} ($remainingAttempts attempt${remainingAttempts == 1 ? '' : 's'} remaining)',
+        );
+      } catch (e) {
+        debugPrint('AdminAuthService login error: $e');
+        return AdminAuthResult.failed(
+          SupabaseHelper.friendlyError(e),
+        );
+      } finally {
+        SupabaseHelper.isInteractiveAuthInProgress = false;
+      }
+    }
+
+    // Offline unit-test fallback only when Supabase client is uninitialized
+    if (normalizedEmail != _defaultAdminEmail) {
       _registerFailedAttempt(normalizedEmail);
       return AdminAuthResult.failed(
         'Invalid administrative credentials. Access restricted to authorized personnel.',
       );
     }
 
-    // 3. Hash input password with pre-stored salt and compare
-    final computedHash = AdminHashUtil.hashPassword(password, record.salt);
-    final isPasswordValid = AdminHashUtil.secureCompare(computedHash, record.passwordHash);
-
-    if (!isPasswordValid) {
+    final computedHash = AdminHashUtil.hashPassword(password, _defaultSalt);
+    if (!AdminHashUtil.secureCompare(computedHash, _defaultPassHash)) {
       final failures = _registerFailedAttempt(normalizedEmail);
       final remainingAttempts = _maxConsecutiveFailures - failures;
-
       if (remainingAttempts <= 0) {
         return AdminAuthResult.lockedOut(60);
       }
-
       return AdminAuthResult.failed(
         'Invalid administrator password. $remainingAttempts attempt${remainingAttempts == 1 ? '' : 's'} remaining before security lockout.',
       );
     }
 
-    // 4. Successful Authentication: Reset failures, generate secure session token
     _failedAttempts.remove(normalizedEmail);
     _lockoutUntil.remove(normalizedEmail);
     _rememberMeEnabled = rememberMe;
 
     final sessionNonce = Random().nextInt(9999999).toString().padLeft(7, '0');
-    final sessionToken = 'cc_adm_sess_${DateTime.now().millisecondsSinceEpoch}_$sessionNonce';
-
-    final authenticatedAdmin = record.userModel.copyWith(
-      sessionToken: sessionToken,
+    final offlineAdmin = AdminUserModel(
+      id: 'a0000000-0000-0000-0000-000000000001',
+      fullName: 'Executive Administrator',
+      email: _defaultAdminEmail,
+      role: 'SUPER_ADMIN',
+      roleDisplayName: 'Executive Super Administrator',
+      department: 'CampusConnect Governance Council',
+      avatarInitial: 'EA',
+      permissions: const [
+        'all',
+        'manage_companies',
+        'verify_students',
+        'audit_projects',
+        'manage_settings',
+      ],
       lastLoginAt: 'Just now',
+      sessionToken: 'cc_adm_sess_${DateTime.now().millisecondsSinceEpoch}_$sessionNonce',
+      isActive: true,
     );
 
-    currentAdminNotifier.value = authenticatedAdmin;
-    return AdminAuthResult.successful(authenticatedAdmin);
+    currentAdminNotifier.value = offlineAdmin;
+    return AdminAuthResult.successful(offlineAdmin);
+  }
+
+  /// Restores active admin session cleanly (e.g. from SplashScreen on cold start).
+  Future<AdminUserModel?> restoreFromCurrentUser() async {
+    final supabase = SupabaseHelper.clientOrNull;
+    final user = supabase?.auth.currentUser;
+    if (supabase == null || user == null) return null;
+
+    try {
+      final profileRow = await supabase
+          .from('profiles')
+          .select()
+          .eq('id', user.id)
+          .maybeSingle();
+
+      final rawRole = (profileRow?['user_type']?.toString() ??
+              user.userMetadata?['user_type']?.toString() ??
+              '')
+          .trim()
+          .toLowerCase();
+      if (rawRole != 'admin') return null;
+
+      final fullName = (profileRow?['name']?.toString().trim().isNotEmpty == true)
+          ? profileRow!['name'].toString().trim()
+          : 'Executive Administrator';
+      final department =
+          (profileRow?['university']?.toString().trim().isNotEmpty == true)
+              ? profileRow!['university'].toString().trim()
+              : 'CampusConnect Governance Council';
+
+      final admin = AdminUserModel(
+        id: user.id,
+        fullName: fullName,
+        email: user.email ?? '',
+        role: 'SUPER_ADMIN',
+        roleDisplayName: 'Executive Super Administrator',
+        department: department,
+        avatarInitial: SupabaseHelper.initialsFor(fullName, fallback: 'EA'),
+        permissions: const [
+          'all',
+          'manage_companies',
+          'verify_students',
+          'audit_projects',
+          'manage_settings',
+        ],
+        lastLoginAt: 'Active Session',
+        isActive: true,
+      );
+
+      currentAdminNotifier.value = admin;
+      await AdminDashboardService().loadAllAdminData();
+      return admin;
+    } catch (e) {
+      debugPrint('AdminAuthService restoreFromCurrentUser error: $e');
+      return null;
+    }
   }
 
   int _registerFailedAttempt(String email) {
@@ -215,18 +362,57 @@ class AdminAuthService {
     return current;
   }
 
-  /// Forgot Password administrative dispatch
+  /// Dispatches real password reset email via Supabase Auth.
   Future<bool> requestPasswordReset(String email) async {
-    await Future.delayed(const Duration(milliseconds: 500));
     final normalized = email.trim().toLowerCase();
-    return _trustedDirectory.containsKey(normalized);
+    if (normalized.isEmpty || !normalized.contains('@')) return false;
+
+    final supabase = SupabaseHelper.clientOrNull;
+    if (supabase == null) {
+      return normalized == _defaultAdminEmail;
+    }
+
+    try {
+      await supabase.auth.resetPasswordForEmail(
+        normalized,
+        redirectTo: SupabaseHelper.emailRedirectUrl,
+      );
+      return true;
+    } catch (e) {
+      debugPrint('AdminAuthService requestPasswordReset error: $e');
+      return false;
+    }
   }
 
-  /// Secure Session Invalidation
+  /// Invalidates Supabase auth session and resets all Admin/Company/Shared caches.
   Future<void> logout() async {
-    await Future.delayed(const Duration(milliseconds: 250));
+    final supabase = SupabaseHelper.clientOrNull;
+    try {
+      await supabase?.auth.signOut();
+    } catch (e) {
+      debugPrint('AdminAuthService signOut error: $e');
+    }
+
+    await AppDataService.instance.clearAuthSession();
     currentAdminNotifier.value = null;
     _rememberMeEnabled = false;
+
+    // Reset all Admin caches
+    AdminCompanyService().reset();
+    AdminVerificationService().reset();
+    AdminStudentService().reset();
+    AdminProjectService().reset();
+    AdminApplicationMonitoringService().reset();
+    AdminCertificateService().reset();
+    AdminSettingsService().reset();
+    AdminDashboardService().reset();
+
+    // Reset Company singleton caches too
+    CompanyProfileService().reset();
+    CompanyVerificationService().reset();
+    CompanyProjectService().reset();
+    CompanyApplicantService().reset();
+    CompanyAssignmentService().reset();
+    CompanySettingsService().reset();
   }
 }
-

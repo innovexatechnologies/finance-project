@@ -12,19 +12,24 @@ class PrivacySettingsScreen extends StatelessWidget {
       backgroundColor: AppColors.background,
       appBar: AppBar(
         title: const Text('Privacy & Visibility'),
-        leading: IconButton(
-          icon: const Icon(Icons.arrow_back_ios_new_rounded, size: 20),
-          onPressed: () => Navigator.pop(context),
-        ),
+        leading: Navigator.canPop(context)
+            ? IconButton(
+                icon: const Icon(Icons.arrow_back_ios_new_rounded, size: 20),
+                onPressed: () => Navigator.pop(context),
+              )
+            : null,
       ),
       body: ListenableBuilder(
         listenable: AppDataService.instance,
         builder: (context, _) {
           final privacy = AppDataService.instance.getPrivacySettings();
 
-          return ListView(
-            padding: const EdgeInsets.all(20),
-            children: [
+          return Center(
+            child: ConstrainedBox(
+              constraints: const BoxConstraints(maxWidth: 780),
+              child: ListView(
+                padding: const EdgeInsets.all(20),
+                children: [
               // Header card
               Container(
                 padding: const EdgeInsets.all(16),
@@ -136,7 +141,9 @@ class PrivacySettingsScreen extends StatelessWidget {
                 keyName: 'allowCompanyMessages',
                 value: privacy['allowCompanyMessages'] ?? true,
               ),
-            ],
+                ],
+              ),
+            ),
           );
         },
       ),
@@ -151,60 +158,67 @@ class PrivacySettingsScreen extends StatelessWidget {
     required String keyName,
     required bool value,
   }) {
-    return Container(
-      margin: const EdgeInsets.only(bottom: 10),
-      decoration: BoxDecoration(
+    return Padding(
+      padding: const EdgeInsets.only(bottom: 10),
+      child: Material(
         color: AppColors.cardWhite,
-        borderRadius: BorderRadius.circular(14),
-        border: Border.all(color: AppColors.lightGray),
-      ),
-      child: SwitchListTile(
-        contentPadding: const EdgeInsets.symmetric(horizontal: 16, vertical: 4),
-        secondary: Container(
-          padding: const EdgeInsets.all(8),
-          decoration: BoxDecoration(
-            color: value
-                ? AppColors.teal.withValues(alpha: 0.1)
-                : AppColors.lightGray.withValues(alpha: 0.5),
-            shape: BoxShape.circle,
-          ),
-          child: Icon(
-            icon,
-            color: value ? AppColors.teal : AppColors.grayText,
-            size: 20,
-          ),
+        shape: RoundedRectangleBorder(
+          borderRadius: BorderRadius.circular(14),
+          side: const BorderSide(color: AppColors.lightGray),
         ),
-        title: Text(
-          title,
-          style: GoogleFonts.poppins(
-            fontSize: 14,
-            fontWeight: FontWeight.w600,
-            color: AppColors.deepNavy,
+        clipBehavior: Clip.antiAlias,
+        child: SwitchListTile(
+          contentPadding:
+              const EdgeInsets.symmetric(horizontal: 16, vertical: 4),
+          secondary: Container(
+            padding: const EdgeInsets.all(8),
+            decoration: BoxDecoration(
+              color: value
+                  ? AppColors.teal.withValues(alpha: 0.1)
+                  : AppColors.lightGray.withValues(alpha: 0.5),
+              shape: BoxShape.circle,
+            ),
+            child: Icon(
+              icon,
+              color: value ? AppColors.teal : AppColors.grayText,
+              size: 20,
+            ),
           ),
-        ),
-        subtitle: Text(
-          subtitle,
-          style: GoogleFonts.inter(
-            fontSize: 11,
-            color: AppColors.grayText,
+          title: Text(
+            title,
+            style: GoogleFonts.poppins(
+              fontSize: 14,
+              fontWeight: FontWeight.w600,
+              color: AppColors.deepNavy,
+            ),
           ),
+          subtitle: Text(
+            subtitle,
+            style: GoogleFonts.inter(
+              fontSize: 11,
+              color: AppColors.grayText,
+            ),
+          ),
+          activeTrackColor: AppColors.teal.withValues(alpha: 0.5),
+          activeThumbColor: AppColors.teal,
+          value: value,
+          onChanged: (newValue) async {
+            await AppDataService.instance
+                .updatePrivacySetting(keyName, newValue);
+            if (context.mounted) {
+              ScaffoldMessenger.of(context).hideCurrentSnackBar();
+              ScaffoldMessenger.of(context).showSnackBar(
+                SnackBar(
+                  content:
+                      Text('$title ${newValue ? "allowed" : "restricted"}'),
+                  duration: const Duration(milliseconds: 1200),
+                  backgroundColor:
+                      newValue ? AppColors.teal : AppColors.deepNavy,
+                ),
+              );
+            }
+          },
         ),
-        activeTrackColor: AppColors.teal.withValues(alpha: 0.5),
-        activeThumbColor: AppColors.teal,
-        value: value,
-        onChanged: (newValue) async {
-          await AppDataService.instance.updatePrivacySetting(keyName, newValue);
-          if (context.mounted) {
-            ScaffoldMessenger.of(context).hideCurrentSnackBar();
-            ScaffoldMessenger.of(context).showSnackBar(
-              SnackBar(
-                content: Text('$title ${newValue ? "allowed" : "restricted"}'),
-                duration: const Duration(milliseconds: 1200),
-                backgroundColor: newValue ? AppColors.teal : AppColors.deepNavy,
-              ),
-            );
-          }
-        },
       ),
     );
   }

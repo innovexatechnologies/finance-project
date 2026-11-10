@@ -1,10 +1,14 @@
 import 'dart:async';
+
 import 'package:flutter/material.dart';
 import 'package:google_fonts/google_fonts.dart';
 import 'package:link_vibe/core/constants/app_colors.dart';
 import 'package:link_vibe/core/services/app_data_service.dart';
+import 'package:link_vibe/core/services/supabase_helper.dart';
 import 'package:link_vibe/feature/admin/presentation/screens/admin_dashboard_screen.dart';
+import 'package:link_vibe/feature/admin/services/admin_auth_service.dart';
 import 'package:link_vibe/feature/company/presentation/screens/company_dashboard.dart';
+import 'package:link_vibe/feature/company/services/company_profile_service.dart';
 import 'package:link_vibe/feature/onboarding/presentation/screens/onboarding_screen.dart';
 import 'package:link_vibe/feature/student/presentation/screens/student_main_nav.dart';
 
@@ -21,28 +25,28 @@ class _SplashScreenState extends State<SplashScreen>
   late Animation<double> _fadeAnimation;
   late Animation<double> _scaleAnimation;
   Timer? _autoLoginTimer;
+  bool _isBootstrapping = false;
 
   @override
   void initState() {
     super.initState();
     _animController = AnimationController(
       vsync: this,
-      duration: const Duration(milliseconds: 1000),
+      duration: const Duration(milliseconds: 950),
     );
     _fadeAnimation = CurvedAnimation(
       parent: _animController,
       curve: Curves.easeIn,
     );
-    _scaleAnimation = Tween<double>(begin: 0.85, end: 1.0).animate(
+    _scaleAnimation = Tween<double>(begin: 0.88, end: 1.0).animate(
       CurvedAnimation(parent: _animController, curve: Curves.easeOutBack),
     );
     _animController.forward();
 
-    // Auto-login check: If user has an active session, auto navigate directly to main screen
-    _autoLoginTimer = Timer(const Duration(milliseconds: 1500), () {
+    _autoLoginTimer = Timer(const Duration(milliseconds: 1400), () {
       if (!mounted) return;
       if (AppDataService.instance.isLoggedIn) {
-        _navigateToMain();
+        _bootstrapAndNavigate();
       }
     });
   }
@@ -54,34 +58,70 @@ class _SplashScreenState extends State<SplashScreen>
     super.dispose();
   }
 
+  Future<void> _bootstrapAndNavigate() async {
+    if (_isBootstrapping) return;
+    setState(() => _isBootstrapping = true);
+
+    try {
+      final supabase = SupabaseHelper.clientOrNull;
+      if (supabase != null && supabase.auth.currentUser != null) {
+        await AppDataService.instance.syncFromSupabase(forceRefresh: true);
+        final role = AppDataService.instance.userRole.toLowerCase();
+
+        if (role == 'admin') {
+          final restoredAdmin = await AdminAuthService()
+              .restoreFromCurrentUser();
+          if (!mounted) return;
+          if (restoredAdmin == null) {
+            await AppDataService.instance.clearAuthSession();
+            if (!mounted) return;
+            Navigator.pushReplacement(
+              context,
+              MaterialPageRoute(builder: (_) => const OnboardingScreen()),
+            );
+            return;
+          }
+        } else if (role == 'company') {
+          await CompanyProfileService.loadAllCompanyPanelData();
+        }
+      }
+    } catch (_) {
+      // Proceed cleanly with hydrated session state
+    }
+
+    if (!mounted) return;
+    _navigateToMain();
+  }
+
   void _navigateToMain() {
     if (!mounted) return;
-    final role = AppDataService.instance.userRole;
-    if (role == 'Admin') {
+    final role = AppDataService.instance.userRole.toLowerCase();
+    if (role == 'admin') {
       Navigator.pushReplacement(
         context,
-        MaterialPageRoute(builder: (context) => const AdminDashboardScreen()),
+        MaterialPageRoute(builder: (_) => const AdminDashboardScreen()),
       );
-    } else if (role == 'Company') {
+    } else if (role == 'company') {
       Navigator.pushReplacement(
         context,
-        MaterialPageRoute(builder: (context) => const CompanyDashboardScreen()),
+        MaterialPageRoute(builder: (_) => const CompanyDashboardScreen()),
       );
     } else {
       Navigator.pushReplacement(
         context,
-        MaterialPageRoute(builder: (context) => const StudentMainNav()),
+        MaterialPageRoute(builder: (_) => const StudentMainNav()),
       );
     }
   }
 
   void _onGetStartedPressed() {
+    _autoLoginTimer?.cancel();
     if (AppDataService.instance.isLoggedIn) {
-      _navigateToMain();
+      _bootstrapAndNavigate();
     } else {
       Navigator.pushReplacement(
         context,
-        MaterialPageRoute(builder: (context) => const OnboardingScreen()),
+        MaterialPageRoute(builder: (_) => const OnboardingScreen()),
       );
     }
   }
@@ -94,13 +134,9 @@ class _SplashScreenState extends State<SplashScreen>
         height: double.infinity,
         decoration: const BoxDecoration(
           gradient: LinearGradient(
-            begin: Alignment.topCenter,
-            end: Alignment.bottomCenter,
-            colors: [
-              Color(0xFF071E3D),
-              AppColors.deepNavy,
-              Color(0xFF0F3A70),
-            ],
+            begin: Alignment.topLeft,
+            end: Alignment.bottomRight,
+            colors: [Color(0xFF061936), AppColors.deepNavy, Color(0xFF123E78)],
           ),
         ),
         child: SafeArea(
@@ -118,8 +154,11 @@ class _SplashScreenState extends State<SplashScreen>
                   ),
                   child: ConstrainedBox(
                     constraints: BoxConstraints(
-                      maxWidth: 480,
-                      minHeight: (constraints.maxHeight - 40).clamp(0.0, double.infinity),
+                      maxWidth: 460,
+                      minHeight: (constraints.maxHeight - 40).clamp(
+                        0.0,
+                        double.infinity,
+                      ),
                     ),
                     child: IntrinsicHeight(
                       child: FadeTransition(
@@ -127,31 +166,40 @@ class _SplashScreenState extends State<SplashScreen>
                         child: Column(
                           mainAxisAlignment: MainAxisAlignment.spaceBetween,
                           children: [
-                            // Top Spacing anchor
                             const SizedBox(height: 8),
 
-                            // Brand Icon & Title
+                            // Brand Emblem & Wordmark
                             ScaleTransition(
                               scale: _scaleAnimation,
                               child: Column(
                                 mainAxisSize: MainAxisSize.min,
                                 children: [
-                                  // Graduation Cap with Star Icon Container
                                   Container(
-                                    width: isSmall ? 68 : 80,
-                                    height: isSmall ? 68 : 80,
+                                    width: isSmall ? 72 : 86,
+                                    height: isSmall ? 72 : 86,
                                     decoration: BoxDecoration(
                                       shape: BoxShape.circle,
-                                      color: Colors.white.withValues(alpha: 0.12),
+                                      gradient: LinearGradient(
+                                        begin: Alignment.topLeft,
+                                        end: Alignment.bottomRight,
+                                        colors: [
+                                          Colors.white.withValues(alpha: 0.16),
+                                          AppColors.teal.withValues(alpha: 0.2),
+                                        ],
+                                      ),
                                       border: Border.all(
-                                        color: Colors.white.withValues(alpha: 0.25),
+                                        color: Colors.white.withValues(
+                                          alpha: 0.28,
+                                        ),
                                         width: 1.5,
                                       ),
                                       boxShadow: [
                                         BoxShadow(
-                                          color: AppColors.teal.withValues(alpha: 0.3),
-                                          blurRadius: 20,
-                                          spreadRadius: 3,
+                                          color: AppColors.teal.withValues(
+                                            alpha: 0.35,
+                                          ),
+                                          blurRadius: 24,
+                                          spreadRadius: 2,
                                         ),
                                       ],
                                     ),
@@ -160,17 +208,17 @@ class _SplashScreenState extends State<SplashScreen>
                                       children: [
                                         Icon(
                                           Icons.school_rounded,
-                                          size: isSmall ? 36 : 42,
+                                          size: isSmall ? 36 : 44,
                                           color: Colors.white,
                                         ),
                                         Positioned(
-                                          top: isSmall ? 14 : 18,
-                                          right: isSmall ? 14 : 18,
+                                          top: isSmall ? 15 : 19,
+                                          right: isSmall ? 15 : 19,
                                           child: Container(
-                                            width: 8,
-                                            height: 8,
+                                            width: 9,
+                                            height: 9,
                                             decoration: const BoxDecoration(
-                                              color: Color(0xFFFBBF24),
+                                              color: AppColors.teal,
                                               shape: BoxShape.circle,
                                             ),
                                           ),
@@ -178,43 +226,57 @@ class _SplashScreenState extends State<SplashScreen>
                                       ],
                                     ),
                                   ),
-                                  SizedBox(height: isSmall ? 12 : 16),
-
-                                  // Brand Name
+                                  SizedBox(height: isSmall ? 14 : 18),
                                   RichText(
+                                    textAlign: TextAlign.center,
                                     text: TextSpan(
                                       children: [
                                         TextSpan(
                                           text: 'Campus',
                                           style: GoogleFonts.poppins(
-                                            fontSize: isSmall ? 26 : 30,
-                                            fontWeight: FontWeight.bold,
+                                            fontSize: isSmall ? 26 : 31,
+                                            fontWeight: FontWeight.w700,
                                             color: Colors.white,
-                                            letterSpacing: 0.5,
+                                            letterSpacing: -0.3,
                                           ),
                                         ),
                                         TextSpan(
                                           text: 'Connect',
                                           style: GoogleFonts.poppins(
-                                            fontSize: isSmall ? 26 : 30,
-                                            fontWeight: FontWeight.bold,
+                                            fontSize: isSmall ? 26 : 31,
+                                            fontWeight: FontWeight.w700,
                                             color: AppColors.teal,
-                                            letterSpacing: 0.5,
+                                            letterSpacing: -0.3,
                                           ),
                                         ),
                                       ],
                                     ),
                                   ),
-                                  const SizedBox(height: 4),
-
-                                  // Tagline
-                                  Text(
-                                    'Learn • Work • Grow',
-                                    style: GoogleFonts.inter(
-                                      fontSize: 13,
-                                      fontWeight: FontWeight.w500,
-                                      color: AppColors.lightAqua.withValues(alpha: 0.85),
-                                      letterSpacing: 2.0,
+                                  const SizedBox(height: 6),
+                                  Container(
+                                    padding: const EdgeInsets.symmetric(
+                                      horizontal: 12,
+                                      vertical: 4,
+                                    ),
+                                    decoration: BoxDecoration(
+                                      color: Colors.white.withValues(
+                                        alpha: 0.08,
+                                      ),
+                                      borderRadius: BorderRadius.circular(20),
+                                      border: Border.all(
+                                        color: Colors.white.withValues(
+                                          alpha: 0.12,
+                                        ),
+                                      ),
+                                    ),
+                                    child: Text(
+                                      'LEARN • COLLABORATE • VERIFY',
+                                      style: GoogleFonts.inter(
+                                        fontSize: 10.5,
+                                        fontWeight: FontWeight.w700,
+                                        color: AppColors.lightAqua,
+                                        letterSpacing: 1.8,
+                                      ),
                                     ),
                                   ),
                                 ],
@@ -223,45 +285,55 @@ class _SplashScreenState extends State<SplashScreen>
 
                             SizedBox(height: verticalSpacing),
 
-                            // Campus Graphic & Heading Banner
+                            // Ecosystem Value Card
                             Container(
                               width: double.infinity,
                               padding: EdgeInsets.symmetric(
                                 horizontal: 20,
-                                vertical: isSmall ? 14 : 18,
+                                vertical: isSmall ? 16 : 22,
                               ),
                               decoration: BoxDecoration(
                                 color: Colors.white.withValues(alpha: 0.08),
-                                borderRadius: BorderRadius.circular(18),
+                                borderRadius: BorderRadius.circular(20),
                                 border: Border.all(
-                                  color: Colors.white.withValues(alpha: 0.12),
+                                  color: Colors.white.withValues(alpha: 0.14),
                                 ),
                               ),
                               child: Column(
                                 mainAxisSize: MainAxisSize.min,
                                 children: [
-                                  Icon(
-                                    Icons.apartment_rounded,
-                                    size: isSmall ? 38 : 46,
-                                    color: AppColors.teal,
+                                  Container(
+                                    padding: const EdgeInsets.all(10),
+                                    decoration: BoxDecoration(
+                                      color: AppColors.teal.withValues(
+                                        alpha: 0.18,
+                                      ),
+                                      borderRadius: BorderRadius.circular(14),
+                                    ),
+                                    child: Icon(
+                                      Icons.hub_rounded,
+                                      size: isSmall ? 30 : 36,
+                                      color: AppColors.lightAqua,
+                                    ),
                                   ),
-                                  const SizedBox(height: 10),
+                                  const SizedBox(height: 12),
                                   Text(
-                                    'Build Your Future',
+                                    'Student–Corporate Innovation Bridge',
                                     textAlign: TextAlign.center,
                                     style: GoogleFonts.poppins(
                                       fontSize: isSmall ? 16 : 18,
-                                      fontWeight: FontWeight.bold,
+                                      fontWeight: FontWeight.w700,
                                       color: Colors.white,
                                     ),
                                   ),
-                                  const SizedBox(height: 4),
+                                  const SizedBox(height: 6),
                                   Text(
-                                    'With Real-World Experience',
+                                    'Verified corporate projects, structured mentorship, and cryptographically signed academic certificates.',
                                     textAlign: TextAlign.center,
                                     style: GoogleFonts.inter(
-                                      fontSize: 12,
+                                      fontSize: 12.5,
                                       color: Colors.white70,
+                                      height: 1.45,
                                     ),
                                   ),
                                 ],
@@ -270,39 +342,51 @@ class _SplashScreenState extends State<SplashScreen>
 
                             SizedBox(height: verticalSpacing),
 
-                            // "Get Started ->" Button matching Image 1
+                            // Primary Action CTA
                             SizedBox(
                               width: double.infinity,
-                              height: 50,
+                              height: 52,
                               child: ElevatedButton(
                                 style: ElevatedButton.styleFrom(
                                   backgroundColor: Colors.white,
                                   foregroundColor: AppColors.deepNavy,
                                   elevation: 4,
                                   shape: RoundedRectangleBorder(
-                                    borderRadius: BorderRadius.circular(25),
+                                    borderRadius: BorderRadius.circular(16),
                                   ),
                                 ),
-                                onPressed: _onGetStartedPressed,
-                                child: Row(
-                                  mainAxisAlignment: MainAxisAlignment.center,
-                                  children: [
-                                    Text(
-                                      'Get Started',
-                                      style: GoogleFonts.poppins(
-                                        fontSize: 15,
-                                        fontWeight: FontWeight.bold,
-                                        color: AppColors.deepNavy,
+                                onPressed: _isBootstrapping
+                                    ? null
+                                    : _onGetStartedPressed,
+                                child: _isBootstrapping
+                                    ? const SizedBox(
+                                        width: 22,
+                                        height: 22,
+                                        child: CircularProgressIndicator(
+                                          strokeWidth: 2.2,
+                                          color: AppColors.deepNavy,
+                                        ),
+                                      )
+                                    : Row(
+                                        mainAxisAlignment:
+                                            MainAxisAlignment.center,
+                                        children: [
+                                          Text(
+                                            'Get Started',
+                                            style: GoogleFonts.poppins(
+                                              fontSize: 15,
+                                              fontWeight: FontWeight.w700,
+                                              color: AppColors.deepNavy,
+                                            ),
+                                          ),
+                                          const SizedBox(width: 8),
+                                          const Icon(
+                                            Icons.arrow_forward_rounded,
+                                            size: 18,
+                                            color: AppColors.deepNavy,
+                                          ),
+                                        ],
                                       ),
-                                    ),
-                                    const SizedBox(width: 8),
-                                    const Icon(
-                                      Icons.arrow_forward_rounded,
-                                      size: 18,
-                                      color: AppColors.deepNavy,
-                                    ),
-                                  ],
-                                ),
                               ),
                             ),
 

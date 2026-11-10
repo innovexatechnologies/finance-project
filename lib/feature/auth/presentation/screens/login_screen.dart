@@ -3,27 +3,39 @@ import 'package:google_fonts/google_fonts.dart';
 import 'package:supabase_flutter/supabase_flutter.dart';
 import 'package:link_vibe/core/constants/app_colors.dart';
 import 'package:link_vibe/core/services/app_data_service.dart';
-import 'package:link_vibe/feature/admin/presentation/screens/admin_dashboard_screen.dart';
+import 'package:link_vibe/core/services/supabase_helper.dart';
 import 'package:link_vibe/feature/admin/presentation/screens/admin_login_screen.dart';
-import 'package:link_vibe/feature/admin/services/admin_auth_service.dart';
 import 'package:link_vibe/feature/company/presentation/screens/company_dashboard.dart';
+import 'package:link_vibe/feature/company/services/company_profile_service.dart';
 import 'package:link_vibe/feature/student/presentation/screens/student_main_nav.dart';
 import 'signup_screen.dart';
 
 class LoginScreen extends StatefulWidget {
-  const LoginScreen({super.key});
+  final String initialRole;
+
+  const LoginScreen({super.key, this.initialRole = 'Student'});
 
   @override
   State<LoginScreen> createState() => _LoginScreenState();
 }
 
 class _LoginScreenState extends State<LoginScreen> {
+  final _formKey = GlobalKey<FormState>();
   final _emailController = TextEditingController();
   final _passwordController = TextEditingController();
 
-  String _selectedRole = 'Student';
+  late String _selectedRole;
   bool _isLoading = false;
   bool _obscurePassword = true;
+  bool _needsEmailConfirmation = false;
+  bool _isResendingConfirmation = false;
+  String? _errorBanner;
+
+  @override
+  void initState() {
+    super.initState();
+    _selectedRole = widget.initialRole == 'Company' ? 'Company' : 'Student';
+  }
 
   @override
   void dispose() {
@@ -32,207 +44,407 @@ class _LoginScreenState extends State<LoginScreen> {
     super.dispose();
   }
 
-  Future<void> _handleLogin() async {
+  Future<void> _resendVerificationEmail() async {
     final email = _emailController.text.trim();
-    final password = _passwordController.text.trim();
+    if (email.isEmpty || _isResendingConfirmation) return;
+    final supabase = SupabaseHelper.clientOrNull;
+    if (supabase == null) return;
 
-    if (email.isEmpty || password.isEmpty) {
-      ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(content: Text('Please enter your email and password')),
+    setState(() => _isResendingConfirmation = true);
+    try {
+      await supabase.auth.resend(
+        type: OtpType.signup,
+        email: email,
+        emailRedirectTo: SupabaseHelper.emailRedirectUrl,
       );
+      if (!mounted) return;
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(
+          content: Text('Verification link resent to $email. Please check your inbox.'),
+          backgroundColor: AppColors.statusOpen,
+        ),
+      );
+    } catch (e) {
+      if (!mounted) return;
+      setState(() => _errorBanner = SupabaseHelper.friendlyError(e));
+    } finally {
+      if (mounted) {
+        setState(() => _isResendingConfirmation = false);
+      }
+    }
+  }
+
+  Future<void> _handleLogin() async {
+    setState(() {
+      _errorBanner = null;
+      _needsEmailConfirmation = false;
+    });
+
+    if (!_formKey.currentState!.validate()) {
       return;
     }
 
-    setState(() {
-      _isLoading = true;
-    });
+    final email = _emailController.text.trim();
+    final password = _passwordController.text.trim();
+
+    setState(() => _isLoading = true);
+    SupabaseHelper.isInteractiveAuthInProgress = true;
 
     try {
-      // 0. Check default Admin credentials (pre-set admin account)
-      if (_selectedRole == 'Admin' ||
-          email.toLowerCase() == 'admin@campusconnect.edu.pk' ||
-          email.toLowerCase() == 'admin@linkvibe.com') {
-        final adminResult = await AdminAuthService().login(
+      // 1. Real Supabase Cloud Authentication (when initialized)
+      final supabase = SupabaseHelper.clientOrNull;
+      if (supabase != null) {
+        final authResponse = await supabase.auth.signInWithPassword(
           email: email,
           password: password,
         );
-        if (adminResult.success && adminResult.admin != null) {
-          await AppDataService.instance.saveAuthSession(
-            role: 'Admin',
-            email: email,
-            name: adminResult.admin!.fullName,
-            userId: adminResult.admin!.id,
-          );
+        final user = authResponse.user;
+        if (user == null) {
+          throw const AuthException('Unable to verify account credentials.');
+        }
+
+        final profileRow = await supabase
+            .from('profiles')
+            .select()
+            .eq('id', user.id)
+            .maybeSingle();
+
+        final accountStatus =
+            (profileRow?['account_status']?.toString() ?? 'active')
+                .trim()
+                .toLowerCase();
+
+        if (accountStatus == 'suspended') {
+          await supabase.auth.signOut();
           if (!mounted) return;
-          ScaffoldMessenger.of(context).showSnackBar(
-            SnackBar(
-              content: Text(
-                'Welcome, Administrator ${adminResult.admin!.fullName}!',
-              ),
-              backgroundColor: Colors.green,
-            ),
-          );
-          Navigator.pushReplacement(
-            context,
-            MaterialPageRoute(
-              builder: (context) => const AdminDashboardScreen(),
-            ),
-          );
-          return;
-        } else if (_selectedRole == 'Admin') {
-          if (!mounted) return;
-          ScaffoldMessenger.of(context).showSnackBar(
-            SnackBar(
-              content: Text(
-                adminResult.message ?? 'Invalid administrator credentials.',
-              ),
-              backgroundColor: Colors.red,
-            ),
-          );
+          setState(() {
+            _errorBanner =
+                'Your account has been suspended by an administrator. Contact platform support for assistance.';
+          });
           return;
         }
+
+        final actualRole = await SupabaseHelper.resolveAccountRole(
+          supabase,
+          user,
+          profileRow: profileRow,
+        );
+
+        // Enforce strict separation: Admin must log in via Governance Admin Console,
+        // and Student/Company can only enter their matching portal.
+        if (actualRole == 'Admin') {
+          await supabase.auth.signOut();
+          if (!mounted) return;
+          setState(() {
+            _errorBanner =
+                'Admin accounts must sign in through Governance Admin Console below.';
+          });
+          return;
+        }
+
+        if (actualRole != _selectedRole) {
+          await supabase.auth.signOut();
+          if (!mounted) return;
+          setState(() {
+            _errorBanner =
+                'This account is registered as a $actualRole. Please select $actualRole under Portal Role to sign in.';
+          });
+          return;
+        }
+
+        // Role-specific suspension checks
+        if (actualRole == 'Student') {
+          final stuRow = await supabase
+              .from('students')
+              .select('account_status, suspension_reason')
+              .eq('user_id', user.id)
+              .maybeSingle();
+          if ((stuRow?['account_status']?.toString().toLowerCase() ?? '') ==
+              'suspended') {
+            final reason = stuRow?['suspension_reason']?.toString() ?? '';
+            await supabase.auth.signOut();
+            if (!mounted) return;
+            setState(() {
+              _errorBanner = reason.isNotEmpty
+                  ? 'Account suspended: $reason'
+                  : 'Your student account is currently suspended.';
+            });
+            return;
+          }
+        } else if (actualRole == 'Company') {
+          final compRow = await supabase
+              .from('companies')
+              .select('account_status, suspension_reason')
+              .eq('user_id', user.id)
+              .maybeSingle();
+          if ((compRow?['account_status']?.toString().toLowerCase() ?? '') ==
+              'suspended') {
+            final reason = compRow?['suspension_reason']?.toString() ?? '';
+            await supabase.auth.signOut();
+            if (!mounted) return;
+            setState(() {
+              _errorBanner = reason.isNotEmpty
+                  ? 'Company account suspended: $reason'
+                  : 'Your company account is currently suspended.';
+            });
+            return;
+          }
+        }
+
+        final resolvedName =
+            (profileRow?['name']?.toString().trim().isNotEmpty == true)
+                ? profileRow!['name'].toString().trim()
+                : (user.userMetadata?['name']?.toString().trim().isNotEmpty ==
+                        true
+                    ? user.userMetadata!['name'].toString().trim()
+                    : (email.split('@').first));
+        final resolvedUni =
+            (profileRow?['university']?.toString().trim().isNotEmpty == true)
+                ? profileRow!['university'].toString().trim()
+                : user.userMetadata?['university']?.toString();
+
+        await AppDataService.instance.saveAuthSession(
+          role: actualRole,
+          email: user.email ?? email,
+          name: resolvedName,
+          university: resolvedUni,
+          userId: user.id,
+        );
+
+        if (actualRole == 'Company') {
+          await CompanyProfileService.loadAllCompanyPanelData();
+        } else {
+          await AppDataService.instance.syncFromSupabase(forceRefresh: true);
+        }
+
+        if (!mounted) return;
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(
+            content: Text('Welcome back, $resolvedName!'),
+            backgroundColor: AppColors.statusOpen,
+          ),
+        );
+
+        if (actualRole == 'Company') {
+          Navigator.pushReplacement(
+            context,
+            MaterialPageRoute(builder: (_) => const CompanyDashboardScreen()),
+          );
+        } else {
+          Navigator.pushReplacement(
+            context,
+            MaterialPageRoute(builder: (_) => const StudentMainNav()),
+          );
+        }
+        return;
       }
 
-      // 1. Check registered local credentials first
+      // 2. Offline unit/widget test registry fallback ONLY when Supabase is null
       final isLocalValid =
           AppDataService.instance.verifyLocalCredentials(email, password);
       if (isLocalValid) {
         final acc = AppDataService.instance.findUserAccount(email);
-        final role = acc?['role'] ?? _selectedRole;
-        final name = acc?['name'] ?? 'Student';
-        final university = acc?['university'];
+        final rawLocalRole = (acc?['role']?.toString() ?? 'Student').trim();
+        final actualRole = rawLocalRole.toLowerCase() == 'admin'
+            ? 'Admin'
+            : (rawLocalRole.toLowerCase() == 'company' ? 'Company' : 'Student');
+
+        if (actualRole == 'Admin') {
+          setState(() {
+            _errorBanner =
+                'Admin accounts must sign in through Governance Admin Console below.';
+          });
+          return;
+        }
+        if (actualRole != _selectedRole) {
+          setState(() {
+            _errorBanner =
+                'This account is registered as a $actualRole. Please select $actualRole under Portal Role to sign in.';
+          });
+          return;
+        }
+
+        final name = acc?['name']?.toString() ?? 'User';
+        final university = acc?['university']?.toString();
 
         await AppDataService.instance.saveAuthSession(
-          role: role,
+          role: actualRole,
           email: email,
           name: name,
           university: university,
         );
 
         if (!mounted) return;
-
-        ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(
-            content: Text('Welcome back, $name!'),
-            backgroundColor: Colors.green,
-          ),
-        );
-
-        if (role == 'Admin') {
+        if (actualRole == 'Company') {
           Navigator.pushReplacement(
             context,
-            MaterialPageRoute(
-              builder: (context) => const AdminDashboardScreen(),
-            ),
-          );
-        } else if (role == 'Company') {
-          Navigator.pushReplacement(
-            context,
-            MaterialPageRoute(
-              builder: (context) => const CompanyDashboardScreen(),
-            ),
+            MaterialPageRoute(builder: (_) => const CompanyDashboardScreen()),
           );
         } else {
           Navigator.pushReplacement(
             context,
-            MaterialPageRoute(
-              builder: (context) => const StudentMainNav(),
-            ),
+            MaterialPageRoute(builder: (_) => const StudentMainNav()),
           );
         }
         return;
       }
 
-      // 2. Try Supabase cloud authentication
-      final supabase = Supabase.instance.client;
-      final authResponse = await supabase.auth.signInWithPassword(
-        email: email,
-        password: password,
-      );
-
-      if (!mounted) return;
-
-      String role = _selectedRole;
-      final metaRole = authResponse.user?.userMetadata?['user_type'];
-      if (metaRole != null && metaRole.toString().isNotEmpty) {
-        role = metaRole.toString();
-      }
-
-      final existingAcc = AppDataService.instance.findUserAccount(email);
-      final resolvedName = existingAcc?['name'] ??
-          authResponse.user?.userMetadata?['name']?.toString() ??
-          'Student';
-      final resolvedUni = existingAcc?['university'] ??
-          authResponse.user?.userMetadata?['university']?.toString();
-
-      await AppDataService.instance.saveAuthSession(
-        role: role,
-        email: email,
-        name: resolvedName,
-        university: resolvedUni,
-        userId: authResponse.user?.id,
-      );
-
-      if (!mounted) return;
-
-      ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(
-          content: Text('Welcome back, $resolvedName!'),
-          backgroundColor: Colors.green,
-        ),
-      );
-
-      if (role == 'Admin') {
-        Navigator.pushReplacement(
-          context,
-          MaterialPageRoute(
-            builder: (context) => const AdminDashboardScreen(),
-          ),
-        );
-      } else if (role == 'Company') {
-        Navigator.pushReplacement(
-          context,
-          MaterialPageRoute(
-            builder: (context) => const CompanyDashboardScreen(),
-          ),
-        );
-      } else {
-        Navigator.pushReplacement(
-          context,
-          MaterialPageRoute(
-            builder: (context) => const StudentMainNav(),
-          ),
-        );
-      }
+      setState(() {
+        _errorBanner =
+            'Supabase is not initialized and no local test account matches these credentials.';
+      });
     } on AuthException catch (e) {
       if (!mounted) return;
-      String errorMsg = e.message;
-      if (errorMsg.toLowerCase().contains('invalid login credentials')) {
-        errorMsg = 'Incorrect email or password. Please double check.';
-      } else if (errorMsg.toLowerCase().contains('email not confirmed')) {
-        errorMsg = 'Email is not confirmed yet. Please verify your inbox.';
-      }
-      ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(
-          content: Text(errorMsg),
-          backgroundColor: Colors.red,
-        ),
-      );
+      setState(() {
+        _needsEmailConfirmation =
+            e.message.toLowerCase().contains('email not confirmed');
+        _errorBanner = SupabaseHelper.friendlyError(e);
+      });
     } catch (e) {
       if (!mounted) return;
-      ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(
-          content: Text('Login failed: $e'),
-          backgroundColor: Colors.red,
-        ),
-      );
+      setState(() => _errorBanner = SupabaseHelper.friendlyError(e));
     } finally {
+      SupabaseHelper.isInteractiveAuthInProgress = false;
       if (mounted) {
-        setState(() {
-          _isLoading = false;
-        });
+        setState(() => _isLoading = false);
       }
     }
+  }
+
+  void _openForgotPasswordDialog() {
+    final resetCtrl = TextEditingController(text: _emailController.text.trim());
+    bool submitting = false;
+    String? feedbackMsg;
+    bool isSuccess = false;
+
+    showDialog(
+      context: context,
+      builder: (ctx) => StatefulBuilder(
+        builder: (dialogCtx, setDialogState) => AlertDialog(
+          shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(18)),
+          title: Row(
+            children: [
+              const Icon(Icons.lock_reset_rounded, color: AppColors.primaryBlue),
+              const SizedBox(width: 10),
+              Expanded(
+                child: Text(
+                  'Reset Password',
+                  style: GoogleFonts.poppins(
+                    fontSize: 17,
+                    fontWeight: FontWeight.w700,
+                    color: AppColors.deepNavy,
+                  ),
+                ),
+              ),
+            ],
+          ),
+          content: ConstrainedBox(
+            constraints: const BoxConstraints(maxWidth: 400),
+            child: Column(
+              mainAxisSize: MainAxisSize.min,
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Text(
+                  'Enter your registered email address and we will send a password recovery link.',
+                  style: GoogleFonts.inter(
+                    fontSize: 13,
+                    color: AppColors.grayText,
+                    height: 1.4,
+                  ),
+                ),
+                const SizedBox(height: 14),
+                TextField(
+                  controller: resetCtrl,
+                  keyboardType: TextInputType.emailAddress,
+                  decoration: const InputDecoration(
+                    labelText: 'Email Address',
+                    prefixIcon: Icon(Icons.email_outlined, size: 20),
+                  ),
+                ),
+                if (feedbackMsg != null) ...[
+                  const SizedBox(height: 12),
+                  Container(
+                    padding: const EdgeInsets.all(10),
+                    decoration: BoxDecoration(
+                      color: isSuccess ? AppColors.successBg : AppColors.errorBg,
+                      borderRadius: BorderRadius.circular(10),
+                    ),
+                    child: Text(
+                      feedbackMsg!,
+                      style: GoogleFonts.inter(
+                        fontSize: 12,
+                        fontWeight: FontWeight.w600,
+                        color: isSuccess
+                            ? const Color(0xFF166534)
+                            : const Color(0xFF991B1B),
+                      ),
+                    ),
+                  ),
+                ],
+              ],
+            ),
+          ),
+          actions: [
+            TextButton(
+              onPressed: () => Navigator.pop(ctx),
+              child: const Text('Close'),
+            ),
+            ElevatedButton(
+              onPressed: submitting
+                  ? null
+                  : () async {
+                      final target = resetCtrl.text.trim();
+                      if (target.isEmpty || !target.contains('@')) {
+                        setDialogState(() {
+                          isSuccess = false;
+                          feedbackMsg = 'Please enter a valid email address.';
+                        });
+                        return;
+                      }
+                      setDialogState(() {
+                        submitting = true;
+                        feedbackMsg = null;
+                      });
+                      try {
+                        final supabase = SupabaseHelper.clientOrNull;
+                        if (supabase == null) {
+                          throw Exception('Supabase client unavailable.');
+                        }
+                        await supabase.auth.resetPasswordForEmail(
+                          target,
+                          redirectTo: SupabaseHelper.emailRedirectUrl,
+                        );
+                        if (!dialogCtx.mounted) return;
+                        setDialogState(() {
+                          submitting = false;
+                          isSuccess = true;
+                          feedbackMsg =
+                              'Password reset email sent to $target. Please check your inbox.';
+                        });
+                      } catch (e) {
+                        if (!dialogCtx.mounted) return;
+                        setDialogState(() {
+                          submitting = false;
+                          isSuccess = false;
+                          feedbackMsg = SupabaseHelper.friendlyError(e);
+                        });
+                      }
+                    },
+              child: submitting
+                  ? const SizedBox(
+                      width: 16,
+                      height: 16,
+                      child: CircularProgressIndicator(
+                        strokeWidth: 2,
+                        color: Colors.white,
+                      ),
+                    )
+                  : const Text('Send Link'),
+            ),
+          ],
+        ),
+      ),
+    );
   }
 
   @override
@@ -242,285 +454,469 @@ class _LoginScreenState extends State<LoginScreen> {
       body: SafeArea(
         child: Center(
           child: SingleChildScrollView(
-            padding: const EdgeInsets.symmetric(horizontal: 24.0, vertical: 20.0),
+            padding: const EdgeInsets.symmetric(horizontal: 20.0, vertical: 20.0),
             child: ConstrainedBox(
-              constraints: const BoxConstraints(maxWidth: 480),
+              constraints: const BoxConstraints(maxWidth: 460),
               child: Column(
                 mainAxisSize: MainAxisSize.min,
-                mainAxisAlignment: MainAxisAlignment.center,
-                crossAxisAlignment: CrossAxisAlignment.start,
                 children: [
-                  // Top Logo & Brand Icon
-                  Center(
-                    child: Column(
-                      mainAxisSize: MainAxisSize.min,
-                      children: [
-                        Container(
-                          width: 68,
-                          height: 68,
-                          decoration: BoxDecoration(
-                            color: AppColors.deepNavy,
-                            shape: BoxShape.circle,
-                            boxShadow: [
-                              BoxShadow(
-                                color: AppColors.primaryBlue.withValues(alpha: 0.2),
-                                blurRadius: 16,
-                                offset: const Offset(0, 6),
-                              ),
-                            ],
-                          ),
-                          child: const Icon(
-                            Icons.school_rounded,
-                            size: 36,
-                            color: Colors.white,
-                          ),
-                        ),
-                        const SizedBox(height: 12),
-                        RichText(
-                          text: TextSpan(
-                            children: [
-                              TextSpan(
-                                text: 'Campus',
-                                style: GoogleFonts.poppins(
-                                  fontSize: 26,
-                                  fontWeight: FontWeight.bold,
-                                  color: AppColors.deepNavy,
-                                ),
-                              ),
-                              TextSpan(
-                                text: 'Connect',
-                                style: GoogleFonts.poppins(
-                                  fontSize: 26,
-                                  fontWeight: FontWeight.bold,
-                                  color: AppColors.teal,
-                                ),
-                              ),
-                            ],
-                          ),
-                        ),
-                        const SizedBox(height: 4),
-                        Text(
-                          'Learn • Work • Grow',
-                          style: GoogleFonts.inter(
-                            fontSize: 12,
-                            fontWeight: FontWeight.w600,
-                            color: AppColors.grayText,
-                            letterSpacing: 1.5,
-                          ),
+                  // Brand Header
+                  Container(
+                    width: 68,
+                    height: 68,
+                    decoration: BoxDecoration(
+                      gradient: AppColors.brandGradient,
+                      shape: BoxShape.circle,
+                      boxShadow: [
+                        BoxShadow(
+                          color: AppColors.primaryBlue.withValues(alpha: 0.22),
+                          blurRadius: 16,
+                          offset: const Offset(0, 6),
                         ),
                       ],
                     ),
+                    child: const Icon(
+                      Icons.school_rounded,
+                      size: 34,
+                      color: Colors.white,
+                    ),
                   ),
-                  const SizedBox(height: 28),
-
-                  // Welcome Texts
-                  Text(
-                    'Welcome Back!',
-                    style: GoogleFonts.poppins(
-                      fontSize: 22,
-                      fontWeight: FontWeight.bold,
-                      color: AppColors.deepNavy,
+                  const SizedBox(height: 12),
+                  RichText(
+                    text: TextSpan(
+                      children: [
+                        TextSpan(
+                          text: 'Campus',
+                          style: GoogleFonts.poppins(
+                            fontSize: 26,
+                            fontWeight: FontWeight.w700,
+                            color: AppColors.deepNavy,
+                          ),
+                        ),
+                        TextSpan(
+                          text: 'Connect',
+                          style: GoogleFonts.poppins(
+                            fontSize: 26,
+                            fontWeight: FontWeight.w700,
+                            color: AppColors.teal,
+                          ),
+                        ),
+                      ],
                     ),
                   ),
                   const SizedBox(height: 4),
                   Text(
-                    'Log in to explore company projects and grow.',
+                    'Learn • Collaborate • Verify',
                     style: GoogleFonts.inter(
-                      fontSize: 13,
+                      fontSize: 12,
+                      fontWeight: FontWeight.w600,
                       color: AppColors.grayText,
+                      letterSpacing: 1.2,
                     ),
                   ),
-                  const SizedBox(height: 20),
+                  const SizedBox(height: 22),
 
-                  // Email Input
-                  Text(
-                    'Email Address',
-                    style: GoogleFonts.inter(
-                      fontSize: 13,
-                      fontWeight: FontWeight.w600,
-                      color: AppColors.darkText,
-                    ),
-                  ),
-                  const SizedBox(height: 6),
-                  TextField(
-                    controller: _emailController,
-                    keyboardType: TextInputType.emailAddress,
-                    decoration: const InputDecoration(
-                      hintText: 'student@university.edu.pk',
-                      prefixIcon: Icon(Icons.email_outlined, size: 20),
-                    ),
-                  ),
-                  const SizedBox(height: 14),
-
-                  // Password Input
-                  Text(
-                    'Password',
-                    style: GoogleFonts.inter(
-                      fontSize: 13,
-                      fontWeight: FontWeight.w600,
-                      color: AppColors.darkText,
-                    ),
-                  ),
-                  const SizedBox(height: 6),
-                  TextField(
-                    controller: _passwordController,
-                    obscureText: _obscurePassword,
-                    decoration: InputDecoration(
-                      hintText: 'Enter your password',
-                      prefixIcon: const Icon(Icons.lock_outline_rounded, size: 20),
-                      suffixIcon: IconButton(
-                        icon: Icon(
-                          _obscurePassword
-                              ? Icons.visibility_off_outlined
-                              : Icons.visibility_outlined,
-                          size: 20,
-                          color: AppColors.grayText,
-                        ),
-                        onPressed: () {
-                          setState(() {
-                            _obscurePassword = !_obscurePassword;
-                          });
-                        },
-                      ),
-                    ),
-                  ),
-                  const SizedBox(height: 14),
-
-                  // Role Selector
-                  Text(
-                    'Log In As',
-                    style: GoogleFonts.inter(
-                      fontSize: 13,
-                      fontWeight: FontWeight.w600,
-                      color: AppColors.darkText,
-                    ),
-                  ),
-                  const SizedBox(height: 6),
-                  DropdownButtonFormField<String>(
-                    initialValue: _selectedRole,
-                    decoration: const InputDecoration(
-                      prefixIcon: Icon(Icons.badge_outlined, size: 20),
-                    ),
-                    items: ['Student', 'Company', 'Admin']
-                        .map((role) => DropdownMenuItem(
-                              value: role,
-                              child: Text(role),
-                            ))
-                        .toList(),
-                    onChanged: (value) {
-                      setState(() {
-                        _selectedRole = value!;
-                      });
-                    },
-                  ),
-                  const SizedBox(height: 24),
-
-                  // Login Button
-                  SizedBox(
+                  // Form Card
+                  Container(
                     width: double.infinity,
-                    height: 50,
-                    child: ElevatedButton(
-                      style: ElevatedButton.styleFrom(
-                        backgroundColor: AppColors.primaryBlue,
-                        foregroundColor: Colors.white,
-                        shape: RoundedRectangleBorder(
-                          borderRadius: BorderRadius.circular(14),
-                        ),
-                      ),
-                      onPressed: _isLoading ? null : _handleLogin,
-                      child: _isLoading
-                          ? const SizedBox(
-                              width: 24,
-                              height: 24,
-                              child: CircularProgressIndicator(
-                                color: Colors.white,
-                                strokeWidth: 2,
-                              ),
-                            )
-                          : Text(
-                              'Log In',
-                              style: GoogleFonts.poppins(
-                                fontSize: 16,
-                                fontWeight: FontWeight.bold,
-                              ),
-                            ),
+                    padding: const EdgeInsets.all(24),
+                    decoration: BoxDecoration(
+                      color: AppColors.cardWhite,
+                      borderRadius: BorderRadius.circular(20),
+                      border: Border.all(color: AppColors.lightGray),
+                      boxShadow: AppColors.softShadow,
                     ),
-                  ),
-                  const SizedBox(height: 20),
-
-                  // Sign Up Link (using Wrap to prevent horizontal overflow on any device)
-                  Center(
-                    child: Wrap(
-                      alignment: WrapAlignment.center,
-                      crossAxisAlignment: WrapCrossAlignment.center,
-                      children: [
-                        Text(
-                          "Don't have an account? ",
-                          style: GoogleFonts.inter(
-                            fontSize: 13,
-                            color: AppColors.grayText,
-                          ),
-                        ),
-                        GestureDetector(
-                          onTap: () {
-                            Navigator.push(
-                              context,
-                              MaterialPageRoute(
-                                builder: (context) => const SignupScreen(),
-                              ),
-                            );
-                          },
-                          child: Text(
-                            'Sign Up',
+                    child: Form(
+                      key: _formKey,
+                      child: Column(
+                        crossAxisAlignment: CrossAxisAlignment.start,
+                        children: [
+                          Text(
+                            'Welcome Back',
                             style: GoogleFonts.poppins(
-                              fontSize: 13,
-                              fontWeight: FontWeight.bold,
-                              color: AppColors.primaryBlue,
+                              fontSize: 20,
+                              fontWeight: FontWeight.w700,
+                              color: AppColors.deepNavy,
                             ),
                           ),
-                        ),
-                      ],
-                    ),
-                  ),
-                  const SizedBox(height: 20),
-
-                  // Enterprise Admin Portal Link
-                  Center(
-                    child: GestureDetector(
-                      onTap: () {
-                        Navigator.push(
-                          context,
-                          MaterialPageRoute(
-                            builder: (context) => const AdminLoginScreen(),
+                          const SizedBox(height: 4),
+                          Text(
+                            'Sign in to continue to your CampusConnect portal.',
+                            style: GoogleFonts.inter(
+                              fontSize: 13,
+                              color: AppColors.grayText,
+                            ),
                           ),
-                        );
-                      },
-                      child: Container(
-                        padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 8),
-                        decoration: BoxDecoration(
-                          color: AppColors.background,
-                          borderRadius: BorderRadius.circular(8),
-                          border: Border.all(color: AppColors.border),
-                        ),
-                        child: const Row(
-                          mainAxisSize: MainAxisSize.min,
-                          children: [
-                            Icon(Icons.shield_outlined, size: 14, color: AppColors.textSecondary),
-                            SizedBox(width: 6),
-                            Flexible(
-                              child: Text(
-                                'CampusConnect Admin Console 🔐',
-                                maxLines: 1,
-                                overflow: TextOverflow.ellipsis,
-                                style: TextStyle(
-                                  fontSize: 12,
-                                  fontWeight: FontWeight.w600,
-                                  color: AppColors.textSecondary,
+                          const SizedBox(height: 18),
+
+                          if (_errorBanner != null) ...[
+                            Container(
+                              width: double.infinity,
+                              padding: const EdgeInsets.all(12),
+                              decoration: BoxDecoration(
+                                color: AppColors.errorBg,
+                                borderRadius: BorderRadius.circular(12),
+                                border: Border.all(
+                                  color: AppColors.error.withValues(alpha: 0.35),
+                                ),
+                              ),
+                              child: Row(
+                                crossAxisAlignment: CrossAxisAlignment.start,
+                                children: [
+                                  const Icon(
+                                    Icons.error_outline_rounded,
+                                    color: AppColors.error,
+                                    size: 18,
+                                  ),
+                                  const SizedBox(width: 8),
+                                  Expanded(
+                                    child: Column(
+                                      crossAxisAlignment:
+                                          CrossAxisAlignment.start,
+                                      children: [
+                                        Text(
+                                          _errorBanner!,
+                                          style: GoogleFonts.inter(
+                                            fontSize: 12.5,
+                                            fontWeight: FontWeight.w600,
+                                            color: const Color(0xFF991B1B),
+                                          ),
+                                        ),
+                                        if (_needsEmailConfirmation) ...[
+                                          const SizedBox(height: 6),
+                                          TextButton(
+                                            style: TextButton.styleFrom(
+                                              padding: EdgeInsets.zero,
+                                              minimumSize: const Size(0, 0),
+                                              tapTargetSize:
+                                                  MaterialTapTargetSize
+                                                      .shrinkWrap,
+                                            ),
+                                            onPressed:
+                                                _isResendingConfirmation
+                                                    ? null
+                                                    : _resendVerificationEmail,
+                                            child: Text(
+                                              _isResendingConfirmation
+                                                  ? 'Sending...'
+                                                  : 'Resend verification email',
+                                              style: GoogleFonts.inter(
+                                                fontSize: 12,
+                                                fontWeight: FontWeight.w700,
+                                                color: AppColors.primaryBlue,
+                                                decoration:
+                                                    TextDecoration.underline,
+                                              ),
+                                            ),
+                                          ),
+                                        ],
+                                      ],
+                                    ),
+                                  ),
+                                ],
+                              ),
+                            ),
+                            const SizedBox(height: 16),
+                          ],
+
+                          // Role Selector Pills (Student & Company only; Admin uses Governance Console below)
+                          Text(
+                            'Portal Role',
+                            style: GoogleFonts.inter(
+                              fontSize: 12.5,
+                              fontWeight: FontWeight.w600,
+                              color: AppColors.darkText,
+                            ),
+                          ),
+                          const SizedBox(height: 8),
+                          Row(
+                            children: ['Student', 'Company'].map((role) {
+                              final selected = _selectedRole == role;
+                              final IconData icon = role == 'Company'
+                                  ? Icons.business_rounded
+                                  : Icons.school_outlined;
+                              return Expanded(
+                                child: Padding(
+                                  padding: EdgeInsets.only(
+                                    right: role == 'Company' ? 0 : 10,
+                                  ),
+                                  child: InkWell(
+                                    borderRadius: BorderRadius.circular(12),
+                                    onTap: _isLoading
+                                        ? null
+                                        : () => setState(() {
+                                              _selectedRole = role;
+                                              _errorBanner = null;
+                                              _needsEmailConfirmation = false;
+                                            }),
+                                    child: AnimatedContainer(
+                                      duration:
+                                          const Duration(milliseconds: 180),
+                                      padding: const EdgeInsets.symmetric(
+                                        vertical: 11,
+                                        horizontal: 8,
+                                      ),
+                                      decoration: BoxDecoration(
+                                        color: selected
+                                            ? AppColors.primaryBlue
+                                            : AppColors.background,
+                                        borderRadius: BorderRadius.circular(12),
+                                        border: Border.all(
+                                          color: selected
+                                              ? AppColors.primaryBlue
+                                              : AppColors.lightGray,
+                                        ),
+                                      ),
+                                      child: Row(
+                                        mainAxisAlignment:
+                                            MainAxisAlignment.center,
+                                        children: [
+                                          Icon(
+                                            icon,
+                                            size: 18,
+                                            color: selected
+                                                ? Colors.white
+                                                : AppColors.grayText,
+                                          ),
+                                          const SizedBox(width: 6),
+                                          Flexible(
+                                            child: Text(
+                                              role,
+                                              maxLines: 1,
+                                              overflow: TextOverflow.ellipsis,
+                                              style: GoogleFonts.inter(
+                                                fontSize: 13,
+                                                fontWeight: FontWeight.w600,
+                                                color: selected
+                                                    ? Colors.white
+                                                    : AppColors.darkText,
+                                              ),
+                                            ),
+                                          ),
+                                        ],
+                                      ),
+                                    ),
+                                  ),
+                                ),
+                              );
+                            }).toList(),
+                          ),
+                          const SizedBox(height: 16),
+
+                          Text(
+                            'Email Address',
+                            style: GoogleFonts.inter(
+                              fontSize: 12.5,
+                              fontWeight: FontWeight.w600,
+                              color: AppColors.darkText,
+                            ),
+                          ),
+                          const SizedBox(height: 6),
+                          TextFormField(
+                            controller: _emailController,
+                            keyboardType: TextInputType.emailAddress,
+                            textInputAction: TextInputAction.next,
+                            enabled: !_isLoading,
+                            decoration: InputDecoration(
+                              hintText: _selectedRole == 'Company'
+                                  ? 'team@company.com'
+                                  : 'you@university.edu',
+                              prefixIcon:
+                                  const Icon(Icons.email_outlined, size: 20),
+                            ),
+                            validator: (val) {
+                              final v = val?.trim() ?? '';
+                              if (v.isEmpty) {
+                                return 'Email address is required';
+                              }
+                              if (!v.contains('@') || !v.contains('.')) {
+                                return 'Enter a valid email address';
+                              }
+                              return null;
+                            },
+                          ),
+                          const SizedBox(height: 14),
+
+                          SizedBox(
+                            width: double.infinity,
+                            child: Wrap(
+                              spacing: 8,
+                              runSpacing: 4,
+                              alignment: WrapAlignment.spaceBetween,
+                              crossAxisAlignment: WrapCrossAlignment.center,
+                              children: [
+                                Text(
+                                  'Password',
+                                  style: GoogleFonts.inter(
+                                    fontSize: 12.5,
+                                    fontWeight: FontWeight.w600,
+                                    color: AppColors.darkText,
+                                  ),
+                                ),
+                                TextButton(
+                                  style: TextButton.styleFrom(
+                                    padding: EdgeInsets.zero,
+                                    minimumSize: const Size(0, 0),
+                                    tapTargetSize:
+                                        MaterialTapTargetSize.shrinkWrap,
+                                  ),
+                                  onPressed: _isLoading
+                                      ? null
+                                      : _openForgotPasswordDialog,
+                                  child: Text(
+                                    'Forgot Password?',
+                                    style: GoogleFonts.inter(
+                                      fontSize: 12,
+                                      fontWeight: FontWeight.w600,
+                                    ),
+                                  ),
+                                ),
+                              ],
+                            ),
+                          ),
+                          const SizedBox(height: 6),
+                          TextFormField(
+                            controller: _passwordController,
+                            obscureText: _obscurePassword,
+                            textInputAction: TextInputAction.done,
+                            enabled: !_isLoading,
+                            onFieldSubmitted: (_) => _handleLogin(),
+                            decoration: InputDecoration(
+                              hintText: 'Enter your password',
+                              prefixIcon: const Icon(
+                                Icons.lock_outline_rounded,
+                                size: 20,
+                              ),
+                              suffixIcon: IconButton(
+                                icon: Icon(
+                                  _obscurePassword
+                                      ? Icons.visibility_off_outlined
+                                      : Icons.visibility_outlined,
+                                  size: 20,
+                                  color: AppColors.grayText,
+                                ),
+                                onPressed: () => setState(
+                                  () => _obscurePassword = !_obscurePassword,
                                 ),
                               ),
                             ),
-                          ],
+                            validator: (val) {
+                              if (val == null || val.trim().isEmpty) {
+                                return 'Password is required';
+                              }
+                              return null;
+                            },
+                          ),
+                          const SizedBox(height: 22),
+
+                          SizedBox(
+                            width: double.infinity,
+                            height: 50,
+                            child: ElevatedButton(
+                              onPressed: _isLoading ? null : _handleLogin,
+                              child: _isLoading
+                                  ? const SizedBox(
+                                      width: 22,
+                                      height: 22,
+                                      child: CircularProgressIndicator(
+                                        color: Colors.white,
+                                        strokeWidth: 2.2,
+                                      ),
+                                    )
+                                  : Text(
+                                      'Sign In as $_selectedRole',
+                                      style: GoogleFonts.poppins(
+                                        fontSize: 15,
+                                        fontWeight: FontWeight.w600,
+                                      ),
+                                    ),
+                            ),
+                          ),
+                        ],
+                      ),
+                    ),
+                  ),
+
+                  const SizedBox(height: 20),
+
+                  // Sign Up Link
+                  Wrap(
+                    alignment: WrapAlignment.center,
+                    crossAxisAlignment: WrapCrossAlignment.center,
+                    children: [
+                      Text(
+                        "Don't have an account? ",
+                        style: GoogleFonts.inter(
+                          fontSize: 13.5,
+                          color: AppColors.grayText,
                         ),
+                      ),
+                      GestureDetector(
+                        onTap: () {
+                          Navigator.push(
+                            context,
+                            MaterialPageRoute(
+                              builder: (_) =>
+                                  SignupScreen(initialRole: _selectedRole),
+                            ),
+                          );
+                        },
+                        child: Text(
+                          'Create Account',
+                          style: GoogleFonts.poppins(
+                            fontSize: 13.5,
+                            fontWeight: FontWeight.w700,
+                            color: AppColors.primaryBlue,
+                          ),
+                        ),
+                      ),
+                    ],
+                  ),
+                  const SizedBox(height: 16),
+
+                  // Dedicated Governance Admin Portal Shortcut
+                  InkWell(
+                    borderRadius: BorderRadius.circular(10),
+                    onTap: () {
+                      Navigator.push(
+                        context,
+                        MaterialPageRoute(
+                          builder: (_) => const AdminLoginScreen(),
+                        ),
+                      );
+                    },
+                    child: Container(
+                      padding: const EdgeInsets.symmetric(
+                        horizontal: 14,
+                        vertical: 9,
+                      ),
+                      decoration: BoxDecoration(
+                        color: AppColors.cardWhite,
+                        borderRadius: BorderRadius.circular(10),
+                        border: Border.all(color: AppColors.lightGray),
+                      ),
+                      child: Row(
+                        mainAxisSize: MainAxisSize.min,
+                        children: [
+                          const Icon(
+                            Icons.admin_panel_settings_outlined,
+                            size: 16,
+                            color: AppColors.deepNavy,
+                          ),
+                          const SizedBox(width: 6),
+                          Flexible(
+                            child: Text(
+                              'Governance Admin Console',
+                              maxLines: 1,
+                              overflow: TextOverflow.ellipsis,
+                              style: GoogleFonts.inter(
+                                fontSize: 12.5,
+                                fontWeight: FontWeight.w600,
+                                color: AppColors.deepNavy,
+                              ),
+                            ),
+                          ),
+                        ],
                       ),
                     ),
                   ),

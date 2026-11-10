@@ -1,11 +1,15 @@
 import 'package:flutter/material.dart';
+import 'package:google_fonts/google_fonts.dart';
 import 'package:link_vibe/core/constants/app_colors.dart';
+import 'package:link_vibe/core/services/supabase_helper.dart';
 import 'package:link_vibe/feature/company/models/project_model.dart';
 import 'package:link_vibe/feature/company/services/company_profile_service.dart';
 import 'package:link_vibe/feature/company/services/company_project_service.dart';
 
 class PostProjectScreen extends StatefulWidget {
-  const PostProjectScreen({super.key});
+  final ProjectModel? existingProject;
+
+  const PostProjectScreen({super.key, this.existingProject});
 
   @override
   State<PostProjectScreen> createState() => _PostProjectScreenState();
@@ -16,23 +20,20 @@ class _PostProjectScreenState extends State<PostProjectScreen> {
   final _projectService = CompanyProjectService();
   final _profileService = CompanyProfileService();
 
-  // Controllers
   final _titleController = TextEditingController();
   final _descriptionController = TextEditingController();
   final _requirementsController = TextEditingController();
   final _deliverablesController = TextEditingController();
-  final _openingsController = TextEditingController(text: '2');
+  final _openingsController = TextEditingController(text: '1');
   final _instructionsController = TextEditingController();
   final _customSkillController = TextEditingController();
 
-  // State values
   String _selectedCategory = 'Mobile App Development';
   String _selectedProjectType = 'Remote';
   DateTime? _selectedDeadline;
   bool _isPublishing = false;
   bool _isSavingDraft = false;
 
-  // Categories list
   final List<String> _categories = [
     'Mobile App Development',
     'Web Development',
@@ -44,10 +45,8 @@ class _PostProjectScreenState extends State<PostProjectScreen> {
     'Blockchain & Distributed Systems',
   ];
 
-  // Project Types
   final List<String> _projectTypes = ['Remote', 'On-site', 'Hybrid'];
 
-  // Skill pool & Selected skills
   final List<String> _availableSkills = [
     'Flutter',
     'Dart',
@@ -64,13 +63,37 @@ class _PostProjectScreenState extends State<PostProjectScreen> {
     'REST API',
   ];
 
-  final List<String> _selectedSkills = ['Flutter', 'Dart', 'REST API'];
+  final List<String> _selectedSkills = [];
+
+  bool get _isEditMode => widget.existingProject != null;
 
   @override
   void initState() {
     super.initState();
-    // Default deadline: 3 weeks from today
-    _selectedDeadline = DateTime.now().add(const Duration(days: 21));
+    final existing = widget.existingProject;
+    if (existing != null) {
+      _titleController.text = existing.title;
+      _descriptionController.text = existing.description;
+      _requirementsController.text = existing.requirements;
+      _deliverablesController.text = existing.deliverables;
+      _openingsController.text = existing.openings.toString();
+      _instructionsController.text = existing.additionalInstructions;
+      if (_categories.contains(existing.category)) {
+        _selectedCategory = existing.category;
+      } else if (existing.category.isNotEmpty) {
+        _categories.insert(0, existing.category);
+        _selectedCategory = existing.category;
+      }
+      if (_projectTypes.contains(existing.projectType)) {
+        _selectedProjectType = existing.projectType;
+      }
+      _selectedSkills.addAll(existing.skillsRequired);
+      _selectedDeadline =
+          DateTime.tryParse(existing.deadline) ??
+          DateTime.now().add(const Duration(days: 21));
+    } else {
+      _selectedDeadline = DateTime.now().add(const Duration(days: 21));
+    }
   }
 
   @override
@@ -85,10 +108,9 @@ class _PostProjectScreenState extends State<PostProjectScreen> {
     super.dispose();
   }
 
-  // Date Picker with Future Date Validation
   Future<void> _pickDeadline() async {
     final now = DateTime.now();
-    final firstAllowed = now.add(const Duration(days: 1)); // Minimum tomorrow
+    final firstAllowed = now.add(const Duration(days: 1));
     final initialDate = _selectedDeadline != null &&
             _selectedDeadline!.isAfter(firstAllowed)
         ? _selectedDeadline!
@@ -103,9 +125,9 @@ class _PostProjectScreenState extends State<PostProjectScreen> {
         return Theme(
           data: Theme.of(context).copyWith(
             colorScheme: const ColorScheme.light(
-              primary: AppColors.primary,
+              primary: AppColors.primaryBlue,
               onPrimary: Colors.white,
-              onSurface: AppColors.darkNavy,
+              onSurface: AppColors.deepNavy,
             ),
           ),
           child: child!,
@@ -120,7 +142,6 @@ class _PostProjectScreenState extends State<PostProjectScreen> {
     }
   }
 
-  // Add custom skill
   void _addCustomSkill() {
     final text = _customSkillController.text.trim();
     if (text.isNotEmpty && !_selectedSkills.contains(text)) {
@@ -131,7 +152,6 @@ class _PostProjectScreenState extends State<PostProjectScreen> {
     }
   }
 
-  // Toggle pre-set skill
   void _toggleSkill(String skill) {
     setState(() {
       if (_selectedSkills.contains(skill)) {
@@ -142,15 +162,15 @@ class _PostProjectScreenState extends State<PostProjectScreen> {
     });
   }
 
-  // Build Project Model instance
   ProjectModel _buildProjectFromForm({required String status}) {
     final company = _profileService.currentProfile;
+    final existing = widget.existingProject;
     final deadlineString = _selectedDeadline != null
         ? '${_selectedDeadline!.year}-${_selectedDeadline!.month.toString().padLeft(2, '0')}-${_selectedDeadline!.day.toString().padLeft(2, '0')}'
         : 'Flexible';
 
     return ProjectModel(
-      id: 'proj_${DateTime.now().millisecondsSinceEpoch}',
+      id: existing?.id ?? SupabaseHelper.generateUuid(),
       title: _titleController.text.trim(),
       category: _selectedCategory,
       description: _descriptionController.text.trim(),
@@ -161,58 +181,68 @@ class _PostProjectScreenState extends State<PostProjectScreen> {
       projectType: _selectedProjectType,
       openings: int.tryParse(_openingsController.text.trim()) ?? 1,
       additionalInstructions: _instructionsController.text.trim(),
-      companyName: company.companyName,
-      companyId: company.id,
+      companyName: company.companyName.isNotEmpty
+          ? company.companyName
+          : (existing?.companyName ?? 'Company Partner'),
+      companyId: company.id.isNotEmpty
+          ? company.id
+          : (existing?.companyId ?? ''),
       status: status,
-      applicantsCount: 0,
-      progress: 0.0,
-      createdAt: 'Just now',
+      applicantsCount: existing?.applicantsCount ?? 0,
+      assignedStudent: existing?.assignedStudent,
+      progress: existing?.progress ?? 0.0,
+      createdAt: existing?.createdAt ?? 'Just now',
     );
   }
 
-  // Save As Draft
   Future<void> _handleSaveDraft() async {
     final title = _titleController.text.trim();
     if (title.isEmpty) {
       ScaffoldMessenger.of(context).showSnackBar(
         const SnackBar(
-          content: Text('Please enter at least a Project Title to save draft.'),
-          backgroundColor: AppColors.warning,
+          content: Text('Please enter a Project Title before saving draft.'),
+          backgroundColor: AppColors.statusPending,
         ),
       );
       return;
     }
 
-    setState(() {
-      _isSavingDraft = true;
-    });
+    setState(() => _isSavingDraft = true);
 
-    final draftProject = _buildProjectFromForm(status: 'Draft');
-    await _projectService.saveDraft(draftProject);
-
-    if (!mounted) return;
-
-    setState(() {
-      _isSavingDraft = false;
-    });
-
-    ScaffoldMessenger.of(context).showSnackBar(
-      SnackBar(
-        content: Text('Project "${draftProject.title}" saved to Drafts!'),
-        backgroundColor: AppColors.primary,
-      ),
-    );
-
-    Navigator.pop(context, true);
+    try {
+      final draftProject = _buildProjectFromForm(status: 'Draft');
+      if (_isEditMode) {
+        await _projectService.updateProject(draftProject);
+      } else {
+        await _projectService.saveDraft(draftProject);
+      }
+      if (!mounted) return;
+      setState(() => _isSavingDraft = false);
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(
+          content: Text('Draft "${draftProject.title}" saved.'),
+          backgroundColor: AppColors.primaryBlue,
+        ),
+      );
+      Navigator.pop(context, true);
+    } catch (e) {
+      if (!mounted) return;
+      setState(() => _isSavingDraft = false);
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(
+          content: Text('Could not save draft: $e'),
+          backgroundColor: AppColors.statusClosed,
+        ),
+      );
+    }
   }
 
-  // Show Confirmation Dialog before publishing
   Future<void> _confirmAndPublish() async {
     if (!_formKey.currentState!.validate()) {
       ScaffoldMessenger.of(context).showSnackBar(
         const SnackBar(
-          content: Text('Please resolve the highlighted validation errors.'),
-          backgroundColor: AppColors.error,
+          content: Text('Please fix the highlighted fields above.'),
+          backgroundColor: AppColors.statusClosed,
         ),
       );
       return;
@@ -222,7 +252,7 @@ class _PostProjectScreenState extends State<PostProjectScreen> {
       ScaffoldMessenger.of(context).showSnackBar(
         const SnackBar(
           content: Text('Please select at least 1 required skill.'),
-          backgroundColor: AppColors.error,
+          backgroundColor: AppColors.statusClosed,
         ),
       );
       return;
@@ -233,41 +263,37 @@ class _PostProjectScreenState extends State<PostProjectScreen> {
       ScaffoldMessenger.of(context).showSnackBar(
         const SnackBar(
           content: Text('Please choose a valid future deadline date.'),
-          backgroundColor: AppColors.error,
+          backgroundColor: AppColors.statusClosed,
         ),
       );
       return;
     }
 
-    // Confirmation Dialog
     final shouldPublish = await showDialog<bool>(
       context: context,
       builder: (ctx) {
         return AlertDialog(
-          shape: RoundedRectangleBorder(
-            borderRadius: BorderRadius.circular(16),
-          ),
-          title: const Row(
+          title: Row(
             children: [
-              Icon(Icons.campaign_rounded, color: AppColors.primary),
-              SizedBox(width: 8),
-              Text(
-                'Publish Project?',
-                style: TextStyle(
-                  fontSize: 18,
-                  fontWeight: FontWeight.bold,
-                  color: AppColors.darkNavy,
+              const Icon(Icons.campaign_rounded, color: AppColors.primaryBlue),
+              const SizedBox(width: 8),
+              Expanded(
+                child: Text(
+                  _isEditMode ? 'Update Project?' : 'Publish Project?',
+                  style: GoogleFonts.poppins(
+                    fontSize: 17,
+                    fontWeight: FontWeight.w700,
+                    color: AppColors.deepNavy,
+                  ),
                 ),
               ),
             ],
           ),
           content: Text(
-            'Are you sure you want to publish "${_titleController.text.trim()}"?\n\nIt will immediately become visible to eligible university students across CAMPUSCONNECT.',
-            style: const TextStyle(
-              fontSize: 13.5,
-              color: AppColors.textPrimary,
-              height: 1.4,
-            ),
+            _isEditMode
+                ? 'Save updates to "${_titleController.text.trim()}" and keep it open for university candidates?'
+                : 'Publish "${_titleController.text.trim()}" to the live CampusConnect catalog for verified university students?',
+            style: GoogleFonts.inter(fontSize: 13.5, height: 1.45),
           ),
           actions: [
             TextButton(
@@ -275,15 +301,9 @@ class _PostProjectScreenState extends State<PostProjectScreen> {
               child: const Text('Cancel'),
             ),
             ElevatedButton(
-              style: ElevatedButton.styleFrom(
-                backgroundColor: AppColors.primary,
-                foregroundColor: Colors.white,
-                shape: RoundedRectangleBorder(
-                  borderRadius: BorderRadius.circular(8),
-                ),
-              ),
               onPressed: () => Navigator.pop(ctx, true),
-              child: const Text('Confirm & Publish'),
+              child: Text(
+                  _isEditMode ? 'Save & Publish' : 'Confirm & Publish'),
             ),
           ],
         );
@@ -292,31 +312,41 @@ class _PostProjectScreenState extends State<PostProjectScreen> {
 
     if (shouldPublish != true) return;
 
-    setState(() {
-      _isPublishing = true;
-    });
+    setState(() => _isPublishing = true);
 
-    final newProject = _buildProjectFromForm(status: 'Open');
-    await _projectService.publishProject(newProject);
+    try {
+      final projectPayload = _buildProjectFromForm(status: 'Open');
+      if (_isEditMode) {
+        await _projectService.updateProject(projectPayload);
+      } else {
+        await _projectService.publishProject(projectPayload);
+      }
 
-    if (!mounted) return;
+      if (!mounted) return;
+      setState(() => _isPublishing = false);
 
-    setState(() {
-      _isPublishing = false;
-    });
-
-    ScaffoldMessenger.of(context).showSnackBar(
-      SnackBar(
-        content: Text(
-          'Project "${newProject.title}" published! Available to eligible students.',
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(
+          content: Text(
+            _isEditMode
+                ? 'Project "${projectPayload.title}" updated.'
+                : 'Project "${projectPayload.title}" published to CampusConnect.',
+          ),
+          backgroundColor: AppColors.statusOpen,
         ),
-        backgroundColor: AppColors.success,
-        duration: const Duration(seconds: 3),
-      ),
-    );
+      );
 
-    // Pops back with signal to update Company Dashboard statistics immediately
-    Navigator.pop(context, true);
+      Navigator.pop(context, true);
+    } catch (e) {
+      if (!mounted) return;
+      setState(() => _isPublishing = false);
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(
+          content: Text('Failed to publish project: $e'),
+          backgroundColor: AppColors.statusClosed,
+        ),
+      );
+    }
   }
 
   @override
@@ -324,41 +354,32 @@ class _PostProjectScreenState extends State<PostProjectScreen> {
     return Scaffold(
       backgroundColor: AppColors.background,
       appBar: AppBar(
-        backgroundColor: Colors.white,
-        elevation: 0.5,
-        title: const Text('Post New Project (Screen 25)'),
+        title: Text(_isEditMode ? 'Edit Project Scope' : 'Post New Challenge'),
         actions: [
-          TextButton(
-            onPressed: _isSavingDraft || _isPublishing ? null : _handleSaveDraft,
-            child: _isSavingDraft
-                ? const SizedBox(
-                    width: 16,
-                    height: 16,
-                    child: CircularProgressIndicator(strokeWidth: 2),
-                  )
-                : const Text(
-                    'Save Draft',
-                    style: TextStyle(
-                      fontWeight: FontWeight.bold,
-                      color: AppColors.textSecondary,
-                    ),
-                  ),
-          ),
+          if (!_isEditMode || widget.existingProject?.status == 'Draft')
+            TextButton(
+              onPressed:
+                  _isSavingDraft || _isPublishing ? null : _handleSaveDraft,
+              child: _isSavingDraft
+                  ? const SizedBox(
+                      width: 16,
+                      height: 16,
+                      child: CircularProgressIndicator(strokeWidth: 2),
+                    )
+                  : const Text('Save Draft'),
+            ),
           const SizedBox(width: 8),
         ],
       ),
       body: Form(
         key: _formKey,
         child: ListView(
-          padding: const EdgeInsets.symmetric(horizontal: 16.0, vertical: 20.0),
+          padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 20),
           children: [
-            // Header Instructions Card
             _buildHeaderInstructions(),
             const SizedBox(height: 18),
-
-            // Section 1: Core Project Details
             _buildSectionCard(
-              title: '1. Core Project Information',
+              title: 'Core Project Information',
               icon: Icons.title_rounded,
               children: [
                 _buildTitleField(),
@@ -370,11 +391,9 @@ class _PostProjectScreenState extends State<PostProjectScreen> {
                 _buildOpeningsField(),
               ],
             ),
-            const SizedBox(height: 20),
-
-            // Section 2: Scope & Requirements
+            const SizedBox(height: 18),
             _buildSectionCard(
-              title: '2. Project Scope & Eligibility',
+              title: 'Project Scope & Eligibility',
               icon: Icons.description_outlined,
               children: [
                 _buildDescriptionField(),
@@ -382,41 +401,33 @@ class _PostProjectScreenState extends State<PostProjectScreen> {
                 _buildRequirementsField(),
               ],
             ),
-            const SizedBox(height: 20),
-
-            // Section 3: Required Skills (Multi-select)
+            const SizedBox(height: 18),
             _buildSectionCard(
-              title: '3. Required Skills & Tech Stack',
+              title: 'Required Skills & Tech Stack',
               icon: Icons.code_rounded,
               children: [
                 _buildSkillsSelector(),
               ],
             ),
-            const SizedBox(height: 20),
-
-            // Section 4: Deliverables & Timeline
+            const SizedBox(height: 18),
             _buildSectionCard(
-              title: '4. Deliverables & Submission Deadline',
+              title: 'Deliverables & Submission Deadline',
               icon: Icons.event_available_rounded,
               children: [
                 _buildDeliverablesField(),
                 const SizedBox(height: 16),
-                _buildDeadlineNumberPicker(),
+                _buildDeadlinePicker(),
               ],
             ),
-            const SizedBox(height: 20),
-
-            // Section 5: Additional Guidelines
+            const SizedBox(height: 18),
             _buildSectionCard(
-              title: '5. Additional Guidelines (Optional)',
+              title: 'Additional Guidelines (Optional)',
               icon: Icons.speaker_notes_outlined,
               children: [
                 _buildAdditionalInstructionsField(),
               ],
             ),
             const SizedBox(height: 28),
-
-            // Bottom Action Buttons
             _buildBottomActionButtons(),
             const SizedBox(height: 24),
           ],
@@ -425,39 +436,42 @@ class _PostProjectScreenState extends State<PostProjectScreen> {
     );
   }
 
-  // Header Instructions
   Widget _buildHeaderInstructions() {
     return Container(
       padding: const EdgeInsets.all(16),
       decoration: BoxDecoration(
-        color: AppColors.lightIceBlue,
+        color: AppColors.lightAqua.withValues(alpha: 0.65),
         borderRadius: BorderRadius.circular(14),
-        border: Border.all(color: AppColors.primary.withValues(alpha: 0.3)),
+        border:
+            Border.all(color: AppColors.primaryBlue.withValues(alpha: 0.25)),
       ),
-      child: const Row(
+      child: Row(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
-          Icon(Icons.info_outline, color: AppColors.primary, size: 22),
-          SizedBox(width: 12),
+          const Icon(Icons.info_outline_rounded,
+              color: AppColors.primaryBlue, size: 22),
+          const SizedBox(width: 12),
           Expanded(
             child: Column(
               crossAxisAlignment: CrossAxisAlignment.start,
               children: [
                 Text(
-                  'Post Campus Challenge Listing',
-                  style: TextStyle(
+                  _isEditMode
+                      ? 'Update Challenge Specifications'
+                      : 'Create Industry Project Challenge',
+                  style: GoogleFonts.poppins(
                     fontSize: 14,
-                    fontWeight: FontWeight.bold,
-                    color: AppColors.darkNavy,
+                    fontWeight: FontWeight.w700,
+                    color: AppColors.deepNavy,
                   ),
                 ),
-                SizedBox(height: 4),
+                const SizedBox(height: 4),
                 Text(
-                  'Provide clear scope, required skills, and deliverables. Published projects will be matched with university students.',
-                  style: TextStyle(
-                    fontSize: 12,
-                    color: AppColors.textSecondary,
-                    height: 1.35,
+                  'Define clear deliverables, prerequisites, and skills so eligible university students can submit focused proposals.',
+                  style: GoogleFonts.inter(
+                    fontSize: 12.5,
+                    color: AppColors.grayText,
+                    height: 1.4,
                   ),
                 ),
               ],
@@ -468,7 +482,6 @@ class _PostProjectScreenState extends State<PostProjectScreen> {
     );
   }
 
-  // Section Card Container
   Widget _buildSectionCard({
     required String title,
     required IconData icon,
@@ -478,36 +491,38 @@ class _PostProjectScreenState extends State<PostProjectScreen> {
       padding: const EdgeInsets.all(18),
       decoration: BoxDecoration(
         color: Colors.white,
-        borderRadius: BorderRadius.circular(14),
-        border: Border.all(color: AppColors.border, width: 0.9),
+        borderRadius: BorderRadius.circular(16),
+        border: Border.all(color: AppColors.lightGray),
+        boxShadow: AppColors.softShadow,
       ),
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
           Row(
             children: [
-              Icon(icon, color: AppColors.primary, size: 20),
-              const SizedBox(width: 10),
-              Text(
-                title,
-                style: const TextStyle(
-                  fontSize: 15,
-                  fontWeight: FontWeight.bold,
-                  color: AppColors.darkNavy,
+              Icon(icon, color: AppColors.primaryBlue, size: 20),
+              const SizedBox(width: 8),
+              Expanded(
+                child: Text(
+                  title,
+                  style: GoogleFonts.poppins(
+                    fontSize: 15,
+                    fontWeight: FontWeight.w700,
+                    color: AppColors.deepNavy,
+                  ),
                 ),
               ),
             ],
           ),
-          const SizedBox(height: 8),
-          const Divider(height: 1, color: AppColors.border),
-          const SizedBox(height: 16),
+          const SizedBox(height: 10),
+          const Divider(),
+          const SizedBox(height: 14),
           ...children,
         ],
       ),
     );
   }
 
-  // 1. Project Title Field
   Widget _buildTitleField() {
     return TextFormField(
       controller: _titleController,
@@ -520,37 +535,20 @@ class _PostProjectScreenState extends State<PostProjectScreen> {
         }
         return null;
       },
-      decoration: InputDecoration(
+      decoration: const InputDecoration(
         labelText: 'Project Title *',
-        hintText: 'e.g. Flutter Mobile E-Commerce Redesign',
-        prefixIcon: const Icon(Icons.work_outline_rounded, size: 18),
-        filled: true,
-        fillColor: AppColors.background,
-        contentPadding:
-            const EdgeInsets.symmetric(horizontal: 14, vertical: 12),
-        border: OutlineInputBorder(
-          borderRadius: BorderRadius.circular(10),
-          borderSide: const BorderSide(color: AppColors.border),
-        ),
+        hintText: 'e.g. Mobile Inventory & Telemetry Portal',
+        prefixIcon: Icon(Icons.work_outline_rounded, size: 18),
       ),
     );
   }
 
-  // 2. Project Category Dropdown
   Widget _buildCategoryDropdown() {
     return DropdownButtonFormField<String>(
       initialValue: _selectedCategory,
-      decoration: InputDecoration(
+      decoration: const InputDecoration(
         labelText: 'Project Category *',
-        prefixIcon: const Icon(Icons.category_outlined, size: 18),
-        filled: true,
-        fillColor: AppColors.background,
-        contentPadding:
-            const EdgeInsets.symmetric(horizontal: 14, vertical: 12),
-        border: OutlineInputBorder(
-          borderRadius: BorderRadius.circular(10),
-          borderSide: const BorderSide(color: AppColors.border),
-        ),
+        prefixIcon: Icon(Icons.category_outlined, size: 18),
       ),
       items: _categories
           .map((cat) => DropdownMenuItem(
@@ -560,25 +558,22 @@ class _PostProjectScreenState extends State<PostProjectScreen> {
           .toList(),
       onChanged: (val) {
         if (val != null) {
-          setState(() {
-            _selectedCategory = val;
-          });
+          setState(() => _selectedCategory = val);
         }
       },
     );
   }
 
-  // 3. Project Type Selector (Remote / On-site / Hybrid)
   Widget _buildProjectTypeSelector() {
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
-        const Text(
-          'Project Mode / Type *',
-          style: TextStyle(
+        Text(
+          'Collaboration Mode *',
+          style: GoogleFonts.inter(
             fontSize: 13,
             fontWeight: FontWeight.w600,
-            color: AppColors.darkNavy,
+            color: AppColors.deepNavy,
           ),
         ),
         const SizedBox(height: 8),
@@ -587,33 +582,29 @@ class _PostProjectScreenState extends State<PostProjectScreen> {
             final isSelected = _selectedProjectType == type;
             return Expanded(
               child: GestureDetector(
-                onTap: () {
-                  setState(() {
-                    _selectedProjectType = type;
-                  });
-                },
+                onTap: () => setState(() => _selectedProjectType = type),
                 child: Container(
                   margin: const EdgeInsets.symmetric(horizontal: 4),
-                  padding: const EdgeInsets.symmetric(vertical: 10),
+                  padding: const EdgeInsets.symmetric(vertical: 11),
                   decoration: BoxDecoration(
                     color: isSelected
-                        ? AppColors.primary
-                        : AppColors.background,
-                    borderRadius: BorderRadius.circular(8),
+                        ? AppColors.primaryBlue
+                        : AppColors.surfaceAlt,
+                    borderRadius: BorderRadius.circular(10),
                     border: Border.all(
                       color: isSelected
-                          ? AppColors.primary
-                          : AppColors.border,
+                          ? AppColors.primaryBlue
+                          : AppColors.lightGray,
                     ),
                   ),
                   child: Center(
                     child: Text(
                       type,
-                      style: TextStyle(
+                      style: GoogleFonts.inter(
                         fontSize: 13,
-                        fontWeight: FontWeight.bold,
+                        fontWeight: FontWeight.w700,
                         color:
-                            isSelected ? Colors.white : AppColors.textPrimary,
+                            isSelected ? Colors.white : AppColors.darkText,
                       ),
                     ),
                   ),
@@ -626,7 +617,6 @@ class _PostProjectScreenState extends State<PostProjectScreen> {
     );
   }
 
-  // 4. Number of Student Openings
   Widget _buildOpeningsField() {
     return TextFormField(
       controller: _openingsController,
@@ -641,23 +631,14 @@ class _PostProjectScreenState extends State<PostProjectScreen> {
         }
         return null;
       },
-      decoration: InputDecoration(
+      decoration: const InputDecoration(
         labelText: 'Number of Student Openings *',
         hintText: 'e.g. 2',
-        prefixIcon: const Icon(Icons.people_outline_rounded, size: 18),
-        filled: true,
-        fillColor: AppColors.background,
-        contentPadding:
-            const EdgeInsets.symmetric(horizontal: 14, vertical: 12),
-        border: OutlineInputBorder(
-          borderRadius: BorderRadius.circular(10),
-          borderSide: const BorderSide(color: AppColors.border),
-        ),
+        prefixIcon: Icon(Icons.people_outline_rounded, size: 18),
       ),
     );
   }
 
-  // Section 2: Description Field
   Widget _buildDescriptionField() {
     return TextFormField(
       controller: _descriptionController,
@@ -671,60 +652,44 @@ class _PostProjectScreenState extends State<PostProjectScreen> {
         }
         return null;
       },
-      decoration: InputDecoration(
+      decoration: const InputDecoration(
         labelText: 'Project Description & Objectives *',
         hintText:
-            'Detail the problem statement, product context, and what the student will build...',
+            'Detail the problem statement, product context, and expected engineering outcomes...',
         alignLabelWithHint: true,
-        filled: true,
-        fillColor: AppColors.background,
-        contentPadding: const EdgeInsets.all(14),
-        border: OutlineInputBorder(
-          borderRadius: BorderRadius.circular(10),
-          borderSide: const BorderSide(color: AppColors.border),
-        ),
       ),
     );
   }
 
-  // Section 2: Requirements Field
   Widget _buildRequirementsField() {
     return TextFormField(
       controller: _requirementsController,
       maxLines: 3,
       validator: (val) {
         if (val == null || val.trim().isEmpty) {
-          return 'Project requirements are required';
+          return 'Project prerequisites are required';
         }
         return null;
       },
-      decoration: InputDecoration(
+      decoration: const InputDecoration(
         labelText: 'Student Prerequisites & Requirements *',
         hintText:
-            'e.g. 3rd/4th year CS student, familiar with clean architecture and Git workflow...',
+            'e.g. Final-year CS/SE student familiar with Git workflow and REST APIs...',
         alignLabelWithHint: true,
-        filled: true,
-        fillColor: AppColors.background,
-        contentPadding: const EdgeInsets.all(14),
-        border: OutlineInputBorder(
-          borderRadius: BorderRadius.circular(10),
-          borderSide: const BorderSide(color: AppColors.border),
-        ),
       ),
     );
   }
 
-  // Section 3: Skills Selector
   Widget _buildSkillsSelector() {
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
-        const Text(
+        Text(
           'Select Required Skills (Tap to toggle):',
-          style: TextStyle(
+          style: GoogleFonts.inter(
             fontSize: 13,
             fontWeight: FontWeight.w600,
-            color: AppColors.textPrimary,
+            color: AppColors.darkText,
           ),
         ),
         const SizedBox(height: 10),
@@ -736,17 +701,18 @@ class _PostProjectScreenState extends State<PostProjectScreen> {
             return FilterChip(
               label: Text(skill),
               selected: isSelected,
-              selectedColor: AppColors.lightIceBlue,
-              checkmarkColor: AppColors.primary,
-              labelStyle: TextStyle(
-                color: isSelected ? AppColors.primary : AppColors.textPrimary,
-                fontWeight: isSelected ? FontWeight.bold : FontWeight.normal,
+              selectedColor: AppColors.lightAqua,
+              checkmarkColor: AppColors.primaryBlue,
+              labelStyle: GoogleFonts.inter(
+                color: isSelected ? AppColors.primaryBlue : AppColors.darkText,
+                fontWeight: isSelected ? FontWeight.w700 : FontWeight.w500,
                 fontSize: 12.5,
               ),
               shape: RoundedRectangleBorder(
                 borderRadius: BorderRadius.circular(8),
                 side: BorderSide(
-                  color: isSelected ? AppColors.primary : AppColors.border,
+                  color:
+                      isSelected ? AppColors.primaryBlue : AppColors.lightGray,
                 ),
               ),
               onSelected: (_) => _toggleSkill(skill),
@@ -754,24 +720,16 @@ class _PostProjectScreenState extends State<PostProjectScreen> {
           }).toList(),
         ),
         const SizedBox(height: 14),
-
-        // Add custom skill input
         Row(
           children: [
             Expanded(
               child: TextFormField(
                 controller: _customSkillController,
-                style: const TextStyle(fontSize: 13),
-                decoration: InputDecoration(
-                  hintText: 'Add other specific skill (e.g. GraphQL)',
-                  filled: true,
-                  fillColor: AppColors.background,
+                style: GoogleFonts.inter(fontSize: 13),
+                decoration: const InputDecoration(
+                  hintText: 'Add custom skill (e.g. GraphQL)',
                   contentPadding:
-                      const EdgeInsets.symmetric(horizontal: 12, vertical: 10),
-                  border: OutlineInputBorder(
-                    borderRadius: BorderRadius.circular(8),
-                    borderSide: const BorderSide(color: AppColors.border),
-                  ),
+                      EdgeInsets.symmetric(horizontal: 12, vertical: 10),
                 ),
                 onFieldSubmitted: (_) => _addCustomSkill(),
               ),
@@ -779,28 +737,24 @@ class _PostProjectScreenState extends State<PostProjectScreen> {
             const SizedBox(width: 8),
             ElevatedButton.icon(
               style: ElevatedButton.styleFrom(
-                backgroundColor: AppColors.accentTeal,
-                foregroundColor: Colors.white,
-                shape: RoundedRectangleBorder(
-                  borderRadius: BorderRadius.circular(8),
-                ),
+                backgroundColor: AppColors.teal,
+                padding:
+                    const EdgeInsets.symmetric(horizontal: 14, vertical: 12),
               ),
               onPressed: _addCustomSkill,
-              icon: const Icon(Icons.add, size: 16),
+              icon: const Icon(Icons.add_rounded, size: 17),
               label: const Text('Add'),
             ),
           ],
         ),
-
-        // Display selected chips with remove option
         if (_selectedSkills.isNotEmpty) ...[
           const SizedBox(height: 12),
-          const Text(
-            'Active Selected Skills:',
-            style: TextStyle(
+          Text(
+            'Selected Skills (${_selectedSkills.length}):',
+            style: GoogleFonts.inter(
               fontSize: 12,
-              fontWeight: FontWeight.bold,
-              color: AppColors.darkNavy,
+              fontWeight: FontWeight.w700,
+              color: AppColors.deepNavy,
             ),
           ),
           const SizedBox(height: 6),
@@ -812,10 +766,10 @@ class _PostProjectScreenState extends State<PostProjectScreen> {
                 label: Text(s),
                 deleteIcon: const Icon(Icons.close, size: 14),
                 onDeleted: () => _toggleSkill(s),
-                backgroundColor: AppColors.lightIceBlue,
-                labelStyle: const TextStyle(
-                  color: AppColors.primary,
-                  fontWeight: FontWeight.bold,
+                backgroundColor: AppColors.lightAqua,
+                labelStyle: GoogleFonts.inter(
+                  color: AppColors.primaryBlue,
+                  fontWeight: FontWeight.w700,
                   fontSize: 11.5,
                 ),
               );
@@ -826,7 +780,6 @@ class _PostProjectScreenState extends State<PostProjectScreen> {
     );
   }
 
-  // Section 4: Deliverables Field
   Widget _buildDeliverablesField() {
     return TextFormField(
       controller: _deliverablesController,
@@ -837,24 +790,16 @@ class _PostProjectScreenState extends State<PostProjectScreen> {
         }
         return null;
       },
-      decoration: InputDecoration(
+      decoration: const InputDecoration(
         labelText: 'Expected Deliverables *',
         hintText:
-            'e.g. Modular GitHub repository, test suite, and runnable APK/Web link...',
+            'e.g. Clean GitHub repository, test suite, documentation, and demo video...',
         alignLabelWithHint: true,
-        filled: true,
-        fillColor: AppColors.background,
-        contentPadding: const EdgeInsets.all(14),
-        border: OutlineInputBorder(
-          borderRadius: BorderRadius.circular(10),
-          borderSide: const BorderSide(color: AppColors.border),
-        ),
       ),
     );
   }
 
-  // Section 4: Deadline Date Picker
-  Widget _buildDeadlineNumberPicker() {
+  Widget _buildDeadlinePicker() {
     final dateString = _selectedDeadline != null
         ? '${_selectedDeadline!.day.toString().padLeft(2, '0')} / ${_selectedDeadline!.month.toString().padLeft(2, '0')} / ${_selectedDeadline!.year}'
         : 'Choose a date';
@@ -862,24 +807,24 @@ class _PostProjectScreenState extends State<PostProjectScreen> {
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
-        const Text(
-          'Project Application & Submission Deadline *',
-          style: TextStyle(
+        Text(
+          'Application & Submission Deadline *',
+          style: GoogleFonts.inter(
             fontSize: 13,
             fontWeight: FontWeight.w600,
-            color: AppColors.darkNavy,
+            color: AppColors.deepNavy,
           ),
         ),
         const SizedBox(height: 8),
         InkWell(
           onTap: _pickDeadline,
-          borderRadius: BorderRadius.circular(10),
+          borderRadius: BorderRadius.circular(12),
           child: Container(
-            padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 12),
+            padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 13),
             decoration: BoxDecoration(
-              color: AppColors.background,
-              borderRadius: BorderRadius.circular(10),
-              border: Border.all(color: AppColors.border),
+              color: Colors.white,
+              borderRadius: BorderRadius.circular(12),
+              border: Border.all(color: AppColors.lightGray),
             ),
             child: Row(
               mainAxisAlignment: MainAxisAlignment.spaceBetween,
@@ -887,24 +832,24 @@ class _PostProjectScreenState extends State<PostProjectScreen> {
                 Row(
                   children: [
                     const Icon(Icons.calendar_month_rounded,
-                        color: AppColors.primary, size: 20),
+                        color: AppColors.primaryBlue, size: 20),
                     const SizedBox(width: 10),
                     Text(
                       dateString,
-                      style: const TextStyle(
+                      style: GoogleFonts.poppins(
                         fontSize: 14,
-                        fontWeight: FontWeight.bold,
-                        color: AppColors.textPrimary,
+                        fontWeight: FontWeight.w600,
+                        color: AppColors.deepNavy,
                       ),
                     ),
                   ],
                 ),
-                const Text(
+                Text(
                   'Change Date',
-                  style: TextStyle(
-                    fontSize: 12,
-                    fontWeight: FontWeight.bold,
-                    color: AppColors.primary,
+                  style: GoogleFonts.inter(
+                    fontSize: 12.5,
+                    fontWeight: FontWeight.w700,
+                    color: AppColors.primaryBlue,
                   ),
                 ),
               ],
@@ -915,68 +860,36 @@ class _PostProjectScreenState extends State<PostProjectScreen> {
     );
   }
 
-  // Section 5: Additional Instructions Field
   Widget _buildAdditionalInstructionsField() {
     return TextFormField(
       controller: _instructionsController,
       maxLines: 2,
-      decoration: InputDecoration(
+      decoration: const InputDecoration(
         labelText: 'Additional Instructions (Optional)',
         hintText:
-            'e.g. Preferred university chapters, orientation meeting timings, contact channel...',
+            'e.g. Weekly mentor sync cadence, coding conventions, or preferred university focus...',
         alignLabelWithHint: true,
-        filled: true,
-        fillColor: AppColors.background,
-        contentPadding: const EdgeInsets.all(14),
-        border: OutlineInputBorder(
-          borderRadius: BorderRadius.circular(10),
-          borderSide: const BorderSide(color: AppColors.border),
-        ),
       ),
     );
   }
 
-  // Bottom Action Buttons
   Widget _buildBottomActionButtons() {
     return Row(
       children: [
-        // Save As Draft
-        Expanded(
-          flex: 1,
-          child: OutlinedButton(
-            style: OutlinedButton.styleFrom(
-              padding: const EdgeInsets.symmetric(vertical: 14),
-              side: const BorderSide(color: AppColors.border),
-              shape: RoundedRectangleBorder(
-                borderRadius: BorderRadius.circular(12),
-              ),
-            ),
-            onPressed:
-                _isSavingDraft || _isPublishing ? null : _handleSaveDraft,
-            child: const Text(
-              'Save Draft',
-              style: TextStyle(
-                fontWeight: FontWeight.bold,
-                color: AppColors.textSecondary,
-              ),
+        if (!_isEditMode || widget.existingProject?.status == 'Draft') ...[
+          Expanded(
+            flex: 1,
+            child: OutlinedButton(
+              onPressed:
+                  _isSavingDraft || _isPublishing ? null : _handleSaveDraft,
+              child: const Text('Save Draft'),
             ),
           ),
-        ),
-        const SizedBox(width: 12),
-
-        // Publish Project
+          const SizedBox(width: 12),
+        ],
         Expanded(
           flex: 2,
           child: ElevatedButton.icon(
-            style: ElevatedButton.styleFrom(
-              backgroundColor: AppColors.primary,
-              foregroundColor: Colors.white,
-              padding: const EdgeInsets.symmetric(vertical: 14),
-              shape: RoundedRectangleBorder(
-                borderRadius: BorderRadius.circular(12),
-              ),
-              elevation: 2,
-            ),
             onPressed:
                 _isPublishing || _isSavingDraft ? null : _confirmAndPublish,
             icon: _isPublishing
@@ -990,11 +903,9 @@ class _PostProjectScreenState extends State<PostProjectScreen> {
                   )
                 : const Icon(Icons.rocket_launch_rounded, size: 18),
             label: Text(
-              _isPublishing ? 'Publishing...' : 'Publish Project',
-              style: const TextStyle(
-                fontSize: 15,
-                fontWeight: FontWeight.bold,
-              ),
+              _isPublishing
+                  ? 'Saving...'
+                  : (_isEditMode ? 'Update Project' : 'Publish Project'),
             ),
           ),
         ),

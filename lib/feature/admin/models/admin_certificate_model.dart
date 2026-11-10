@@ -57,6 +57,8 @@ class AdminCertificateModel {
   final String? revokingAdminName;
   final List<CertificateAuditRecord> verificationHistory;
   final bool isIssued;
+  final String? pdfUrl;
+  final String? verificationUrl;
 
   const AdminCertificateModel({
     required this.id,
@@ -85,6 +87,8 @@ class AdminCertificateModel {
     this.revokingAdminName,
     required this.verificationHistory,
     this.isIssued = true,
+    this.pdfUrl,
+    this.verificationUrl,
   });
 
   AdminCertificateModel copyWith({
@@ -110,10 +114,13 @@ class AdminCertificateModel {
     Map<String, double>? performanceRatings,
     String? recommendationLetter,
     String? revocationReason,
+    bool clearRevocation = false,
     String? revocationDate,
     String? revokingAdminName,
     List<CertificateAuditRecord>? verificationHistory,
     bool? isIssued,
+    String? pdfUrl,
+    String? verificationUrl,
   }) {
     return AdminCertificateModel(
       id: id ?? this.id,
@@ -137,11 +144,16 @@ class AdminCertificateModel {
       cryptographicHash: cryptographicHash ?? this.cryptographicHash,
       performanceRatings: performanceRatings ?? this.performanceRatings,
       recommendationLetter: recommendationLetter ?? this.recommendationLetter,
-      revocationReason: revocationReason ?? this.revocationReason,
-      revocationDate: revocationDate ?? this.revocationDate,
-      revokingAdminName: revokingAdminName ?? this.revokingAdminName,
+      revocationReason:
+          clearRevocation ? null : (revocationReason ?? this.revocationReason),
+      revocationDate:
+          clearRevocation ? null : (revocationDate ?? this.revocationDate),
+      revokingAdminName:
+          clearRevocation ? null : (revokingAdminName ?? this.revokingAdminName),
       verificationHistory: verificationHistory ?? this.verificationHistory,
       isIssued: isIssued ?? this.isIssued,
+      pdfUrl: pdfUrl ?? this.pdfUrl,
+      verificationUrl: verificationUrl ?? this.verificationUrl,
     );
   }
 
