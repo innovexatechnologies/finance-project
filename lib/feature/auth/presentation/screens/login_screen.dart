@@ -3,7 +3,9 @@ import 'package:google_fonts/google_fonts.dart';
 import 'package:supabase_flutter/supabase_flutter.dart';
 import 'package:link_vibe/core/constants/app_colors.dart';
 import 'package:link_vibe/core/services/app_data_service.dart';
+import 'package:link_vibe/feature/admin/presentation/screens/admin_dashboard_screen.dart';
 import 'package:link_vibe/feature/admin/presentation/screens/admin_login_screen.dart';
+import 'package:link_vibe/feature/admin/services/admin_auth_service.dart';
 import 'package:link_vibe/feature/company/presentation/screens/company_dashboard.dart';
 import 'package:link_vibe/feature/student/presentation/screens/student_main_nav.dart';
 import 'signup_screen.dart';
@@ -46,6 +48,51 @@ class _LoginScreenState extends State<LoginScreen> {
     });
 
     try {
+      // 0. Check default Admin credentials (pre-set admin account)
+      if (_selectedRole == 'Admin' ||
+          email.toLowerCase() == 'admin@campusconnect.edu.pk' ||
+          email.toLowerCase() == 'admin@linkvibe.com') {
+        final adminResult = await AdminAuthService().login(
+          email: email,
+          password: password,
+        );
+        if (adminResult.success && adminResult.admin != null) {
+          await AppDataService.instance.saveAuthSession(
+            role: 'Admin',
+            email: email,
+            name: adminResult.admin!.fullName,
+            userId: adminResult.admin!.id,
+          );
+          if (!mounted) return;
+          ScaffoldMessenger.of(context).showSnackBar(
+            SnackBar(
+              content: Text(
+                'Welcome, Administrator ${adminResult.admin!.fullName}!',
+              ),
+              backgroundColor: Colors.green,
+            ),
+          );
+          Navigator.pushReplacement(
+            context,
+            MaterialPageRoute(
+              builder: (context) => const AdminDashboardScreen(),
+            ),
+          );
+          return;
+        } else if (_selectedRole == 'Admin') {
+          if (!mounted) return;
+          ScaffoldMessenger.of(context).showSnackBar(
+            SnackBar(
+              content: Text(
+                adminResult.message ?? 'Invalid administrator credentials.',
+              ),
+              backgroundColor: Colors.red,
+            ),
+          );
+          return;
+        }
+      }
+
       // 1. Check registered local credentials first
       final isLocalValid =
           AppDataService.instance.verifyLocalCredentials(email, password);
@@ -71,7 +118,14 @@ class _LoginScreenState extends State<LoginScreen> {
           ),
         );
 
-        if (role == 'Company') {
+        if (role == 'Admin') {
+          Navigator.pushReplacement(
+            context,
+            MaterialPageRoute(
+              builder: (context) => const AdminDashboardScreen(),
+            ),
+          );
+        } else if (role == 'Company') {
           Navigator.pushReplacement(
             context,
             MaterialPageRoute(
@@ -128,7 +182,14 @@ class _LoginScreenState extends State<LoginScreen> {
         ),
       );
 
-      if (role == 'Company') {
+      if (role == 'Admin') {
+        Navigator.pushReplacement(
+          context,
+          MaterialPageRoute(
+            builder: (context) => const AdminDashboardScreen(),
+          ),
+        );
+      } else if (role == 'Company') {
         Navigator.pushReplacement(
           context,
           MaterialPageRoute(
@@ -340,7 +401,7 @@ class _LoginScreenState extends State<LoginScreen> {
                     decoration: const InputDecoration(
                       prefixIcon: Icon(Icons.badge_outlined, size: 20),
                     ),
-                    items: ['Student', 'Company']
+                    items: ['Student', 'Company', 'Admin']
                         .map((role) => DropdownMenuItem(
                               value: role,
                               child: Text(role),

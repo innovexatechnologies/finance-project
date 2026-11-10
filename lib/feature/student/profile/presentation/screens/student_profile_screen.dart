@@ -27,23 +27,25 @@ class _StudentProfileScreenState extends State<StudentProfileScreen> {
   }
 
   void _syncSupabaseUser() {
-    final user = Supabase.instance.client.auth.currentUser;
-    if (user != null) {
-      final name = user.userMetadata?['name'];
-      final email = user.email;
-      final university = user.userMetadata?['university'];
-      final currentProfile = AppDataService.instance.getProfile();
-      final currentName = currentProfile['name']?.toString() ?? '';
-      final isGeneric = currentName.isEmpty || currentName == 'Ahmed Khan';
+    try {
+      final user = Supabase.instance.client.auth.currentUser;
+      if (user != null) {
+        final name = user.userMetadata?['name'];
+        final email = user.email;
+        final university = user.userMetadata?['university'];
+        final currentProfile = AppDataService.instance.getProfile();
+        final currentName = currentProfile['name']?.toString() ?? '';
+        final isGeneric = currentName.isEmpty || currentName == 'Ahmed Khan';
 
-      AppDataService.instance.updateProfile({
-        if (name != null && name.toString().isNotEmpty && isGeneric)
-          'name': name.toString(),
-        if (email != null && email.isNotEmpty) 'email': email,
-        if (university != null && university.toString().isNotEmpty)
-          'university': university.toString(),
-      });
-    }
+        AppDataService.instance.updateProfile({
+          if (name != null && name.toString().isNotEmpty && isGeneric)
+            'name': name.toString(),
+          if (email != null && email.isNotEmpty) 'email': email,
+          if (university != null && university.toString().isNotEmpty)
+            'university': university.toString(),
+        });
+      }
+    } catch (_) {}
   }
 
   void _showAddSkillDialog() {
@@ -408,9 +410,6 @@ class _StudentProfileScreenState extends State<StudentProfileScreen> {
                       ),
                       const SizedBox(height: 10),
                       _buildInfoRow(Icons.school_outlined, 'Institute', university),
-                      const SizedBox(height: 8),
-                      _buildInfoRow(Icons.location_on_outlined, 'Location',
-                          profile['location'] ?? 'Lahore, Pakistan'),
                       if (showPhone) ...[
                         const SizedBox(height: 8),
                         _buildInfoRow(Icons.phone_outlined, 'Phone',
@@ -668,29 +667,32 @@ class _StudentProfileScreenState extends State<StudentProfileScreen> {
     VoidCallback onTap,
     Color iconColor,
   ) {
-    return ListTile(
-      leading: Container(
-        padding: const EdgeInsets.all(8),
-        decoration: BoxDecoration(
-          color: iconColor.withValues(alpha: 0.1),
-          borderRadius: BorderRadius.circular(10),
+    return Material(
+      color: Colors.transparent,
+      child: ListTile(
+        leading: Container(
+          padding: const EdgeInsets.all(8),
+          decoration: BoxDecoration(
+            color: iconColor.withValues(alpha: 0.1),
+            borderRadius: BorderRadius.circular(10),
+          ),
+          child: Icon(icon, color: iconColor, size: 20),
         ),
-        child: Icon(icon, color: iconColor, size: 20),
-      ),
-      title: Text(
-        title,
-        style: GoogleFonts.inter(
-          fontSize: 14,
-          fontWeight: FontWeight.w600,
-          color: AppColors.darkText,
+        title: Text(
+          title,
+          style: GoogleFonts.inter(
+            fontSize: 14,
+            fontWeight: FontWeight.w600,
+            color: AppColors.darkText,
+          ),
         ),
+        trailing: const Icon(
+          Icons.arrow_forward_ios_rounded,
+          size: 14,
+          color: AppColors.grayText,
+        ),
+        onTap: onTap,
       ),
-      trailing: const Icon(
-        Icons.arrow_forward_ios_rounded,
-        size: 14,
-        color: AppColors.grayText,
-      ),
-      onTap: onTap,
     );
   }
 }
