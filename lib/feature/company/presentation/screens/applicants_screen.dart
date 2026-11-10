@@ -12,10 +12,12 @@ import 'applicant_detail_screen.dart';
 
 class ApplicantsScreen extends StatefulWidget {
   final String? projectId;
+  final Function(int)? onTabChange;
 
   const ApplicantsScreen({
     super.key,
     this.projectId,
+    this.onTabChange,
   });
 
   @override
@@ -214,10 +216,12 @@ class _ApplicantsScreenState extends State<ApplicantsScreen> {
         backgroundColor: AppColors.deepNavy,
         foregroundColor: Colors.white,
         elevation: 0,
-        leading: IconButton(
-          icon: const Icon(Icons.arrow_back_ios_new_rounded, size: 18),
-          onPressed: () => Navigator.pop(context),
-        ),
+        leading: Navigator.canPop(context)
+            ? IconButton(
+                icon: const Icon(Icons.arrow_back_ios_new_rounded, size: 18),
+                onPressed: () => Navigator.pop(context),
+              )
+            : null,
         title: Column(
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [

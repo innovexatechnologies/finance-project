@@ -28,7 +28,9 @@ import 'company_verification_screen.dart';
 import 'post_project_screen.dart';
 
 class CompanyDashboardScreen extends StatefulWidget {
-  const CompanyDashboardScreen({super.key});
+  final Function(int)? onTabChange;
+
+  const CompanyDashboardScreen({super.key, this.onTabChange});
 
   @override
   State<CompanyDashboardScreen> createState() => _CompanyDashboardScreenState();
@@ -149,6 +151,11 @@ class _CompanyDashboardScreenState extends State<CompanyDashboardScreen> {
       return;
     }
 
+    if (widget.onTabChange != null) {
+      widget.onTabChange!(2);
+      return;
+    }
+
     final result = await Navigator.push(
       context,
       MaterialPageRoute(
@@ -194,6 +201,10 @@ class _CompanyDashboardScreenState extends State<CompanyDashboardScreen> {
   }
 
   void _navigateToApplicants() {
+    if (widget.onTabChange != null) {
+      widget.onTabChange!(3);
+      return;
+    }
     Navigator.push(
       context,
       MaterialPageRoute(
@@ -203,6 +214,10 @@ class _CompanyDashboardScreenState extends State<CompanyDashboardScreen> {
   }
 
   void _navigateToAssignedProjects() {
+    if (widget.onTabChange != null) {
+      widget.onTabChange!(4);
+      return;
+    }
     Navigator.push(
       context,
       MaterialPageRoute(
@@ -221,6 +236,10 @@ class _CompanyDashboardScreenState extends State<CompanyDashboardScreen> {
   }
 
   void _navigateToProjectsView({String filter = 'All'}) {
+    if (widget.onTabChange != null) {
+      widget.onTabChange!(1);
+      return;
+    }
     Navigator.push(
       context,
       MaterialPageRoute(

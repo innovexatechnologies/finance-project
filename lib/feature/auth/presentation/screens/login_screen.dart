@@ -8,6 +8,7 @@ import 'package:link_vibe/feature/admin/presentation/screens/admin_login_screen.
 import 'package:link_vibe/feature/auth/presentation/screens/email_verification_screen.dart';
 import 'package:link_vibe/feature/auth/presentation/screens/reset_password_screen.dart';
 import 'package:link_vibe/feature/company/presentation/screens/company_dashboard.dart';
+import 'package:link_vibe/feature/company/presentation/screens/company_main_nav.dart';
 import 'package:link_vibe/feature/company/services/company_profile_service.dart';
 import 'package:link_vibe/feature/student/presentation/screens/student_main_nav.dart';
 import 'signup_screen.dart';
@@ -230,7 +231,7 @@ class _LoginScreenState extends State<LoginScreen> {
         if (actualRole == 'Company') {
           Navigator.pushReplacement(
             context,
-            MaterialPageRoute(builder: (_) => const CompanyDashboardScreen()),
+            MaterialPageRoute(builder: (_) => const CompanyMainNav()),
           );
         } else {
           Navigator.pushReplacement(
@@ -280,7 +281,7 @@ class _LoginScreenState extends State<LoginScreen> {
         if (actualRole == 'Company') {
           Navigator.pushReplacement(
             context,
-            MaterialPageRoute(builder: (_) => const CompanyDashboardScreen()),
+            MaterialPageRoute(builder: (_) => const CompanyMainNav()),
           );
         } else {
           Navigator.pushReplacement(

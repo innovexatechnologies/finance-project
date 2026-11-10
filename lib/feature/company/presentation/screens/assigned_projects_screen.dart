@@ -16,10 +16,12 @@ import 'submission_review_screen.dart';
 
 class AssignedProjectsScreen extends StatefulWidget {
   final String? filterProjectId;
+  final Function(int)? onTabChange;
 
   const AssignedProjectsScreen({
     super.key,
     this.filterProjectId,
+    this.onTabChange,
   });
 
   @override
@@ -150,10 +152,12 @@ class _AssignedProjectsScreenState extends State<AssignedProjectsScreen> {
         backgroundColor: AppColors.deepNavy,
         foregroundColor: Colors.white,
         elevation: 0,
-        leading: IconButton(
-          icon: const Icon(Icons.arrow_back_ios_new_rounded, size: 18),
-          onPressed: () => Navigator.pop(context),
-        ),
+        leading: Navigator.canPop(context)
+            ? IconButton(
+                icon: const Icon(Icons.arrow_back_ios_new_rounded, size: 18),
+                onPressed: () => Navigator.pop(context),
+              )
+            : null,
         title: Column(
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [

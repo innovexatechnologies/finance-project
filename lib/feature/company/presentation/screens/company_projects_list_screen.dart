@@ -12,10 +12,12 @@ import 'post_project_screen.dart';
 
 class CompanyProjectsListScreen extends StatefulWidget {
   final String initialFilter;
+  final Function(int)? onTabChange;
 
   const CompanyProjectsListScreen({
     super.key,
     this.initialFilter = 'All',
+    this.onTabChange,
   });
 
   @override
@@ -65,6 +67,10 @@ class _CompanyProjectsListScreenState extends State<CompanyProjectsListScreen> {
   }
 
   Future<void> _navigateToPostProject() async {
+    if (widget.onTabChange != null) {
+      widget.onTabChange!(2);
+      return;
+    }
     final result = await Navigator.push(
       context,
       MaterialPageRoute(

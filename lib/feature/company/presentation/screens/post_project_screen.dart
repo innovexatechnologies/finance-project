@@ -8,8 +8,13 @@ import 'package:link_vibe/feature/company/services/company_project_service.dart'
 
 class PostProjectScreen extends StatefulWidget {
   final ProjectModel? existingProject;
+  final Function(int)? onTabChange;
 
-  const PostProjectScreen({super.key, this.existingProject});
+  const PostProjectScreen({
+    super.key,
+    this.existingProject,
+    this.onTabChange,
+  });
 
   @override
   State<PostProjectScreen> createState() => _PostProjectScreenState();
@@ -224,7 +229,12 @@ class _PostProjectScreenState extends State<PostProjectScreen> {
           backgroundColor: AppColors.primaryBlue,
         ),
       );
-      Navigator.pop(context, true);
+      if (Navigator.canPop(context)) {
+        Navigator.pop(context, true);
+      } else {
+        _resetForm();
+        widget.onTabChange?.call(1);
+      }
     } catch (e) {
       if (!mounted) return;
       setState(() => _isSavingDraft = false);
@@ -336,7 +346,12 @@ class _PostProjectScreenState extends State<PostProjectScreen> {
         ),
       );
 
-      Navigator.pop(context, true);
+      if (Navigator.canPop(context)) {
+        Navigator.pop(context, true);
+      } else {
+        _resetForm();
+        widget.onTabChange?.call(1);
+      }
     } catch (e) {
       if (!mounted) return;
       setState(() => _isPublishing = false);
@@ -346,6 +361,25 @@ class _PostProjectScreenState extends State<PostProjectScreen> {
           backgroundColor: AppColors.statusClosed,
         ),
       );
+    }
+  }
+
+  void _resetForm() {
+    _formKey.currentState?.reset();
+    _titleController.clear();
+    _descriptionController.clear();
+    _requirementsController.clear();
+    _deliverablesController.clear();
+    _openingsController.text = '1';
+    _instructionsController.clear();
+    _customSkillController.clear();
+    if (mounted) {
+      setState(() {
+        _selectedSkills.clear();
+        _selectedCategory = 'Mobile App Development';
+        _selectedProjectType = 'Remote';
+        _selectedDeadline = null;
+      });
     }
   }
 
