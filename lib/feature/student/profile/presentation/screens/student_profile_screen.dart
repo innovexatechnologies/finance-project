@@ -56,217 +56,54 @@ class _StudentProfileScreenState extends State<StudentProfileScreen> {
   }
 
   Future<void> _showAddSkillDialog() async {
-    final controller = TextEditingController();
-    final added = await showDialog<String>(
+    final addedRaw = await showDialog<String>(
       context: context,
-      builder: (dialogCtx) => AlertDialog(
-        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
-        title: Text(
-          'Add New Skill',
-          style: GoogleFonts.poppins(
-            fontWeight: FontWeight.bold,
-            color: AppColors.deepNavy,
-          ),
-        ),
-        content: TextField(
-          controller: controller,
-          autofocus: true,
-          decoration: const InputDecoration(
-            hintText: 'e.g. Flutter, SQL, UI/UX, Python',
-          ),
-          onSubmitted: (val) => Navigator.pop(dialogCtx, val.trim()),
-        ),
-        actions: [
-          TextButton(
-            onPressed: () => Navigator.pop(dialogCtx),
-            child: const Text('Cancel'),
-          ),
-          ElevatedButton(
-            onPressed: () => Navigator.pop(dialogCtx, controller.text.trim()),
-            child: const Text('Add'),
-          ),
-        ],
+      builder: (_) => const _AddSkillDialog(),
+    );
+
+    if (addedRaw == null || addedRaw.trim().isEmpty) return;
+
+    final entries = addedRaw
+        .split(',')
+        .map((s) => s.trim())
+        .where((s) => s.isNotEmpty)
+        .toList();
+    if (entries.isEmpty) return;
+
+    for (final skill in entries) {
+      await AppDataService.instance.addSkill(skill);
+    }
+    if (!mounted) return;
+    final label = entries.length == 1
+        ? 'Skill "${entries.first}" added and synced!'
+        : '${entries.length} skills added and synced!';
+    ScaffoldMessenger.of(context).showSnackBar(
+      SnackBar(
+        content: Text(label),
+        behavior: SnackBarBehavior.floating,
+        backgroundColor: AppColors.statusOpen,
+        duration: const Duration(seconds: 2),
       ),
     );
-    controller.dispose();
-
-    if (added != null && added.isNotEmpty) {
-      await AppDataService.instance.addSkill(added);
-      if (!mounted) return;
-      ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(
-          content: Text('Skill "$added" added and synced!'),
-          duration: const Duration(seconds: 2),
-        ),
-      );
-    }
   }
 
   Future<void> _showEditProfileDialog() async {
     final profile = AppDataService.instance.getProfile();
-    final nameCtrl =
-        TextEditingController(text: profile['name']?.toString() ?? '');
-    final uniCtrl =
-        TextEditingController(text: profile['university']?.toString() ?? '');
-    final deptCtrl =
-        TextEditingController(text: profile['department']?.toString() ?? '');
-    final degreeCtrl =
-        TextEditingController(text: profile['degree']?.toString() ?? '');
-    final semesterCtrl =
-        TextEditingController(text: profile['semester']?.toString() ?? '');
-    final cgpaCtrl = TextEditingController(
-      text: profile['cgpa'] != null ? profile['cgpa'].toString() : '',
-    );
-    final phoneCtrl =
-        TextEditingController(text: profile['phone']?.toString() ?? '');
-    final portfolioCtrl = TextEditingController(
-      text: profile['portfolioUrl']?.toString() ??
-          profile['githubUrl']?.toString() ??
-          '',
-    );
-    final bioCtrl =
-        TextEditingController(text: profile['bio']?.toString() ?? '');
-
-    final saved = await showDialog<bool>(
+    final updates = await showDialog<Map<String, dynamic>>(
       context: context,
-      builder: (dialogCtx) => AlertDialog(
-        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(18)),
-        title: Text(
-          'Edit Academic Profile',
-          style: GoogleFonts.poppins(
-            fontWeight: FontWeight.bold,
-            color: AppColors.deepNavy,
-          ),
-        ),
-        content: SizedBox(
-          width: 440,
-          child: SingleChildScrollView(
-            child: Column(
-              mainAxisSize: MainAxisSize.min,
-              crossAxisAlignment: CrossAxisAlignment.start,
-              children: [
-                _dialogField('Full Name', nameCtrl, 'Enter full name'),
-                _dialogField('Institute / University', uniCtrl,
-                    'e.g. FAST NUCES / NUST'),
-                _dialogField('Department', deptCtrl, 'e.g. Computer Science'),
-                _dialogField('Degree Program', degreeCtrl, 'e.g. BSCS'),
-                Row(
-                  children: [
-                    Expanded(
-                      child: _dialogField(
-                          'Semester', semesterCtrl, 'e.g. 7th'),
-                    ),
-                    const SizedBox(width: 10),
-                    Expanded(
-                      child: _dialogField(
-                        'CGPA',
-                        cgpaCtrl,
-                        'e.g. 3.65',
-                        keyboardType: const TextInputType.numberWithOptions(
-                          decimal: true,
-                        ),
-                      ),
-                    ),
-                  ],
-                ),
-                _dialogField(
-                  'Contact Phone',
-                  phoneCtrl,
-                  'e.g. +92 3xx xxxxxxx',
-                  keyboardType: TextInputType.phone,
-                ),
-                _dialogField(
-                  'Portfolio / GitHub URL',
-                  portfolioCtrl,
-                  'https://github.com/username',
-                  keyboardType: TextInputType.url,
-                ),
-                _dialogField(
-                  'Professional Bio',
-                  bioCtrl,
-                  'Highlight your academic strengths and goals',
-                  maxLines: 3,
-                ),
-              ],
-            ),
-          ),
-        ),
-        actions: [
-          TextButton(
-            onPressed: () => Navigator.pop(dialogCtx, false),
-            child: const Text('Cancel'),
-          ),
-          ElevatedButton(
-            onPressed: () => Navigator.pop(dialogCtx, true),
-            child: const Text('Save Changes'),
-          ),
-        ],
-      ),
+      builder: (_) => _EditAcademicProfileDialog(initialProfile: profile),
     );
 
-    if (saved == true) {
-      final parsedCgpa = double.tryParse(cgpaCtrl.text.trim());
-      await AppDataService.instance.updateProfile({
-        'name': nameCtrl.text.trim(),
-        'university': uniCtrl.text.trim(),
-        'department': deptCtrl.text.trim(),
-        'degree': degreeCtrl.text.trim(),
-        'semester': semesterCtrl.text.trim(),
-        'cgpa': ?parsedCgpa,
-        'phone': phoneCtrl.text.trim(),
-        'portfolioUrl': portfolioCtrl.text.trim(),
-        'githubUrl': portfolioCtrl.text.trim(),
-        'bio': bioCtrl.text.trim(),
-      });
-      if (mounted) {
-        ScaffoldMessenger.of(context).showSnackBar(
-          const SnackBar(
-            content: Text('Profile updated and synchronized with Supabase.'),
-            duration: Duration(seconds: 2),
-          ),
-        );
-      }
-    }
+    if (updates == null) return;
 
-    nameCtrl.dispose();
-    uniCtrl.dispose();
-    deptCtrl.dispose();
-    degreeCtrl.dispose();
-    semesterCtrl.dispose();
-    cgpaCtrl.dispose();
-    phoneCtrl.dispose();
-    portfolioCtrl.dispose();
-    bioCtrl.dispose();
-  }
-
-  Widget _dialogField(
-    String label,
-    TextEditingController ctrl,
-    String hint, {
-    int maxLines = 1,
-    TextInputType? keyboardType,
-  }) {
-    return Padding(
-      padding: const EdgeInsets.only(bottom: 12),
-      child: Column(
-        crossAxisAlignment: CrossAxisAlignment.start,
-        children: [
-          Text(
-            label,
-            style: GoogleFonts.inter(
-              fontWeight: FontWeight.w600,
-              fontSize: 12,
-              color: AppColors.deepNavy,
-            ),
-          ),
-          const SizedBox(height: 5),
-          TextField(
-            controller: ctrl,
-            maxLines: maxLines,
-            keyboardType: keyboardType,
-            decoration: InputDecoration(hintText: hint),
-          ),
-        ],
+    await AppDataService.instance.updateProfile(updates);
+    if (!mounted) return;
+    ScaffoldMessenger.of(context).showSnackBar(
+      const SnackBar(
+        content: Text('Profile updated and synchronized with Supabase.'),
+        behavior: SnackBarBehavior.floating,
+        backgroundColor: AppColors.statusOpen,
+        duration: Duration(seconds: 2),
       ),
     );
   }
@@ -554,6 +391,7 @@ class _StudentProfileScreenState extends State<StudentProfileScreen> {
                           color: AppColors.cardWhite,
                           borderRadius: BorderRadius.circular(16),
                           border: Border.all(color: AppColors.lightGray),
+                          boxShadow: AppColors.softShadow,
                         ),
                         child: Column(
                           crossAxisAlignment: CrossAxisAlignment.start,
@@ -648,6 +486,7 @@ class _StudentProfileScreenState extends State<StudentProfileScreen> {
                           color: AppColors.cardWhite,
                           borderRadius: BorderRadius.circular(16),
                           border: Border.all(color: AppColors.lightGray),
+                          boxShadow: AppColors.softShadow,
                         ),
                         child: Column(
                           crossAxisAlignment: CrossAxisAlignment.start,
@@ -724,13 +563,25 @@ class _StudentProfileScreenState extends State<StudentProfileScreen> {
                                 children: skills.map((skill) {
                                   return Chip(
                                     label: Text(skill),
+                                    visualDensity: VisualDensity.compact,
+                                    materialTapTargetSize:
+                                        MaterialTapTargetSize.shrinkWrap,
+                                    padding: const EdgeInsets.symmetric(
+                                      horizontal: 8,
+                                      vertical: 2,
+                                    ),
+                                    labelPadding:
+                                        const EdgeInsets.only(left: 4, right: 2),
+                                    shape: RoundedRectangleBorder(
+                                      borderRadius: BorderRadius.circular(10),
+                                    ),
                                     labelStyle: GoogleFonts.inter(
-                                      fontSize: 12,
-                                      fontWeight: FontWeight.w500,
+                                      fontSize: 12.5,
+                                      fontWeight: FontWeight.w600,
                                       color: AppColors.deepNavy,
                                     ),
-                                    backgroundColor:
-                                        AppColors.lightAqua.withValues(alpha: 0.5),
+                                    backgroundColor: AppColors.lightAqua
+                                        .withValues(alpha: 0.55),
                                     side: BorderSide(
                                       color:
                                           AppColors.teal.withValues(alpha: 0.3),
@@ -758,6 +609,7 @@ class _StudentProfileScreenState extends State<StudentProfileScreen> {
                           color: AppColors.cardWhite,
                           borderRadius: BorderRadius.circular(16),
                           border: Border.all(color: AppColors.lightGray),
+                          boxShadow: AppColors.softShadow,
                         ),
                         child: Column(
                           children: [
@@ -932,6 +784,309 @@ class _StudentProfileScreenState extends State<StudentProfileScreen> {
         ),
         onTap: onTap,
       ),
+    );
+  }
+}
+
+class _AddSkillDialog extends StatefulWidget {
+  const _AddSkillDialog();
+
+  @override
+  State<_AddSkillDialog> createState() => _AddSkillDialogState();
+}
+
+class _AddSkillDialogState extends State<_AddSkillDialog> {
+  final TextEditingController _controller = TextEditingController();
+  String? _errorText;
+
+  @override
+  void dispose() {
+    _controller.dispose();
+    super.dispose();
+  }
+
+  void _submit() {
+    final val = _controller.text.trim();
+    if (val.isEmpty) {
+      setState(() => _errorText = 'Please enter at least one skill.');
+      return;
+    }
+    FocusScope.of(context).unfocus();
+    Navigator.pop(context, val);
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    return AlertDialog(
+      shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(18)),
+      title: Row(
+        children: [
+          Container(
+            padding: const EdgeInsets.all(8),
+            decoration: BoxDecoration(
+              color: AppColors.primaryBlue.withValues(alpha: 0.1),
+              borderRadius: BorderRadius.circular(10),
+            ),
+            child: const Icon(
+              Icons.auto_awesome_outlined,
+              color: AppColors.primaryBlue,
+              size: 18,
+            ),
+          ),
+          const SizedBox(width: 10),
+          Expanded(
+            child: Text(
+              'Add New Skill',
+              style: GoogleFonts.poppins(
+                fontSize: 17,
+                fontWeight: FontWeight.w700,
+                color: AppColors.deepNavy,
+              ),
+            ),
+          ),
+        ],
+      ),
+      content: ConstrainedBox(
+        constraints: const BoxConstraints(maxWidth: 400),
+        child: Column(
+          mainAxisSize: MainAxisSize.min,
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            Text(
+              'Add a technical skill or separate multiple skills with commas.',
+              style: GoogleFonts.inter(
+                fontSize: 12.5,
+                color: AppColors.grayText,
+                height: 1.4,
+              ),
+            ),
+            const SizedBox(height: 12),
+            TextField(
+              controller: _controller,
+              autofocus: true,
+              textInputAction: TextInputAction.done,
+              onChanged: (_) {
+                if (_errorText != null) setState(() => _errorText = null);
+              },
+              onSubmitted: (_) => _submit(),
+              decoration: InputDecoration(
+                hintText: 'e.g. Flutter, SQL, UI/UX, Python',
+                errorText: _errorText,
+                prefixIcon: const Icon(Icons.code_rounded, size: 19),
+              ),
+            ),
+          ],
+        ),
+      ),
+      actions: [
+        TextButton(
+          onPressed: () {
+            FocusScope.of(context).unfocus();
+            Navigator.pop(context);
+          },
+          child: const Text('Cancel'),
+        ),
+        ElevatedButton(
+          onPressed: _submit,
+          child: const Text('Add'),
+        ),
+      ],
+    );
+  }
+}
+
+class _EditAcademicProfileDialog extends StatefulWidget {
+  final Map<String, dynamic> initialProfile;
+
+  const _EditAcademicProfileDialog({required this.initialProfile});
+
+  @override
+  State<_EditAcademicProfileDialog> createState() =>
+      _EditAcademicProfileDialogState();
+}
+
+class _EditAcademicProfileDialogState
+    extends State<_EditAcademicProfileDialog> {
+  late final TextEditingController _nameCtrl;
+  late final TextEditingController _uniCtrl;
+  late final TextEditingController _deptCtrl;
+  late final TextEditingController _degreeCtrl;
+  late final TextEditingController _semesterCtrl;
+  late final TextEditingController _cgpaCtrl;
+  late final TextEditingController _phoneCtrl;
+  late final TextEditingController _portfolioCtrl;
+  late final TextEditingController _bioCtrl;
+
+  @override
+  void initState() {
+    super.initState();
+    final p = widget.initialProfile;
+    _nameCtrl = TextEditingController(text: p['name']?.toString() ?? '');
+    _uniCtrl = TextEditingController(text: p['university']?.toString() ?? '');
+    _deptCtrl = TextEditingController(text: p['department']?.toString() ?? '');
+    _degreeCtrl = TextEditingController(text: p['degree']?.toString() ?? '');
+    _semesterCtrl =
+        TextEditingController(text: p['semester']?.toString() ?? '');
+    _cgpaCtrl = TextEditingController(
+      text: p['cgpa'] != null && (p['cgpa'] as num) > 0
+          ? p['cgpa'].toString()
+          : '',
+    );
+    _phoneCtrl = TextEditingController(text: p['phone']?.toString() ?? '');
+    _portfolioCtrl = TextEditingController(
+      text: p['portfolioUrl']?.toString() ??
+          p['githubUrl']?.toString() ??
+          '',
+    );
+    _bioCtrl = TextEditingController(text: p['bio']?.toString() ?? '');
+  }
+
+  @override
+  void dispose() {
+    _nameCtrl.dispose();
+    _uniCtrl.dispose();
+    _deptCtrl.dispose();
+    _degreeCtrl.dispose();
+    _semesterCtrl.dispose();
+    _cgpaCtrl.dispose();
+    _phoneCtrl.dispose();
+    _portfolioCtrl.dispose();
+    _bioCtrl.dispose();
+    super.dispose();
+  }
+
+  void _save() {
+    FocusScope.of(context).unfocus();
+    final parsedCgpa = double.tryParse(_cgpaCtrl.text.trim());
+    Navigator.pop<Map<String, dynamic>>(context, {
+      'name': _nameCtrl.text.trim(),
+      'university': _uniCtrl.text.trim(),
+      'department': _deptCtrl.text.trim(),
+      'degree': _degreeCtrl.text.trim(),
+      'semester': _semesterCtrl.text.trim(),
+      'cgpa': ?parsedCgpa,
+      'phone': _phoneCtrl.text.trim(),
+      'portfolioUrl': _portfolioCtrl.text.trim(),
+      'githubUrl': _portfolioCtrl.text.trim(),
+      'bio': _bioCtrl.text.trim(),
+    });
+  }
+
+  Widget _dialogField(
+    String label,
+    TextEditingController ctrl,
+    String hint, {
+    int maxLines = 1,
+    TextInputType? keyboardType,
+  }) {
+    return Padding(
+      padding: const EdgeInsets.only(bottom: 12),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Text(
+            label,
+            style: GoogleFonts.inter(
+              fontWeight: FontWeight.w600,
+              fontSize: 12,
+              color: AppColors.deepNavy,
+            ),
+          ),
+          const SizedBox(height: 5),
+          TextField(
+            controller: ctrl,
+            maxLines: maxLines,
+            keyboardType: keyboardType,
+            decoration: InputDecoration(hintText: hint),
+          ),
+        ],
+      ),
+    );
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    return AlertDialog(
+      shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(18)),
+      title: Text(
+        'Edit Academic Profile',
+        style: GoogleFonts.poppins(
+          fontWeight: FontWeight.bold,
+          color: AppColors.deepNavy,
+        ),
+      ),
+      content: SizedBox(
+        width: 440,
+        child: SingleChildScrollView(
+          child: Column(
+            mainAxisSize: MainAxisSize.min,
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              _dialogField('Full Name', _nameCtrl, 'Enter full name'),
+              _dialogField(
+                'Institute / University',
+                _uniCtrl,
+                'e.g. FAST NUCES / NUST',
+              ),
+              _dialogField('Department', _deptCtrl, 'e.g. Computer Science'),
+              _dialogField('Degree Program', _degreeCtrl, 'e.g. BSCS'),
+              Row(
+                children: [
+                  Expanded(
+                    child: _dialogField(
+                      'Semester',
+                      _semesterCtrl,
+                      'e.g. 7th',
+                    ),
+                  ),
+                  const SizedBox(width: 10),
+                  Expanded(
+                    child: _dialogField(
+                      'CGPA',
+                      _cgpaCtrl,
+                      'e.g. 3.65',
+                      keyboardType: const TextInputType.numberWithOptions(
+                        decimal: true,
+                      ),
+                    ),
+                  ),
+                ],
+              ),
+              _dialogField(
+                'Contact Phone',
+                _phoneCtrl,
+                'e.g. +92 3xx xxxxxxx',
+                keyboardType: TextInputType.phone,
+              ),
+              _dialogField(
+                'Portfolio / GitHub URL',
+                _portfolioCtrl,
+                'https://github.com/username',
+                keyboardType: TextInputType.url,
+              ),
+              _dialogField(
+                'Professional Bio',
+                _bioCtrl,
+                'Highlight your academic strengths and goals',
+                maxLines: 3,
+              ),
+            ],
+          ),
+        ),
+      ),
+      actions: [
+        TextButton(
+          onPressed: () {
+            FocusScope.of(context).unfocus();
+            Navigator.pop(context);
+          },
+          child: const Text('Cancel'),
+        ),
+        ElevatedButton(
+          onPressed: _save,
+          child: const Text('Save Changes'),
+        ),
+      ],
     );
   }
 }

@@ -305,5 +305,82 @@ void main() {
       await tester.pumpAndSettle();
       expect(find.byType(StudentMainNav), findsOneWidget);
     });
+
+    testWidgets(
+        'StudentProfileScreen Add New Skill dialog adds skill without assertion/lifecycle errors',
+        (tester) async {
+      tester.view.physicalSize = const Size(412, 915);
+      tester.view.devicePixelRatio = 1.0;
+      addTearDown(() {
+        tester.view.resetPhysicalSize();
+        tester.view.resetViewInsets();
+      });
+
+      await AppDataService.instance.addSkill('cc');
+      await AppDataService.instance.addSkill('i');
+
+      await tester.pumpWidget(
+        const MaterialApp(home: StudentMainNav(initialIndex: 4)),
+      );
+      await tester.pumpAndSettle();
+
+      await tester.tap(find.byIcon(Icons.add_circle_outline_rounded));
+      await tester.pump();
+      await tester.pump(const Duration(milliseconds: 50));
+
+      // Simulate soft keyboard opening while dialog is focused
+      tester.view.viewInsets = const FakeViewPadding(bottom: 300);
+      await tester.pump(const Duration(milliseconds: 50));
+
+      await tester.enterText(find.byType(TextField).last, 'yuu');
+      await tester.pump();
+
+      await tester.tap(find.text('Add'));
+      // Simulate keyboard dismissing right as dialog closes
+      tester.view.viewInsets = FakeViewPadding.zero;
+      await tester.pump();
+      await tester.pump(const Duration(milliseconds: 50));
+      await tester.pump(const Duration(milliseconds: 100));
+      await tester.pumpAndSettle();
+
+      expect(tester.takeException(), isNull);
+      expect(find.text('yuu'), findsOneWidget);
+    });
+
+    testWidgets(
+        'StudentProfileScreen Edit Academic Profile dialog saves without controller lifecycle errors',
+        (tester) async {
+      tester.view.physicalSize = const Size(412, 915);
+      tester.view.devicePixelRatio = 1.0;
+      addTearDown(() {
+        tester.view.resetPhysicalSize();
+        tester.view.resetViewInsets();
+      });
+
+      await tester.pumpWidget(
+        const MaterialApp(home: StudentMainNav(initialIndex: 4)),
+      );
+      await tester.pumpAndSettle();
+
+      await tester.tap(find.byTooltip('Edit Profile'));
+      await tester.pump();
+      await tester.pump(const Duration(milliseconds: 50));
+
+      tester.view.viewInsets = const FakeViewPadding(bottom: 300);
+      await tester.pump(const Duration(milliseconds: 50));
+
+      await tester.enterText(find.byType(TextField).first, 'Ayesha Noor');
+      await tester.pump();
+
+      await tester.ensureVisible(find.text('Save Changes'));
+      await tester.tap(find.text('Save Changes'));
+      tester.view.viewInsets = FakeViewPadding.zero;
+      await tester.pump();
+      await tester.pump(const Duration(milliseconds: 100));
+      await tester.pumpAndSettle();
+
+      expect(tester.takeException(), isNull);
+      expect(find.text('Ayesha Noor'), findsOneWidget);
+    });
   });
 }

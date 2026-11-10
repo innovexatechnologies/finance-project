@@ -64,10 +64,6 @@ void main() async {
     );
   }
 
-  if (SupabaseHelper.currentUser != null && !SupabaseHelper.pendingPasswordRecovery) {
-    await AppDataService.instance.syncFromSupabase();
-  }
-
   await bootSub?.cancel();
   runApp(const MyApp());
 }

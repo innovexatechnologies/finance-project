@@ -43,7 +43,7 @@ class _SplashScreenState extends State<SplashScreen>
     );
     _animController.forward();
 
-    _autoLoginTimer = Timer(const Duration(milliseconds: 1400), () {
+    _autoLoginTimer = Timer(const Duration(milliseconds: 900), () {
       if (!mounted) return;
       if (AppDataService.instance.isLoggedIn) {
         _bootstrapAndNavigate();
@@ -65,10 +65,10 @@ class _SplashScreenState extends State<SplashScreen>
     try {
       final supabase = SupabaseHelper.clientOrNull;
       if (supabase != null && supabase.auth.currentUser != null) {
-        await AppDataService.instance.syncFromSupabase(forceRefresh: true);
         final role = AppDataService.instance.userRole.toLowerCase();
 
         if (role == 'admin') {
+          await AppDataService.instance.syncFromSupabase(forceRefresh: true);
           final restoredAdmin = await AdminAuthService()
               .restoreFromCurrentUser();
           if (!mounted) return;
@@ -350,6 +350,9 @@ class _SplashScreenState extends State<SplashScreen>
                                 style: ElevatedButton.styleFrom(
                                   backgroundColor: Colors.white,
                                   foregroundColor: AppColors.deepNavy,
+                                  disabledBackgroundColor:
+                                      Colors.white.withValues(alpha: 0.94),
+                                  disabledForegroundColor: AppColors.deepNavy,
                                   elevation: 4,
                                   shape: RoundedRectangleBorder(
                                     borderRadius: BorderRadius.circular(16),
@@ -359,13 +362,32 @@ class _SplashScreenState extends State<SplashScreen>
                                     ? null
                                     : _onGetStartedPressed,
                                 child: _isBootstrapping
-                                    ? const SizedBox(
-                                        width: 22,
-                                        height: 22,
-                                        child: CircularProgressIndicator(
-                                          strokeWidth: 2.2,
-                                          color: AppColors.deepNavy,
-                                        ),
+                                    ? Row(
+                                        mainAxisAlignment:
+                                            MainAxisAlignment.center,
+                                        children: [
+                                          const SizedBox(
+                                            width: 18,
+                                            height: 18,
+                                            child: CircularProgressIndicator(
+                                              strokeWidth: 2.2,
+                                              color: AppColors.deepNavy,
+                                            ),
+                                          ),
+                                          const SizedBox(width: 10),
+                                          Flexible(
+                                            child: Text(
+                                              'Opening Workspace...',
+                                              maxLines: 1,
+                                              overflow: TextOverflow.ellipsis,
+                                              style: GoogleFonts.poppins(
+                                                fontSize: 14,
+                                                fontWeight: FontWeight.w600,
+                                                color: AppColors.deepNavy,
+                                              ),
+                                            ),
+                                          ),
+                                        ],
                                       )
                                     : Row(
                                         mainAxisAlignment:
