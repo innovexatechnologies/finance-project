@@ -4,16 +4,16 @@ import 'package:supabase_flutter/supabase_flutter.dart';
 import 'package:link_vibe/core/constants/app_colors.dart';
 import 'package:link_vibe/core/services/app_data_service.dart';
 import 'package:link_vibe/core/services/supabase_helper.dart';
-import 'package:link_vibe/feature/admin/presentation/screens/admin_dashboard_screen.dart';
 import 'package:link_vibe/feature/admin/presentation/screens/admin_login_screen.dart';
-import 'package:link_vibe/feature/admin/services/admin_auth_service.dart';
 import 'package:link_vibe/feature/company/presentation/screens/company_dashboard.dart';
 import 'package:link_vibe/feature/company/services/company_profile_service.dart';
 import 'package:link_vibe/feature/student/presentation/screens/student_main_nav.dart';
 import 'signup_screen.dart';
 
 class LoginScreen extends StatefulWidget {
-  const LoginScreen({super.key});
+  final String initialRole;
+
+  const LoginScreen({super.key, this.initialRole = 'Student'});
 
   @override
   State<LoginScreen> createState() => _LoginScreenState();
@@ -24,10 +24,16 @@ class _LoginScreenState extends State<LoginScreen> {
   final _emailController = TextEditingController();
   final _passwordController = TextEditingController();
 
-  String _selectedRole = 'Student';
+  late String _selectedRole;
   bool _isLoading = false;
   bool _obscurePassword = true;
   String? _errorBanner;
+
+  @override
+  void initState() {
+    super.initState();
+    _selectedRole = widget.initialRole == 'Company' ? 'Company' : 'Student';
+  }
 
   @override
   void dispose() {
@@ -49,47 +55,7 @@ class _LoginScreenState extends State<LoginScreen> {
     setState(() => _isLoading = true);
 
     try {
-      // 1. Administrator authentication path
-      if (_selectedRole == 'Admin' ||
-          email.toLowerCase() == 'admin@campusconnect.edu.pk') {
-        final adminResult = await AdminAuthService().login(
-          email: email,
-          password: password,
-        );
-        if (adminResult.success && adminResult.admin != null) {
-          await AppDataService.instance.saveAuthSession(
-            role: 'Admin',
-            email: adminResult.admin!.email,
-            name: adminResult.admin!.fullName,
-            userId: adminResult.admin!.id,
-          );
-          if (!mounted) return;
-          ScaffoldMessenger.of(context).showSnackBar(
-            SnackBar(
-              content: Text(
-                'Welcome, ${adminResult.admin!.fullName}!',
-              ),
-              backgroundColor: AppColors.statusOpen,
-            ),
-          );
-          Navigator.pushReplacement(
-            context,
-            MaterialPageRoute(
-              builder: (_) => const AdminDashboardScreen(),
-            ),
-          );
-          return;
-        } else if (_selectedRole == 'Admin') {
-          if (!mounted) return;
-          setState(() {
-            _errorBanner =
-                adminResult.message ?? 'Invalid administrator credentials.';
-          });
-          return;
-        }
-      }
-
-      // 2. Real Supabase Cloud Authentication (when initialized)
+      // 1. Real Supabase Cloud Authentication (when initialized)
       final supabase = SupabaseHelper.clientOrNull;
       if (supabase != null) {
         final authResponse = await supabase.auth.signInWithPassword(
@@ -107,11 +73,6 @@ class _LoginScreenState extends State<LoginScreen> {
             .eq('id', user.id)
             .maybeSingle();
 
-        final rawRole = (profileRow?['user_type']?.toString() ??
-                user.userMetadata?['user_type']?.toString() ??
-                _selectedRole)
-            .trim();
-
         final accountStatus =
             (profileRow?['account_status']?.toString() ?? 'active')
                 .trim()
@@ -127,34 +88,36 @@ class _LoginScreenState extends State<LoginScreen> {
           return;
         }
 
-        // Route Admin via AdminAuthService restoration
-        if (rawRole.toLowerCase() == 'admin') {
-          final restoredAdmin =
-              await AdminAuthService().restoreFromCurrentUser();
+        final actualRole = await SupabaseHelper.resolveAccountRole(
+          supabase,
+          user,
+          profileRow: profileRow,
+        );
+
+        // Enforce strict separation: Admin must log in via Governance Admin Console,
+        // and Student/Company can only enter their matching portal.
+        if (actualRole == 'Admin') {
+          await supabase.auth.signOut();
           if (!mounted) return;
-          if (restoredAdmin == null) {
-            setState(() {
-              _errorBanner =
-                  'Administrator privileges could not be verified.';
-            });
-            return;
-          }
-          await AppDataService.instance.saveAuthSession(
-            role: 'Admin',
-            email: restoredAdmin.email,
-            name: restoredAdmin.fullName,
-            userId: restoredAdmin.id,
-          );
-          if (!mounted) return;
-          Navigator.pushReplacement(
-            context,
-            MaterialPageRoute(builder: (_) => const AdminDashboardScreen()),
-          );
+          setState(() {
+            _errorBanner =
+                'Admin accounts must sign in through Governance Admin Console below.';
+          });
           return;
         }
 
-        // Extra suspension check for student accounts
-        if (rawRole.toLowerCase() == 'student') {
+        if (actualRole != _selectedRole) {
+          await supabase.auth.signOut();
+          if (!mounted) return;
+          setState(() {
+            _errorBanner =
+                'This account is registered as a $actualRole. Please select $actualRole under Portal Role to sign in.';
+          });
+          return;
+        }
+
+        // Role-specific suspension checks
+        if (actualRole == 'Student') {
           final stuRow = await supabase
               .from('students')
               .select('account_status, suspension_reason')
@@ -172,6 +135,24 @@ class _LoginScreenState extends State<LoginScreen> {
             });
             return;
           }
+        } else if (actualRole == 'Company') {
+          final compRow = await supabase
+              .from('companies')
+              .select('account_status, suspension_reason')
+              .eq('user_id', user.id)
+              .maybeSingle();
+          if ((compRow?['account_status']?.toString().toLowerCase() ?? '') ==
+              'suspended') {
+            final reason = compRow?['suspension_reason']?.toString() ?? '';
+            await supabase.auth.signOut();
+            if (!mounted) return;
+            setState(() {
+              _errorBanner = reason.isNotEmpty
+                  ? 'Company account suspended: $reason'
+                  : 'Your company account is currently suspended.';
+            });
+            return;
+          }
         }
 
         final resolvedName =
@@ -186,18 +167,15 @@ class _LoginScreenState extends State<LoginScreen> {
                 ? profileRow!['university'].toString().trim()
                 : user.userMetadata?['university']?.toString();
 
-        final normalizedRole =
-            rawRole.toLowerCase() == 'company' ? 'Company' : 'Student';
-
         await AppDataService.instance.saveAuthSession(
-          role: normalizedRole,
+          role: actualRole,
           email: user.email ?? email,
           name: resolvedName,
           university: resolvedUni,
           userId: user.id,
         );
 
-        if (normalizedRole == 'Company') {
+        if (actualRole == 'Company') {
           await CompanyProfileService.loadAllCompanyPanelData();
         } else {
           await AppDataService.instance.syncFromSupabase(forceRefresh: true);
@@ -211,7 +189,7 @@ class _LoginScreenState extends State<LoginScreen> {
           ),
         );
 
-        if (normalizedRole == 'Company') {
+        if (actualRole == 'Company') {
           Navigator.pushReplacement(
             context,
             MaterialPageRoute(builder: (_) => const CompanyDashboardScreen()),
@@ -225,29 +203,43 @@ class _LoginScreenState extends State<LoginScreen> {
         return;
       }
 
-      // 3. Offline unit/widget test registry fallback ONLY when Supabase is null
+      // 2. Offline unit/widget test registry fallback ONLY when Supabase is null
       final isLocalValid =
           AppDataService.instance.verifyLocalCredentials(email, password);
       if (isLocalValid) {
         final acc = AppDataService.instance.findUserAccount(email);
-        final role = acc?['role']?.toString() ?? _selectedRole;
+        final rawLocalRole = (acc?['role']?.toString() ?? 'Student').trim();
+        final actualRole = rawLocalRole.toLowerCase() == 'admin'
+            ? 'Admin'
+            : (rawLocalRole.toLowerCase() == 'company' ? 'Company' : 'Student');
+
+        if (actualRole == 'Admin') {
+          setState(() {
+            _errorBanner =
+                'Admin accounts must sign in through Governance Admin Console below.';
+          });
+          return;
+        }
+        if (actualRole != _selectedRole) {
+          setState(() {
+            _errorBanner =
+                'This account is registered as a $actualRole. Please select $actualRole under Portal Role to sign in.';
+          });
+          return;
+        }
+
         final name = acc?['name']?.toString() ?? 'User';
         final university = acc?['university']?.toString();
 
         await AppDataService.instance.saveAuthSession(
-          role: role,
+          role: actualRole,
           email: email,
           name: name,
           university: university,
         );
 
         if (!mounted) return;
-        if (role == 'Admin') {
-          Navigator.pushReplacement(
-            context,
-            MaterialPageRoute(builder: (_) => const AdminDashboardScreen()),
-          );
-        } else if (role == 'Company') {
+        if (actualRole == 'Company') {
           Navigator.pushReplacement(
             context,
             MaterialPageRoute(builder: (_) => const CompanyDashboardScreen()),
@@ -267,18 +259,10 @@ class _LoginScreenState extends State<LoginScreen> {
       });
     } on AuthException catch (e) {
       if (!mounted) return;
-      String errorMsg = e.message;
-      final lower = errorMsg.toLowerCase();
-      if (lower.contains('invalid login credentials')) {
-        errorMsg = 'Incorrect email or password. Please verify and try again.';
-      } else if (lower.contains('email not confirmed')) {
-        errorMsg =
-            'Email is not verified yet. Please confirm the link in your inbox.';
-      }
-      setState(() => _errorBanner = errorMsg);
+      setState(() => _errorBanner = SupabaseHelper.friendlyError(e));
     } catch (e) {
       if (!mounted) return;
-      setState(() => _errorBanner = 'Unable to sign in: $e');
+      setState(() => _errorBanner = SupabaseHelper.friendlyError(e));
     } finally {
       if (mounted) {
         setState(() => _isLoading = false);
@@ -398,7 +382,7 @@ class _LoginScreenState extends State<LoginScreen> {
                         setDialogState(() {
                           submitting = false;
                           isSuccess = false;
-                          feedbackMsg = 'Could not send reset email: $e';
+                          feedbackMsg = SupabaseHelper.friendlyError(e);
                         });
                       }
                     },
@@ -557,7 +541,7 @@ class _LoginScreenState extends State<LoginScreen> {
                             const SizedBox(height: 16),
                           ],
 
-                          // Role Selector Pills
+                          // Role Selector Pills (Student & Company only; Admin uses Governance Console below)
                           Text(
                             'Portal Role',
                             style: GoogleFonts.inter(
@@ -568,32 +552,30 @@ class _LoginScreenState extends State<LoginScreen> {
                           ),
                           const SizedBox(height: 8),
                           Row(
-                            children: ['Student', 'Company', 'Admin']
-                                .map((role) {
+                            children: ['Student', 'Company'].map((role) {
                               final selected = _selectedRole == role;
                               final IconData icon = role == 'Company'
                                   ? Icons.business_rounded
-                                  : role == 'Admin'
-                                      ? Icons.shield_outlined
-                                      : Icons.school_outlined;
+                                  : Icons.school_outlined;
                               return Expanded(
                                 child: Padding(
                                   padding: EdgeInsets.only(
-                                    right: role == 'Admin' ? 0 : 8,
+                                    right: role == 'Company' ? 0 : 10,
                                   ),
                                   child: InkWell(
                                     borderRadius: BorderRadius.circular(12),
                                     onTap: _isLoading
                                         ? null
-                                        : () => setState(
-                                              () => _selectedRole = role,
-                                            ),
+                                        : () => setState(() {
+                                              _selectedRole = role;
+                                              _errorBanner = null;
+                                            }),
                                     child: AnimatedContainer(
                                       duration:
                                           const Duration(milliseconds: 180),
                                       padding: const EdgeInsets.symmetric(
-                                        vertical: 10,
-                                        horizontal: 6,
+                                        vertical: 11,
+                                        horizontal: 8,
                                       ),
                                       decoration: BoxDecoration(
                                         color: selected
@@ -606,7 +588,9 @@ class _LoginScreenState extends State<LoginScreen> {
                                               : AppColors.lightGray,
                                         ),
                                       ),
-                                      child: Column(
+                                      child: Row(
+                                        mainAxisAlignment:
+                                            MainAxisAlignment.center,
                                         children: [
                                           Icon(
                                             icon,
@@ -615,15 +599,14 @@ class _LoginScreenState extends State<LoginScreen> {
                                                 ? Colors.white
                                                 : AppColors.grayText,
                                           ),
-                                          const SizedBox(height: 4),
-                                          FittedBox(
-                                            fit: BoxFit.scaleDown,
+                                          const SizedBox(width: 6),
+                                          Flexible(
                                             child: Text(
                                               role,
                                               maxLines: 1,
                                               overflow: TextOverflow.ellipsis,
                                               style: GoogleFonts.inter(
-                                                fontSize: 12,
+                                                fontSize: 13,
                                                 fontWeight: FontWeight.w600,
                                                 color: selected
                                                     ? Colors.white
@@ -658,9 +641,7 @@ class _LoginScreenState extends State<LoginScreen> {
                             decoration: InputDecoration(
                               hintText: _selectedRole == 'Company'
                                   ? 'team@company.com'
-                                  : _selectedRole == 'Admin'
-                                      ? 'admin@campusconnect.edu.pk'
-                                      : 'you@university.edu',
+                                  : 'you@university.edu',
                               prefixIcon:
                                   const Icon(Icons.email_outlined, size: 20),
                             ),
@@ -796,7 +777,8 @@ class _LoginScreenState extends State<LoginScreen> {
                           Navigator.push(
                             context,
                             MaterialPageRoute(
-                              builder: (_) => const SignupScreen(),
+                              builder: (_) =>
+                                  SignupScreen(initialRole: _selectedRole),
                             ),
                           );
                         },

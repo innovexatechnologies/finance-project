@@ -10,7 +10,9 @@ import 'package:link_vibe/feature/student/presentation/screens/student_main_nav.
 import 'login_screen.dart';
 
 class SignupScreen extends StatefulWidget {
-  const SignupScreen({super.key});
+  final String initialRole;
+
+  const SignupScreen({super.key, this.initialRole = 'Student'});
 
   @override
   State<SignupScreen> createState() => _SignupScreenState();
@@ -23,10 +25,16 @@ class _SignupScreenState extends State<SignupScreen> {
   final _universityController = TextEditingController();
   final _passwordController = TextEditingController();
 
-  String _selectedRole = 'Student';
+  late String _selectedRole;
   bool _isLoading = false;
   bool _obscurePassword = true;
   String? _errorBanner;
+
+  @override
+  void initState() {
+    super.initState();
+    _selectedRole = widget.initialRole == 'Company' ? 'Company' : 'Student';
+  }
 
   @override
   void dispose() {
@@ -65,6 +73,15 @@ class _SignupScreenState extends State<SignupScreen> {
         final user = authResponse.user;
         if (user == null) {
           throw const AuthException('Account creation did not return a user.');
+        }
+
+        if (user.identities != null && user.identities!.isEmpty) {
+          if (!mounted) return;
+          setState(() {
+            _errorBanner =
+                'An account with this email already exists. Please sign in instead.';
+          });
+          return;
         }
 
         // If email verification is required (session is null), prompt user to confirm & sign in
@@ -114,7 +131,9 @@ class _SignupScreenState extends State<SignupScreen> {
           if (!mounted) return;
           Navigator.pushReplacement(
             context,
-            MaterialPageRoute(builder: (_) => const LoginScreen()),
+            MaterialPageRoute(
+              builder: (_) => LoginScreen(initialRole: _selectedRole),
+            ),
           );
           return;
         }
@@ -212,10 +231,10 @@ class _SignupScreenState extends State<SignupScreen> {
       }
     } on AuthException catch (e) {
       if (!mounted) return;
-      setState(() => _errorBanner = e.message);
+      setState(() => _errorBanner = SupabaseHelper.friendlyError(e));
     } catch (e) {
       if (!mounted) return;
-      setState(() => _errorBanner = 'Registration failed: $e');
+      setState(() => _errorBanner = SupabaseHelper.friendlyError(e));
     } finally {
       if (mounted) {
         setState(() => _isLoading = false);
@@ -579,7 +598,8 @@ class _SignupScreenState extends State<SignupScreen> {
                                 Navigator.pushReplacement(
                                   context,
                                   MaterialPageRoute(
-                                    builder: (_) => const LoginScreen(),
+                                    builder: (_) =>
+                                        LoginScreen(initialRole: _selectedRole),
                                   ),
                                 );
                               },

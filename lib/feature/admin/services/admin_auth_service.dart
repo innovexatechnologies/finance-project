@@ -234,12 +234,12 @@ class AdminAuthService {
           return AdminAuthResult.lockedOut(60);
         }
         return AdminAuthResult.failed(
-          '${e.message} ($remainingAttempts attempt${remainingAttempts == 1 ? '' : 's'} remaining)',
+          '${SupabaseHelper.friendlyError(e)} ($remainingAttempts attempt${remainingAttempts == 1 ? '' : 's'} remaining)',
         );
       } catch (e) {
         debugPrint('AdminAuthService login error: $e');
         return AdminAuthResult.failed(
-          'Unable to complete administrative sign-in: $e',
+          SupabaseHelper.friendlyError(e),
         );
       }
     }

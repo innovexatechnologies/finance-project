@@ -129,4 +129,70 @@ class SupabaseHelper {
         .substring(0, cleaned.length >= 2 ? 2 : 1)
         .toUpperCase();
   }
+
+  /// Resolves the authoritative portal role ('Admin', 'Company', or 'Student')
+  /// from `public.profiles`, auth metadata, or role-specific tables.
+  static Future<String> resolveAccountRole(
+    SupabaseClient supabase,
+    User user, {
+    Map<String, dynamic>? profileRow,
+  }) async {
+    String raw = (profileRow?['user_type']?.toString() ??
+            user.userMetadata?['user_type']?.toString() ??
+            '')
+        .trim()
+        .toLowerCase();
+
+    if (raw.isEmpty) {
+      try {
+        final comp = await supabase
+            .from('companies')
+            .select('id')
+            .eq('user_id', user.id)
+            .maybeSingle();
+        if (comp != null) raw = 'company';
+      } catch (_) {}
+    }
+
+    if (raw == 'admin') return 'Admin';
+    if (raw == 'company') return 'Company';
+    return 'Student';
+  }
+
+  /// Converts raw network/auth/platform exceptions into readable UI messages.
+  static String friendlyError(Object error) {
+    final msg = error is AuthException ? error.message : error.toString();
+    final lower = msg.toLowerCase();
+
+    if (lower.contains('failed host lookup') ||
+        lower.contains('socketexception') ||
+        lower.contains('no address associated with hostname') ||
+        lower.contains('clientexception') ||
+        lower.contains('network is unreachable') ||
+        lower.contains('connection refused') ||
+        lower.contains('connection reset') ||
+        lower.contains('timed out')) {
+      return 'Unable to reach the server. Please check your internet connection (Wi-Fi / Mobile Data) and try again.';
+    }
+    if (lower.contains('invalid login credentials')) {
+      return 'Incorrect email or password. Please verify and try again.';
+    }
+    if (lower.contains('email not confirmed')) {
+      return 'Email is not verified yet. Please confirm the link in your inbox before signing in.';
+    }
+    if (lower.contains('user already registered') ||
+        lower.contains('already registered') ||
+        lower.contains('already exists')) {
+      return 'An account with this email already exists. Please sign in instead.';
+    }
+    if (lower.contains('password should be at least')) {
+      return 'Password must be at least 6 characters long.';
+    }
+
+    var cleaned = msg.trim();
+    if (cleaned.startsWith('Exception: ')) {
+      cleaned = cleaned.substring('Exception: '.length).trim();
+    }
+    return cleaned.isEmpty ? 'Something went wrong. Please try again.' : cleaned;
+  }
 }

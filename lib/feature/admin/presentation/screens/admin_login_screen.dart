@@ -624,7 +624,7 @@ class _AdminLoginScreenState extends State<AdminLoginScreen> {
   // Right-side (or Centered) Form Card
   Widget _buildLoginFormCard() {
     return Container(
-      padding: const EdgeInsets.all(32),
+      padding: const EdgeInsets.symmetric(horizontal: 24, vertical: 28),
       decoration: BoxDecoration(
         color: Colors.white,
         borderRadius: BorderRadius.circular(20),
@@ -923,14 +923,18 @@ class _AdminLoginScreenState extends State<AdminLoginScreen> {
                             color: AppColors.accentTeal,
                           ),
                           const SizedBox(width: 8),
-                          Text(
-                            _lockoutSeconds > 0
-                                ? 'Locked ($_lockoutSeconds s)'
-                                : 'Sign In to Console',
-                            style: const TextStyle(
-                              fontSize: 14.5,
-                              fontWeight: FontWeight.bold,
-                              letterSpacing: 0.3,
+                          Flexible(
+                            child: Text(
+                              _lockoutSeconds > 0
+                                  ? 'Locked ($_lockoutSeconds s)'
+                                  : 'Sign In to Console',
+                              maxLines: 1,
+                              overflow: TextOverflow.ellipsis,
+                              style: const TextStyle(
+                                fontSize: 14.5,
+                                fontWeight: FontWeight.bold,
+                                letterSpacing: 0.3,
+                              ),
                             ),
                           ),
                         ],
@@ -969,16 +973,7 @@ class _AdminLoginScreenState extends State<AdminLoginScreen> {
 
             // Back to Standard Login Link
             Center(
-              child: TextButton.icon(
-                icon: const Icon(Icons.arrow_back_rounded, size: 16, color: AppColors.textSecondary),
-                label: const Text(
-                  'Return to Public Portal (Student / Company)',
-                  style: TextStyle(
-                    fontSize: 12,
-                    color: AppColors.textSecondary,
-                    fontWeight: FontWeight.w600,
-                  ),
-                ),
+              child: TextButton(
                 onPressed: () {
                   Navigator.pushReplacement(
                     context,
@@ -987,6 +982,26 @@ class _AdminLoginScreenState extends State<AdminLoginScreen> {
                     ),
                   );
                 },
+                child: const Row(
+                  mainAxisSize: MainAxisSize.min,
+                  children: [
+                    Icon(Icons.arrow_back_rounded, size: 16, color: AppColors.textSecondary),
+                    SizedBox(width: 6),
+                    Flexible(
+                      child: Text(
+                        'Return to Public Portal (Student / Company)',
+                        maxLines: 2,
+                        overflow: TextOverflow.ellipsis,
+                        textAlign: TextAlign.center,
+                        style: TextStyle(
+                          fontSize: 12,
+                          color: AppColors.textSecondary,
+                          fontWeight: FontWeight.w600,
+                        ),
+                      ),
+                    ),
+                  ],
+                ),
               ),
             ),
           ],
