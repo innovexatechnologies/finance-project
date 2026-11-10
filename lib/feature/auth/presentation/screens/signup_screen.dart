@@ -4,6 +4,7 @@ import 'package:supabase_flutter/supabase_flutter.dart';
 import 'package:link_vibe/core/constants/app_colors.dart';
 import 'package:link_vibe/core/services/app_data_service.dart';
 import 'package:link_vibe/core/services/supabase_helper.dart';
+import 'package:link_vibe/feature/auth/presentation/screens/email_verification_screen.dart';
 import 'package:link_vibe/feature/company/presentation/screens/company_dashboard.dart';
 import 'package:link_vibe/feature/company/services/company_profile_service.dart';
 import 'package:link_vibe/feature/student/presentation/screens/student_main_nav.dart';
@@ -86,55 +87,17 @@ class _SignupScreenState extends State<SignupScreen> {
           return;
         }
 
-        // If email verification is required (session is null), prompt user to confirm & sign in
+        // If email verification is required (session is null), open dedicated EmailVerificationScreen
         if (authResponse.session == null) {
-          if (!mounted) return;
-          await showDialog(
-            context: context,
-            builder: (ctx) => AlertDialog(
-              shape: RoundedRectangleBorder(
-                borderRadius: BorderRadius.circular(18),
-              ),
-              title: Row(
-                children: [
-                  const Icon(
-                    Icons.mark_email_read_outlined,
-                    color: AppColors.primaryBlue,
-                  ),
-                  const SizedBox(width: 10),
-                  Expanded(
-                    child: Text(
-                      'Verify Your Email',
-                      style: GoogleFonts.poppins(
-                        fontSize: 17,
-                        fontWeight: FontWeight.w700,
-                        color: AppColors.deepNavy,
-                      ),
-                    ),
-                  ),
-                ],
-              ),
-              content: Text(
-                'Your $_selectedRole account for $email was created! Please confirm your verification link in your email inbox, then sign in.',
-                style: GoogleFonts.inter(
-                  fontSize: 13.5,
-                  color: AppColors.darkText,
-                  height: 1.45,
-                ),
-              ),
-              actions: [
-                ElevatedButton(
-                  onPressed: () => Navigator.pop(ctx),
-                  child: const Text('Go to Sign In'),
-                ),
-              ],
-            ),
-          );
           if (!mounted) return;
           Navigator.pushReplacement(
             context,
             MaterialPageRoute(
-              builder: (_) => LoginScreen(initialRole: _selectedRole),
+              builder: (_) => EmailVerificationScreen(
+                email: email,
+                role: _selectedRole,
+                isVerified: false,
+              ),
             ),
           );
           return;

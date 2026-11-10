@@ -5,6 +5,7 @@ import 'package:supabase_flutter/supabase_flutter.dart'
 import 'package:link_vibe/core/constants/app_colors.dart';
 import 'package:link_vibe/core/services/app_data_service.dart';
 import 'package:link_vibe/core/services/supabase_helper.dart';
+import 'package:link_vibe/feature/auth/presentation/screens/reset_password_screen.dart';
 
 class ChangePasswordScreen extends StatefulWidget {
   const ChangePasswordScreen({super.key});
@@ -92,6 +93,15 @@ class _ChangePasswordScreenState extends State<ChangePasswordScreen> {
           ),
           backgroundColor: AppColors.statusOpen,
           duration: const Duration(seconds: 4),
+        ),
+      );
+      Navigator.push(
+        context,
+        MaterialPageRoute(
+          builder: (_) => ResetPasswordScreen(
+            initialEmail: email,
+            hasRecoverySession: false,
+          ),
         ),
       );
     } on AuthException catch (e) {

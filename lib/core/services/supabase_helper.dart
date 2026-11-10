@@ -22,6 +22,14 @@ class SupabaseHelper {
   /// the widget tree mounts.
   static bool pendingPasswordRecovery = false;
 
+  /// Set if a signup/verification deep link completes during cold boot before
+  /// the widget tree mounts.
+  static bool pendingEmailVerification = false;
+
+  /// Captures an auth callback error (e.g. expired link or PKCE mismatch)
+  /// arriving during cold boot so the UI can show a dedicated recovery screen.
+  static String? pendingAuthCallbackError;
+
   static final Random _random = Random();
   static final RegExp _uuidRegex = RegExp(
     r'^[0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{12}$',

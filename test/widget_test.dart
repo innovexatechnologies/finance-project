@@ -5,7 +5,9 @@ import 'package:link_vibe/core/services/app_data_service.dart';
 import 'package:link_vibe/core/services/supabase_helper.dart';
 import 'package:link_vibe/feature/admin/presentation/screens/admin_dashboard_screen.dart';
 import 'package:link_vibe/feature/admin/presentation/screens/admin_login_screen.dart';
+import 'package:link_vibe/feature/auth/presentation/screens/email_verification_screen.dart';
 import 'package:link_vibe/feature/auth/presentation/screens/login_screen.dart';
+import 'package:link_vibe/feature/auth/presentation/screens/reset_password_screen.dart';
 import 'package:link_vibe/feature/company/presentation/screens/company_dashboard.dart';
 import 'package:link_vibe/feature/splash/presentation/screens/splash_screen.dart';
 import 'package:link_vibe/feature/student/certificates/presentation/screens/certificates_screen.dart';
@@ -148,6 +150,45 @@ void main() {
       await pumpAndVerifyScreen(
         tester,
         screen: const ChatListScreen(),
+        size: size,
+      );
+    });
+
+    testWidgets(
+        'ResetPasswordScreen & EmailVerificationScreen render cleanly ($tag)',
+        (tester) async {
+      await pumpAndVerifyScreen(
+        tester,
+        screen: const ResetPasswordScreen(
+          initialEmail: 'student@university.edu',
+          hasRecoverySession: true,
+        ),
+        size: size,
+      );
+      await pumpAndVerifyScreen(
+        tester,
+        screen: const ResetPasswordScreen(
+          initialEmail: 'student@university.edu',
+          hasRecoverySession: false,
+        ),
+        size: size,
+      );
+      await pumpAndVerifyScreen(
+        tester,
+        screen: const EmailVerificationScreen(
+          email: 'student@university.edu',
+          role: 'Student',
+          isVerified: true,
+        ),
+        size: size,
+      );
+      await pumpAndVerifyScreen(
+        tester,
+        screen: const EmailVerificationScreen(
+          email: 'company@partner.io',
+          role: 'Company',
+          isVerified: false,
+        ),
         size: size,
       );
     });

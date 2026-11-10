@@ -5,6 +5,7 @@ import 'package:link_vibe/core/constants/app_colors.dart';
 import 'package:link_vibe/feature/admin/presentation/screens/admin_dashboard_screen.dart';
 import 'package:link_vibe/feature/admin/services/admin_auth_service.dart';
 import 'package:link_vibe/feature/auth/presentation/screens/login_screen.dart';
+import 'package:link_vibe/feature/auth/presentation/screens/reset_password_screen.dart';
 
 /// Enterprise Admin Login Screen for CampusConnect
 /// Features responsive split-screen layout, cryptographic verification, brute-force mitigation,
@@ -277,6 +278,22 @@ class _AdminLoginScreenState extends State<AdminLoginScreen> {
                           final sent =
                               await _authService.requestPasswordReset(targetEmail);
                           if (!dialogCtx.mounted) return;
+
+                          if (sent && dialogCtx.mounted) {
+                            Navigator.pop(dialogCtx);
+                            if (mounted) {
+                              Navigator.push(
+                                context,
+                                MaterialPageRoute(
+                                  builder: (_) => ResetPasswordScreen(
+                                    initialEmail: targetEmail,
+                                    hasRecoverySession: false,
+                                  ),
+                                ),
+                              );
+                            }
+                            return;
+                          }
 
                           setDialogState(() {
                             isSubmitting = false;

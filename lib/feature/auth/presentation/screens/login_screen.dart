@@ -5,6 +5,8 @@ import 'package:link_vibe/core/constants/app_colors.dart';
 import 'package:link_vibe/core/services/app_data_service.dart';
 import 'package:link_vibe/core/services/supabase_helper.dart';
 import 'package:link_vibe/feature/admin/presentation/screens/admin_login_screen.dart';
+import 'package:link_vibe/feature/auth/presentation/screens/email_verification_screen.dart';
+import 'package:link_vibe/feature/auth/presentation/screens/reset_password_screen.dart';
 import 'package:link_vibe/feature/company/presentation/screens/company_dashboard.dart';
 import 'package:link_vibe/feature/company/services/company_profile_service.dart';
 import 'package:link_vibe/feature/student/presentation/screens/student_main_nav.dart';
@@ -415,12 +417,17 @@ class _LoginScreenState extends State<LoginScreen> {
                           redirectTo: SupabaseHelper.emailRedirectUrl,
                         );
                         if (!dialogCtx.mounted) return;
-                        setDialogState(() {
-                          submitting = false;
-                          isSuccess = true;
-                          feedbackMsg =
-                              'Password reset email sent to $target. Please check your inbox.';
-                        });
+                        Navigator.pop(dialogCtx);
+                        if (!mounted) return;
+                        Navigator.push(
+                          context,
+                          MaterialPageRoute(
+                            builder: (_) => ResetPasswordScreen(
+                              initialEmail: target,
+                              hasRecoverySession: false,
+                            ),
+                          ),
+                        );
                       } catch (e) {
                         if (!dialogCtx.mounted) return;
                         setDialogState(() {
@@ -584,30 +591,70 @@ class _LoginScreenState extends State<LoginScreen> {
                                         ),
                                         if (_needsEmailConfirmation) ...[
                                           const SizedBox(height: 6),
-                                          TextButton(
-                                            style: TextButton.styleFrom(
-                                              padding: EdgeInsets.zero,
-                                              minimumSize: const Size(0, 0),
-                                              tapTargetSize:
-                                                  MaterialTapTargetSize
-                                                      .shrinkWrap,
-                                            ),
-                                            onPressed:
-                                                _isResendingConfirmation
-                                                    ? null
-                                                    : _resendVerificationEmail,
-                                            child: Text(
-                                              _isResendingConfirmation
-                                                  ? 'Sending...'
-                                                  : 'Resend verification email',
-                                              style: GoogleFonts.inter(
-                                                fontSize: 12,
-                                                fontWeight: FontWeight.w700,
-                                                color: AppColors.primaryBlue,
-                                                decoration:
-                                                    TextDecoration.underline,
+                                          Wrap(
+                                            spacing: 12,
+                                            runSpacing: 4,
+                                            children: [
+                                              TextButton(
+                                                style: TextButton.styleFrom(
+                                                  padding: EdgeInsets.zero,
+                                                  minimumSize: const Size(0, 0),
+                                                  tapTargetSize:
+                                                      MaterialTapTargetSize
+                                                          .shrinkWrap,
+                                                ),
+                                                onPressed:
+                                                    _isResendingConfirmation
+                                                        ? null
+                                                        : _resendVerificationEmail,
+                                                child: Text(
+                                                  _isResendingConfirmation
+                                                      ? 'Sending...'
+                                                      : 'Resend verification email',
+                                                  style: GoogleFonts.inter(
+                                                    fontSize: 12,
+                                                    fontWeight: FontWeight.w700,
+                                                    color: AppColors.primaryBlue,
+                                                    decoration:
+                                                        TextDecoration.underline,
+                                                  ),
+                                                ),
                                               ),
-                                            ),
+                                              TextButton(
+                                                style: TextButton.styleFrom(
+                                                  padding: EdgeInsets.zero,
+                                                  minimumSize: const Size(0, 0),
+                                                  tapTargetSize:
+                                                      MaterialTapTargetSize
+                                                          .shrinkWrap,
+                                                ),
+                                                onPressed: () {
+                                                  Navigator.push(
+                                                    context,
+                                                    MaterialPageRoute(
+                                                      builder: (_) =>
+                                                          EmailVerificationScreen(
+                                                        email: _emailController
+                                                            .text
+                                                            .trim(),
+                                                        role: _selectedRole,
+                                                        isVerified: false,
+                                                      ),
+                                                    ),
+                                                  );
+                                                },
+                                                child: Text(
+                                                  'Verify via code',
+                                                  style: GoogleFonts.inter(
+                                                    fontSize: 12,
+                                                    fontWeight: FontWeight.w700,
+                                                    color: AppColors.deepNavy,
+                                                    decoration:
+                                                        TextDecoration.underline,
+                                                  ),
+                                                ),
+                                              ),
+                                            ],
                                           ),
                                         ],
                                       ],

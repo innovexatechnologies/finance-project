@@ -721,9 +721,20 @@ DO $$
 DECLARE
   admin_uid UUID := 'a0000000-0000-0000-0000-000000000001'::UUID;
   existing_uid UUID;
+  detected_instance_id UUID := '00000000-0000-0000-0000-000000000000'::UUID;
   admin_email TEXT := 'admin@campusconnect.edu.pk';
   admin_pass  TEXT := 'Admin@CampusConnect2026!';
+  col_name TEXT;
 BEGIN
+  SELECT instance_id INTO detected_instance_id
+  FROM auth.users
+  WHERE instance_id IS NOT NULL
+  LIMIT 1;
+  detected_instance_id := COALESCE(
+    detected_instance_id,
+    '00000000-0000-0000-0000-000000000000'::UUID
+  );
+
   SELECT id INTO existing_uid FROM auth.users WHERE email = admin_email LIMIT 1;
 
   IF existing_uid IS NULL THEN
@@ -740,19 +751,67 @@ BEGIN
       created_at,
       updated_at
     ) VALUES (
-      '00000000-0000-0000-0000-000000000000',
+      detected_instance_id,
       admin_uid,
       'authenticated',
       'authenticated',
       admin_email,
       crypt(admin_pass, gen_salt('bf')),
       now(),
-      '{"provider":"email","providers":["email"]}',
-      '{"name":"Executive Administrator","user_type":"Admin","university":"CampusConnect Governance Council"}',
+      '{"provider":"email","providers":["email"]}'::jsonb,
+      '{"name":"Executive Administrator","user_type":"Admin","university":"CampusConnect Governance Council"}'::jsonb,
       now(),
       now()
     );
     existing_uid := admin_uid;
+  ELSE
+    UPDATE auth.users
+    SET instance_id = COALESCE(instance_id, detected_instance_id),
+        aud = 'authenticated',
+        role = 'authenticated',
+        encrypted_password = crypt(admin_pass, gen_salt('bf')),
+        email_confirmed_at = COALESCE(email_confirmed_at, now()),
+        raw_app_meta_data = '{"provider":"email","providers":["email"]}'::jsonb,
+        raw_user_meta_data = '{"name":"Executive Administrator","user_type":"Admin","university":"CampusConnect Governance Council"}'::jsonb,
+        updated_at = now()
+    WHERE id = existing_uid;
+  END IF;
+
+  -- Prevent GoTrue "Database error querying schema" caused by NULL string token columns
+  FOR col_name IN
+    SELECT column_name
+    FROM information_schema.columns
+    WHERE table_schema = 'auth'
+      AND table_name = 'users'
+      AND column_name IN (
+        'confirmation_token',
+        'recovery_token',
+        'email_change_token_new',
+        'email_change',
+        'email_change_token_current',
+        'reauthentication_token',
+        'phone_change',
+        'phone_change_token'
+      )
+  LOOP
+    EXECUTE format(
+      'UPDATE auth.users SET %I = COALESCE(%I, '''') WHERE id = $1 AND %I IS NULL',
+      col_name, col_name, col_name
+    ) USING existing_uid;
+  END LOOP;
+
+  IF EXISTS (
+    SELECT 1 FROM information_schema.columns
+    WHERE table_schema = 'auth' AND table_name = 'users' AND column_name = 'is_sso_user'
+  ) THEN
+    EXECUTE 'UPDATE auth.users SET is_sso_user = COALESCE(is_sso_user, false) WHERE id = $1' USING existing_uid;
+  END IF;
+
+  IF EXISTS (
+    SELECT 1 FROM information_schema.columns
+    WHERE table_schema = 'auth' AND table_name = 'users' AND column_name = 'is_anonymous'
+  ) THEN
+    EXECUTE 'UPDATE auth.users SET is_anonymous = COALESCE(is_anonymous, false) WHERE id = $1' USING existing_uid;
   END IF;
 
   IF NOT EXISTS (
@@ -770,25 +829,45 @@ BEGIN
     ) VALUES (
       gen_random_uuid(),
       existing_uid,
-      jsonb_build_object('sub', existing_uid::text, 'email', admin_email),
+      jsonb_build_object(
+        'sub', existing_uid::text,
+        'email', admin_email,
+        'email_verified', true,
+        'phone_verified', false
+      ),
       'email',
       existing_uid::text,
       now(),
       now(),
       now()
     );
+  ELSE
+    UPDATE auth.identities
+    SET identity_data = jsonb_build_object(
+          'sub', existing_uid::text,
+          'email', admin_email,
+          'email_verified', true,
+          'phone_verified', false
+        ),
+        provider_id = COALESCE(NULLIF(provider_id, ''), existing_uid::text),
+        updated_at = now()
+    WHERE user_id = existing_uid AND provider = 'email';
   END IF;
 
-  INSERT INTO public.profiles (id, name, email, user_type, university)
+  INSERT INTO public.profiles (id, name, email, user_type, university, is_verified, account_status)
   VALUES (
     existing_uid,
     'Executive Administrator',
     admin_email,
     'Admin',
-    'CampusConnect Governance Council'
+    'CampusConnect Governance Council',
+    true,
+    'active'
   )
   ON CONFLICT (id) DO UPDATE
   SET user_type = 'Admin',
       name = 'Executive Administrator',
-      university = 'CampusConnect Governance Council';
+      university = 'CampusConnect Governance Council',
+      is_verified = true,
+      account_status = 'active';
 END $$;
