@@ -625,6 +625,8 @@ DROP POLICY IF EXISTS "Certificates Authenticated Manage" ON public.certificates
 DROP POLICY IF EXISTS "Messages Participant Access" ON public.messages;
 DROP POLICY IF EXISTS "Notifications User Access" ON public.notifications;
 DROP POLICY IF EXISTS "Notifications Insert Authenticated" ON public.notifications;
+DROP POLICY IF EXISTS "Notifications User Update" ON public.notifications;
+DROP POLICY IF EXISTS "Notifications User Delete" ON public.notifications;
 DROP POLICY IF EXISTS "Saved Projects User Access" ON public.saved_projects;
 DROP POLICY IF EXISTS "Support Tickets Access" ON public.support_tickets;
 DROP POLICY IF EXISTS "User Settings Self Access" ON public.user_settings;
