@@ -7,7 +7,7 @@ import 'package:link_vibe/core/services/supabase_helper.dart';
 import 'package:link_vibe/feature/admin/presentation/screens/admin_dashboard_screen.dart';
 import 'package:link_vibe/feature/admin/services/admin_auth_service.dart';
 import 'package:link_vibe/feature/auth/presentation/screens/login_screen.dart';
-import 'package:link_vibe/feature/company/presentation/screens/company_dashboard.dart';
+import 'package:link_vibe/feature/company/presentation/screens/company_main_nav.dart';
 import 'package:link_vibe/feature/company/services/company_profile_service.dart';
 import 'package:link_vibe/feature/student/presentation/screens/student_main_nav.dart';
 
@@ -245,7 +245,7 @@ class _EmailVerificationScreenState extends State<EmailVerificationScreen> {
         destination = const AdminDashboardScreen();
       } else if (role == 'Company') {
         await CompanyProfileService.loadAllCompanyPanelData();
-        destination = const CompanyDashboardScreen();
+        destination = const CompanyMainNav();
       } else {
         await AppDataService.instance.syncFromSupabase(forceRefresh: true);
         destination = const StudentMainNav();

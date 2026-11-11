@@ -208,6 +208,7 @@ class _CompanyVerificationScreenState extends State<CompanyVerificationScreen> {
           style: GoogleFonts.poppins(
             fontSize: 17,
             fontWeight: FontWeight.w700,
+            color: Colors.white,
           ),
         ),
         actions: [
@@ -233,7 +234,10 @@ class _CompanyVerificationScreenState extends State<CompanyVerificationScreen> {
               child: SingleChildScrollView(
                 physics: const AlwaysScrollableScrollPhysics(),
                 padding: const EdgeInsets.fromLTRB(16, 16, 16, 36),
-                child: Column(
+                child: Center(
+                  child: ConstrainedBox(
+                    constraints: const BoxConstraints(maxWidth: 820),
+                    child: Column(
                   crossAxisAlignment: CrossAxisAlignment.start,
                   children: [
                     _buildStatusBanner(verification),
@@ -427,6 +431,8 @@ class _CompanyVerificationScreenState extends State<CompanyVerificationScreen> {
                       ),
                     ],
                   ],
+                    ),
+                  ),
                 ),
               ),
             ),

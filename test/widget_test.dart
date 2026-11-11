@@ -601,7 +601,9 @@ void main() {
       await tester.pumpAndSettle();
       expect(find.byType(CompanyDashboardScreen), findsOneWidget);
 
-      await tester.tap(find.byTooltip('Settings'));
+      await tester.tap(find.byTooltip('Open Workspace Menu'));
+      await tester.pumpAndSettle();
+      await tester.tap(find.text('Settings'));
       await tester.pumpAndSettle();
 
       await tester.ensureVisible(find.text('Sign Out'));

@@ -586,7 +586,11 @@ class _CompanySettingsScreenState extends State<CompanySettingsScreen> {
         ),
         title: Text(
           'Organization Settings',
-          style: GoogleFonts.poppins(fontSize: 17, fontWeight: FontWeight.w700),
+          style: GoogleFonts.poppins(
+            fontSize: 17,
+            fontWeight: FontWeight.w700,
+            color: Colors.white,
+          ),
         ),
       ),
       body: ValueListenableBuilder<CompanyProfileModel>(
@@ -604,7 +608,10 @@ class _CompanySettingsScreenState extends State<CompanySettingsScreen> {
 
                   return SingleChildScrollView(
                     padding: const EdgeInsets.fromLTRB(16, 16, 16, 36),
-                    child: Column(
+                    child: Center(
+                      child: ConstrainedBox(
+                        constraints: const BoxConstraints(maxWidth: 820),
+                        child: Column(
                       crossAxisAlignment: CrossAxisAlignment.start,
                       children: [
                         Container(
@@ -836,6 +843,8 @@ class _CompanySettingsScreenState extends State<CompanySettingsScreen> {
                           ],
                         ),
                       ],
+                        ),
+                      ),
                     ),
                   );
                 },

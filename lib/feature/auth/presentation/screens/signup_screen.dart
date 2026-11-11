@@ -5,7 +5,7 @@ import 'package:link_vibe/core/constants/app_colors.dart';
 import 'package:link_vibe/core/services/app_data_service.dart';
 import 'package:link_vibe/core/services/supabase_helper.dart';
 import 'package:link_vibe/feature/auth/presentation/screens/email_verification_screen.dart';
-import 'package:link_vibe/feature/company/presentation/screens/company_dashboard.dart';
+import 'package:link_vibe/feature/company/presentation/screens/company_main_nav.dart';
 import 'package:link_vibe/feature/company/services/company_profile_service.dart';
 import 'package:link_vibe/feature/student/presentation/screens/student_main_nav.dart';
 import 'login_screen.dart';
@@ -188,7 +188,7 @@ class _SignupScreenState extends State<SignupScreen> {
       if (_selectedRole == 'Company') {
         Navigator.pushAndRemoveUntil(
           context,
-          MaterialPageRoute(builder: (_) => const CompanyDashboardScreen()),
+          MaterialPageRoute(builder: (_) => const CompanyMainNav()),
           (route) => false,
         );
       } else {
