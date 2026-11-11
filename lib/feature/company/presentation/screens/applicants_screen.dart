@@ -5,6 +5,7 @@ import 'package:link_vibe/core/widgets/app_empty_state.dart';
 import 'package:link_vibe/core/widgets/status_badge.dart';
 import 'package:link_vibe/feature/company/models/applicant_model.dart';
 import 'package:link_vibe/feature/company/models/project_model.dart';
+import 'package:link_vibe/feature/company/presentation/widgets/company_executive_app_bar.dart';
 import 'package:link_vibe/feature/company/services/company_applicant_service.dart';
 import 'package:link_vibe/feature/company/services/company_profile_service.dart';
 import 'package:link_vibe/feature/company/services/company_project_service.dart';
@@ -13,11 +14,15 @@ import 'applicant_detail_screen.dart';
 class ApplicantsScreen extends StatefulWidget {
   final String? projectId;
   final Function(int)? onTabChange;
+  final VoidCallback? onOpenDrawer;
+  final bool isDrawerOpen;
 
   const ApplicantsScreen({
     super.key,
     this.projectId,
     this.onTabChange,
+    this.onOpenDrawer,
+    this.isDrawerOpen = false,
   });
 
   @override
@@ -288,7 +293,9 @@ class _ApplicantsScreenState extends State<ApplicantsScreen> {
         ),
         actions: [
           Padding(
-            padding: const EdgeInsets.only(right: 12),
+            padding: EdgeInsets.only(
+              right: widget.onOpenDrawer != null ? 8 : 14,
+            ),
             child: Center(
               child: Tooltip(
                 message: 'Sync Applicants',
@@ -327,6 +334,16 @@ class _ApplicantsScreenState extends State<ApplicantsScreen> {
               ),
             ),
           ),
+          if (widget.onOpenDrawer != null)
+            Padding(
+              padding: const EdgeInsets.only(right: 14),
+              child: Center(
+                child: CompanyDrawerMenuButton(
+                  onPressed: widget.onOpenDrawer,
+                  isDrawerOpen: widget.isDrawerOpen,
+                ),
+              ),
+            ),
         ],
         bottom: PreferredSize(
           preferredSize: const Size.fromHeight(1),

@@ -3,7 +3,6 @@ import 'package:flutter/services.dart';
 import 'package:google_fonts/google_fonts.dart';
 import 'package:link_vibe/core/constants/app_colors.dart';
 import 'package:link_vibe/core/services/supabase_helper.dart';
-import 'package:link_vibe/core/widgets/rubik_cube_transition.dart';
 import 'package:link_vibe/feature/auth/presentation/screens/login_screen.dart';
 import 'package:link_vibe/feature/company/models/applicant_model.dart';
 import 'package:link_vibe/feature/company/models/assignment_model.dart';
@@ -35,10 +34,12 @@ class _CompanyMainNavState extends State<CompanyMainNav> {
   DateTime? _lastBackPressTime;
   GlobalKey<ScaffoldState>? _scaffoldKeyCache;
   bool? _isSyncingWorkspace;
+  bool? _isDrawerOpen;
 
   GlobalKey<ScaffoldState> get _scaffoldKey =>
       _scaffoldKeyCache ??= GlobalKey<ScaffoldState>();
   bool get _isSyncing => _isSyncingWorkspace ?? false;
+  bool get _drawerIsOpen => _isDrawerOpen ?? false;
 
   CompanyProfileService get _profileService => CompanyProfileService();
   CompanySettingsService get _settingsService => CompanySettingsService();
@@ -237,11 +238,24 @@ class _CompanyMainNavState extends State<CompanyMainNav> {
       CompanyDashboardScreen(
         onTabChange: _onTabChange,
         onOpenDrawer: _openDrawer,
+        isDrawerOpen: _drawerIsOpen,
       ),
-      CompanyProjectsListScreen(onTabChange: _onTabChange),
+      CompanyProjectsListScreen(
+        onTabChange: _onTabChange,
+        onOpenDrawer: _openDrawer,
+        isDrawerOpen: _drawerIsOpen,
+      ),
       PostProjectScreen(onTabChange: _onTabChange),
-      ApplicantsScreen(onTabChange: _onTabChange),
-      AssignedProjectsScreen(onTabChange: _onTabChange),
+      ApplicantsScreen(
+        onTabChange: _onTabChange,
+        onOpenDrawer: _openDrawer,
+        isDrawerOpen: _drawerIsOpen,
+      ),
+      AssignedProjectsScreen(
+        onTabChange: _onTabChange,
+        onOpenDrawer: _openDrawer,
+        isDrawerOpen: _drawerIsOpen,
+      ),
     ];
 
     return PopScope(
@@ -313,10 +327,18 @@ class _CompanyMainNavState extends State<CompanyMainNav> {
       },
       child: Scaffold(
         key: _scaffoldKey,
-        endDrawerEnableOpenDragGesture: _currentIndex == 0,
+        endDrawerEnableOpenDragGesture: _currentIndex == 0 ||
+            _currentIndex == 1 ||
+            _currentIndex == 3 ||
+            _currentIndex == 4,
+        onEndDrawerChanged: (isOpen) {
+          if (mounted) {
+            setState(() => _isDrawerOpen = isOpen);
+          }
+        },
         endDrawer: _buildStandardDrawer(drawerWidth),
-        body: RubikCubeTabView(
-          currentIndex: _currentIndex,
+        body: IndexedStack(
+          index: _currentIndex,
           children: screens,
         ),
         bottomNavigationBar: Container(
