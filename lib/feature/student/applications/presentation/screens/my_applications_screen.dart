@@ -2,22 +2,348 @@ import 'package:flutter/material.dart';
 import 'package:google_fonts/google_fonts.dart';
 import 'package:link_vibe/core/constants/app_colors.dart';
 import 'package:link_vibe/core/services/app_data_service.dart';
+import 'package:link_vibe/core/services/share_service.dart';
 import 'package:link_vibe/core/services/supabase_helper.dart';
 import 'package:link_vibe/core/widgets/app_empty_state.dart';
+import 'package:link_vibe/core/widgets/executive_ui.dart';
 import 'package:link_vibe/core/widgets/status_badge.dart';
-import 'package:link_vibe/feature/student/chat/presentation/screens/chat_list_screen.dart';
 import 'package:link_vibe/feature/student/feedback/presentation/screens/feedback_screen.dart';
+import 'package:link_vibe/feature/student/project_details/presentation/screens/student_project_details_screen.dart';
 import 'package:link_vibe/feature/student/submissions/presentation/screens/submit_work_screen.dart';
 
 class MyApplicationsScreen extends StatefulWidget {
-  const MyApplicationsScreen({super.key});
+  final String? initialApplicationId;
+
+  const MyApplicationsScreen({super.key, this.initialApplicationId});
+
+  /// Opens an in-app detail sheet for a student project application.
+  static void showApplicationDetailsSheet(
+    BuildContext context,
+    Map<String, dynamic> app,
+  ) {
+    final title = app['title']?.toString() ?? 'Project Application';
+    final company = (app['company']?.toString().trim().isNotEmpty == true)
+        ? app['company'].toString().trim()
+        : 'Partner Company';
+    final status = app['status']?.toString() ?? 'Pending';
+    final stage = (app['timelineStep'] as int?) ?? 1;
+    final appliedDate = app['appliedDate']?.toString().trim() ?? 'Recently';
+    final deadline = app['deadline']?.toString().trim() ?? '';
+    final availability = app['availability']?.toString().trim() ?? '';
+    final skills = app['skills']?.toString().trim() ?? '';
+    final coverMessage = app['coverMessage']?.toString().trim() ?? '';
+    final feedback = app['companyFeedback']?.toString().trim() ?? '';
+    final projectId =
+        (app['projectId'] ?? app['project_id'] ?? '').toString().trim();
+
+    showModalBottomSheet<void>(
+      context: context,
+      isScrollControlled: true,
+      backgroundColor: Colors.transparent,
+      builder: (sheetCtx) => Container(
+        decoration: const BoxDecoration(
+          color: Colors.white,
+          borderRadius: BorderRadius.vertical(top: Radius.circular(22)),
+        ),
+        padding: const EdgeInsets.fromLTRB(20, 14, 20, 22),
+        child: SafeArea(
+          top: false,
+          child: SingleChildScrollView(
+            child: Column(
+              mainAxisSize: MainAxisSize.min,
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Center(
+                  child: Container(
+                    width: 42,
+                    height: 4,
+                    margin: const EdgeInsets.only(bottom: 14),
+                    decoration: BoxDecoration(
+                      color: AppColors.lightGray,
+                      borderRadius: BorderRadius.circular(10),
+                    ),
+                  ),
+                ),
+                Row(
+                  children: [
+                    Container(
+                      width: 46,
+                      height: 46,
+                      decoration: BoxDecoration(
+                        color: AppColors.lightAqua,
+                        borderRadius: BorderRadius.circular(12),
+                      ),
+                      child: Center(
+                        child: Text(
+                          SupabaseHelper.initialsFor(company, fallback: 'CO'),
+                          style: GoogleFonts.poppins(
+                            fontSize: 15,
+                            fontWeight: FontWeight.bold,
+                            color: AppColors.primaryBlue,
+                          ),
+                        ),
+                      ),
+                    ),
+                    const SizedBox(width: 12),
+                    Expanded(
+                      child: Column(
+                        crossAxisAlignment: CrossAxisAlignment.start,
+                        children: [
+                          Text(
+                            title,
+                            maxLines: 2,
+                            overflow: TextOverflow.ellipsis,
+                            style: GoogleFonts.poppins(
+                              fontSize: 15.5,
+                              fontWeight: FontWeight.w700,
+                              color: AppColors.deepNavy,
+                            ),
+                          ),
+                          Text(
+                            company,
+                            maxLines: 1,
+                            overflow: TextOverflow.ellipsis,
+                            style: GoogleFonts.inter(
+                              fontSize: 12.5,
+                              color: AppColors.grayText,
+                            ),
+                          ),
+                        ],
+                      ),
+                    ),
+                    const SizedBox(width: 8),
+                    StatusBadge(label: status),
+                  ],
+                ),
+                const SizedBox(height: 14),
+                Wrap(
+                  spacing: 8,
+                  runSpacing: 8,
+                  children: [
+                    _DetailChip(
+                      icon: Icons.calendar_today_rounded,
+                      label: 'Applied: $appliedDate',
+                    ),
+                    _DetailChip(
+                      icon: Icons.timeline_rounded,
+                      label: 'Stage $stage of 3',
+                    ),
+                    if (deadline.isNotEmpty)
+                      _DetailChip(
+                        icon: Icons.schedule_rounded,
+                        label: 'Deadline: $deadline',
+                      ),
+                    if (availability.isNotEmpty)
+                      _DetailChip(
+                        icon: Icons.access_time_rounded,
+                        label: availability,
+                      ),
+                  ],
+                ),
+                if (skills.isNotEmpty) ...[
+                  const SizedBox(height: 12),
+                  Text(
+                    'Submitted Skills',
+                    style: GoogleFonts.poppins(
+                      fontSize: 12.5,
+                      fontWeight: FontWeight.w600,
+                      color: AppColors.deepNavy,
+                    ),
+                  ),
+                  const SizedBox(height: 4),
+                  Text(
+                    skills,
+                    style: GoogleFonts.inter(
+                      fontSize: 12.5,
+                      color: AppColors.darkText,
+                    ),
+                  ),
+                ],
+                if (coverMessage.isNotEmpty) ...[
+                  const SizedBox(height: 12),
+                  Text(
+                    'Proposal Summary',
+                    style: GoogleFonts.poppins(
+                      fontSize: 12.5,
+                      fontWeight: FontWeight.w600,
+                      color: AppColors.deepNavy,
+                    ),
+                  ),
+                  const SizedBox(height: 4),
+                  Container(
+                    width: double.infinity,
+                    padding: const EdgeInsets.all(12),
+                    decoration: BoxDecoration(
+                      color: AppColors.background,
+                      borderRadius: BorderRadius.circular(12),
+                      border: Border.all(color: AppColors.lightGray),
+                    ),
+                    child: Text(
+                      coverMessage,
+                      style: GoogleFonts.inter(
+                        fontSize: 12.5,
+                        color: AppColors.darkText,
+                        height: 1.45,
+                      ),
+                    ),
+                  ),
+                ],
+                if (feedback.isNotEmpty) ...[
+                  const SizedBox(height: 12),
+                  Container(
+                    width: double.infinity,
+                    padding: const EdgeInsets.all(12),
+                    decoration: BoxDecoration(
+                      color: AppColors.warningBg,
+                      borderRadius: BorderRadius.circular(12),
+                      border: Border.all(
+                        color: AppColors.statusPending.withValues(alpha: 0.4),
+                      ),
+                    ),
+                    child: Text(
+                      'Company Feedback: $feedback',
+                      style: GoogleFonts.inter(
+                        fontSize: 12.5,
+                        color: const Color(0xFF78350F),
+                        height: 1.4,
+                      ),
+                    ),
+                  ),
+                ],
+                const SizedBox(height: 18),
+                Row(
+                  children: [
+                    Expanded(
+                      child: OutlinedButton.icon(
+                        icon: const Icon(Icons.share_outlined, size: 17),
+                        label: const Text('Share'),
+                        onPressed: () {
+                          Navigator.pop(sheetCtx);
+                          ShareService.shareApplication(
+                            context: context,
+                            application: app,
+                          );
+                        },
+                      ),
+                    ),
+                    const SizedBox(width: 10),
+                    Expanded(
+                      child: ElevatedButton.icon(
+                        icon: const Icon(Icons.open_in_new_rounded, size: 17),
+                        label: const Text('View Project'),
+                        onPressed: () async {
+                          Navigator.pop(sheetCtx);
+                          final projects =
+                              AppDataService.instance.getAllProjects();
+                          final match = projects.firstWhere(
+                            (p) => p['id']?.toString() == projectId,
+                            orElse: () => <String, dynamic>{},
+                          );
+                          if (match.isNotEmpty) {
+                            Navigator.push(
+                              context,
+                              MaterialPageRoute(
+                                builder: (_) =>
+                                    StudentProjectDetailsScreen(project: match),
+                              ),
+                            );
+                            return;
+                          }
+                          if (projectId.isNotEmpty &&
+                              ShareService.deepLinkOpener != null) {
+                            final opened =
+                                await ShareService.deepLinkOpener!.call(
+                              ShareService.buildProjectShareLink({
+                                'id': projectId,
+                                'title': title,
+                              }),
+                              context: context,
+                            );
+                            if (opened) return;
+                          }
+                          if (context.mounted) {
+                            ScaffoldMessenger.of(context).showSnackBar(
+                              const SnackBar(
+                                content: Text(
+                                  'Related project details are not available right now.',
+                                ),
+                              ),
+                            );
+                          }
+                        },
+                      ),
+                    ),
+                  ],
+                ),
+              ],
+            ),
+          ),
+        ),
+      ),
+    );
+  }
 
   @override
   State<MyApplicationsScreen> createState() => _MyApplicationsScreenState();
 }
 
+class _DetailChip extends StatelessWidget {
+  final IconData icon;
+  final String label;
+
+  const _DetailChip({required this.icon, required this.label});
+
+  @override
+  Widget build(BuildContext context) {
+    return Container(
+      padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 6),
+      decoration: BoxDecoration(
+        color: AppColors.background,
+        borderRadius: BorderRadius.circular(8),
+        border: Border.all(color: AppColors.lightGray),
+      ),
+      child: Row(
+        mainAxisSize: MainAxisSize.min,
+        children: [
+          Icon(icon, size: 13, color: AppColors.primaryBlue),
+          const SizedBox(width: 5),
+          Text(
+            label,
+            style: GoogleFonts.inter(
+              fontSize: 11.5,
+              fontWeight: FontWeight.w600,
+              color: AppColors.deepNavy,
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+}
+
 class _MyApplicationsScreenState extends State<MyApplicationsScreen> {
   String _selectedFilter = 'All';
+
+  @override
+  void initState() {
+    super.initState();
+    final initialId = widget.initialApplicationId?.trim();
+    if (initialId != null && initialId.isNotEmpty) {
+      WidgetsBinding.instance.addPostFrameCallback((_) {
+        if (!mounted) return;
+        final apps = AppDataService.instance.getApplications();
+        final match = apps.firstWhere(
+          (a) =>
+              a['id']?.toString() == initialId ||
+              a['projectId']?.toString() == initialId,
+          orElse: () => <String, dynamic>{},
+        );
+        if (match.isNotEmpty) {
+          MyApplicationsScreen.showApplicationDetailsSheet(context, match);
+        }
+      });
+    }
+  }
 
   static const List<String> _filters = [
     'All',
@@ -35,20 +361,16 @@ class _MyApplicationsScreenState extends State<MyApplicationsScreen> {
   Widget build(BuildContext context) {
     return Scaffold(
       backgroundColor: AppColors.background,
-      appBar: AppBar(
-        title: const Text('My Applications'),
-        leading: IconButton(
-          icon: const Icon(Icons.arrow_back_ios_new_rounded, size: 20),
-          onPressed: () => Navigator.pop(context),
-        ),
+      appBar: ExecutiveAppBar(
+        title: 'My Applications',
+        subtitle: 'Track Review & Approval Stages',
         actions: [
-          IconButton(
+          ExecutiveHeaderIconButton(
             tooltip: 'Sync Applications',
-            icon: const Icon(Icons.refresh_rounded),
+            icon: Icons.refresh_rounded,
             onPressed: () =>
                 AppDataService.instance.syncFromSupabase(forceRefresh: true),
           ),
-          const SizedBox(width: 4),
         ],
       ),
       body: ListenableBuilder(
@@ -178,62 +500,85 @@ class _MyApplicationsScreenState extends State<MyApplicationsScreen> {
 
     return Card(
       margin: const EdgeInsets.only(bottom: 14),
-      child: Padding(
-        padding: const EdgeInsets.all(16),
-        child: Column(
-          crossAxisAlignment: CrossAxisAlignment.start,
-          children: [
-            Row(
-              children: [
-                Container(
-                  width: 44,
-                  height: 44,
-                  decoration: BoxDecoration(
-                    color: AppColors.lightAqua,
-                    borderRadius: BorderRadius.circular(12),
-                  ),
-                  child: Center(
-                    child: Text(
-                      SupabaseHelper.initialsFor(company, fallback: 'CO'),
-                      style: GoogleFonts.poppins(
-                        fontSize: 15,
-                        fontWeight: FontWeight.bold,
-                        color: AppColors.primaryBlue,
+      clipBehavior: Clip.antiAlias,
+      child: InkWell(
+        onTap: () => MyApplicationsScreen.showApplicationDetailsSheet(
+          context,
+          app,
+        ),
+        child: Padding(
+          padding: const EdgeInsets.all(16),
+          child: Column(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              Row(
+                children: [
+                  Container(
+                    width: 44,
+                    height: 44,
+                    decoration: BoxDecoration(
+                      color: AppColors.lightAqua,
+                      borderRadius: BorderRadius.circular(12),
+                    ),
+                    child: Center(
+                      child: Text(
+                        SupabaseHelper.initialsFor(company, fallback: 'CO'),
+                        style: GoogleFonts.poppins(
+                          fontSize: 15,
+                          fontWeight: FontWeight.bold,
+                          color: AppColors.primaryBlue,
+                        ),
                       ),
                     ),
                   ),
-                ),
-                const SizedBox(width: 12),
-                Expanded(
-                  child: Column(
-                    crossAxisAlignment: CrossAxisAlignment.start,
-                    children: [
-                      Text(
-                        title,
-                        maxLines: 1,
-                        overflow: TextOverflow.ellipsis,
-                        style: GoogleFonts.poppins(
-                          fontSize: 14.5,
-                          fontWeight: FontWeight.bold,
-                          color: AppColors.deepNavy,
+                  const SizedBox(width: 12),
+                  Expanded(
+                    child: Column(
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      children: [
+                        Text(
+                          title,
+                          maxLines: 1,
+                          overflow: TextOverflow.ellipsis,
+                          style: GoogleFonts.poppins(
+                            fontSize: 14.5,
+                            fontWeight: FontWeight.bold,
+                            color: AppColors.deepNavy,
+                          ),
                         ),
-                      ),
-                      Text(
-                        company,
-                        maxLines: 1,
-                        overflow: TextOverflow.ellipsis,
-                        style: GoogleFonts.inter(
-                          fontSize: 12,
-                          color: AppColors.grayText,
+                        Text(
+                          company,
+                          maxLines: 1,
+                          overflow: TextOverflow.ellipsis,
+                          style: GoogleFonts.inter(
+                            fontSize: 12,
+                            color: AppColors.grayText,
+                          ),
                         ),
-                      ),
-                    ],
+                      ],
+                    ),
                   ),
-                ),
-                const SizedBox(width: 6),
-                StatusBadge(label: status),
-              ],
-            ),
+                  const SizedBox(width: 6),
+                  StatusBadge(label: status),
+                  const SizedBox(width: 2),
+                  IconButton(
+                    constraints: const BoxConstraints(),
+                    padding: const EdgeInsets.all(6),
+                    tooltip: 'Share Application',
+                    icon: const Icon(
+                      Icons.share_outlined,
+                      size: 19,
+                      color: AppColors.grayText,
+                    ),
+                    onPressed: () {
+                      ShareService.shareApplication(
+                        context: context,
+                        application: app,
+                      );
+                    },
+                  ),
+                ],
+              ),
             const SizedBox(height: 14),
 
             Row(
@@ -323,33 +668,12 @@ class _MyApplicationsScreenState extends State<MyApplicationsScreen> {
                       style: GoogleFonts.poppins(fontSize: 12.5),
                     ),
                   ),
-                  OutlinedButton.icon(
-                    style: OutlinedButton.styleFrom(
-                      padding: const EdgeInsets.symmetric(
-                          horizontal: 14, vertical: 9),
-                    ),
-                    onPressed: () async {
-                      await AppDataService.instance.openOrCreateConversation(
-                        companyName: company,
-                        peerUserId: app['companyUserId']?.toString(),
-                        projectTitle: title,
-                      );
-                      if (!context.mounted) return;
-                      Navigator.push(
-                        context,
-                        MaterialPageRoute(
-                            builder: (_) => const ChatListScreen()),
-                      );
-                    },
-                    icon: const Icon(Icons.chat_bubble_outline_rounded,
-                        size: 15),
-                    label: const Text('Message', style: TextStyle(fontSize: 12.5)),
-                  ),
                 ],
               ),
             ],
           ],
         ),
+      ),
       ),
     );
   }

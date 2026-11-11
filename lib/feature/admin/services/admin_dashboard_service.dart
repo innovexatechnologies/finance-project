@@ -15,7 +15,7 @@ import 'package:link_vibe/feature/admin/services/admin_student_service.dart';
 import 'package:link_vibe/feature/admin/services/admin_verification_service.dart';
 import 'package:link_vibe/feature/company/models/company_verification_model.dart';
 
-/// Enterprise Dashboard Service for CampusConnect Admin Console.
+/// Enterprise Dashboard Service for SkillBridge Admin Console.
 /// Aggregates 100% live metrics, cohort trends, and activity feeds from Supabase-backed services.
 class AdminDashboardService {
   static final AdminDashboardService _instance =
@@ -343,7 +343,7 @@ class AdminDashboardService {
           type: ActivityType.studentRegistration,
           title: 'Student Registration',
           description:
-              '${s.name}${s.university.isNotEmpty ? " (${s.university})" : ""} joined CampusConnect.',
+              '${s.name}${s.university.isNotEmpty ? " (${s.university})" : ""} joined SkillBridge.',
           timeAgo: s.registrationDate,
           actorName: s.name,
           actorRole: 'Student',

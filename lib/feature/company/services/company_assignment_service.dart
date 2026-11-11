@@ -1,5 +1,6 @@
 import 'dart:math';
 import 'package:flutter/foundation.dart';
+import 'package:link_vibe/core/services/share_service.dart';
 import 'package:link_vibe/core/services/supabase_helper.dart';
 import 'package:link_vibe/feature/company/models/assignment_model.dart';
 import 'package:link_vibe/feature/company/models/project_model.dart';
@@ -331,26 +332,11 @@ class CompanyAssignmentService {
               'status': 'valid',
               'cryptographic_hash':
                   'sha256:${hashInput.hashCode.toRadixString(16).padLeft(12, '0')}',
-              'verification_url': 'https://campusconnect.edu.pk/verify/$certCode',
+              'verification_url': ShareService.buildCertificateShareLink({
+                'id': certCode,
+              }),
             });
           }
-        }
-
-        if (SupabaseHelper.isUuid(assignment.studentId)) {
-          await supabase.from('notifications').insert({
-            'user_id': assignment.studentId,
-            'title': newStatus == 'Approved'
-                ? 'Work Approved & Certificate Issued!'
-                : 'Revision Requested on "${assignment.projectTitle}"',
-            'message': newStatus == 'Approved'
-                ? '$companyDisplay approved your deliverable for "${assignment.projectTitle}". Your verified certificate is ready!'
-                : '$companyDisplay requested revisions: $cleanFeedback',
-            'type': newStatus == 'Approved' ? 'approved' : 'revision',
-            if (SupabaseHelper.isUuid(assignment.projectId))
-              'project_id': assignment.projectId,
-            'actor_name': companyDisplay,
-            'is_read': false,
-          });
         }
       } catch (e) {
         debugPrint('CompanyAssignmentService reviewSubmission error: $e');

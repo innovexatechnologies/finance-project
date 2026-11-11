@@ -51,7 +51,7 @@ class CertificatePdfService {
                   pw.Column(
                     children: [
                       pw.Text(
-                        'CAMPUSCONNECT',
+                        'SKILLBRIDGE',
                         style: pw.TextStyle(
                           fontSize: 26,
                           fontWeight: pw.FontWeight.bold,
@@ -155,7 +155,7 @@ class CertificatePdfService {
                           ),
                           pw.SizedBox(height: 2),
                           pw.Text(
-                            'Verified Portal: campusconnect.edu.pk/verify',
+                            'Verified SkillBridge Credential ($certId)',
                             style: pw.TextStyle(
                               fontSize: 8,
                               color: teal,
@@ -177,7 +177,7 @@ class CertificatePdfService {
                         child: pw.Column(
                           children: [
                             pw.Text(
-                              'CAMPUSCONNECT',
+                              'SKILLBRIDGE',
                               style: pw.TextStyle(
                                 fontSize: 8,
                                 fontWeight: pw.FontWeight.bold,

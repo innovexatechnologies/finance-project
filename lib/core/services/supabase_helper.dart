@@ -1,34 +1,24 @@
+import 'dart:async';
 import 'dart:math';
-import 'package:flutter/foundation.dart' show kIsWeb;
 import 'package:supabase_flutter/supabase_flutter.dart';
 
 /// Safe wrapper & utilities for Supabase client access across runtime & tests.
 class SupabaseHelper {
   SupabaseHelper._();
 
-  static const String authRedirectUri =
-      'io.supabase.campusconnect://login-callback/';
-
-  /// Returns mobile deep-link callback URI on Android/iOS/desktop, or `null`
-  /// on Flutter Web so Supabase falls back to the current web origin.
-  static String? get emailRedirectUrl => kIsWeb ? null : authRedirectUri;
-
-  /// Guard set while LoginScreen / SignupScreen / AdminAuthService perform an
-  /// interactive auth call so the global deep-link listener only handles
-  /// external verification/recovery redirects.
   static bool isInteractiveAuthInProgress = false;
 
-  /// Set if a password recovery deep link arrives during app cold boot before
-  /// the widget tree mounts.
-  static bool pendingPasswordRecovery = false;
+  static void beginInteractiveAuth() {
+    isInteractiveAuthInProgress = true;
+  }
 
-  /// Set if a signup/verification deep link completes during cold boot before
-  /// the widget tree mounts.
-  static bool pendingEmailVerification = false;
+  static void endInteractiveAuth() {
+    isInteractiveAuthInProgress = false;
+  }
 
-  /// Captures an auth callback error (e.g. expired link or PKCE mismatch)
-  /// arriving during cold boot so the UI can show a dedicated recovery screen.
-  static String? pendingAuthCallbackError;
+  static void clearAuthFlags() {
+    isInteractiveAuthInProgress = false;
+  }
 
   static final Random _random = Random();
   static final RegExp _uuidRegex = RegExp(
@@ -162,11 +152,11 @@ class SupabaseHelper {
     User user, {
     Map<String, dynamic>? profileRow,
   }) async {
-    String raw = (profileRow?['user_type']?.toString() ??
-            user.userMetadata?['user_type']?.toString() ??
-            '')
-        .trim()
-        .toLowerCase();
+    final profileType =
+        profileRow?['user_type']?.toString().trim().toLowerCase() ?? '';
+    final metaType =
+        user.userMetadata?['user_type']?.toString().trim().toLowerCase() ?? '';
+    String raw = profileType.isNotEmpty ? profileType : metaType;
 
     if (raw.isEmpty) {
       try {
@@ -174,6 +164,7 @@ class SupabaseHelper {
             .from('companies')
             .select('id')
             .eq('user_id', user.id)
+            .limit(1)
             .maybeSingle();
         if (comp != null) raw = 'company';
       } catch (_) {}
@@ -182,6 +173,101 @@ class SupabaseHelper {
     if (raw == 'admin') return 'Admin';
     if (raw == 'company') return 'Company';
     return 'Student';
+  }
+
+  static bool isWeakPasswordError(Object error) {
+    final msg = error is AuthException ? error.message : error.toString();
+    final lower = msg.toLowerCase();
+    final code = error is AuthException ? (error.code?.toLowerCase() ?? '') : '';
+    return code == 'weak_password' ||
+        lower.contains('password should be at least') ||
+        lower.contains('weak_password');
+  }
+
+  static bool isEmailRateLimitError(Object error) {
+    final msg = error is AuthException ? error.message : error.toString();
+    final lower = msg.toLowerCase();
+    final code = error is AuthException ? (error.code?.toLowerCase() ?? '') : '';
+    return code == 'over_email_send_rate_limit' ||
+        code == 'over_request_rate_limit' ||
+        lower.contains('over_email_send_rate_limit') ||
+        lower.contains('over_request_rate_limit') ||
+        lower.contains('email rate limit exceeded');
+  }
+
+  static bool isEmailNotConfirmedError(Object error) {
+    final msg = error is AuthException ? error.message : error.toString();
+    final lower = msg.toLowerCase();
+    final code = error is AuthException ? (error.code?.toLowerCase() ?? '') : '';
+    return code == 'email_not_confirmed' ||
+        lower.contains('email_not_confirmed') ||
+        lower.contains('email not confirmed');
+  }
+
+  static bool isAlreadyRegisteredError(Object error) {
+    final msg = error is AuthException ? error.message : error.toString();
+    final lower = msg.toLowerCase();
+    final code = error is AuthException ? (error.code?.toLowerCase() ?? '') : '';
+    return code == 'user_already_exists' ||
+        lower.contains('user already registered') ||
+        lower.contains('already registered') ||
+        lower.contains('already exists');
+  }
+
+  /// Best-effort SQL RPC call to auto-confirm an unconfirmed Supabase Auth user.
+  static Future<void> confirmUserEmailInApp(String email) async {
+    final supabase = clientOrNull;
+    final cleanEmail = email.trim().toLowerCase();
+    if (supabase == null || cleanEmail.isEmpty) return;
+    try {
+      await supabase.rpc(
+        'confirm_user_email_in_app',
+        params: {'target_email': cleanEmail},
+      );
+    } catch (_) {}
+  }
+
+  /// Creates an immediately confirmed Supabase Auth account directly in DB
+  /// (used when server SMTP or signup constraints block direct signup).
+  static Future<void> registerUserInApp({
+    required String email,
+    required String password,
+    required String name,
+    required String role,
+    required String organization,
+  }) async {
+    final supabase = clientOrNull;
+    if (supabase == null) {
+      throw const AuthException('Supabase client unavailable.');
+    }
+    await supabase.rpc(
+      'register_user_in_app',
+      params: {
+        'target_email': email.trim().toLowerCase(),
+        'target_password': password.trim(),
+        'full_name': name.trim(),
+        'user_type': role.trim(),
+        'organization': organization.trim(),
+      },
+    );
+  }
+
+  /// Resets any registered user's password directly in Supabase via RPC.
+  static Future<void> resetPasswordInApp({
+    required String email,
+    required String newPassword,
+  }) async {
+    final supabase = clientOrNull;
+    if (supabase == null) {
+      throw const AuthException('Supabase client unavailable.');
+    }
+    await supabase.rpc(
+      'reset_user_password_in_app',
+      params: {
+        'target_email': email.trim().toLowerCase(),
+        'new_password': newPassword.trim(),
+      },
+    );
   }
 
   /// Converts raw network/auth/platform exceptions into readable UI messages.
@@ -202,16 +288,13 @@ class SupabaseHelper {
     if (lower.contains('invalid login credentials')) {
       return 'Incorrect email or password. Please verify and try again.';
     }
-    if (lower.contains('email not confirmed')) {
-      return 'Email is not verified yet. Please confirm the link in your inbox before signing in.';
+    if (lower.contains('no account found')) {
+      return 'No account found for this email address.';
     }
     if (lower.contains('user already registered') ||
         lower.contains('already registered') ||
         lower.contains('already exists')) {
       return 'An account with this email already exists. Please sign in instead.';
-    }
-    if (lower.contains('password should be at least')) {
-      return 'Password must be at least 6 characters long.';
     }
 
     var cleaned = msg.trim();

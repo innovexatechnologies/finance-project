@@ -142,20 +142,11 @@ class AdminVerificationService {
             'is_verified': true,
             'updated_at': nowIso,
           }).eq('id', target.userId!);
-
-          await supabase.from('notifications').insert({
-            'user_id': target.userId,
-            'title': 'Company Verification Approved',
-            'message':
-                '${target.companyName} has been officially verified on CampusConnect.',
-            'type': 'verification',
-            'actor_name': reviewerName,
-          });
         }
 
         await supabase.from('admin_audit_logs').insert({
           'admin_email':
-              SupabaseHelper.currentUser?.email ?? 'admin@campusconnect.edu.pk',
+              SupabaseHelper.currentUser?.email ?? 'admin@skillbridge.edu.pk',
           'action': 'COMPANY_VERIFICATION_APPROVED',
           'target': target.companyName,
           'details': 'Approved corporate verification by $reviewerName.',
@@ -226,19 +217,11 @@ class AdminVerificationService {
             'is_verified': false,
             'updated_at': nowIso,
           }).eq('id', target.userId!);
-
-          await supabase.from('notifications').insert({
-            'user_id': target.userId,
-            'title': 'Company Verification Rejected',
-            'message': cleanFeedback,
-            'type': 'verification',
-            'actor_name': reviewerName,
-          });
         }
 
         await supabase.from('admin_audit_logs').insert({
           'admin_email':
-              SupabaseHelper.currentUser?.email ?? 'admin@campusconnect.edu.pk',
+              SupabaseHelper.currentUser?.email ?? 'admin@skillbridge.edu.pk',
           'action': 'COMPANY_VERIFICATION_REJECTED',
           'target': target.companyName,
           'details': cleanFeedback,

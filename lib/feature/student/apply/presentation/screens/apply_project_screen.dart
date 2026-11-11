@@ -3,6 +3,7 @@ import 'package:google_fonts/google_fonts.dart';
 import 'package:link_vibe/core/constants/app_colors.dart';
 import 'package:link_vibe/core/services/app_data_service.dart';
 import 'package:link_vibe/core/services/supabase_helper.dart';
+import 'package:link_vibe/core/widgets/executive_ui.dart';
 
 class ApplyProjectScreen extends StatefulWidget {
   final Map<String, dynamic> project;
@@ -190,12 +191,9 @@ class _ApplyProjectScreenState extends State<ApplyProjectScreen> {
 
     return Scaffold(
       backgroundColor: AppColors.background,
-      appBar: AppBar(
-        title: const Text('Apply for Project'),
-        leading: IconButton(
-          icon: const Icon(Icons.arrow_back_ios_new_rounded, size: 20),
-          onPressed: () => Navigator.pop(context),
-        ),
+      appBar: ExecutiveAppBar(
+        title: 'Apply for Project',
+        subtitle: company,
       ),
       body: SingleChildScrollView(
         padding: const EdgeInsets.all(20),

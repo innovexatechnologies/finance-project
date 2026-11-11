@@ -309,7 +309,7 @@ class AdminStudentService {
     }
   }
 
-  /// Approve student verification in Supabase (`students` + `profiles` + `notifications`).
+  /// Approve student verification in Supabase (`students` + `profiles`).
   Future<bool> approveStudentVerification({
     required String studentId,
     required String adminName,
@@ -341,15 +341,6 @@ class AdminStudentService {
             'is_verified': true,
             'updated_at': nowIso,
           }).eq('id', student.userId!);
-
-          await _notifyStudent(
-            userId: student.userId!,
-            title: 'Academic Verification Approved',
-            message:
-                'Your student profile (${student.name}) has been verified by CampusConnect Administration.',
-            type: 'verification',
-            actorName: adminName,
-          );
         }
 
         await _writeAuditLog(
@@ -416,14 +407,6 @@ class AdminStudentService {
             'is_verified': false,
             'updated_at': nowIso,
           }).eq('id', student.userId!);
-
-          await _notifyStudent(
-            userId: student.userId!,
-            title: 'Academic Verification Rejected',
-            message: reason.trim(),
-            type: 'verification',
-            actorName: adminName,
-          );
         }
 
         await _writeAuditLog(
@@ -483,16 +466,6 @@ class AdminStudentService {
             'verification_status': 'pending',
             'updated_at': nowIso,
           }).eq('user_id', student.userId!);
-        }
-
-        if (SupabaseHelper.isUuid(student.userId)) {
-          await _notifyStudent(
-            userId: student.userId!,
-            title: 'Resubmit Verification Document',
-            message: instructions.trim(),
-            type: 'verification',
-            actorName: adminName,
-          );
         }
 
         await _writeAuditLog(
@@ -561,14 +534,6 @@ class AdminStudentService {
             'account_status': 'suspended',
             'updated_at': nowIso,
           }).eq('id', student.userId!);
-
-          await _notifyStudent(
-            userId: student.userId!,
-            title: 'Student Account Suspended',
-            message: reason.trim(),
-            type: 'governance',
-            actorName: adminName,
-          );
         }
 
         await _writeAuditLog(
@@ -637,14 +602,6 @@ class AdminStudentService {
             'account_status': 'active',
             'updated_at': nowIso,
           }).eq('id', student.userId!);
-
-          await _notifyStudent(
-            userId: student.userId!,
-            title: 'Student Account Reactivated',
-            message: 'Your CampusConnect student account has been reactivated.',
-            type: 'governance',
-            actorName: adminName,
-          );
         }
 
         await _writeAuditLog(
@@ -695,28 +652,6 @@ class AdminStudentService {
     return approvedCount;
   }
 
-  Future<void> _notifyStudent({
-    required String userId,
-    required String title,
-    required String message,
-    required String type,
-    required String actorName,
-  }) async {
-    final supabase = SupabaseHelper.clientOrNull;
-    if (supabase == null || !SupabaseHelper.isUuid(userId)) return;
-    try {
-      await supabase.from('notifications').insert({
-        'user_id': userId,
-        'title': title,
-        'message': message,
-        'type': type,
-        'actor_name': actorName,
-      });
-    } catch (e) {
-      debugPrint('AdminStudentService notify error: $e');
-    }
-  }
-
   Future<void> _writeAuditLog({
     required String action,
     required String target,
@@ -726,7 +661,7 @@ class AdminStudentService {
     if (supabase == null) return;
     try {
       await supabase.from('admin_audit_logs').insert({
-        'admin_email': SupabaseHelper.currentUser?.email ?? 'admin@campusconnect.edu.pk',
+        'admin_email': SupabaseHelper.currentUser?.email ?? 'admin@skillbridge.edu.pk',
         'action': action,
         'target': target,
         'details': details,

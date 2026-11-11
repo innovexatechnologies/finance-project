@@ -5,6 +5,7 @@ import 'package:link_vibe/core/services/app_data_service.dart';
 import 'package:link_vibe/core/services/share_service.dart';
 import 'package:link_vibe/core/services/supabase_helper.dart';
 import 'package:link_vibe/core/widgets/app_empty_state.dart';
+import 'package:link_vibe/core/widgets/executive_ui.dart';
 import 'package:link_vibe/core/widgets/status_badge.dart';
 import 'package:link_vibe/feature/admin/services/admin_settings_service.dart';
 import 'package:link_vibe/feature/student/project_details/presentation/screens/student_project_details_screen.dart';
@@ -152,22 +153,34 @@ class _ExploreProjectsScreenState extends State<ExploreProjectsScreen> {
   Widget build(BuildContext context) {
     return Scaffold(
       backgroundColor: AppColors.background,
-      appBar: AppBar(
-        title: const Text('Explore Projects'),
-        centerTitle: false,
+      appBar: ExecutiveAppBar(
+        title: 'Explore Projects',
+        subtitle: 'Live Corporate Opportunities',
+        showLeading: Navigator.canPop(context),
+        leadingBadge: Container(
+          width: 36,
+          height: 36,
+          decoration: BoxDecoration(
+            gradient: AppColors.brandGradient,
+            borderRadius: BorderRadius.circular(11),
+            boxShadow: [
+              BoxShadow(
+                color: AppColors.primaryBlue.withValues(alpha: 0.22),
+                blurRadius: 8,
+                offset: const Offset(0, 3),
+              ),
+            ],
+          ),
+          child: const Icon(
+            Icons.explore_rounded,
+            color: Colors.white,
+            size: 19,
+          ),
+        ),
         actions: [
-          IconButton(
+          ExecutiveHeaderIconButton(
             tooltip: 'Refresh Live Catalog',
-            icon: _isLoading
-                ? const SizedBox(
-                    width: 20,
-                    height: 20,
-                    child: CircularProgressIndicator(
-                      color: AppColors.primaryBlue,
-                      strokeWidth: 2,
-                    ),
-                  )
-                : const Icon(Icons.refresh_rounded),
+            icon: Icons.refresh_rounded,
             onPressed: _isLoading
                 ? null
                 : () => _refreshLiveCatalog(
@@ -175,7 +188,6 @@ class _ExploreProjectsScreenState extends State<ExploreProjectsScreen> {
                       resetFilters: true,
                     ),
           ),
-          const SizedBox(width: 8),
         ],
       ),
       body: ListenableBuilder(
@@ -199,117 +211,139 @@ class _ExploreProjectsScreenState extends State<ExploreProjectsScreen> {
                       backgroundColor: AppColors.lightAqua,
                     ),
 
-                  // Search & Reset Row
-                  Padding(
-                    padding: const EdgeInsets.symmetric(
-                        horizontal: 16, vertical: 10),
-                    child: Row(
+                  // Crisp White Executive Search & Filter Control Dock
+                  Container(
+                    width: double.infinity,
+                    decoration: const BoxDecoration(
+                      color: Colors.white,
+                      border: Border(
+                        bottom: BorderSide(color: AppColors.borderLight),
+                      ),
+                    ),
+                    padding: const EdgeInsets.fromLTRB(16, 12, 16, 10),
+                    child: Column(
                       children: [
-                        Expanded(
-                          child: TextField(
-                            controller: _searchController,
-                            onChanged: (_) => setState(() {}),
-                            decoration: InputDecoration(
-                              hintText: 'Search projects, companies, skills...',
-                              prefixIcon: const Icon(
-                                Icons.search_rounded,
-                                color: AppColors.grayText,
+                        Row(
+                          children: [
+                            Expanded(
+                              child: TextField(
+                                controller: _searchController,
+                                onChanged: (_) => setState(() {}),
+                                decoration: InputDecoration(
+                                  hintText:
+                                      'Search projects, companies, skills...',
+                                  filled: true,
+                                  fillColor: AppColors.background,
+                                  isDense: true,
+                                  contentPadding: const EdgeInsets.symmetric(
+                                    horizontal: 14,
+                                    vertical: 12,
+                                  ),
+                                  prefixIcon: const Icon(
+                                    Icons.search_rounded,
+                                    color: AppColors.grayText,
+                                    size: 20,
+                                  ),
+                                  suffixIcon: _searchController.text.isNotEmpty
+                                      ? IconButton(
+                                          icon: const Icon(
+                                            Icons.close_rounded,
+                                            size: 18,
+                                          ),
+                                          onPressed: () {
+                                            _searchController.clear();
+                                            setState(() {});
+                                          },
+                                        )
+                                      : null,
+                                ),
                               ),
-                              suffixIcon: _searchController.text.isNotEmpty
-                                  ? IconButton(
-                                      icon: const Icon(Icons.close_rounded,
-                                          size: 18),
-                                      onPressed: () {
-                                        _searchController.clear();
-                                        setState(() {});
-                                      },
-                                    )
-                                  : null,
                             ),
-                          ),
+                            const SizedBox(width: 8),
+                            Container(
+                              decoration: BoxDecoration(
+                                color: hasActiveFilters
+                                    ? AppColors.primaryBlue
+                                    : AppColors.background,
+                                borderRadius: BorderRadius.circular(12),
+                                border: Border.all(
+                                  color: hasActiveFilters
+                                      ? AppColors.primaryBlue
+                                      : AppColors.borderLight,
+                                ),
+                              ),
+                              child: IconButton(
+                                tooltip: 'Reset Filters',
+                                icon: Icon(
+                                  Icons.filter_alt_off_rounded,
+                                  color: hasActiveFilters
+                                      ? Colors.white
+                                      : AppColors.deepNavy,
+                                  size: 20,
+                                ),
+                                onPressed: () {
+                                  setState(() {
+                                    _selectedCategory = 'All';
+                                    _searchController.clear();
+                                  });
+                                },
+                              ),
+                            ),
+                          ],
                         ),
-                        const SizedBox(width: 8),
-                        Container(
-                          decoration: BoxDecoration(
-                            color: hasActiveFilters
-                                ? AppColors.primaryBlue
-                                : AppColors.cardWhite,
-                            borderRadius: BorderRadius.circular(12),
-                            border: Border.all(
-                              color: hasActiveFilters
-                                  ? AppColors.primaryBlue
-                                  : AppColors.lightGray,
-                            ),
-                          ),
-                          child: IconButton(
-                            tooltip: 'Reset Filters',
-                            icon: Icon(
-                              Icons.filter_alt_off_rounded,
-                              color: hasActiveFilters
-                                  ? Colors.white
-                                  : AppColors.deepNavy,
-                              size: 20,
-                            ),
-                            onPressed: () {
-                              setState(() {
-                                _selectedCategory = 'All';
-                                _searchController.clear();
-                              });
+                        const SizedBox(height: 10),
+                        SizedBox(
+                          height: 36,
+                          child: ListView.builder(
+                            scrollDirection: Axis.horizontal,
+                            itemCount: categories.length,
+                            itemBuilder: (context, index) {
+                              final cat = categories[index];
+                              final isSelected = _selectedCategory == cat;
+                              return Padding(
+                                padding: const EdgeInsets.only(right: 8),
+                                child: ChoiceChip(
+                                  label: Text(cat),
+                                  selected: isSelected,
+                                  onSelected: (selected) {
+                                    if (selected) {
+                                      setState(() => _selectedCategory = cat);
+                                    }
+                                  },
+                                  selectedColor: AppColors.primaryBlue,
+                                  backgroundColor: AppColors.background,
+                                  labelStyle: GoogleFonts.inter(
+                                    fontSize: 12,
+                                    fontWeight: isSelected
+                                        ? FontWeight.w700
+                                        : FontWeight.w500,
+                                    color: isSelected
+                                        ? Colors.white
+                                        : AppColors.darkText,
+                                  ),
+                                  shape: RoundedRectangleBorder(
+                                    borderRadius: BorderRadius.circular(20),
+                                    side: BorderSide(
+                                      color: isSelected
+                                          ? AppColors.primaryBlue
+                                          : AppColors.borderLight,
+                                    ),
+                                  ),
+                                  showCheckmark: false,
+                                  materialTapTargetSize:
+                                      MaterialTapTargetSize.shrinkWrap,
+                                  padding: const EdgeInsets.symmetric(
+                                    horizontal: 10,
+                                    vertical: 2,
+                                  ),
+                                ),
+                              );
                             },
                           ),
                         ),
                       ],
                     ),
                   ),
-
-                  // Categories Chip Strip
-                  SizedBox(
-                    height: 44,
-                    child: ListView.builder(
-                      scrollDirection: Axis.horizontal,
-                      padding: const EdgeInsets.symmetric(horizontal: 12),
-                      itemCount: categories.length,
-                      itemBuilder: (context, index) {
-                        final cat = categories[index];
-                        final isSelected = _selectedCategory == cat;
-                        return Padding(
-                          padding: const EdgeInsets.symmetric(horizontal: 4),
-                          child: ChoiceChip(
-                            label: Text(cat),
-                            selected: isSelected,
-                            onSelected: (selected) {
-                              if (selected) {
-                                setState(() => _selectedCategory = cat);
-                              }
-                            },
-                            selectedColor: AppColors.primaryBlue,
-                            backgroundColor: AppColors.cardWhite,
-                            labelStyle: GoogleFonts.inter(
-                              fontSize: 12,
-                              fontWeight: isSelected
-                                  ? FontWeight.w700
-                                  : FontWeight.w500,
-                              color: isSelected
-                                  ? Colors.white
-                                  : AppColors.darkText,
-                            ),
-                            shape: RoundedRectangleBorder(
-                              borderRadius: BorderRadius.circular(20),
-                              side: BorderSide(
-                                color: isSelected
-                                    ? AppColors.primaryBlue
-                                    : AppColors.lightGray,
-                              ),
-                            ),
-                            showCheckmark: false,
-                            padding: const EdgeInsets.symmetric(
-                                horizontal: 10, vertical: 4),
-                          ),
-                        );
-                      },
-                    ),
-                  ),
-                  const SizedBox(height: 8),
 
                   // Projects Listing
                   Expanded(
@@ -392,44 +426,60 @@ class _ExploreProjectsScreenState extends State<ExploreProjectsScreen> {
     final status = project['status']?.toString() ?? 'Open';
     final category = project['category']?.toString().trim() ?? '';
 
-    return Card(
+    return Container(
       margin: const EdgeInsets.only(bottom: 14),
-      child: InkWell(
-        borderRadius: BorderRadius.circular(16),
-        onTap: () {
-          Navigator.push(
-            context,
-            MaterialPageRoute(
-              builder: (_) => StudentProjectDetailsScreen(project: project),
-            ),
-          );
-        },
-        child: Padding(
-          padding: const EdgeInsets.all(16),
-          child: Column(
-            crossAxisAlignment: CrossAxisAlignment.start,
-            children: [
-              Row(
-                crossAxisAlignment: CrossAxisAlignment.start,
-                children: [
-                  Container(
-                    width: 44,
-                    height: 44,
-                    decoration: BoxDecoration(
-                      color: AppColors.lightAqua,
-                      borderRadius: BorderRadius.circular(12),
-                    ),
-                    child: Center(
-                      child: Text(
-                        SupabaseHelper.initialsFor(companyStr, fallback: 'CO'),
-                        style: GoogleFonts.poppins(
-                          fontSize: 15,
-                          fontWeight: FontWeight.bold,
-                          color: AppColors.primaryBlue,
+      decoration: BoxDecoration(
+        color: AppColors.cardWhite,
+        borderRadius: BorderRadius.circular(18),
+        border: Border.all(color: AppColors.lightGray),
+        boxShadow: AppColors.softShadow,
+      ),
+      child: Material(
+        color: Colors.transparent,
+        child: InkWell(
+          borderRadius: BorderRadius.circular(18),
+          onTap: () {
+            Navigator.push(
+              context,
+              MaterialPageRoute(
+                builder: (_) => StudentProjectDetailsScreen(project: project),
+              ),
+            );
+          },
+          child: Padding(
+            padding: const EdgeInsets.all(16),
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Row(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    Container(
+                      width: 46,
+                      height: 46,
+                      decoration: BoxDecoration(
+                        gradient: LinearGradient(
+                          colors: [
+                            AppColors.lightAqua,
+                            AppColors.primaryBlue.withValues(alpha: 0.14),
+                          ],
+                        ),
+                        borderRadius: BorderRadius.circular(13),
+                      ),
+                      child: Center(
+                        child: Text(
+                          SupabaseHelper.initialsFor(
+                            companyStr,
+                            fallback: 'CO',
+                          ),
+                          style: GoogleFonts.poppins(
+                            fontSize: 15,
+                            fontWeight: FontWeight.w700,
+                            color: AppColors.primaryBlue,
+                          ),
                         ),
                       ),
                     ),
-                  ),
                   const SizedBox(width: 12),
                   Expanded(
                     child: Column(
@@ -601,6 +651,7 @@ class _ExploreProjectsScreenState extends State<ExploreProjectsScreen> {
             ],
           ),
         ),
+      ),
       ),
     );
   }

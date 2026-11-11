@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 import 'package:google_fonts/google_fonts.dart';
 import 'package:link_vibe/core/constants/app_colors.dart';
 import 'package:link_vibe/core/services/app_data_service.dart';
+import 'package:link_vibe/core/widgets/executive_ui.dart';
 import 'package:link_vibe/core/widgets/status_badge.dart';
 
 class FeedbackScreen extends StatefulWidget {
@@ -134,12 +135,9 @@ class _FeedbackScreenState extends State<FeedbackScreen> {
 
     return Scaffold(
       backgroundColor: AppColors.background,
-      appBar: AppBar(
-        title: const Text('Feedback & Revisions'),
-        leading: IconButton(
-          icon: const Icon(Icons.arrow_back_ios_new_rounded, size: 20),
-          onPressed: () => Navigator.pop(context),
-        ),
+      appBar: ExecutiveAppBar(
+        title: 'Feedback & Revisions',
+        subtitle: company,
       ),
       body: SingleChildScrollView(
         padding: const EdgeInsets.all(20),

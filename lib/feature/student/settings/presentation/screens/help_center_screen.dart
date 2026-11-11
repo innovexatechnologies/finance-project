@@ -22,9 +22,9 @@ class _HelpCenterScreenState extends State<HelpCenterScreen> {
       'category': 'Projects',
     },
     {
-      'question': 'Is CampusConnect completely free for students?',
+      'question': 'Is SkillBridge completely free for students?',
       'answer':
-          'Yes! CampusConnect is 100% free. There are no fees, wallet balances, or payment gateways. Our mission is to bridge academia and industry with zero financial barriers.',
+          'Yes! SkillBridge is 100% free. There are no fees, wallet balances, or payment gateways. Our mission is to bridge academia and industry with zero financial barriers.',
       'category': 'Platform',
     },
     {
@@ -36,7 +36,7 @@ class _HelpCenterScreenState extends State<HelpCenterScreen> {
     {
       'question': 'What should I do if a company requests revisions?',
       'answer':
-          'If a company requests revisions, you will see a notification and status update in "My Projects". Open the assignment to read the supervisor\'s feedback, modify your work, and upload revised deliverables.',
+          'If a company requests revisions, you will see a status update in "My Projects". Open the assignment to read the supervisor\'s feedback, modify your work, and upload revised deliverables.',
       'category': 'Submissions',
     },
     {
@@ -44,12 +44,6 @@ class _HelpCenterScreenState extends State<HelpCenterScreen> {
       'answer':
           'Once the company supervisor approves your work, an official verified completion certificate is generated automatically. You can view, download, or share it from the "Certificates" screen.',
       'category': 'Certificates',
-    },
-    {
-      'question': 'How does messaging and company communication work?',
-      'answer':
-          'You can communicate directly with assigned company leads via the Messages & Chat section. All project conversations and supervisor notes are safely stored and updated in real-time.',
-      'category': 'Communication',
     },
     {
       'question': 'Can I edit my profile information after signing up?',

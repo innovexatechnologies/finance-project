@@ -372,60 +372,11 @@ ALTER TABLE public.certificates ADD COLUMN IF NOT EXISTS pdf_url TEXT;
 ALTER TABLE public.certificates ADD COLUMN IF NOT EXISTS created_at TIMESTAMPTZ DEFAULT timezone('utc'::text, now());
 
 -- ----------------------------------------------------------------------------
--- 8. MESSAGES / CHAT TABLE
+-- 8. SAVED PROJECTS, SUPPORT TICKETS, USER SETTINGS, TAXONOMIES & AUDIT LOGS
 -- ----------------------------------------------------------------------------
-CREATE TABLE IF NOT EXISTS public.messages (
-  id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
-  conversation_id TEXT,
-  sender_id UUID REFERENCES auth.users(id) ON DELETE CASCADE,
-  receiver_id UUID REFERENCES auth.users(id) ON DELETE CASCADE,
-  sender_name TEXT,
-  receiver_name TEXT,
-  company_name TEXT,
-  project_title TEXT,
-  message_text TEXT,
-  is_read BOOLEAN DEFAULT false,
-  created_at TIMESTAMPTZ DEFAULT timezone('utc'::text, now()) NOT NULL
-);
+DROP TABLE IF EXISTS public.messages CASCADE;
+DROP TABLE IF EXISTS public.notifications CASCADE;
 
-ALTER TABLE public.messages ADD COLUMN IF NOT EXISTS conversation_id TEXT;
-ALTER TABLE public.messages ADD COLUMN IF NOT EXISTS sender_id UUID REFERENCES auth.users(id) ON DELETE CASCADE;
-ALTER TABLE public.messages ADD COLUMN IF NOT EXISTS receiver_id UUID REFERENCES auth.users(id) ON DELETE CASCADE;
-ALTER TABLE public.messages ADD COLUMN IF NOT EXISTS sender_name TEXT;
-ALTER TABLE public.messages ADD COLUMN IF NOT EXISTS receiver_name TEXT;
-ALTER TABLE public.messages ADD COLUMN IF NOT EXISTS company_name TEXT;
-ALTER TABLE public.messages ADD COLUMN IF NOT EXISTS project_title TEXT;
-ALTER TABLE public.messages ADD COLUMN IF NOT EXISTS message_text TEXT;
-ALTER TABLE public.messages ADD COLUMN IF NOT EXISTS is_read BOOLEAN DEFAULT false;
-ALTER TABLE public.messages ADD COLUMN IF NOT EXISTS created_at TIMESTAMPTZ DEFAULT timezone('utc'::text, now());
-
--- ----------------------------------------------------------------------------
--- 9. NOTIFICATIONS TABLE
--- ----------------------------------------------------------------------------
-CREATE TABLE IF NOT EXISTS public.notifications (
-  id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
-  user_id UUID REFERENCES auth.users(id) ON DELETE CASCADE,
-  title TEXT,
-  message TEXT,
-  type TEXT DEFAULT 'general',
-  project_id UUID,
-  actor_name TEXT,
-  is_read BOOLEAN DEFAULT false,
-  created_at TIMESTAMPTZ DEFAULT timezone('utc'::text, now()) NOT NULL
-);
-
-ALTER TABLE public.notifications ADD COLUMN IF NOT EXISTS user_id UUID REFERENCES auth.users(id) ON DELETE CASCADE;
-ALTER TABLE public.notifications ADD COLUMN IF NOT EXISTS title TEXT;
-ALTER TABLE public.notifications ADD COLUMN IF NOT EXISTS message TEXT;
-ALTER TABLE public.notifications ADD COLUMN IF NOT EXISTS type TEXT DEFAULT 'general';
-ALTER TABLE public.notifications ADD COLUMN IF NOT EXISTS project_id UUID;
-ALTER TABLE public.notifications ADD COLUMN IF NOT EXISTS actor_name TEXT;
-ALTER TABLE public.notifications ADD COLUMN IF NOT EXISTS is_read BOOLEAN DEFAULT false;
-ALTER TABLE public.notifications ADD COLUMN IF NOT EXISTS created_at TIMESTAMPTZ DEFAULT timezone('utc'::text, now());
-
--- ----------------------------------------------------------------------------
--- 10. SAVED PROJECTS, SUPPORT TICKETS, USER SETTINGS, TAXONOMIES & AUDIT LOGS
--- ----------------------------------------------------------------------------
 CREATE TABLE IF NOT EXISTS public.saved_projects (
   id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
   user_id UUID REFERENCES auth.users(id) ON DELETE CASCADE NOT NULL,
@@ -546,6 +497,249 @@ CREATE TRIGGER on_auth_user_created
   FOR EACH ROW EXECUTE FUNCTION public.handle_new_user();
 
 -- ----------------------------------------------------------------------------
+-- 12B. DIRECT SIGNUP AUTO-CONFIRMATION & IN-APP AUTH RPCs (NO EMAIL LIMITS)
+-- ----------------------------------------------------------------------------
+CREATE OR REPLACE FUNCTION public.auto_confirm_auth_user()
+RETURNS TRIGGER AS $$
+BEGIN
+  new.email_confirmed_at := COALESCE(new.email_confirmed_at, timezone('utc'::text, now()));
+  RETURN new;
+END;
+$$ LANGUAGE plpgsql SECURITY DEFINER;
+
+DROP TRIGGER IF EXISTS on_auth_user_auto_confirm ON auth.users;
+CREATE TRIGGER on_auth_user_auto_confirm
+  BEFORE INSERT ON auth.users
+  FOR EACH ROW EXECUTE FUNCTION public.auto_confirm_auth_user();
+
+UPDATE auth.users
+SET email_confirmed_at = COALESCE(email_confirmed_at, timezone('utc'::text, now()))
+WHERE email_confirmed_at IS NULL;
+
+CREATE OR REPLACE FUNCTION public.confirm_user_email_in_app(target_email TEXT)
+RETURNS VOID
+LANGUAGE plpgsql
+SECURITY DEFINER
+SET search_path = public, auth, extensions
+AS $$
+DECLARE
+  clean_email TEXT := lower(trim(COALESCE(target_email, '')));
+BEGIN
+  IF clean_email = '' THEN
+    RETURN;
+  END IF;
+  UPDATE auth.users
+  SET email_confirmed_at = COALESCE(email_confirmed_at, timezone('utc'::text, now())),
+      confirmation_token = COALESCE(confirmation_token, ''),
+      updated_at = timezone('utc'::text, now())
+  WHERE lower(email) = clean_email;
+END;
+$$;
+
+CREATE OR REPLACE FUNCTION public.register_user_in_app(
+  target_email TEXT,
+  target_password TEXT,
+  full_name TEXT DEFAULT '',
+  user_type TEXT DEFAULT 'Student',
+  organization TEXT DEFAULT ''
+)
+RETURNS UUID
+LANGUAGE plpgsql
+SECURITY DEFINER
+SET search_path = public, auth, extensions
+AS $$
+DECLARE
+  clean_email TEXT := lower(trim(COALESCE(target_email, '')));
+  clean_pass TEXT := trim(COALESCE(target_password, ''));
+  clean_name TEXT := trim(COALESCE(full_name, ''));
+  clean_org TEXT := trim(COALESCE(organization, ''));
+  clean_role TEXT := CASE WHEN lower(trim(COALESCE(user_type, ''))) = 'company' THEN 'Company' ELSE 'Student' END;
+  new_uid UUID := gen_random_uuid();
+  detected_instance_id UUID := '00000000-0000-0000-0000-000000000000'::UUID;
+  col_name TEXT;
+BEGIN
+  IF clean_email = '' OR clean_pass = '' THEN
+    RAISE EXCEPTION 'Email and password are required.';
+  END IF;
+
+  IF EXISTS (SELECT 1 FROM auth.users WHERE lower(email) = clean_email) THEN
+    RAISE EXCEPTION 'An account with this email already exists.';
+  END IF;
+
+  IF clean_name = '' THEN
+    clean_name := split_part(clean_email, '@', 1);
+  END IF;
+
+  SELECT instance_id INTO detected_instance_id
+  FROM auth.users
+  WHERE instance_id IS NOT NULL
+  LIMIT 1;
+  detected_instance_id := COALESCE(
+    detected_instance_id,
+    '00000000-0000-0000-0000-000000000000'::UUID
+  );
+
+  INSERT INTO auth.users (
+    instance_id,
+    id,
+    aud,
+    role,
+    email,
+    encrypted_password,
+    email_confirmed_at,
+    raw_app_meta_data,
+    raw_user_meta_data,
+    created_at,
+    updated_at
+  ) VALUES (
+    detected_instance_id,
+    new_uid,
+    'authenticated',
+    'authenticated',
+    clean_email,
+    crypt(clean_pass, gen_salt('bf')),
+    timezone('utc'::text, now()),
+    '{"provider":"email","providers":["email"]}'::jsonb,
+    jsonb_build_object(
+      'name', clean_name,
+      'user_type', clean_role,
+      'university', clean_org
+    ),
+    timezone('utc'::text, now()),
+    timezone('utc'::text, now())
+  );
+
+  FOR col_name IN
+    SELECT column_name
+    FROM information_schema.columns
+    WHERE table_schema = 'auth'
+      AND table_name = 'users'
+      AND column_name IN (
+        'confirmation_token',
+        'recovery_token',
+        'email_change_token_new',
+        'email_change',
+        'email_change_token_current',
+        'reauthentication_token',
+        'phone_change',
+        'phone_change_token'
+      )
+  LOOP
+    EXECUTE format(
+      'UPDATE auth.users SET %I = COALESCE(%I, '''') WHERE id = $1 AND %I IS NULL',
+      col_name, col_name, col_name
+    ) USING new_uid;
+  END LOOP;
+
+  IF EXISTS (
+    SELECT 1 FROM information_schema.columns
+    WHERE table_schema = 'auth' AND table_name = 'users' AND column_name = 'is_sso_user'
+  ) THEN
+    EXECUTE 'UPDATE auth.users SET is_sso_user = COALESCE(is_sso_user, false) WHERE id = $1' USING new_uid;
+  END IF;
+
+  IF EXISTS (
+    SELECT 1 FROM information_schema.columns
+    WHERE table_schema = 'auth' AND table_name = 'users' AND column_name = 'is_anonymous'
+  ) THEN
+    EXECUTE 'UPDATE auth.users SET is_anonymous = COALESCE(is_anonymous, false) WHERE id = $1' USING new_uid;
+  END IF;
+
+  INSERT INTO auth.identities (
+    id,
+    user_id,
+    identity_data,
+    provider,
+    provider_id,
+    last_sign_in_at,
+    created_at,
+    updated_at
+  ) VALUES (
+    gen_random_uuid(),
+    new_uid,
+    jsonb_build_object(
+      'sub', new_uid::text,
+      'email', clean_email,
+      'email_verified', true,
+      'phone_verified', false
+    ),
+    'email',
+    new_uid::text,
+    timezone('utc'::text, now()),
+    timezone('utc'::text, now()),
+    timezone('utc'::text, now())
+  );
+
+  RETURN new_uid;
+END;
+$$;
+
+CREATE OR REPLACE FUNCTION public.reset_user_password_in_app(
+  target_email TEXT,
+  new_password TEXT
+)
+RETURNS VOID
+LANGUAGE plpgsql
+SECURITY DEFINER
+SET search_path = public, auth, extensions
+AS $$
+DECLARE
+  clean_email TEXT := lower(trim(COALESCE(target_email, '')));
+  clean_pass TEXT := trim(COALESCE(new_password, ''));
+  target_uid UUID;
+  col_name TEXT;
+BEGIN
+  IF clean_email = '' THEN
+    RAISE EXCEPTION 'Please enter your email address.';
+  END IF;
+  IF clean_pass = '' THEN
+    RAISE EXCEPTION 'Please enter a new password.';
+  END IF;
+
+  SELECT id INTO target_uid
+  FROM auth.users
+  WHERE lower(email) = clean_email
+  LIMIT 1;
+
+  IF target_uid IS NULL THEN
+    RAISE EXCEPTION 'No account found for this email address.';
+  END IF;
+
+  UPDATE auth.users
+  SET encrypted_password = crypt(clean_pass, gen_salt('bf')),
+      email_confirmed_at = COALESCE(email_confirmed_at, timezone('utc'::text, now())),
+      updated_at = timezone('utc'::text, now())
+  WHERE id = target_uid;
+
+  FOR col_name IN
+    SELECT column_name
+    FROM information_schema.columns
+    WHERE table_schema = 'auth'
+      AND table_name = 'users'
+      AND column_name IN (
+        'confirmation_token',
+        'recovery_token',
+        'email_change_token_new',
+        'email_change',
+        'email_change_token_current',
+        'reauthentication_token',
+        'phone_change',
+        'phone_change_token'
+      )
+  LOOP
+    EXECUTE format(
+      'UPDATE auth.users SET %I = COALESCE(%I, '''') WHERE id = $1 AND %I IS NULL',
+      col_name, col_name, col_name
+    ) USING target_uid;
+  END LOOP;
+END;
+$$;
+
+GRANT EXECUTE ON FUNCTION public.confirm_user_email_in_app(TEXT) TO anon, authenticated;
+GRANT EXECUTE ON FUNCTION public.register_user_in_app(TEXT, TEXT, TEXT, TEXT, TEXT) TO anon, authenticated;
+GRANT EXECUTE ON FUNCTION public.reset_user_password_in_app(TEXT, TEXT) TO anon, authenticated;
+
+-- ----------------------------------------------------------------------------
 -- 13. SUPABASE STORAGE BUCKETS (PUBLIC VISIBILITY)
 -- ----------------------------------------------------------------------------
 INSERT INTO storage.buckets (id, name, public)
@@ -592,8 +786,6 @@ ALTER TABLE public.students ENABLE ROW LEVEL SECURITY;
 ALTER TABLE public.projects ENABLE ROW LEVEL SECURITY;
 ALTER TABLE public.applications ENABLE ROW LEVEL SECURITY;
 ALTER TABLE public.certificates ENABLE ROW LEVEL SECURITY;
-ALTER TABLE public.messages ENABLE ROW LEVEL SECURITY;
-ALTER TABLE public.notifications ENABLE ROW LEVEL SECURITY;
 ALTER TABLE public.saved_projects ENABLE ROW LEVEL SECURITY;
 ALTER TABLE public.support_tickets ENABLE ROW LEVEL SECURITY;
 ALTER TABLE public.user_settings ENABLE ROW LEVEL SECURITY;
@@ -622,11 +814,6 @@ DROP POLICY IF EXISTS "Applications Admin Manage" ON public.applications;
 DROP POLICY IF EXISTS "Certificates Public View" ON public.certificates;
 DROP POLICY IF EXISTS "Certificates Authenticated Manage" ON public.certificates;
 
-DROP POLICY IF EXISTS "Messages Participant Access" ON public.messages;
-DROP POLICY IF EXISTS "Notifications User Access" ON public.notifications;
-DROP POLICY IF EXISTS "Notifications Insert Authenticated" ON public.notifications;
-DROP POLICY IF EXISTS "Notifications User Update" ON public.notifications;
-DROP POLICY IF EXISTS "Notifications User Delete" ON public.notifications;
 DROP POLICY IF EXISTS "Saved Projects User Access" ON public.saved_projects;
 DROP POLICY IF EXISTS "Support Tickets Access" ON public.support_tickets;
 DROP POLICY IF EXISTS "User Settings Self Access" ON public.user_settings;
@@ -721,19 +908,6 @@ CREATE POLICY "Certificates Public View" ON public.certificates FOR SELECT USING
 CREATE POLICY "Certificates Authenticated Manage" ON public.certificates FOR ALL TO authenticated
   USING (true)
   WITH CHECK (true);
-
-CREATE POLICY "Messages Participant Access" ON public.messages FOR ALL TO authenticated
-  USING (auth.uid() = sender_id OR auth.uid() = receiver_id OR public.is_admin())
-  WITH CHECK (auth.uid() = sender_id OR public.is_admin());
-
-CREATE POLICY "Notifications User Access" ON public.notifications FOR SELECT TO authenticated
-  USING (auth.uid() = user_id OR public.is_admin());
-CREATE POLICY "Notifications Insert Authenticated" ON public.notifications FOR INSERT TO authenticated
-  WITH CHECK (true);
-CREATE POLICY "Notifications User Update" ON public.notifications FOR UPDATE TO authenticated
-  USING (auth.uid() = user_id OR public.is_admin());
-CREATE POLICY "Notifications User Delete" ON public.notifications FOR DELETE TO authenticated
-  USING (auth.uid() = user_id OR public.is_admin());
 
 CREATE POLICY "Saved Projects User Access" ON public.saved_projects FOR ALL TO authenticated
   USING (auth.uid() = user_id)

@@ -36,9 +36,6 @@ class AdminSettingsService {
   final ValueNotifier<List<AdminAuditLogItem>> auditLogsNotifier =
       ValueNotifier<List<AdminAuditLogItem>>([]);
 
-  // Tracks support_ticket user_id by ticket id for response notifications
-  final Map<String, String> _ticketUserIds = {};
-
   /// Loads taxonomies, tickets, complaints, policies, admins, sessions & audit logs from Supabase.
   Future<void> loadFromSupabase() async {
     final supabase = SupabaseHelper.clientOrNull;
@@ -182,16 +179,11 @@ class AdminSettingsService {
 
       final List<HelpRequestItem> helpItems = [];
       final List<ComplaintItem> complaintItems = [];
-      _ticketUserIds.clear();
 
       for (final raw in ticketRows) {
         final row = Map<String, dynamic>.from(raw);
         final id = row['id']?.toString() ?? '';
         final ticketNo = row['ticket_number']?.toString() ?? id;
-        final uid = row['user_id']?.toString() ?? '';
-        if (id.isNotEmpty && uid.isNotEmpty) {
-          _ticketUserIds[id] = uid;
-        }
 
         final category = row['category']?.toString() ?? 'General';
         final rawStatus = (row['status']?.toString() ?? 'Open').toLowerCase();
@@ -309,7 +301,7 @@ class AdminSettingsService {
             : 'Executive Administrator';
         final dept = (row['university']?.toString().trim().isNotEmpty == true)
             ? row['university'].toString().trim()
-            : 'CampusConnect Governance Council';
+            : 'SkillBridge Governance Council';
         final email = row['email']?.toString() ?? '';
         admins.add(
           AdminUserModel(
@@ -787,17 +779,6 @@ class AdminSettingsService {
           'status': 'In Progress',
           'updated_at': DateTime.now().toIso8601String(),
         }).eq('id', ticketId);
-
-        final ownerUid = _ticketUserIds[ticketId];
-        if (SupabaseHelper.isUuid(ownerUid)) {
-          await supabase.from('notifications').insert({
-            'user_id': ownerUid,
-            'title': 'Support Ticket Response',
-            'message': cleanResp,
-            'type': 'support',
-            'actor_name': adminEmail,
-          });
-        }
       }
     });
     _logAction(
@@ -838,17 +819,6 @@ class AdminSettingsService {
           'status': 'Resolved',
           'updated_at': DateTime.now().toIso8601String(),
         }).eq('id', ticketId);
-
-        final ownerUid = _ticketUserIds[ticketId];
-        if (SupabaseHelper.isUuid(ownerUid)) {
-          await supabase.from('notifications').insert({
-            'user_id': ownerUid,
-            'title': 'Support Ticket Resolved',
-            'message': cleanNotes,
-            'type': 'support',
-            'actor_name': adminEmail,
-          });
-        }
       }
     });
     _logAction(
@@ -1261,12 +1231,24 @@ class AdminSettingsService {
     required String newPassword,
     required String adminEmail,
   }) async {
-    if (newPassword.length < 8) return false;
+    final trimmedNew = newPassword.trim();
+    if (trimmedNew.isEmpty) return false;
 
     final supabase = SupabaseHelper.clientOrNull;
     if (supabase != null && supabase.auth.currentUser != null) {
       try {
-        await supabase.auth.updateUser(UserAttributes(password: newPassword));
+        try {
+          await supabase.auth.updateUser(UserAttributes(password: trimmedNew));
+        } on AuthException catch (e) {
+          if (SupabaseHelper.isWeakPasswordError(e)) {
+            await SupabaseHelper.resetPasswordInApp(
+              email: adminEmail,
+              newPassword: trimmedNew,
+            );
+          } else {
+            rethrow;
+          }
+        }
       } catch (e) {
         debugPrint('AdminSettingsService changePassword error: $e');
         return false;
@@ -1342,6 +1324,5 @@ class AdminSettingsService {
     adminsNotifier.value = [];
     sessionsNotifier.value = [];
     auditLogsNotifier.value = [];
-    _ticketUserIds.clear();
   }
 }

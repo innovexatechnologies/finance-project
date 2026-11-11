@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:google_fonts/google_fonts.dart';
 import 'package:link_vibe/core/constants/app_colors.dart';
+import 'package:link_vibe/core/services/deep_link_service.dart';
 import 'package:link_vibe/core/services/supabase_helper.dart';
 import 'package:link_vibe/feature/auth/presentation/screens/login_screen.dart';
 import 'package:link_vibe/feature/company/models/applicant_model.dart';
@@ -32,14 +33,11 @@ class _CompanyMainNavState extends State<CompanyMainNav> {
   late int _currentIndex;
   final List<int> _tabHistory = [0];
   DateTime? _lastBackPressTime;
-  GlobalKey<ScaffoldState>? _scaffoldKeyCache;
-  bool? _isSyncingWorkspace;
-  bool? _isDrawerOpen;
+  final GlobalKey<ScaffoldState> _scaffoldKey = GlobalKey<ScaffoldState>();
+  bool _isSyncingWorkspace = false;
+  bool _isDrawerOpen = false;
 
-  GlobalKey<ScaffoldState> get _scaffoldKey =>
-      _scaffoldKeyCache ??= GlobalKey<ScaffoldState>();
-  bool get _isSyncing => _isSyncingWorkspace ?? false;
-  bool get _drawerIsOpen => _isDrawerOpen ?? false;
+  bool get _isSyncing => _isSyncingWorkspace;
 
   CompanyProfileService get _profileService => CompanyProfileService();
   CompanySettingsService get _settingsService => CompanySettingsService();
@@ -50,6 +48,11 @@ class _CompanyMainNavState extends State<CompanyMainNav> {
     _currentIndex = widget.initialIndex;
     _tabHistory.clear();
     _tabHistory.add(widget.initialIndex);
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      if (mounted) {
+        DeepLinkService.instance.markWorkspaceReadyAndConsume();
+      }
+    });
   }
 
   void _onTabChange(int index) {
@@ -151,7 +154,9 @@ class _CompanyMainNavState extends State<CompanyMainNav> {
     if (!mounted) return;
     Navigator.pushAndRemoveUntil(
       context,
-      MaterialPageRoute(builder: (_) => const LoginScreen()),
+      MaterialPageRoute(
+        builder: (_) => const LoginScreen(initialRole: 'Company'),
+      ),
       (route) => false,
     );
   }
@@ -224,7 +229,9 @@ class _CompanyMainNavState extends State<CompanyMainNav> {
 
     Navigator.pushAndRemoveUntil(
       context,
-      MaterialPageRoute(builder: (_) => const LoginScreen()),
+      MaterialPageRoute(
+        builder: (_) => const LoginScreen(initialRole: 'Company'),
+      ),
       (route) => false,
     );
   }
@@ -238,23 +245,23 @@ class _CompanyMainNavState extends State<CompanyMainNav> {
       CompanyDashboardScreen(
         onTabChange: _onTabChange,
         onOpenDrawer: _openDrawer,
-        isDrawerOpen: _drawerIsOpen,
+        isDrawerOpen: _isDrawerOpen,
       ),
       CompanyProjectsListScreen(
         onTabChange: _onTabChange,
         onOpenDrawer: _openDrawer,
-        isDrawerOpen: _drawerIsOpen,
+        isDrawerOpen: _isDrawerOpen,
       ),
       PostProjectScreen(onTabChange: _onTabChange),
       ApplicantsScreen(
         onTabChange: _onTabChange,
         onOpenDrawer: _openDrawer,
-        isDrawerOpen: _drawerIsOpen,
+        isDrawerOpen: _isDrawerOpen,
       ),
       AssignedProjectsScreen(
         onTabChange: _onTabChange,
         onOpenDrawer: _openDrawer,
-        isDrawerOpen: _drawerIsOpen,
+        isDrawerOpen: _isDrawerOpen,
       ),
     ];
 
@@ -303,7 +310,7 @@ class _CompanyMainNavState extends State<CompanyMainNav> {
                   ),
                   const SizedBox(width: 8),
                   Text(
-                    'Press back again to exit CampusConnect',
+                    'Press back again to exit SkillBridge',
                     style: GoogleFonts.inter(
                       fontSize: 13,
                       fontWeight: FontWeight.w500,
@@ -332,13 +339,14 @@ class _CompanyMainNavState extends State<CompanyMainNav> {
             _currentIndex == 3 ||
             _currentIndex == 4,
         onEndDrawerChanged: (isOpen) {
-          if (mounted) {
+          if (mounted && _isDrawerOpen != isOpen) {
             setState(() => _isDrawerOpen = isOpen);
           }
         },
         endDrawer: _buildStandardDrawer(drawerWidth),
         body: IndexedStack(
-          index: _currentIndex,
+          key: const ValueKey('company_nav_stack'),
+          index: _currentIndex.clamp(0, screens.length - 1),
           children: screens,
         ),
         bottomNavigationBar: Container(
@@ -379,7 +387,7 @@ class _CompanyMainNavState extends State<CompanyMainNav> {
                           .length;
 
                       return BottomNavigationBar(
-                        currentIndex: _currentIndex,
+                        currentIndex: _currentIndex.clamp(0, 4),
                         onTap: _onTabChange,
                         backgroundColor: Colors.transparent,
                         elevation: 0,
@@ -595,14 +603,6 @@ class _CompanyMainNavState extends State<CompanyMainNav> {
                               child: Column(
                                 crossAxisAlignment: CrossAxisAlignment.stretch,
                                 children: [
-                                  _buildDrawerMenuRow(
-                                    icon: Icons.home_rounded,
-                                    accentColor: AppColors.primaryBlue,
-                                    title: 'Home',
-                                    isSelected: _currentIndex == 0,
-                                    onTap: () => _onTabChange(0),
-                                  ),
-                                  const SizedBox(height: 4),
                                   _buildDrawerMenuRow(
                                     icon: Icons.business_outlined,
                                     accentColor: AppColors.deepNavy,

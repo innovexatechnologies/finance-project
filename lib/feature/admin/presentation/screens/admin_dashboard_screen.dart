@@ -14,7 +14,7 @@ import 'package:link_vibe/feature/admin/services/admin_dashboard_service.dart';
 import 'package:link_vibe/feature/admin/services/admin_project_service.dart';
 import 'package:link_vibe/feature/admin/services/admin_student_service.dart';
 
-/// Enterprise Admin Home Screen for CampusConnect.
+/// Enterprise Admin Home Screen for SkillBridge.
 /// Displays an animated Admin Command Header and accurate live quantities for
 /// Students, Companies, Total Projects, Active Projects, and Completed Projects.
 class AdminDashboardScreen extends StatefulWidget {
@@ -264,12 +264,12 @@ class _AdminDashboardScreenState extends State<AdminDashboardScreen> {
                                                     fullName:
                                                         'Executive Administrator',
                                                     email:
-                                                        'admin@campusconnect.edu.pk',
+                                                        'admin@skillbridge.edu.pk',
                                                     role: 'SUPER_ADMIN',
                                                     roleDisplayName:
                                                         'Executive Super Administrator',
                                                     department:
-                                                        'CampusConnect Governance Council',
+                                                        'SkillBridge Governance Council',
                                                     avatarInitial: 'EA',
                                                     permissions: ['all'],
                                                     lastLoginAt:
@@ -704,14 +704,19 @@ class _AnimatedAdminCommandBannerState extends State<_AnimatedAdminCommandBanner
                                                 ],
                                               ),
                                             ),
-                                            const SizedBox(width: 7),
-                                            Text(
-                                              'ADMIN CONTROL PANEL',
-                                              style: GoogleFonts.inter(
-                                                color: const Color(0xFFA7F3D0),
-                                                fontSize: 10.5,
-                                                fontWeight: FontWeight.w700,
-                                                letterSpacing: 0.8,
+                                             const SizedBox(width: 7),
+                                            Flexible(
+                                              child: Text(
+                                                'ADMIN CONTROL PANEL',
+                                                maxLines: 1,
+                                                overflow: TextOverflow.ellipsis,
+                                                style: GoogleFonts.inter(
+                                                  color:
+                                                      const Color(0xFFA7F3D0),
+                                                  fontSize: 10.5,
+                                                  fontWeight: FontWeight.w700,
+                                                  letterSpacing: 0.8,
+                                                ),
                                               ),
                                             ),
                                           ],
@@ -720,12 +725,6 @@ class _AnimatedAdminCommandBannerState extends State<_AnimatedAdminCommandBanner
                                     },
                                   ),
                                   Container(
-                                    constraints: BoxConstraints(
-                                      maxWidth: math.max(
-                                        120.0,
-                                        constraints.maxWidth - 130.0,
-                                      ),
-                                    ),
                                     padding: const EdgeInsets.symmetric(
                                       horizontal: 10,
                                       vertical: 5,

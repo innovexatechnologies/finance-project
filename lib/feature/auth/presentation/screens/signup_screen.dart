@@ -4,9 +4,7 @@ import 'package:supabase_flutter/supabase_flutter.dart';
 import 'package:link_vibe/core/constants/app_colors.dart';
 import 'package:link_vibe/core/services/app_data_service.dart';
 import 'package:link_vibe/core/services/supabase_helper.dart';
-import 'package:link_vibe/feature/auth/presentation/screens/email_verification_screen.dart';
 import 'package:link_vibe/feature/auth/presentation/widgets/auth_form_helpers.dart';
-import 'package:link_vibe/feature/company/presentation/screens/company_dashboard.dart';
 import 'package:link_vibe/feature/company/presentation/screens/company_main_nav.dart';
 import 'package:link_vibe/feature/company/services/company_profile_service.dart';
 import 'package:link_vibe/feature/student/presentation/screens/student_main_nav.dart';
@@ -76,51 +74,78 @@ class _SignupScreenState extends State<SignupScreen> {
     final password = _passwordController.text.trim();
 
     setState(() => _isLoading = true);
-    SupabaseHelper.isInteractiveAuthInProgress = true;
+    SupabaseHelper.beginInteractiveAuth();
 
     try {
       final supabase = SupabaseHelper.clientOrNull;
 
       if (supabase != null) {
-        final authResponse = await supabase.auth.signUp(
-          email: email,
-          password: password,
-          emailRedirectTo: SupabaseHelper.emailRedirectUrl,
-          data: {
-            'name': name,
-            'user_type': _selectedRole,
-            'university': instituteOrIndustry,
-          },
-        );
+        AuthResponse authResponse;
+        try {
+          authResponse = await supabase.auth.signUp(
+            email: email,
+            password: password,
+            data: {
+              'name': name,
+              'user_type': _selectedRole,
+              'university': instituteOrIndustry,
+            },
+          );
+        } on AuthException catch (signUpErr) {
+          if (SupabaseHelper.isEmailRateLimitError(signUpErr) ||
+              SupabaseHelper.isWeakPasswordError(signUpErr)) {
+            await SupabaseHelper.registerUserInApp(
+              email: email,
+              password: password,
+              name: name,
+              role: _selectedRole,
+              organization: instituteOrIndustry,
+            );
+            authResponse = await supabase.auth.signInWithPassword(
+              email: email,
+              password: password,
+            );
+          } else {
+            rethrow;
+          }
+        }
 
-        final user = authResponse.user;
+        var user = authResponse.user;
+        var session = authResponse.session;
+
+        if (user != null && user.identities != null && user.identities!.isEmpty) {
+          // Account already exists: attempt direct sign-in if credentials match
+          await SupabaseHelper.confirmUserEmailInApp(email);
+          try {
+            final existingSignIn = await supabase.auth.signInWithPassword(
+              email: email,
+              password: password,
+            );
+            user = existingSignIn.user;
+            session = existingSignIn.session;
+          } catch (_) {
+            if (!mounted) return;
+            setState(() {
+              _errorBanner =
+                  'An account with this email already exists. Please sign in or reset your password.';
+            });
+            return;
+          }
+        }
+
         if (user == null) {
           throw const AuthException('Account creation did not return a user.');
         }
 
-        if (user.identities != null && user.identities!.isEmpty) {
-          if (!mounted) return;
-          setState(() {
-            _errorBanner =
-                'An account with this email already exists. Please sign in instead.';
-          });
-          return;
-        }
-
-        // If email verification is required (session is null), open dedicated EmailVerificationScreen
-        if (authResponse.session == null) {
-          if (!mounted) return;
-          Navigator.pushReplacement(
-            context,
-            MaterialPageRoute(
-              builder: (_) => EmailVerificationScreen(
-                email: email,
-                role: _selectedRole,
-                isVerified: false,
-              ),
-            ),
+        if (session == null) {
+          // Auto-confirm and log user directly into their workspace without verification screens
+          await SupabaseHelper.confirmUserEmailInApp(email);
+          final loginResponse = await supabase.auth.signInWithPassword(
+            email: email,
+            password: password,
           );
-          return;
+          user = loginResponse.user ?? user;
+          session = loginResponse.session;
         }
 
         // Session active: ensure profile + role-specific record exist cleanly
@@ -138,6 +163,7 @@ class _SignupScreenState extends State<SignupScreen> {
               .from('companies')
               .select('id')
               .eq('user_id', user.id)
+              .limit(1)
               .maybeSingle();
           if (existingComp == null) {
             await supabase.from('companies').insert({
@@ -154,6 +180,7 @@ class _SignupScreenState extends State<SignupScreen> {
               .from('students')
               .select('id')
               .eq('user_id', user.id)
+              .limit(1)
               .maybeSingle();
           if (existingStu == null) {
             await supabase.from('students').insert({
@@ -204,24 +231,30 @@ class _SignupScreenState extends State<SignupScreen> {
       );
 
       if (_selectedRole == 'Company') {
-        Navigator.pushReplacement(
+        Navigator.pushAndRemoveUntil(
           context,
           MaterialPageRoute(builder: (_) => const CompanyMainNav()),
+          (route) => false,
         );
       } else {
-        Navigator.pushReplacement(
+        Navigator.pushAndRemoveUntil(
           context,
           MaterialPageRoute(builder: (_) => const StudentMainNav()),
+          (route) => false,
         );
       }
     } on AuthException catch (e) {
       if (!mounted) return;
-      setState(() => _errorBanner = SupabaseHelper.friendlyError(e));
+      setState(() {
+        _errorBanner = SupabaseHelper.friendlyError(e);
+      });
     } catch (e) {
       if (!mounted) return;
-      setState(() => _errorBanner = SupabaseHelper.friendlyError(e));
+      setState(() {
+        _errorBanner = SupabaseHelper.friendlyError(e);
+      });
     } finally {
-      SupabaseHelper.isInteractiveAuthInProgress = false;
+      SupabaseHelper.endInteractiveAuth();
       if (mounted) {
         setState(() => _isLoading = false);
       }
@@ -272,7 +305,7 @@ class _SignupScreenState extends State<SignupScreen> {
                       ),
                       const SizedBox(height: 4),
                       Text(
-                        'Join CampusConnect as a university student or corporate partner.',
+                        'Join SkillBridge as a university student or corporate partner.',
                         style: GoogleFonts.inter(
                           fontSize: 13,
                           color: AppColors.grayText,
@@ -424,7 +457,7 @@ class _SignupScreenState extends State<SignupScreen> {
                                 ),
                               ),
                               validator: (val) {
-                                if (val == null || val.trim().length < 2) {
+                                if (val == null || val.trim().isEmpty) {
                                   return isCompany
                                       ? 'Company name is required'
                                       : 'Full name is required';
@@ -457,9 +490,7 @@ class _SignupScreenState extends State<SignupScreen> {
                               ),
                               validator: (val) {
                                 final v = val?.trim() ?? '';
-                                if (v.isEmpty ||
-                                    !v.contains('@') ||
-                                    !v.contains('.')) {
+                                if (v.isEmpty || !v.contains('@')) {
                                   return 'Enter a valid email address';
                                 }
                                 return null;
@@ -494,7 +525,7 @@ class _SignupScreenState extends State<SignupScreen> {
                                 ),
                               ),
                               validator: (val) {
-                                if (val == null || val.trim().length < 2) {
+                                if (val == null || val.trim().isEmpty) {
                                   return isCompany
                                       ? 'Please enter your industry sector'
                                       : 'Please enter your university or institute';
@@ -520,7 +551,7 @@ class _SignupScreenState extends State<SignupScreen> {
                               enabled: !_isLoading,
                               onFieldSubmitted: (_) => _handleRegister(),
                               decoration: InputDecoration(
-                                hintText: 'Minimum 6 characters',
+                                hintText: 'Enter password',
                                 prefixIcon: const Icon(
                                   Icons.lock_outline_rounded,
                                   size: 20,
@@ -539,8 +570,8 @@ class _SignupScreenState extends State<SignupScreen> {
                                 ),
                               ),
                               validator: (val) {
-                                if (val == null || val.trim().length < 6) {
-                                  return 'Password must be at least 6 characters';
+                                if (val == null || val.trim().isEmpty) {
+                                  return 'Password is required';
                                 }
                                 return null;
                               },

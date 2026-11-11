@@ -730,14 +730,19 @@ class _CompanyProfileScreenState extends State<CompanyProfileScreen> {
             Row(
               mainAxisAlignment: MainAxisAlignment.spaceBetween,
               children: [
-                Text(
-                  'Profile Readiness ($completed/8 completed)',
-                  style: GoogleFonts.inter(
-                    fontSize: 11.5,
-                    fontWeight: FontWeight.w600,
-                    color: Colors.white,
+                Expanded(
+                  child: Text(
+                    'Profile Readiness ($completed/8 completed)',
+                    maxLines: 1,
+                    overflow: TextOverflow.ellipsis,
+                    style: GoogleFonts.inter(
+                      fontSize: 11.5,
+                      fontWeight: FontWeight.w600,
+                      color: Colors.white,
+                    ),
                   ),
                 ),
+                const SizedBox(width: 8),
                 Text(
                   '$completionPercent%',
                   style: GoogleFonts.poppins(

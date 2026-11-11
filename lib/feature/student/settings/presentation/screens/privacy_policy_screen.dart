@@ -51,7 +51,7 @@ class PrivacyPolicyScreen extends StatelessWidget {
                     crossAxisAlignment: CrossAxisAlignment.start,
                     children: [
                       Text(
-                        'CampusConnect Privacy Policy',
+                        'SkillBridge Privacy Policy',
                         style: GoogleFonts.poppins(
                           fontSize: 14,
                           fontWeight: FontWeight.bold,
@@ -76,15 +76,15 @@ class PrivacyPolicyScreen extends StatelessWidget {
 
           _buildSection(
             '1. Commitment to Privacy',
-            'CampusConnect is committed to protecting student and partner privacy. This policy outlines what data we collect, how it is used to connect students with corporate opportunities, and how your information is safeguarded.',
+            'SkillBridge is committed to protecting student and partner privacy. This policy outlines what data we collect, how it is used to connect students with corporate opportunities, and how your information is safeguarded.',
           ),
           _buildSection(
             '2. Information We Collect',
-            'We collect details provided during registration and profile creation: your full name, university email, academic institution, department, degree program, technical skills, and submitted application notes. We do NOT collect any financial, banking, or credit card information because CampusConnect does not conduct monetary transactions.',
+            'We collect details provided during registration and profile creation: your full name, university email, academic institution, department, degree program, technical skills, and submitted application notes. We do NOT collect any financial, banking, or credit card information because SkillBridge does not conduct monetary transactions.',
           ),
           _buildSection(
             '3. How We Use Information',
-            'Your information is used strictly to:\n• Allow partner companies to review project applications.\n• Enable supervisors to communicate with assigned students.\n• Generate verified project completion certificates.\n• Deliver in-app notifications regarding your applications and milestone updates.',
+            'Your information is used strictly to:\n• Allow partner companies to review project applications.\n• Enable supervisors to review and evaluate assigned project deliverables.\n• Generate verified project completion certificates.',
           ),
           _buildSection(
             '4. Controlled Visibility & Sharing',

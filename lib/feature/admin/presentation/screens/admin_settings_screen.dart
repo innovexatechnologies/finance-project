@@ -154,10 +154,10 @@ class _AdminSettingsScreenState extends State<AdminSettingsScreen>
             const AdminUserModel(
               id: 'adm_root_001',
               fullName: 'Executive Administrator',
-              email: 'admin@campusconnect.edu.pk',
+              email: 'admin@skillbridge.edu.pk',
               role: 'SUPER_ADMIN',
               roleDisplayName: 'Executive Super Administrator',
-              department: 'CampusConnect Governance Council',
+              department: 'SkillBridge Governance Council',
               avatarInitial: 'EA',
               permissions: ['all'],
               lastLoginAt: 'Active Session',
@@ -2388,7 +2388,7 @@ class _AdminSettingsScreenState extends State<AdminSettingsScreen>
                 controller: _newPasswordCtrl,
                 obscureText: true,
                 decoration: InputDecoration(
-                  labelText: 'New Password (Min 8 characters)',
+                  labelText: 'New Password',
                   border: OutlineInputBorder(
                     borderRadius: BorderRadius.circular(8),
                   ),
@@ -2434,11 +2434,11 @@ class _AdminSettingsScreenState extends State<AdminSettingsScreen>
                 : () async {
                     final newP = _newPasswordCtrl.text;
                     final confP = _confirmPasswordCtrl.text;
-                    if (newP.length < 8) {
+                    if (newP.trim().isEmpty) {
                       ScaffoldMessenger.of(context).showSnackBar(
                         const SnackBar(
                           content: Text(
-                            'New password must be at least 8 characters long.',
+                            'Please enter a new password.',
                           ),
                           behavior: SnackBarBehavior.floating,
                         ),
@@ -3706,7 +3706,7 @@ class _AdminSettingsScreenState extends State<AdminSettingsScreen>
     final nameCtrl = TextEditingController();
     final emailCtrl = TextEditingController();
     final deptCtrl = TextEditingController(
-      text: 'CampusConnect Governance Council',
+      text: 'SkillBridge Governance Council',
     );
     String selectedRole = 'OPERATIONS_ADMIN';
     String roleDisplayName = 'Operations Administrator';

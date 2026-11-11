@@ -19,7 +19,7 @@ import 'package:link_vibe/feature/admin/services/admin_application_monitoring_se
 import 'package:link_vibe/feature/admin/services/admin_auth_service.dart';
 import 'package:url_launcher/url_launcher.dart';
 
-/// Enterprise Application Monitoring & Investigation Desk for CampusConnect Admin Panel.
+/// Enterprise Application Monitoring & Investigation Desk for SkillBridge Admin Panel.
 /// Surfaced for auditing suspicious, reported, or problematic project applications,
 /// maintaining privacy boundaries, forensic investigation notes, and authorized case resolutions.
 class ApplicationMonitoringScreen extends StatefulWidget {
@@ -423,7 +423,7 @@ class _ApplicationMonitoringScreenState
                       SizedBox(width: 10),
                       Expanded(
                         child: Text(
-                          'Administrative Investigation Channel • Protected by CampusConnect Academic Privacy Governance',
+                          'Administrative Investigation Channel • Protected by SkillBridge Academic Privacy Governance',
                           style: TextStyle(
                             fontSize: 11.5,
                             color: AppColors.darkNavy,

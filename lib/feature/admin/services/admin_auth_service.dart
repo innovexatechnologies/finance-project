@@ -72,18 +72,12 @@ class AdminAuthService {
   AdminAuthService._internal();
 
   // Offline/test-only fallback hash for default provisioned admin when Supabase is uninitialized
-  static const String _defaultAdminEmail = 'admin@campusconnect.edu.pk';
+  static const String _defaultAdminEmail = 'admin@skillbridge.edu.pk';
   static const String _defaultSalt = '7f9a8b2c4d1e3f5a';
   static final String _defaultPassHash = AdminHashUtil.hashPassword(
-    'Admin@CampusConnect2026!',
+    'Admin@SkillBridge2026!',
     _defaultSalt,
   );
-
-  // Brute-force mitigation tracking
-  static const int _maxConsecutiveFailures = 5;
-  static const Duration _lockoutDuration = Duration(seconds: 60);
-  final Map<String, int> _failedAttempts = {};
-  final Map<String, DateTime> _lockoutUntil = {};
 
   final ValueNotifier<AdminUserModel?> currentAdminNotifier =
       ValueNotifier<AdminUserModel?>(null);
@@ -94,19 +88,7 @@ class AdminAuthService {
   AdminUserModel? get currentAdmin => currentAdminNotifier.value;
   bool get isAuthenticated => currentAdminNotifier.value != null;
 
-  int getRemainingLockoutSeconds(String normalizedEmail) {
-    final lockoutTime = _lockoutUntil[normalizedEmail];
-    if (lockoutTime == null) return 0;
-
-    final now = DateTime.now();
-    if (now.isBefore(lockoutTime)) {
-      return lockoutTime.difference(now).inSeconds + 1;
-    } else {
-      _lockoutUntil.remove(normalizedEmail);
-      _failedAttempts[normalizedEmail] = 0;
-      return 0;
-    }
-  }
+  int getRemainingLockoutSeconds(String normalizedEmail) => 0;
 
   /// Secure Login backed by Supabase Auth + `public.profiles` Admin role verification.
   Future<AdminAuthResult> login({
@@ -116,15 +98,10 @@ class AdminAuthService {
   }) async {
     final normalizedEmail = email.trim().toLowerCase();
 
-    final remainingSeconds = getRemainingLockoutSeconds(normalizedEmail);
-    if (remainingSeconds > 0) {
-      return AdminAuthResult.lockedOut(remainingSeconds);
-    }
-
     final supabase = SupabaseHelper.clientOrNull;
 
     if (supabase != null) {
-      SupabaseHelper.isInteractiveAuthInProgress = true;
+      SupabaseHelper.beginInteractiveAuth();
       try {
         final response = await supabase.auth.signInWithPassword(
           email: normalizedEmail,
@@ -133,7 +110,6 @@ class AdminAuthService {
 
         final user = response.user;
         if (user == null) {
-          _registerFailedAttempt(normalizedEmail);
           return AdminAuthResult.failed(
             'Authentication failed. Please check your credentials.',
           );
@@ -154,7 +130,6 @@ class AdminAuthService {
 
         if (rawRole != 'admin') {
           await supabase.auth.signOut();
-          _registerFailedAttempt(normalizedEmail);
           return AdminAuthResult.failed(
             'Access denied. This account does not have Administrator privileges.',
           );
@@ -179,7 +154,7 @@ class AdminAuthService {
         final department =
             (profileRow?['university']?.toString().trim().isNotEmpty == true)
                 ? profileRow!['university'].toString().trim()
-                : 'CampusConnect Governance Council';
+                : 'SkillBridge Governance Council';
 
         final authenticatedAdmin = AdminUserModel(
           id: user.id,
@@ -201,8 +176,6 @@ class AdminAuthService {
           isActive: true,
         );
 
-        _failedAttempts.remove(normalizedEmail);
-        _lockoutUntil.remove(normalizedEmail);
         _rememberMeEnabled = rememberMe;
         currentAdminNotifier.value = authenticatedAdmin;
 
@@ -229,27 +202,19 @@ class AdminAuthService {
 
         return AdminAuthResult.successful(authenticatedAdmin);
       } on AuthException catch (e) {
-        final failures = _registerFailedAttempt(normalizedEmail);
-        final remainingAttempts = _maxConsecutiveFailures - failures;
-        if (remainingAttempts <= 0) {
-          return AdminAuthResult.lockedOut(60);
-        }
-        return AdminAuthResult.failed(
-          '${SupabaseHelper.friendlyError(e)} ($remainingAttempts attempt${remainingAttempts == 1 ? '' : 's'} remaining)',
-        );
+        return AdminAuthResult.failed(SupabaseHelper.friendlyError(e));
       } catch (e) {
         debugPrint('AdminAuthService login error: $e');
         return AdminAuthResult.failed(
           SupabaseHelper.friendlyError(e),
         );
       } finally {
-        SupabaseHelper.isInteractiveAuthInProgress = false;
+        SupabaseHelper.endInteractiveAuth();
       }
     }
 
     // Offline unit-test fallback only when Supabase client is uninitialized
     if (normalizedEmail != _defaultAdminEmail) {
-      _registerFailedAttempt(normalizedEmail);
       return AdminAuthResult.failed(
         'Invalid administrative credentials. Access restricted to authorized personnel.',
       );
@@ -257,18 +222,11 @@ class AdminAuthService {
 
     final computedHash = AdminHashUtil.hashPassword(password, _defaultSalt);
     if (!AdminHashUtil.secureCompare(computedHash, _defaultPassHash)) {
-      final failures = _registerFailedAttempt(normalizedEmail);
-      final remainingAttempts = _maxConsecutiveFailures - failures;
-      if (remainingAttempts <= 0) {
-        return AdminAuthResult.lockedOut(60);
-      }
       return AdminAuthResult.failed(
-        'Invalid administrator password. $remainingAttempts attempt${remainingAttempts == 1 ? '' : 's'} remaining before security lockout.',
+        'Invalid administrator password. Please check and try again.',
       );
     }
 
-    _failedAttempts.remove(normalizedEmail);
-    _lockoutUntil.remove(normalizedEmail);
     _rememberMeEnabled = rememberMe;
 
     final sessionNonce = Random().nextInt(9999999).toString().padLeft(7, '0');
@@ -278,7 +236,7 @@ class AdminAuthService {
       email: _defaultAdminEmail,
       role: 'SUPER_ADMIN',
       roleDisplayName: 'Executive Super Administrator',
-      department: 'CampusConnect Governance Council',
+      department: 'SkillBridge Governance Council',
       avatarInitial: 'EA',
       permissions: const [
         'all',
@@ -322,7 +280,7 @@ class AdminAuthService {
       final department =
           (profileRow?['university']?.toString().trim().isNotEmpty == true)
               ? profileRow!['university'].toString().trim()
-              : 'CampusConnect Governance Council';
+              : 'SkillBridge Governance Council';
 
       final admin = AdminUserModel(
         id: user.id,
@@ -352,20 +310,15 @@ class AdminAuthService {
     }
   }
 
-  int _registerFailedAttempt(String email) {
-    final current = (_failedAttempts[email] ?? 0) + 1;
-    _failedAttempts[email] = current;
-
-    if (current >= _maxConsecutiveFailures) {
-      _lockoutUntil[email] = DateTime.now().add(_lockoutDuration);
-    }
-    return current;
-  }
-
-  /// Dispatches real password reset email via Supabase Auth.
-  Future<bool> requestPasswordReset(String email) async {
+  /// Updates administrator password directly in-app without sending emails.
+  Future<bool> resetPasswordInApp({
+    required String email,
+    required String newPassword,
+  }) async {
     final normalized = email.trim().toLowerCase();
-    if (normalized.isEmpty || !normalized.contains('@')) return false;
+    if (normalized.isEmpty || !normalized.contains('@') || newPassword.trim().isEmpty) {
+      return false;
+    }
 
     final supabase = SupabaseHelper.clientOrNull;
     if (supabase == null) {
@@ -373,13 +326,13 @@ class AdminAuthService {
     }
 
     try {
-      await supabase.auth.resetPasswordForEmail(
-        normalized,
-        redirectTo: SupabaseHelper.emailRedirectUrl,
+      await SupabaseHelper.resetPasswordInApp(
+        email: normalized,
+        newPassword: newPassword.trim(),
       );
       return true;
     } catch (e) {
-      debugPrint('AdminAuthService requestPasswordReset error: $e');
+      debugPrint('AdminAuthService resetPasswordInApp error: $e');
       return false;
     }
   }
@@ -388,11 +341,12 @@ class AdminAuthService {
   Future<void> logout() async {
     final supabase = SupabaseHelper.clientOrNull;
     try {
-      await supabase?.auth.signOut();
+      await supabase?.auth.signOut().timeout(const Duration(seconds: 3));
     } catch (e) {
       debugPrint('AdminAuthService signOut error: $e');
     }
 
+    SupabaseHelper.clearAuthFlags();
     await AppDataService.instance.clearAuthSession();
     currentAdminNotifier.value = null;
     _rememberMeEnabled = false;

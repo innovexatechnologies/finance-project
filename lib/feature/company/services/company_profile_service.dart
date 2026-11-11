@@ -1,7 +1,12 @@
 import 'package:flutter/foundation.dart';
 import 'package:link_vibe/core/services/app_data_service.dart';
 import 'package:link_vibe/core/services/supabase_helper.dart';
+import 'package:link_vibe/feature/company/models/applicant_model.dart';
+import 'package:link_vibe/feature/company/models/assignment_model.dart';
 import 'package:link_vibe/feature/company/models/company_profile_model.dart';
+import 'package:link_vibe/feature/company/models/company_settings_model.dart';
+import 'package:link_vibe/feature/company/models/company_verification_model.dart';
+import 'package:link_vibe/feature/company/models/project_model.dart';
 import 'package:link_vibe/feature/company/services/company_applicant_service.dart';
 import 'package:link_vibe/feature/company/services/company_assignment_service.dart';
 import 'package:link_vibe/feature/company/services/company_project_service.dart';
@@ -38,17 +43,124 @@ class CompanyProfileService {
   bool isSuspended = false;
   String? suspensionReason;
 
+  static bool hasLoadedWorkspace = false;
+  static Future<void>? _activeSyncFuture;
+
   CompanyProfileModel get currentProfile => currentProfileNotifier.value;
 
-  /// Loads the full Company Panel dataset from Supabase cleanly.
-  static Future<void> loadAllCompanyPanelData() async {
+  /// Restores cached Company Panel state from SharedPreferences synchronously
+  /// so cold restarts render the dashboard instantaneously without blocking UI.
+  static void hydrateFromLocalCache() {
+    final cached = AppDataService.instance.loadCompanyPanelCache();
+    if (cached == null) return;
+
+    try {
+      final rawProfile = cached['profile'];
+      if (rawProfile is Map) {
+        final profileService = CompanyProfileService();
+        profileService.currentProfileNotifier.value =
+            CompanyProfileModel.fromJson(
+          Map<String, dynamic>.from(rawProfile),
+        );
+        profileService.isSuspended = cached['is_suspended'] == true;
+        profileService.suspensionReason =
+            cached['suspension_reason']?.toString();
+      }
+
+      final rawProjects = cached['projects'];
+      if (rawProjects is List) {
+        CompanyProjectService().projectsNotifier.value = rawProjects
+            .whereType<Map>()
+            .map((e) => ProjectModel.fromJson(Map<String, dynamic>.from(e)))
+            .toList();
+      }
+
+      final rawApplicants = cached['applicants'];
+      if (rawApplicants is List) {
+        CompanyApplicantService().applicantsNotifier.value = rawApplicants
+            .whereType<Map>()
+            .map((e) => ApplicantModel.fromJson(Map<String, dynamic>.from(e)))
+            .toList();
+      }
+
+      final rawAssignments = cached['assignments'];
+      if (rawAssignments is List) {
+        CompanyAssignmentService().assignmentsNotifier.value = rawAssignments
+            .whereType<Map>()
+            .map((e) => AssignmentModel.fromJson(Map<String, dynamic>.from(e)))
+            .toList();
+      }
+
+      final rawVerification = cached['verification'];
+      if (rawVerification is Map) {
+        CompanyVerificationService().verificationNotifier.value =
+            CompanyVerificationModel.fromJson(
+          Map<String, dynamic>.from(rawVerification),
+        );
+      }
+
+      final rawSettings = cached['settings'];
+      if (rawSettings is Map) {
+        CompanySettingsService().settingsNotifier.value =
+            CompanySettingsModel.fromJson(
+          Map<String, dynamic>.from(rawSettings),
+        );
+      }
+
+      hasLoadedWorkspace = true;
+    } catch (e) {
+      debugPrint('CompanyProfileService hydrateFromLocalCache skipped: $e');
+    }
+  }
+
+  static Future<void> persistLocalCache() async {
+    final profileService = CompanyProfileService();
+    await AppDataService.instance.saveCompanyPanelCache({
+      'profile': profileService.currentProfile.toJson(),
+      'is_suspended': profileService.isSuspended,
+      'suspension_reason': profileService.suspensionReason,
+      'projects': CompanyProjectService()
+          .allProjects
+          .map((p) => p.toJson())
+          .toList(),
+      'applicants': CompanyApplicantService()
+          .allApplicants
+          .map((a) => a.toJson())
+          .toList(),
+      'assignments': CompanyAssignmentService()
+          .allAssignments
+          .map((a) => a.toJson())
+          .toList(),
+      'verification':
+          CompanyVerificationService().currentVerification.toJson(),
+      'settings': CompanySettingsService().currentSettings.toJson(),
+    });
+  }
+
+  /// Loads the full Company Panel dataset from Supabase cleanly & in parallel.
+  static Future<void> loadAllCompanyPanelData() {
+    if (_activeSyncFuture != null) return _activeSyncFuture!;
+    final future = _runLoadAllCompanyPanelData();
+    _activeSyncFuture = future;
+    return future.whenComplete(() {
+      if (identical(_activeSyncFuture, future)) {
+        _activeSyncFuture = null;
+      }
+    });
+  }
+
+  static Future<void> _runLoadAllCompanyPanelData() async {
     await CompanyProfileService().loadFromSupabase();
     await CompanyProjectService().loadFromSupabase();
-    await CompanyApplicantService().loadFromSupabase();
-    await CompanyAssignmentService().loadFromSupabase();
-    await CompanyVerificationService().loadFromSupabase();
-    await CompanySettingsService().loadFromSupabase();
-    await AppDataService.instance.syncFromSupabase(forceRefresh: true);
+    await Future.wait([
+      CompanyApplicantService().loadFromSupabase(),
+      CompanyAssignmentService().loadFromSupabase(),
+      CompanyVerificationService().loadFromSupabase(),
+      CompanySettingsService().loadFromSupabase(),
+      AppDataService.instance.syncFromSupabase(forceRefresh: true),
+    ]);
+    hasLoadedWorkspace = true;
+    await persistLocalCache();
   }
 
   Future<void> loadFromSupabase() async {
@@ -61,12 +173,14 @@ class CompanyProfileService {
           .from('profiles')
           .select()
           .eq('id', user.id)
+          .limit(1)
           .maybeSingle();
 
       var companyRow = await supabase
           .from('companies')
           .select()
           .eq('user_id', user.id)
+          .limit(1)
           .maybeSingle();
 
       if (companyRow == null) {
@@ -220,6 +334,8 @@ class CompanyProfileService {
   }
 
   void reset() {
+    hasLoadedWorkspace = false;
+    _activeSyncFuture = null;
     isSuspended = false;
     suspensionReason = null;
     currentProfileNotifier.value = _emptyProfile;

@@ -2,11 +2,12 @@ import 'package:flutter/material.dart';
 import 'package:google_fonts/google_fonts.dart';
 import 'package:link_vibe/core/constants/app_colors.dart';
 import 'package:link_vibe/core/services/app_data_service.dart';
+import 'package:link_vibe/core/services/share_service.dart';
 import 'package:link_vibe/core/services/supabase_helper.dart';
 import 'package:link_vibe/core/widgets/app_empty_state.dart';
+import 'package:link_vibe/core/widgets/executive_ui.dart';
 import 'package:link_vibe/core/widgets/status_badge.dart';
 import 'package:link_vibe/feature/student/certificates/presentation/screens/certificates_screen.dart';
-import 'package:link_vibe/feature/student/chat/presentation/screens/chat_list_screen.dart';
 import 'package:link_vibe/feature/student/feedback/presentation/screens/feedback_screen.dart';
 import 'package:link_vibe/feature/student/project_details/presentation/screens/student_project_details_screen.dart';
 import 'package:link_vibe/feature/student/submissions/presentation/screens/submit_work_screen.dart';
@@ -21,6 +22,7 @@ class MyProjectsScreen extends StatefulWidget {
 class _MyProjectsScreenState extends State<MyProjectsScreen>
     with SingleTickerProviderStateMixin {
   late TabController _tabController;
+  bool _isRefreshing = false;
 
   @override
   void initState() {
@@ -34,21 +36,50 @@ class _MyProjectsScreenState extends State<MyProjectsScreen>
     super.dispose();
   }
 
-  Future<void> _openCompanyChat(Map<String, dynamic> project) async {
-    final company = (project['company']?.toString().trim().isNotEmpty == true)
-        ? project['company'].toString().trim()
-        : 'Partner Company';
-    await AppDataService.instance.openOrCreateConversation(
-      companyName: company,
-      peerUserId: project['companyUserId']?.toString(),
-      supervisorName: '$company Lead',
-      projectTitle: project['title']?.toString(),
-    );
-    if (!mounted) return;
-    Navigator.push(
-      context,
-      MaterialPageRoute(builder: (_) => const ChatListScreen()),
-    );
+  Future<void> _refreshProjects({bool showFeedback = true}) async {
+    if (_isRefreshing) return;
+    setState(() => _isRefreshing = true);
+    try {
+      final hasClient = SupabaseHelper.clientOrNull != null;
+      if (hasClient) {
+        await AppDataService.instance.syncFromSupabase(forceRefresh: true);
+      } else {
+        await AppDataService.instance.init();
+      }
+      if (!mounted || !showFeedback) return;
+      final syncError = AppDataService.instance.lastSyncError;
+      ScaffoldMessenger.of(context)
+        ..hideCurrentSnackBar()
+        ..showSnackBar(
+          SnackBar(
+            content: Text(
+              syncError != null
+                  ? SupabaseHelper.friendlyError(syncError)
+                  : hasClient
+                      ? 'Projects and statuses refreshed.'
+                      : 'Refreshed local projects.',
+            ),
+            backgroundColor:
+                syncError != null ? AppColors.statusClosed : AppColors.statusOpen,
+            duration: const Duration(seconds: 2),
+          ),
+        );
+    } catch (e) {
+      if (mounted && showFeedback) {
+        ScaffoldMessenger.of(context)
+          ..hideCurrentSnackBar()
+          ..showSnackBar(
+            SnackBar(
+              content: Text(SupabaseHelper.friendlyError(e)),
+              backgroundColor: AppColors.statusClosed,
+            ),
+          );
+      }
+    } finally {
+      if (mounted) {
+        setState(() => _isRefreshing = false);
+      }
+    }
   }
 
   @override
@@ -72,17 +103,37 @@ class _MyProjectsScreenState extends State<MyProjectsScreen>
 
         return Scaffold(
           backgroundColor: AppColors.background,
-          appBar: AppBar(
-            title: const Text('My Projects'),
-            centerTitle: false,
-            actions: [
-              IconButton(
-                tooltip: 'Sync Assignments',
-                icon: const Icon(Icons.refresh_rounded),
-                onPressed: () => AppDataService.instance
-                    .syncFromSupabase(forceRefresh: true),
+          appBar: ExecutiveAppBar(
+            title: 'My Projects',
+            subtitle: 'Active Engagements & Deliverables',
+            showLeading: Navigator.canPop(context),
+            leadingBadge: Container(
+              width: 36,
+              height: 36,
+              decoration: BoxDecoration(
+                gradient: AppColors.brandGradient,
+                borderRadius: BorderRadius.circular(11),
+                boxShadow: [
+                  BoxShadow(
+                    color: AppColors.primaryBlue.withValues(alpha: 0.22),
+                    blurRadius: 8,
+                    offset: const Offset(0, 3),
+                  ),
+                ],
               ),
-              const SizedBox(width: 4),
+              child: const Icon(
+                Icons.business_center_rounded,
+                color: Colors.white,
+                size: 19,
+              ),
+            ),
+            actions: [
+              ExecutiveHeaderIconButton(
+                tooltip:
+                    _isRefreshing ? 'Syncing Projects...' : 'Refresh Projects',
+                icon: Icons.refresh_rounded,
+                onPressed: _isRefreshing ? null : _refreshProjects,
+              ),
             ],
             bottom: TabBar(
               controller: _tabController,
@@ -90,8 +141,8 @@ class _MyProjectsScreenState extends State<MyProjectsScreen>
               unselectedLabelColor: AppColors.grayText,
               indicatorColor: AppColors.primaryBlue,
               labelStyle: GoogleFonts.poppins(
-                fontWeight: FontWeight.bold,
-                fontSize: 13.5,
+                fontWeight: FontWeight.w700,
+                fontSize: 13,
               ),
               tabs: [
                 Tab(text: 'Active (${activeList.length})'),
@@ -107,8 +158,7 @@ class _MyProjectsScreenState extends State<MyProjectsScreen>
                 children: [
                   RefreshIndicator(
                     color: AppColors.primaryBlue,
-                    onRefresh: () => AppDataService.instance
-                        .syncFromSupabase(forceRefresh: true),
+                    onRefresh: _refreshProjects,
                     child: activeList.isEmpty
                         ? ListView(
                             physics: const AlwaysScrollableScrollPhysics(),
@@ -133,8 +183,7 @@ class _MyProjectsScreenState extends State<MyProjectsScreen>
                   ),
                   RefreshIndicator(
                     color: AppColors.primaryBlue,
-                    onRefresh: () => AppDataService.instance
-                        .syncFromSupabase(forceRefresh: true),
+                    onRefresh: _refreshProjects,
                     child: completedList.isEmpty
                         ? ListView(
                             physics: const AlwaysScrollableScrollPhysics(),
@@ -178,8 +227,14 @@ class _MyProjectsScreenState extends State<MyProjectsScreen>
     final assignedDate = project['appliedDate']?.toString().trim() ?? 'Recently';
     final feedback = project['companyFeedback']?.toString().trim() ?? '';
 
-    return Card(
+    return Container(
       margin: const EdgeInsets.only(bottom: 14),
+      decoration: BoxDecoration(
+        color: AppColors.cardWhite,
+        borderRadius: BorderRadius.circular(18),
+        border: Border.all(color: AppColors.lightGray),
+        boxShadow: AppColors.softShadow,
+      ),
       child: Padding(
         padding: const EdgeInsets.all(16),
         child: Column(
@@ -188,18 +243,23 @@ class _MyProjectsScreenState extends State<MyProjectsScreen>
             Row(
               children: [
                 Container(
-                  width: 44,
-                  height: 44,
+                  width: 46,
+                  height: 46,
                   decoration: BoxDecoration(
-                    color: AppColors.lightAqua,
-                    borderRadius: BorderRadius.circular(12),
+                    gradient: LinearGradient(
+                      colors: [
+                        AppColors.lightAqua,
+                        AppColors.primaryBlue.withValues(alpha: 0.14),
+                      ],
+                    ),
+                    borderRadius: BorderRadius.circular(13),
                   ),
                   child: Center(
                     child: Text(
                       SupabaseHelper.initialsFor(company, fallback: 'CO'),
                       style: GoogleFonts.poppins(
                         fontSize: 15,
-                        fontWeight: FontWeight.bold,
+                        fontWeight: FontWeight.w700,
                         color: AppColors.primaryBlue,
                       ),
                     ),
@@ -328,9 +388,14 @@ class _MyProjectsScreenState extends State<MyProjectsScreen>
                     padding: const EdgeInsets.symmetric(
                         horizontal: 12, vertical: 10),
                   ),
-                  onPressed: () => _openCompanyChat(project),
-                  icon: const Icon(Icons.chat_bubble_outline_rounded, size: 15),
-                  label: const Text('Message'),
+                  onPressed: () {
+                    ShareService.shareProject(
+                      context: context,
+                      project: project,
+                    );
+                  },
+                  icon: const Icon(Icons.share_outlined, size: 15),
+                  label: const Text('Share'),
                 ),
                 if (!isCompleted)
                   ElevatedButton.icon(

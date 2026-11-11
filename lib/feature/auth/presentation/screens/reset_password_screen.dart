@@ -8,13 +8,11 @@ import 'package:link_vibe/feature/auth/presentation/screens/login_screen.dart';
 
 class ResetPasswordScreen extends StatefulWidget {
   final String initialEmail;
-  final bool hasRecoverySession;
   final String? initialError;
 
   const ResetPasswordScreen({
     super.key,
     this.initialEmail = '',
-    this.hasRecoverySession = false,
     this.initialError,
   });
 
@@ -25,17 +23,14 @@ class ResetPasswordScreen extends StatefulWidget {
 class _ResetPasswordScreenState extends State<ResetPasswordScreen> {
   final _formKey = GlobalKey<FormState>();
   late final TextEditingController _emailCtrl;
-  final _codeCtrl = TextEditingController();
   final _newPassCtrl = TextEditingController();
   final _confirmPassCtrl = TextEditingController();
 
   bool _isSaving = false;
-  bool _isResending = false;
   bool _obscureNew = true;
   bool _obscureConfirm = true;
   bool _isUpdated = false;
   String? _errorBanner;
-  String? _infoBanner;
 
   @override
   void initState() {
@@ -47,90 +42,60 @@ class _ResetPasswordScreenState extends State<ResetPasswordScreen> {
   @override
   void dispose() {
     _emailCtrl.dispose();
-    _codeCtrl.dispose();
     _newPassCtrl.dispose();
     _confirmPassCtrl.dispose();
     super.dispose();
   }
 
-  bool get _hasActiveRecoverySession =>
-      widget.hasRecoverySession || SupabaseHelper.currentUser != null;
-
-  Future<void> _handleResend() async {
-    final email = _emailCtrl.text.trim();
-    if (email.isEmpty || !email.contains('@')) {
-      setState(() => _errorBanner = 'Enter your registered email address first.');
-      return;
-    }
-    final supabase = SupabaseHelper.clientOrNull;
-    if (supabase == null) {
-      setState(() => _errorBanner = 'Supabase client unavailable.');
-      return;
-    }
-
-    setState(() {
-      _isResending = true;
-      _errorBanner = null;
-      _infoBanner = null;
-    });
-
-    try {
-      await supabase.auth.resetPasswordForEmail(
-        email,
-        redirectTo: SupabaseHelper.emailRedirectUrl,
-      );
-      if (!mounted) return;
-      setState(() {
-        _infoBanner =
-            'A fresh password reset email has been sent to $email. Open the link or enter the 6-digit recovery code below.';
-      });
-    } catch (e) {
-      if (!mounted) return;
-      setState(() => _errorBanner = SupabaseHelper.friendlyError(e));
-    } finally {
-      if (mounted) setState(() => _isResending = false);
-    }
-  }
-
   Future<void> _handleSubmit() async {
     setState(() {
       _errorBanner = null;
-      _infoBanner = null;
     });
     if (!_formKey.currentState!.validate()) return;
 
-    final supabase = SupabaseHelper.clientOrNull;
-    if (supabase == null) {
-      setState(() => _errorBanner = 'Cloud authentication service unavailable.');
-      return;
-    }
-
     final email = _emailCtrl.text.trim();
-    final code = _codeCtrl.text.trim();
     final newPassword = _newPassCtrl.text.trim();
 
     setState(() => _isSaving = true);
+    SupabaseHelper.beginInteractiveAuth();
 
     try {
-      if (!_hasActiveRecoverySession) {
-        if (code.length < 6) {
-          throw const AuthException(
-            'Enter the 6-digit recovery code from your email or open the reset link directly.',
+      final supabase = SupabaseHelper.clientOrNull;
+      if (supabase != null) {
+        final current = supabase.auth.currentUser;
+        if (current != null &&
+            (current.email?.trim().toLowerCase() ?? '') ==
+                email.toLowerCase()) {
+          try {
+            await supabase.auth.updateUser(
+              UserAttributes(password: newPassword),
+            );
+          } on AuthException catch (e) {
+            if (SupabaseHelper.isWeakPasswordError(e)) {
+              await SupabaseHelper.resetPasswordInApp(
+                email: email,
+                newPassword: newPassword,
+              );
+            } else {
+              rethrow;
+            }
+          }
+        } else {
+          await SupabaseHelper.resetPasswordInApp(
+            email: email,
+            newPassword: newPassword,
           );
         }
-        await supabase.auth.verifyOTP(
-          email: email,
-          token: code,
-          type: OtpType.recovery,
-        );
-      }
 
-      await supabase.auth.updateUser(
-        UserAttributes(password: newPassword),
-      );
-
-      if (!AppDataService.instance.isLoggedIn) {
-        await supabase.auth.signOut();
+        await AppDataService.instance.updateAccountPassword(email, newPassword);
+      } else {
+        final existing = AppDataService.instance.findUserAccount(email);
+        if (existing == null) {
+          throw const AuthException(
+            'No account found for this email address.',
+          );
+        }
+        await AppDataService.instance.updateAccountPassword(email, newPassword);
       }
 
       if (!mounted) return;
@@ -139,6 +104,7 @@ class _ResetPasswordScreenState extends State<ResetPasswordScreen> {
       if (!mounted) return;
       setState(() => _errorBanner = SupabaseHelper.friendlyError(e));
     } finally {
+      SupabaseHelper.endInteractiveAuth();
       if (mounted) setState(() => _isSaving = false);
     }
   }
@@ -153,8 +119,6 @@ class _ResetPasswordScreenState extends State<ResetPasswordScreen> {
 
   @override
   Widget build(BuildContext context) {
-    final activeRecovery = _hasActiveRecoverySession;
-
     return Scaffold(
       backgroundColor: AppColors.background,
       appBar: AppBar(
@@ -185,7 +149,7 @@ class _ResetPasswordScreenState extends State<ResetPasswordScreen> {
                   border: Border.all(color: AppColors.lightGray),
                   boxShadow: AppColors.softShadow,
                 ),
-                child: _isUpdated ? _buildSuccessView() : _buildFormView(activeRecovery),
+                child: _isUpdated ? _buildSuccessView() : _buildFormView(),
               ),
             ),
           ),
@@ -223,7 +187,7 @@ class _ResetPasswordScreenState extends State<ResetPasswordScreen> {
         ),
         const SizedBox(height: 8),
         Text(
-          'Your CampusConnect account password has been updated successfully. You can now sign in with your new password.',
+          'Your SkillBridge account password has been updated successfully. You can now sign in with your new password.',
           textAlign: TextAlign.center,
           style: GoogleFonts.inter(
             fontSize: 13.5,
@@ -244,7 +208,7 @@ class _ResetPasswordScreenState extends State<ResetPasswordScreen> {
     );
   }
 
-  Widget _buildFormView(bool activeRecovery) {
+  Widget _buildFormView() {
     return Form(
       key: _formKey,
       child: Column(
@@ -278,14 +242,10 @@ class _ResetPasswordScreenState extends State<ResetPasswordScreen> {
                       ),
                     ),
                     Text(
-                      activeRecovery
-                          ? 'Verified recovery session active'
-                          : 'Confirm recovery code & set a new password',
+                      'Set a new password directly in the app',
                       style: GoogleFonts.inter(
                         fontSize: 12.5,
-                        color: activeRecovery
-                            ? AppColors.statusOpen
-                            : AppColors.grayText,
+                        color: AppColors.grayText,
                         fontWeight: FontWeight.w600,
                       ),
                     ),
@@ -319,79 +279,32 @@ class _ResetPasswordScreenState extends State<ResetPasswordScreen> {
             const SizedBox(height: 14),
           ],
 
-          if (_infoBanner != null) ...[
-            Container(
-              width: double.infinity,
-              padding: const EdgeInsets.all(12),
-              decoration: BoxDecoration(
-                color: AppColors.successBg,
-                borderRadius: BorderRadius.circular(12),
-              ),
-              child: Text(
-                _infoBanner!,
-                style: GoogleFonts.inter(
-                  fontSize: 12.5,
-                  fontWeight: FontWeight.w600,
-                  color: const Color(0xFF166534),
-                ),
-              ),
+          Text(
+            'Email Address',
+            style: GoogleFonts.inter(
+              fontSize: 12.5,
+              fontWeight: FontWeight.w600,
+              color: AppColors.darkText,
             ),
-            const SizedBox(height: 14),
-          ],
-
-          if (!activeRecovery) ...[
-            Text(
-              'Email Address',
-              style: GoogleFonts.inter(
-                fontSize: 12.5,
-                fontWeight: FontWeight.w600,
-                color: AppColors.darkText,
-              ),
+          ),
+          const SizedBox(height: 6),
+          TextFormField(
+            controller: _emailCtrl,
+            keyboardType: TextInputType.emailAddress,
+            enabled: !_isSaving,
+            decoration: const InputDecoration(
+              hintText: 'you@example.com',
+              prefixIcon: Icon(Icons.email_outlined, size: 20),
             ),
-            const SizedBox(height: 6),
-            TextFormField(
-              controller: _emailCtrl,
-              keyboardType: TextInputType.emailAddress,
-              enabled: !_isSaving,
-              decoration: const InputDecoration(
-                hintText: 'you@example.com',
-                prefixIcon: Icon(Icons.email_outlined, size: 20),
-              ),
-              validator: (val) {
-                final v = val?.trim() ?? '';
-                if (v.isEmpty || !v.contains('@')) {
-                  return 'Enter a valid email address';
-                }
-                return null;
-              },
-            ),
-            const SizedBox(height: 14),
-            Text(
-              '6-Digit Recovery Code (from email)',
-              style: GoogleFonts.inter(
-                fontSize: 12.5,
-                fontWeight: FontWeight.w600,
-                color: AppColors.darkText,
-              ),
-            ),
-            const SizedBox(height: 6),
-            TextFormField(
-              controller: _codeCtrl,
-              keyboardType: TextInputType.number,
-              enabled: !_isSaving,
-              decoration: const InputDecoration(
-                hintText: 'Enter 6-digit code',
-                prefixIcon: Icon(Icons.pin_outlined, size: 20),
-              ),
-              validator: (val) {
-                if (!activeRecovery && (val == null || val.trim().length < 6)) {
-                  return 'Enter the 6-digit recovery code sent to your email';
-                }
-                return null;
-              },
-            ),
-            const SizedBox(height: 14),
-          ],
+            validator: (val) {
+              final v = val?.trim() ?? '';
+              if (v.isEmpty || !v.contains('@')) {
+                return 'Enter a valid email address';
+              }
+              return null;
+            },
+          ),
+          const SizedBox(height: 14),
 
           Text(
             'New Password',
@@ -407,7 +320,7 @@ class _ResetPasswordScreenState extends State<ResetPasswordScreen> {
             obscureText: _obscureNew,
             enabled: !_isSaving,
             decoration: InputDecoration(
-              hintText: 'Minimum 6 characters',
+              hintText: 'Enter new password',
               prefixIcon: const Icon(Icons.lock_outline_rounded, size: 20),
               suffixIcon: IconButton(
                 icon: Icon(
@@ -421,8 +334,8 @@ class _ResetPasswordScreenState extends State<ResetPasswordScreen> {
               ),
             ),
             validator: (val) {
-              if (val == null || val.trim().length < 6) {
-                return 'Password must be at least 6 characters';
+              if (val == null || val.trim().isEmpty) {
+                return 'Enter a new password';
               }
               return null;
             },
@@ -481,9 +394,7 @@ class _ResetPasswordScreenState extends State<ResetPasswordScreen> {
                       ),
                     )
                   : Text(
-                      activeRecovery
-                          ? 'Update Password'
-                          : 'Verify Code & Reset Password',
+                      'Reset Password',
                       style: GoogleFonts.poppins(
                         fontSize: 14.5,
                         fontWeight: FontWeight.w600,
@@ -491,26 +402,7 @@ class _ResetPasswordScreenState extends State<ResetPasswordScreen> {
                     ),
             ),
           ),
-
-          if (!activeRecovery) ...[
-            const SizedBox(height: 12),
-            Center(
-              child: TextButton(
-                onPressed: _isResending ? null : _handleResend,
-                child: Text(
-                  _isResending
-                      ? 'Resending Reset Email...'
-                      : 'Resend Reset Email',
-                  style: GoogleFonts.inter(
-                    fontSize: 13,
-                    fontWeight: FontWeight.w600,
-                  ),
-                ),
-              ),
-            ),
-          ],
-
-          const SizedBox(height: 4),
+          const SizedBox(height: 8),
           Center(
             child: TextButton(
               onPressed: _goToLogin,
@@ -529,4 +421,3 @@ class _ResetPasswordScreenState extends State<ResetPasswordScreen> {
     );
   }
 }
-

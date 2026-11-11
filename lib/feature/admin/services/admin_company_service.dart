@@ -286,15 +286,6 @@ class AdminCompanyService {
             'is_verified': true,
             'updated_at': nowIso,
           }).eq('id', company.userId!);
-
-          await _notifyUser(
-            userId: company.userId!,
-            title: 'Company Verification Approved',
-            message:
-                '${company.companyName} has been verified by CampusConnect Administration.',
-            type: 'verification',
-            actorName: adminName,
-          );
         }
 
         await _writeAuditLog(
@@ -376,14 +367,6 @@ class AdminCompanyService {
             'is_verified': false,
             'updated_at': nowIso,
           }).eq('id', company.userId!);
-
-          await _notifyUser(
-            userId: company.userId!,
-            title: 'Company Verification Rejected',
-            message: reason.trim(),
-            type: 'verification',
-            actorName: adminName,
-          );
         }
 
         await _writeAuditLog(
@@ -459,16 +442,6 @@ class AdminCompanyService {
           'updated_at': nowIso,
         }).eq('id', companyId);
 
-        if (SupabaseHelper.isUuid(company.userId)) {
-          await _notifyUser(
-            userId: company.userId!,
-            title: 'Additional Verification Documents Requested',
-            message: instructions.trim(),
-            type: 'verification',
-            actorName: adminName,
-          );
-        }
-
         await _writeAuditLog(
           action: 'COMPANY_DOCS_REQUESTED',
           target: company.companyName,
@@ -535,14 +508,6 @@ class AdminCompanyService {
             'account_status': 'suspended',
             'updated_at': nowIso,
           }).eq('id', company.userId!);
-
-          await _notifyUser(
-            userId: company.userId!,
-            title: 'Corporate Account Suspended',
-            message: reason.trim(),
-            type: 'governance',
-            actorName: adminName,
-          );
         }
 
         await _writeAuditLog(
@@ -603,14 +568,6 @@ class AdminCompanyService {
             'account_status': 'active',
             'updated_at': nowIso,
           }).eq('id', company.userId!);
-
-          await _notifyUser(
-            userId: company.userId!,
-            title: 'Corporate Account Reactivated',
-            message: 'Your corporate account has been restored to active standing.',
-            type: 'governance',
-            actorName: adminName,
-          );
         }
 
         await _writeAuditLog(
@@ -657,28 +614,6 @@ class AdminCompanyService {
     companiesNotifier.value = list;
   }
 
-  Future<void> _notifyUser({
-    required String userId,
-    required String title,
-    required String message,
-    required String type,
-    required String actorName,
-  }) async {
-    final supabase = SupabaseHelper.clientOrNull;
-    if (supabase == null || !SupabaseHelper.isUuid(userId)) return;
-    try {
-      await supabase.from('notifications').insert({
-        'user_id': userId,
-        'title': title,
-        'message': message,
-        'type': type,
-        'actor_name': actorName,
-      });
-    } catch (e) {
-      debugPrint('AdminCompanyService notify error: $e');
-    }
-  }
-
   Future<void> _writeAuditLog({
     required String action,
     required String target,
@@ -688,7 +623,7 @@ class AdminCompanyService {
     if (supabase == null) return;
     try {
       await supabase.from('admin_audit_logs').insert({
-        'admin_email': SupabaseHelper.currentUser?.email ?? 'admin@campusconnect.edu.pk',
+        'admin_email': SupabaseHelper.currentUser?.email ?? 'admin@skillbridge.edu.pk',
         'action': action,
         'target': target,
         'details': details,

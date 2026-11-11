@@ -398,7 +398,7 @@ class _CompanyVerificationsScreenState
                         ScaffoldMessenger.of(context).showSnackBar(
                           SnackBar(
                             content: Text(
-                              '${item.companyName} has been verified and authorized across CampusConnect.',
+                              '${item.companyName} has been verified and authorized across SkillBridge.',
                             ),
                             backgroundColor: AppColors.success,
                             behavior: SnackBarBehavior.floating,

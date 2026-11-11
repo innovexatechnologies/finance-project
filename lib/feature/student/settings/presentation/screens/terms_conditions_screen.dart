@@ -52,7 +52,7 @@ class TermsConditionsScreen extends StatelessWidget {
                     crossAxisAlignment: CrossAxisAlignment.start,
                     children: [
                       Text(
-                        'CampusConnect Platform Terms',
+                        'SkillBridge Platform Terms',
                         style: GoogleFonts.poppins(
                           fontSize: 14,
                           fontWeight: FontWeight.bold,
@@ -77,11 +77,11 @@ class TermsConditionsScreen extends StatelessWidget {
 
           _buildSection(
             '1. Acceptance of Terms',
-            'By creating an account, browsing opportunities, or applying for projects on CampusConnect, you agree to comply with and be legally bound by these Terms and Conditions. If you do not agree with any part of these terms, please do not use the application.',
+            'By creating an account, browsing opportunities, or applying for projects on SkillBridge, you agree to comply with and be legally bound by these Terms and Conditions. If you do not agree with any part of these terms, please do not use the application.',
           ),
           _buildSection(
             '2. Non-Monetary Educational Platform',
-            'CampusConnect is an academic and skill-building bridge connecting verified corporate partners with university students. The platform contains no payment gateway, digital wallets, bank integrations, subscription billing, or in-app monetary transactions. All projects are conducted purely for academic credit, skill enhancement, portfolio development, and verified certification.',
+            'SkillBridge is an academic and skill-building bridge connecting verified corporate partners with university students. The platform contains no payment gateway, digital wallets, bank integrations, subscription billing, or in-app monetary transactions. All projects are conducted purely for academic credit, skill enhancement, portfolio development, and verified certification.',
           ),
           _buildSection(
             '3. Student Eligibility & Code of Conduct',
@@ -97,11 +97,11 @@ class TermsConditionsScreen extends StatelessWidget {
           ),
           _buildSection(
             '6. Verified Certifications',
-            'Certificates generated on CampusConnect are digitally verifiable and reflect successful completion of assignments reviewed and approved by verified partner supervisors.',
+            'Certificates generated on SkillBridge are digitally verifiable and reflect successful completion of assignments reviewed and approved by verified partner supervisors.',
           ),
           _buildSection(
             '7. Platform Modifications & Termination',
-            'CampusConnect reserves the right to amend these terms at any time. Continued use of the platform following modifications constitutes acceptance of the revised terms.',
+            'SkillBridge reserves the right to amend these terms at any time. Continued use of the platform following modifications constitutes acceptance of the revised terms.',
           ),
           const SizedBox(height: 16),
             ],

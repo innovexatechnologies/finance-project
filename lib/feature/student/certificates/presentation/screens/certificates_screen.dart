@@ -7,11 +7,14 @@ import 'package:link_vibe/core/services/download_service.dart';
 import 'package:link_vibe/core/services/share_service.dart';
 import 'package:link_vibe/core/services/supabase_helper.dart';
 import 'package:link_vibe/core/widgets/app_empty_state.dart';
+import 'package:link_vibe/core/widgets/executive_ui.dart';
 
 class CertificatesScreen extends StatelessWidget {
   const CertificatesScreen({super.key});
 
-  String _resolveStudentName() {
+  static String _resolveStudentName({Map<String, dynamic>? cert}) {
+    final certStudent = cert?['studentName']?.toString().trim() ?? '';
+    if (certStudent.isNotEmpty) return certStudent;
     final pName =
         AppDataService.instance.getProfile()['name']?.toString().trim() ?? '';
     if (pName.isNotEmpty) return pName;
@@ -22,8 +25,41 @@ class CertificatesScreen extends StatelessWidget {
         'Student';
   }
 
-  Future<void> _openVerificationUrl(BuildContext context, String rawUrl) async {
-    final uri = Uri.tryParse(rawUrl.trim());
+  static Future<void> _verifyCredentialInApp(
+    BuildContext context,
+    Map<String, dynamic> cert,
+    String rawUrl,
+  ) async {
+    final trimmed = rawUrl.trim();
+    final lower = trimmed.toLowerCase();
+    final isInAppCredential = trimmed.isEmpty ||
+        lower.startsWith('${ShareService.appScheme}://') ||
+        lower.contains('skillbridge.edu.pk') ||
+        lower.contains('skillbridge.app');
+
+    if (isInAppCredential) {
+      final status = (cert['status']?.toString().trim() ?? 'valid').toLowerCase();
+      final certId = cert['id']?.toString() ?? 'SB-CERT';
+      final isRevoked = status == 'revoked';
+      if (!context.mounted) return;
+      ScaffoldMessenger.of(context)
+        ..hideCurrentSnackBar()
+        ..showSnackBar(
+          SnackBar(
+            content: Text(
+              isRevoked
+                  ? 'Credential $certId has been revoked by issuing authority.'
+                  : 'Verified SkillBridge Credential ($certId) — Authentic & Active.',
+            ),
+            backgroundColor:
+                isRevoked ? AppColors.statusClosed : AppColors.statusOpen,
+            behavior: SnackBarBehavior.floating,
+          ),
+        );
+      return;
+    }
+
+    final uri = Uri.tryParse(trimmed);
     if (uri == null ||
         !await launchUrl(uri, mode: LaunchMode.externalApplication)) {
       if (!context.mounted) return;
@@ -33,17 +69,20 @@ class CertificatesScreen extends StatelessWidget {
     }
   }
 
-  void _showCertificateDialog(BuildContext context, Map<String, dynamic> cert) {
+  static void showCertificateDialog(
+    BuildContext context,
+    Map<String, dynamic> cert,
+  ) {
     final title = cert['title']?.toString() ?? 'Certificate of Completion';
     final project = cert['project']?.toString() ?? 'Corporate Project';
-    final issuer = cert['issuer']?.toString() ?? 'CampusConnect Partner';
+    final issuer = cert['issuer']?.toString() ?? 'SkillBridge Partner';
     final certId = cert['id']?.toString() ?? 'CC-CERT';
     final date = cert['date']?.toString() ?? 'Recently';
     final rating = (cert['rating'] as num?)?.toDouble();
     final recommendation = cert['recommendation']?.toString().trim() ?? '';
     final hash = cert['hash']?.toString().trim() ?? '';
     final verificationUrl = cert['verificationUrl']?.toString().trim() ?? '';
-    final studentName = _resolveStudentName();
+    final studentName = _resolveStudentName(cert: cert);
 
     showDialog(
       context: context,
@@ -78,7 +117,7 @@ class CertificatesScreen extends StatelessWidget {
                 ),
                 const SizedBox(height: 12),
                 Text(
-                  'CAMPUSCONNECT',
+                  'SKILLBRIDGE',
                   style: GoogleFonts.inter(
                     fontSize: 12,
                     fontWeight: FontWeight.bold,
@@ -219,12 +258,15 @@ class CertificatesScreen extends StatelessWidget {
                     ),
                   ),
                 ],
-                if (verificationUrl.isNotEmpty)
+                if (verificationUrl.isNotEmpty || hash.isNotEmpty)
                   TextButton.icon(
-                    onPressed: () =>
-                        _openVerificationUrl(context, verificationUrl),
+                    onPressed: () => _verifyCredentialInApp(
+                      context,
+                      cert,
+                      verificationUrl,
+                    ),
                     icon: const Icon(Icons.verified_user_outlined, size: 15),
-                    label: const Text('Verify Credential Online'),
+                    label: const Text('Verify Credential'),
                   ),
                 const SizedBox(height: 16),
                 Wrap(
@@ -283,20 +325,16 @@ class CertificatesScreen extends StatelessWidget {
   Widget build(BuildContext context) {
     return Scaffold(
       backgroundColor: AppColors.background,
-      appBar: AppBar(
-        title: const Text('My Certificates'),
-        leading: IconButton(
-          icon: const Icon(Icons.arrow_back_ios_new_rounded, size: 20),
-          onPressed: () => Navigator.pop(context),
-        ),
+      appBar: ExecutiveAppBar(
+        title: 'My Certificates',
+        subtitle: 'Verified Digital Credentials',
         actions: [
-          IconButton(
+          ExecutiveHeaderIconButton(
             tooltip: 'Sync Certificates',
-            icon: const Icon(Icons.refresh_rounded),
+            icon: Icons.refresh_rounded,
             onPressed: () =>
                 AppDataService.instance.syncFromSupabase(forceRefresh: true),
           ),
-          const SizedBox(width: 4),
         ],
       ),
       body: ListenableBuilder(
@@ -345,7 +383,7 @@ class CertificatesScreen extends StatelessWidget {
                             child: InkWell(
                               borderRadius: BorderRadius.circular(18),
                               onTap: () =>
-                                  _showCertificateDialog(context, cert),
+                                  showCertificateDialog(context, cert),
                               child: Container(
                                 padding: const EdgeInsets.all(20),
                                 decoration: BoxDecoration(
@@ -402,7 +440,7 @@ class CertificatesScreen extends StatelessWidget {
                                     ),
                                     const SizedBox(height: 6),
                                     Text(
-                                      '${cert['issuer'] ?? 'CampusConnect Partner'}\n${cert['date'] ?? ''} • ID: ${cert['id'] ?? ''}',
+                                      '${cert['issuer'] ?? 'SkillBridge Partner'}\n${cert['date'] ?? ''} • ID: ${cert['id'] ?? ''}',
                                       textAlign: TextAlign.center,
                                       style: GoogleFonts.inter(
                                         fontSize: 12,

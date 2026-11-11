@@ -4,10 +4,11 @@ import 'package:flutter/material.dart';
 import 'package:google_fonts/google_fonts.dart';
 import 'package:link_vibe/core/constants/app_colors.dart';
 import 'package:link_vibe/core/services/app_data_service.dart';
+import 'package:link_vibe/core/services/deep_link_service.dart';
 import 'package:link_vibe/core/services/supabase_helper.dart';
+import 'package:link_vibe/core/widgets/skillbridge_logo.dart';
 import 'package:link_vibe/feature/admin/presentation/screens/admin_dashboard_screen.dart';
 import 'package:link_vibe/feature/admin/services/admin_auth_service.dart';
-import 'package:link_vibe/feature/company/presentation/screens/company_dashboard.dart';
 import 'package:link_vibe/feature/company/presentation/screens/company_main_nav.dart';
 import 'package:link_vibe/feature/company/services/company_profile_service.dart';
 import 'package:link_vibe/feature/onboarding/presentation/screens/onboarding_screen.dart';
@@ -33,21 +34,29 @@ class _SplashScreenState extends State<SplashScreen>
     super.initState();
     _animController = AnimationController(
       vsync: this,
-      duration: const Duration(milliseconds: 950),
+      duration: const Duration(milliseconds: 520),
     );
     _fadeAnimation = CurvedAnimation(
       parent: _animController,
       curve: Curves.easeIn,
     );
-    _scaleAnimation = Tween<double>(begin: 0.88, end: 1.0).animate(
+    _scaleAnimation = Tween<double>(begin: 0.92, end: 1.0).animate(
       CurvedAnimation(parent: _animController, curve: Curves.easeOutBack),
     );
     _animController.forward();
 
-    _autoLoginTimer = Timer(const Duration(milliseconds: 900), () {
+    _autoLoginTimer = Timer(const Duration(milliseconds: 220), () {
       if (!mounted) return;
       if (AppDataService.instance.isLoggedIn) {
         _bootstrapAndNavigate();
+      } else if (DeepLinkService.instance.hasPendingLink) {
+        Navigator.pushReplacement(
+          context,
+          MaterialPageRoute(builder: (_) => const OnboardingScreen()),
+        );
+        WidgetsBinding.instance.addPostFrameCallback((_) {
+          DeepLinkService.instance.markWorkspaceReadyAndConsume();
+        });
       }
     });
   }
@@ -65,9 +74,9 @@ class _SplashScreenState extends State<SplashScreen>
 
     try {
       final supabase = SupabaseHelper.clientOrNull;
-      if (supabase != null && supabase.auth.currentUser != null) {
-        final role = AppDataService.instance.userRole.toLowerCase();
+      final role = AppDataService.instance.userRole.toLowerCase();
 
+      if (supabase != null && supabase.auth.currentUser != null) {
         if (role == 'admin') {
           await AppDataService.instance.syncFromSupabase(forceRefresh: true);
           final restoredAdmin = await AdminAuthService()
@@ -83,8 +92,13 @@ class _SplashScreenState extends State<SplashScreen>
             return;
           }
         } else if (role == 'company') {
-          await CompanyProfileService.loadAllCompanyPanelData();
+          CompanyProfileService.hydrateFromLocalCache();
+          unawaited(CompanyProfileService.loadAllCompanyPanelData());
+        } else {
+          unawaited(AppDataService.instance.syncFromSupabase(forceRefresh: true));
         }
+      } else if (role == 'company') {
+        CompanyProfileService.hydrateFromLocalCache();
       }
     } catch (_) {
       // Proceed cleanly with hydrated session state
@@ -113,6 +127,9 @@ class _SplashScreenState extends State<SplashScreen>
         MaterialPageRoute(builder: (_) => const StudentMainNav()),
       );
     }
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      DeepLinkService.instance.markWorkspaceReadyAndConsume();
+    });
   }
 
   void _onGetStartedPressed() {
@@ -175,57 +192,24 @@ class _SplashScreenState extends State<SplashScreen>
                               child: Column(
                                 mainAxisSize: MainAxisSize.min,
                                 children: [
-                                  Container(
-                                    width: isSmall ? 72 : 86,
-                                    height: isSmall ? 72 : 86,
-                                    decoration: BoxDecoration(
-                                      shape: BoxShape.circle,
-                                      gradient: LinearGradient(
-                                        begin: Alignment.topLeft,
-                                        end: Alignment.bottomRight,
-                                        colors: [
-                                          Colors.white.withValues(alpha: 0.16),
-                                          AppColors.teal.withValues(alpha: 0.2),
-                                        ],
+                                  SkillBridgeLogo(
+                                    size: isSmall ? 82 : 98,
+                                    circular: true,
+                                    border: Border.all(
+                                      color: Colors.white.withValues(
+                                        alpha: 0.35,
                                       ),
-                                      border: Border.all(
-                                        color: Colors.white.withValues(
-                                          alpha: 0.28,
+                                      width: 2,
+                                    ),
+                                    shadows: [
+                                      BoxShadow(
+                                        color: AppColors.teal.withValues(
+                                          alpha: 0.42,
                                         ),
-                                        width: 1.5,
+                                        blurRadius: 26,
+                                        spreadRadius: 2,
                                       ),
-                                      boxShadow: [
-                                        BoxShadow(
-                                          color: AppColors.teal.withValues(
-                                            alpha: 0.35,
-                                          ),
-                                          blurRadius: 24,
-                                          spreadRadius: 2,
-                                        ),
-                                      ],
-                                    ),
-                                    child: Stack(
-                                      alignment: Alignment.center,
-                                      children: [
-                                        Icon(
-                                          Icons.school_rounded,
-                                          size: isSmall ? 36 : 44,
-                                          color: Colors.white,
-                                        ),
-                                        Positioned(
-                                          top: isSmall ? 15 : 19,
-                                          right: isSmall ? 15 : 19,
-                                          child: Container(
-                                            width: 9,
-                                            height: 9,
-                                            decoration: const BoxDecoration(
-                                              color: AppColors.teal,
-                                              shape: BoxShape.circle,
-                                            ),
-                                          ),
-                                        ),
-                                      ],
-                                    ),
+                                    ],
                                   ),
                                   SizedBox(height: isSmall ? 14 : 18),
                                   RichText(
@@ -233,7 +217,7 @@ class _SplashScreenState extends State<SplashScreen>
                                     text: TextSpan(
                                       children: [
                                         TextSpan(
-                                          text: 'Campus',
+                                          text: 'Skill',
                                           style: GoogleFonts.poppins(
                                             fontSize: isSmall ? 26 : 31,
                                             fontWeight: FontWeight.w700,
@@ -242,7 +226,7 @@ class _SplashScreenState extends State<SplashScreen>
                                           ),
                                         ),
                                         TextSpan(
-                                          text: 'Connect',
+                                          text: 'Bridge',
                                           style: GoogleFonts.poppins(
                                             fontSize: isSmall ? 26 : 31,
                                             fontWeight: FontWeight.w700,

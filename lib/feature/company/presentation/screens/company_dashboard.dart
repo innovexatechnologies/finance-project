@@ -4,6 +4,7 @@ import 'package:link_vibe/core/constants/app_colors.dart';
 import 'package:link_vibe/core/services/supabase_helper.dart';
 import 'package:link_vibe/core/widgets/app_empty_state.dart';
 import 'package:link_vibe/core/widgets/section_header.dart';
+import 'package:link_vibe/core/widgets/skillbridge_logo.dart';
 import 'package:link_vibe/core/widgets/status_badge.dart';
 import 'package:link_vibe/feature/company/models/applicant_model.dart';
 import 'package:link_vibe/feature/company/models/assignment_model.dart';
@@ -44,7 +45,7 @@ class _CompanyDashboardScreenState extends State<CompanyDashboardScreen> {
   final _applicantService = CompanyApplicantService();
   final _assignmentService = CompanyAssignmentService();
 
-  bool _isLoading = true;
+  bool _isLoading = false;
   String? _errorMessage;
 
   bool get _drawerOpen => widget.isDrawerOpen;
@@ -52,31 +53,30 @@ class _CompanyDashboardScreenState extends State<CompanyDashboardScreen> {
   @override
   void initState() {
     super.initState();
-    _loadDashboardData();
+    CompanyProfileService.hydrateFromLocalCache();
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      if (mounted) _loadDashboardData();
+    });
   }
 
-  Future<void> _loadDashboardData() async {
-    if (mounted) {
+  Future<void> _loadDashboardData({bool blockingLoader = false}) async {
+    if (blockingLoader && mounted) {
       setState(() {
         _isLoading = true;
         _errorMessage = null;
       });
+    } else if (_errorMessage != null && mounted) {
+      setState(() => _errorMessage = null);
     }
 
     try {
       await CompanyProfileService.loadAllCompanyPanelData();
-      if (mounted) {
-        setState(() {
-          _isLoading = false;
-        });
+      if (mounted && _isLoading) {
+        setState(() => _isLoading = false);
       }
-    } catch (e) {
-      if (mounted) {
-        setState(() {
-          _isLoading = false;
-          _errorMessage =
-              'Unable to synchronize corporate workspace. Pull to retry.';
-        });
+    } catch (_) {
+      if (mounted && _isLoading) {
+        setState(() => _isLoading = false);
       }
     }
   }
@@ -254,25 +254,17 @@ class _CompanyDashboardScreenState extends State<CompanyDashboardScreen> {
         titleSpacing: 16,
         title: Row(
           children: [
-            Container(
-              width: 38,
-              height: 38,
-              decoration: BoxDecoration(
-                gradient: AppColors.brandGradient,
-                borderRadius: BorderRadius.circular(12),
-                boxShadow: [
-                  BoxShadow(
-                    color: AppColors.primaryBlue.withValues(alpha: 0.22),
-                    blurRadius: 8,
-                    offset: const Offset(0, 3),
-                  ),
-                ],
-              ),
-              child: const Icon(
-                Icons.business_center_rounded,
-                color: Colors.white,
-                size: 19,
-              ),
+            SkillBridgeLogo(
+              size: 38,
+              circular: false,
+              borderRadius: 11,
+              shadows: [
+                BoxShadow(
+                  color: AppColors.primaryBlue.withValues(alpha: 0.22),
+                  blurRadius: 8,
+                  offset: const Offset(0, 3),
+                ),
+              ],
             ),
             const SizedBox(width: 11),
             Expanded(
@@ -281,7 +273,7 @@ class _CompanyDashboardScreenState extends State<CompanyDashboardScreen> {
                 mainAxisSize: MainAxisSize.min,
                 children: [
                   Text(
-                    'CampusConnect',
+                    'SkillBridge',
                     maxLines: 1,
                     overflow: TextOverflow.ellipsis,
                     style: GoogleFonts.poppins(
@@ -311,9 +303,12 @@ class _CompanyDashboardScreenState extends State<CompanyDashboardScreen> {
           Padding(
             padding: const EdgeInsets.only(right: 14),
             child: Center(
-              child: CompanyDrawerMenuButton(
-                onPressed: widget.onOpenDrawer,
-                isDrawerOpen: _drawerOpen,
+              child: Tooltip(
+                message: 'Open Workspace Menu',
+                child: CompanyDrawerMenuButton(
+                  onPressed: widget.onOpenDrawer,
+                  isDrawerOpen: _drawerOpen,
+                ),
               ),
             ),
           ),
@@ -696,7 +691,7 @@ class _CompanyDashboardScreenState extends State<CompanyDashboardScreen> {
                                       Expanded(
                                         child: Text(
                                           profile.officialEmail,
-                                          maxLines: 1,
+                                          maxLines: 2,
                                           overflow: TextOverflow.ellipsis,
                                           style: GoogleFonts.inter(
                                             color: Colors.white.withValues(
@@ -810,12 +805,16 @@ class _CompanyDashboardScreenState extends State<CompanyDashboardScreen> {
       children: [
         Icon(icon, size: 14, color: AppColors.lightAqua),
         const SizedBox(width: 6),
-        Text(
-          label,
-          style: GoogleFonts.inter(
-            fontSize: 12,
-            fontWeight: FontWeight.w600,
-            color: Colors.white.withValues(alpha: 0.92),
+        Flexible(
+          child: Text(
+            label,
+            maxLines: 1,
+            overflow: TextOverflow.ellipsis,
+            style: GoogleFonts.inter(
+              fontSize: 12,
+              fontWeight: FontWeight.w600,
+              color: Colors.white.withValues(alpha: 0.92),
+            ),
           ),
         ),
       ],
@@ -954,78 +953,77 @@ class _CompanyDashboardScreenState extends State<CompanyDashboardScreen> {
           child: InkWell(
             onTap: onTap,
             child: Column(
+              mainAxisSize: MainAxisSize.min,
               crossAxisAlignment: CrossAxisAlignment.stretch,
               children: [
                 Container(height: 3, color: iconColor),
-                Expanded(
-                  child: Padding(
-                    padding: const EdgeInsets.all(15),
-                    child: Column(
-                      crossAxisAlignment: CrossAxisAlignment.start,
-                      mainAxisAlignment: MainAxisAlignment.spaceBetween,
-                      children: [
-                        Row(
-                          mainAxisAlignment: MainAxisAlignment.spaceBetween,
-                          children: [
-                            Container(
-                              padding: const EdgeInsets.all(9),
-                              decoration: BoxDecoration(
-                                color: bgColor,
-                                borderRadius: BorderRadius.circular(11),
-                              ),
-                              child: Icon(icon, color: iconColor, size: 19),
+                Padding(
+                  padding: const EdgeInsets.all(15),
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    mainAxisSize: MainAxisSize.min,
+                    children: [
+                      Row(
+                        mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                        children: [
+                          Container(
+                            padding: const EdgeInsets.all(9),
+                            decoration: BoxDecoration(
+                              color: bgColor,
+                              borderRadius: BorderRadius.circular(11),
                             ),
-                            Container(
-                              padding: const EdgeInsets.all(5),
-                              decoration: const BoxDecoration(
-                                color: AppColors.background,
-                                shape: BoxShape.circle,
-                              ),
-                              child: const Icon(
-                                Icons.arrow_outward_rounded,
-                                size: 13.5,
-                                color: AppColors.textMuted,
-                              ),
+                            child: Icon(icon, color: iconColor, size: 19),
+                          ),
+                          Container(
+                            padding: const EdgeInsets.all(5),
+                            decoration: const BoxDecoration(
+                              color: AppColors.background,
+                              shape: BoxShape.circle,
                             ),
-                          ],
-                        ),
-                        const SizedBox(height: 14),
-                        Column(
-                          crossAxisAlignment: CrossAxisAlignment.start,
-                          children: [
-                            Text(
-                              count,
-                              style: GoogleFonts.poppins(
-                                fontSize: 24,
-                                fontWeight: FontWeight.w700,
-                                color: AppColors.deepNavy,
-                                height: 1.1,
-                              ),
+                            child: const Icon(
+                              Icons.arrow_outward_rounded,
+                              size: 13.5,
+                              color: AppColors.textMuted,
                             ),
-                            const SizedBox(height: 3),
-                            Text(
-                              title,
-                              maxLines: 1,
-                              overflow: TextOverflow.ellipsis,
-                              style: GoogleFonts.inter(
-                                fontSize: 13,
-                                fontWeight: FontWeight.w700,
-                                color: AppColors.darkText,
-                              ),
+                          ),
+                        ],
+                      ),
+                      const SizedBox(height: 14),
+                      Column(
+                        crossAxisAlignment: CrossAxisAlignment.start,
+                        children: [
+                          Text(
+                            count,
+                            style: GoogleFonts.poppins(
+                              fontSize: 24,
+                              fontWeight: FontWeight.w700,
+                              color: AppColors.deepNavy,
+                              height: 1.1,
                             ),
-                            Text(
-                              subtitle,
-                              maxLines: 1,
-                              overflow: TextOverflow.ellipsis,
-                              style: GoogleFonts.inter(
-                                fontSize: 11,
-                                color: AppColors.grayText,
-                              ),
+                          ),
+                          const SizedBox(height: 3),
+                          Text(
+                            title,
+                            maxLines: 1,
+                            overflow: TextOverflow.ellipsis,
+                            style: GoogleFonts.inter(
+                              fontSize: 13,
+                              fontWeight: FontWeight.w700,
+                              color: AppColors.darkText,
                             ),
-                          ],
-                        ),
-                      ],
-                    ),
+                          ),
+                          Text(
+                            subtitle,
+                            maxLines: 1,
+                            overflow: TextOverflow.ellipsis,
+                            style: GoogleFonts.inter(
+                              fontSize: 11,
+                              color: AppColors.grayText,
+                            ),
+                          ),
+                        ],
+                      ),
+                    ],
                   ),
                 ),
               ],
@@ -1045,7 +1043,7 @@ class _CompanyDashboardScreenState extends State<CompanyDashboardScreen> {
       _buildActionTile(
         icon: Icons.add_circle_outline_rounded,
         label: 'Post Challenge',
-        subLabel: 'Publish to campus',
+        subLabel: 'Publish to SkillBridge',
         isPrimary: true,
         onTap: _navigateToCreateProject,
       ),
@@ -1406,12 +1404,16 @@ class _CompanyDashboardScreenState extends State<CompanyDashboardScreen> {
                                 color: AppColors.grayText,
                               ),
                               const SizedBox(width: 4),
-                              Text(
-                                'Deadline: ${project.deadline}',
-                                style: GoogleFonts.inter(
-                                  fontSize: 11.5,
-                                  color: AppColors.grayText,
-                                  fontWeight: FontWeight.w500,
+                              Flexible(
+                                child: Text(
+                                  'Deadline: ${project.deadline}',
+                                  maxLines: 1,
+                                  overflow: TextOverflow.ellipsis,
+                                  style: GoogleFonts.inter(
+                                    fontSize: 11.5,
+                                    color: AppColors.grayText,
+                                    fontWeight: FontWeight.w500,
+                                  ),
                                 ),
                               ),
                             ],

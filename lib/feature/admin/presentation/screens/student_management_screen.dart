@@ -1326,7 +1326,7 @@ class _StudentManagementScreenState extends State<StudentManagementScreen> {
             _buildMetricTile(
               title: 'Total Students',
               value: '${_studentService.totalCount}',
-              subtitle: 'Registered on CampusConnect',
+              subtitle: 'Registered on SkillBridge',
               icon: Icons.school_rounded,
               color: AppColors.primary,
               bgColor: AppColors.lightIceBlue,
@@ -1485,7 +1485,7 @@ class _StudentManagementScreenState extends State<StudentManagementScreen> {
                         ),
                         const SizedBox(height: 2),
                         Text(
-                          'All students enrolled & engaged in projects across CampusConnect',
+                          'All students enrolled & engaged in projects across SkillBridge',
                           style: GoogleFonts.inter(
                             fontSize: 12,
                             color: AppColors.textSecondary,

@@ -540,7 +540,7 @@ class _PostProjectScreenState extends State<PostProjectScreen> {
           content: Text(
             _isEditMode
                 ? 'Save updates to "${_titleController.text.trim()}" and keep it open for university candidates?'
-                : 'Publish "${_titleController.text.trim()}" to the live CampusConnect catalog for verified university students?',
+                : 'Publish "${_titleController.text.trim()}" to the live SkillBridge catalog for verified university students?',
             style: GoogleFonts.inter(
               fontSize: 13.5,
               color: AppColors.grayText,
@@ -582,7 +582,7 @@ class _PostProjectScreenState extends State<PostProjectScreen> {
           content: Text(
             _isEditMode
                 ? 'Project "${projectPayload.title}" updated.'
-                : 'Project "${projectPayload.title}" published to CampusConnect.',
+                : 'Project "${projectPayload.title}" published to SkillBridge.',
           ),
           backgroundColor: AppColors.statusOpen,
         ),
@@ -1763,30 +1763,42 @@ class _PostProjectScreenState extends State<PostProjectScreen> {
             flex: 2,
             child: SizedBox(
               height: 52,
-              child: OutlinedButton.icon(
+              child: OutlinedButton(
                 style: OutlinedButton.styleFrom(
                   backgroundColor: Colors.white,
                   foregroundColor: AppColors.deepNavy,
                   side: const BorderSide(color: AppColors.lightGray, width: 1.2),
+                  padding: const EdgeInsets.symmetric(horizontal: 10),
                   shape: RoundedRectangleBorder(
                     borderRadius: BorderRadius.circular(14),
                   ),
                 ),
                 onPressed:
                     _isSavingDraft || _isPublishing ? null : _handleSaveDraft,
-                icon: _isSavingDraft
-                    ? const SizedBox(
+                child: Row(
+                  mainAxisAlignment: MainAxisAlignment.center,
+                  children: [
+                    if (_isSavingDraft)
+                      const SizedBox(
                         width: 16,
                         height: 16,
                         child: CircularProgressIndicator(strokeWidth: 2),
                       )
-                    : const Icon(Icons.bookmark_border_rounded, size: 18),
-                label: Text(
-                  'Save Draft',
-                  style: GoogleFonts.poppins(
-                    fontSize: 14,
-                    fontWeight: FontWeight.w600,
-                  ),
+                    else
+                      const Icon(Icons.bookmark_border_rounded, size: 17),
+                    const SizedBox(width: 6),
+                    Flexible(
+                      child: Text(
+                        'Save Draft',
+                        maxLines: 1,
+                        overflow: TextOverflow.ellipsis,
+                        style: GoogleFonts.poppins(
+                          fontSize: 13.5,
+                          fontWeight: FontWeight.w600,
+                        ),
+                      ),
+                    ),
+                  ],
                 ),
               ),
             ),
@@ -1822,36 +1834,43 @@ class _PostProjectScreenState extends State<PostProjectScreen> {
                 onTap: _isPublishing || _isSavingDraft
                     ? null
                     : _confirmAndPublish,
-                child: Row(
-                  mainAxisAlignment: MainAxisAlignment.center,
-                  children: [
-                    if (_isPublishing)
-                      const SizedBox(
-                        width: 18,
-                        height: 18,
-                        child: CircularProgressIndicator(
+                child: Padding(
+                  padding: const EdgeInsets.symmetric(horizontal: 10),
+                  child: Row(
+                    mainAxisAlignment: MainAxisAlignment.center,
+                    children: [
+                      if (_isPublishing)
+                        const SizedBox(
+                          width: 18,
+                          height: 18,
+                          child: CircularProgressIndicator(
+                            color: Colors.white,
+                            strokeWidth: 2,
+                          ),
+                        )
+                      else
+                        const Icon(
+                          Icons.rocket_launch_rounded,
                           color: Colors.white,
-                          strokeWidth: 2,
+                          size: 18,
                         ),
-                      )
-                    else
-                      const Icon(
-                        Icons.rocket_launch_rounded,
-                        color: Colors.white,
-                        size: 18,
+                      const SizedBox(width: 8),
+                      Flexible(
+                        child: Text(
+                          _isPublishing
+                              ? 'Saving...'
+                              : (_isEditMode ? 'Update Project' : 'Publish Project'),
+                          maxLines: 1,
+                          overflow: TextOverflow.ellipsis,
+                          style: GoogleFonts.poppins(
+                            fontSize: 14,
+                            fontWeight: FontWeight.w700,
+                            color: Colors.white,
+                          ),
+                        ),
                       ),
-                    const SizedBox(width: 8),
-                    Text(
-                      _isPublishing
-                          ? 'Saving...'
-                          : (_isEditMode ? 'Update Project' : 'Publish Project'),
-                      style: GoogleFonts.poppins(
-                        fontSize: 14.5,
-                        fontWeight: FontWeight.w700,
-                        color: Colors.white,
-                      ),
-                    ),
-                  ],
+                    ],
+                  ),
                 ),
               ),
             ),

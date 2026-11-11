@@ -37,18 +37,11 @@ class CompanySettingsService {
           .maybeSingle();
 
       if (row != null) {
-        final np = row['notification_prefs'] is Map
-            ? Map<String, dynamic>.from(row['notification_prefs'] as Map)
-            : <String, dynamic>{};
         final ps = row['privacy_settings'] is Map
             ? Map<String, dynamic>.from(row['privacy_settings'] as Map)
             : <String, dynamic>{};
 
         settingsNotifier.value = CompanySettingsModel(
-          notifyNewApplications: np['notify_new_applications'] ?? true,
-          notifyMilestoneSubmissions: np['notify_milestone_submissions'] ?? true,
-          notifyStatusChanges: np['notify_status_changes'] ?? true,
-          notifyWeeklyDigest: np['notify_weekly_digest'] ?? false,
           privacyDirectoryVisible: ps['privacy_directory_visible'] ?? true,
           privacyShowContactPerson: ps['privacy_show_contact_person'] ?? true,
           privacyShareAnalytics: ps['privacy_share_analytics'] ?? true,
@@ -68,12 +61,6 @@ class CompanySettingsService {
       try {
         await supabase.from('user_settings').upsert({
           'user_id': user.id,
-          'notification_prefs': {
-            'notify_new_applications': updated.notifyNewApplications,
-            'notify_milestone_submissions': updated.notifyMilestoneSubmissions,
-            'notify_status_changes': updated.notifyStatusChanges,
-            'notify_weekly_digest': updated.notifyWeeklyDigest,
-          },
           'privacy_settings': {
             'privacy_directory_visible': updated.privacyDirectoryVisible,
             'privacy_show_contact_person': updated.privacyShowContactPerson,
@@ -92,8 +79,9 @@ class CompanySettingsService {
     required String newPassword,
   }) async {
     lastError = null;
-    if (currentPassword.isEmpty || newPassword.length < 6) {
-      lastError = 'New password must be at least 6 characters.';
+    final trimmedNew = newPassword.trim();
+    if (currentPassword.isEmpty || trimmedNew.isEmpty) {
+      lastError = 'Please enter your current and new password.';
       return false;
     }
 
@@ -103,12 +91,36 @@ class CompanySettingsService {
       try {
         final email = user.email;
         if (email != null && email.isNotEmpty) {
-          await supabase.auth.signInWithPassword(
-            email: email,
-            password: currentPassword,
+          SupabaseHelper.beginInteractiveAuth();
+          try {
+            await supabase.auth.signInWithPassword(
+              email: email,
+              password: currentPassword,
+            );
+          } finally {
+            SupabaseHelper.endInteractiveAuth();
+          }
+        }
+        try {
+          await supabase.auth.updateUser(UserAttributes(password: trimmedNew));
+        } on AuthException catch (e) {
+          if (email != null &&
+              email.isNotEmpty &&
+              SupabaseHelper.isWeakPasswordError(e)) {
+            await SupabaseHelper.resetPasswordInApp(
+              email: email,
+              newPassword: trimmedNew,
+            );
+          } else {
+            rethrow;
+          }
+        }
+        if (email != null && email.isNotEmpty) {
+          await AppDataService.instance.updateAccountPassword(
+            email,
+            trimmedNew,
           );
         }
-        await supabase.auth.updateUser(UserAttributes(password: newPassword));
         return true;
       } on AuthException catch (e) {
         lastError = e.message;
@@ -169,21 +181,6 @@ class CompanySettingsService {
 
         try {
           await supabase
-              .from('messages')
-              .delete()
-              .or('sender_id.eq.${user.id},receiver_id.eq.${user.id}');
-        } catch (e) {
-          debugPrint('Delete messages cleanup skipped: $e');
-        }
-
-        try {
-          await supabase.from('notifications').delete().eq('user_id', user.id);
-        } catch (e) {
-          debugPrint('Delete notifications cleanup skipped: $e');
-        }
-
-        try {
-          await supabase
               .from('support_tickets')
               .delete()
               .eq('user_id', user.id);
@@ -235,9 +232,10 @@ class CompanySettingsService {
   Future<void> logout() async {
     final supabase = SupabaseHelper.clientOrNull;
     try {
-      await supabase?.auth.signOut();
+      await supabase?.auth.signOut().timeout(const Duration(seconds: 3));
     } catch (_) {}
 
+    SupabaseHelper.clearAuthFlags();
     await AppDataService.instance.clearAuthSession();
     CompanyProfileService().reset();
     CompanyProjectService().reset();

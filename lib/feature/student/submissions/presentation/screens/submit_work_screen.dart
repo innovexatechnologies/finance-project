@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 import 'package:google_fonts/google_fonts.dart';
 import 'package:link_vibe/core/constants/app_colors.dart';
 import 'package:link_vibe/core/services/app_data_service.dart';
+import 'package:link_vibe/core/widgets/executive_ui.dart';
 import 'package:link_vibe/core/widgets/status_badge.dart';
 
 class SubmitWorkScreen extends StatefulWidget {
@@ -200,12 +201,9 @@ class _SubmitWorkScreenState extends State<SubmitWorkScreen> {
 
     return Scaffold(
       backgroundColor: AppColors.background,
-      appBar: AppBar(
-        title: const Text('Submit Project Work'),
-        leading: IconButton(
-          icon: const Icon(Icons.arrow_back_ios_new_rounded, size: 20),
-          onPressed: () => Navigator.pop(context),
-        ),
+      appBar: ExecutiveAppBar(
+        title: 'Submit Project Work',
+        subtitle: company,
       ),
       body: SingleChildScrollView(
         padding: const EdgeInsets.all(20),
