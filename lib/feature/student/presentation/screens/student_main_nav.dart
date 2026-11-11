@@ -9,7 +9,6 @@ import 'package:link_vibe/feature/admin/services/admin_auth_service.dart';
 import 'package:link_vibe/feature/auth/presentation/screens/login_screen.dart';
 import 'package:link_vibe/feature/student/applications/presentation/screens/my_applications_screen.dart';
 import 'package:link_vibe/feature/student/certificates/presentation/screens/certificates_screen.dart';
-import 'package:link_vibe/feature/student/chat/presentation/screens/chat_list_screen.dart';
 import 'package:link_vibe/feature/student/home/presentation/screens/student_home_screen.dart';
 import 'package:link_vibe/feature/student/explore/presentation/screens/explore_projects_screen.dart';
 import 'package:link_vibe/feature/student/my_projects/presentation/screens/my_projects_screen.dart';
@@ -334,12 +333,6 @@ class _StudentMainNavState extends State<StudentMainNav> {
                       ? AppDataService.instance.userEmail
                       : 'Verified Talent Profile');
 
-            final unreadChats = AppDataService.instance
-                .getConversations()
-                .fold<int>(
-                  0,
-                  (sum, c) => sum + ((c['unread'] as int?) ?? 0),
-                );
             final savedCount = AppDataService.instance.getSavedProjects().length;
             final certCount = AppDataService.instance.certificatesCount;
 
@@ -425,15 +418,6 @@ class _StudentMainNavState extends State<StudentMainNav> {
                           title: 'Home',
                           isSelected: _currentIndex == 0,
                           onTap: () => _onTabChange(0),
-                        ),
-                        const SizedBox(height: 4),
-                        _buildDrawerMenuRow(
-                          icon: Icons.chat_bubble_outline_rounded,
-                          accentColor: AppColors.teal,
-                          title: 'Messages',
-                          badgeCount: unreadChats,
-                          onTap: () =>
-                              _openDrawerScreen(const ChatListScreen()),
                         ),
                         const SizedBox(height: 4),
                         _buildDrawerMenuRow(

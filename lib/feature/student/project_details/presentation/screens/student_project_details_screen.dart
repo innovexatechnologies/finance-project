@@ -7,7 +7,6 @@ import 'package:link_vibe/core/services/share_service.dart';
 import 'package:link_vibe/core/services/supabase_helper.dart';
 import 'package:link_vibe/core/widgets/status_badge.dart';
 import 'package:link_vibe/feature/student/apply/presentation/screens/apply_project_screen.dart';
-import 'package:link_vibe/feature/student/chat/presentation/screens/chat_list_screen.dart';
 
 class StudentProjectDetailsScreen extends StatelessWidget {
   final Map<String, dynamic> project;
@@ -35,27 +34,6 @@ class StudentProjectDetailsScreen extends StatelessWidget {
         const SnackBar(content: Text('Could not open project attachment link.')),
       );
     }
-  }
-
-  Future<void> _messageCompany(BuildContext context) async {
-    final company = (project['company']?.toString().trim().isNotEmpty == true)
-        ? project['company'].toString().trim()
-        : 'Partner Company';
-    final peerUserId = project['companyUserId']?.toString() ?? '';
-    final title = project['title']?.toString() ?? '';
-
-    await AppDataService.instance.openOrCreateConversation(
-      companyName: company,
-      peerUserId: peerUserId,
-      supervisorName: '$company Lead',
-      projectTitle: title,
-    );
-
-    if (!context.mounted) return;
-    Navigator.push(
-      context,
-      MaterialPageRoute(builder: (_) => const ChatListScreen()),
-    );
   }
 
   @override
@@ -510,14 +488,6 @@ class StudentProjectDetailsScreen extends StatelessWidget {
                     onPressed: () {
                       AppDataService.instance.toggleSaveProject(project);
                     },
-                  ),
-                  IconButton(
-                    tooltip: 'Message Partner',
-                    icon: const Icon(
-                      Icons.chat_bubble_outline_rounded,
-                      color: AppColors.primaryBlue,
-                    ),
-                    onPressed: () => _messageCompany(context),
                   ),
                   const SizedBox(width: 8),
                   Expanded(

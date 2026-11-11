@@ -4,7 +4,6 @@ import 'package:supabase_flutter/supabase_flutter.dart';
 import 'package:link_vibe/core/constants/app_colors.dart';
 import 'package:link_vibe/core/services/app_data_service.dart';
 import 'package:link_vibe/core/services/supabase_helper.dart';
-import 'package:link_vibe/feature/auth/presentation/screens/email_verification_screen.dart';
 import 'package:link_vibe/feature/company/presentation/screens/company_main_nav.dart';
 import 'package:link_vibe/feature/company/services/company_profile_service.dart';
 import 'package:link_vibe/feature/student/presentation/screens/student_main_nav.dart';
@@ -29,9 +28,6 @@ class _SignupScreenState extends State<SignupScreen> {
   late String _selectedRole;
   bool _isLoading = false;
   bool _obscurePassword = true;
-  bool _offerVerificationRecovery = false;
-  bool _isResendingVerification = false;
-  final ResendCooldown _resendCooldown = ResendCooldown();
   String? _errorBanner;
 
   @override
@@ -42,7 +38,6 @@ class _SignupScreenState extends State<SignupScreen> {
 
   @override
   void dispose() {
-    _resendCooldown.dispose();
     _nameController.dispose();
     _emailController.dispose();
     _universityController.dispose();
@@ -50,68 +45,8 @@ class _SignupScreenState extends State<SignupScreen> {
     super.dispose();
   }
 
-  Future<void> _resendAndOpenVerification() async {
-    final email = _emailController.text.trim();
-    if (email.isEmpty || !email.contains('@')) {
-      setState(() => _errorBanner = 'Enter a valid email address first.');
-      return;
-    }
-    final supabase = SupabaseHelper.clientOrNull;
-    if (supabase == null || _isResendingVerification || _resendCooldown.isActive) {
-      return;
-    }
-
-    setState(() => _isResendingVerification = true);
-    await AppDataService.instance.savePendingAuthContext(
-      flow: 'signup',
-      email: email,
-      role: _selectedRole,
-    );
-
-    try {
-      await supabase.auth.resend(
-        type: OtpType.signup,
-        email: email,
-        emailRedirectTo: SupabaseHelper.emailRedirectUrl,
-      );
-      if (!mounted) return;
-      _resendCooldown.start(() {
-        if (mounted) setState(() {});
-      });
-      Navigator.push(
-        context,
-        MaterialPageRoute(
-          builder: (_) => EmailVerificationScreen(
-            email: email,
-            role: _selectedRole,
-            isVerified: false,
-            initialInfo:
-                'Verification email resent to $email. Click the link or enter the 6-digit code.',
-          ),
-        ),
-      );
-    } catch (e) {
-      if (!mounted) return;
-      if (SupabaseHelper.isEmailRateLimitError(e) ||
-          SupabaseHelper.friendlyError(e).toLowerCase().contains('seconds')) {
-        _resendCooldown.start(
-          () {
-            if (mounted) setState(() {});
-          },
-          seconds: SupabaseHelper.extractRateLimitCooldownSeconds(e),
-        );
-      }
-      setState(() => _errorBanner = SupabaseHelper.friendlyError(e));
-    } finally {
-      if (mounted) setState(() => _isResendingVerification = false);
-    }
-  }
-
   Future<void> _handleRegister() async {
-    setState(() {
-      _errorBanner = null;
-      _offerVerificationRecovery = false;
-    });
+    setState(() => _errorBanner = null);
     if (!_formKey.currentState!.validate()) return;
 
     final name = _nameController.text.trim();
@@ -121,106 +56,77 @@ class _SignupScreenState extends State<SignupScreen> {
 
     setState(() => _isLoading = true);
     SupabaseHelper.beginInteractiveAuth();
-    await AppDataService.instance.savePendingAuthContext(
-      flow: 'signup',
-      email: email,
-      role: _selectedRole,
-    );
 
     try {
       final supabase = SupabaseHelper.clientOrNull;
 
       if (supabase != null) {
-        final authResponse = await supabase.auth.signUp(
-          email: email,
-          password: password,
-          emailRedirectTo: SupabaseHelper.emailRedirectUrl,
-          data: {
-            'name': name,
-            'user_type': _selectedRole,
-            'university': instituteOrIndustry,
-          },
-        );
+        AuthResponse authResponse;
+        try {
+          authResponse = await supabase.auth.signUp(
+            email: email,
+            password: password,
+            data: {
+              'name': name,
+              'user_type': _selectedRole,
+              'university': instituteOrIndustry,
+            },
+          );
+        } on AuthException catch (signUpErr) {
+          if (SupabaseHelper.isEmailRateLimitError(signUpErr) ||
+              SupabaseHelper.isWeakPasswordError(signUpErr)) {
+            await SupabaseHelper.registerUserInApp(
+              email: email,
+              password: password,
+              name: name,
+              role: _selectedRole,
+              organization: instituteOrIndustry,
+            );
+            authResponse = await supabase.auth.signInWithPassword(
+              email: email,
+              password: password,
+            );
+          } else {
+            rethrow;
+          }
+        }
 
-        final user = authResponse.user;
+        var user = authResponse.user;
+        var session = authResponse.session;
+
+        if (user != null && user.identities != null && user.identities!.isEmpty) {
+          // Account already exists: attempt direct sign-in if credentials match
+          await SupabaseHelper.confirmUserEmailInApp(email);
+          try {
+            final existingSignIn = await supabase.auth.signInWithPassword(
+              email: email,
+              password: password,
+            );
+            user = existingSignIn.user;
+            session = existingSignIn.session;
+          } catch (_) {
+            if (!mounted) return;
+            setState(() {
+              _errorBanner =
+                  'An account with this email already exists. Please sign in or reset your password.';
+            });
+            return;
+          }
+        }
+
         if (user == null) {
           throw const AuthException('Account creation did not return a user.');
         }
 
-        if (user.identities != null && user.identities!.isEmpty) {
-          // Email already registered in Supabase; probe whether it is still
-          // unverified so we can immediately resend and let the user verify.
-          var confirmedAlready = false;
-          var confirmedUnverified = false;
-          try {
-            final probe = await supabase.auth.signInWithPassword(
-              email: email,
-              password: password,
-            );
-            if (probe.user != null) {
-              confirmedAlready = true;
-              await supabase.auth.signOut();
-            }
-          } catch (probeErr) {
-            if (SupabaseHelper.isEmailNotConfirmedError(probeErr)) {
-              confirmedUnverified = true;
-            }
-          }
-
-          if (confirmedUnverified) {
-            String? resendInfo;
-            String? resendErr;
-            try {
-              await supabase.auth.resend(
-                type: OtpType.signup,
-                email: email,
-                emailRedirectTo: SupabaseHelper.emailRedirectUrl,
-              );
-              resendInfo =
-                  'This account was not verified yet. A fresh verification email was sent to $email.';
-            } catch (resendException) {
-              resendErr = SupabaseHelper.friendlyError(resendException);
-            }
-            if (!mounted) return;
-            Navigator.pushReplacement(
-              context,
-              MaterialPageRoute(
-                builder: (_) => EmailVerificationScreen(
-                  email: email,
-                  role: _selectedRole,
-                  isVerified: false,
-                  initialInfo: resendInfo,
-                  initialError: resendErr,
-                ),
-              ),
-            );
-            return;
-          }
-
-          if (!mounted) return;
-          setState(() {
-            _offerVerificationRecovery = !confirmedAlready;
-            _errorBanner = confirmedAlready
-                ? 'This email is already verified. Please sign in instead.'
-                : 'An account with this email already exists. If it was not verified yet, resend the verification email or verify via code below — otherwise sign in.';
-          });
-          return;
-        }
-
-        // If email verification is required (session is null), open dedicated EmailVerificationScreen
-        if (authResponse.session == null) {
-          if (!mounted) return;
-          Navigator.pushReplacement(
-            context,
-            MaterialPageRoute(
-              builder: (_) => EmailVerificationScreen(
-                email: email,
-                role: _selectedRole,
-                isVerified: false,
-              ),
-            ),
+        if (session == null) {
+          // Auto-confirm and log user directly into their workspace without verification screens
+          await SupabaseHelper.confirmUserEmailInApp(email);
+          final loginResponse = await supabase.auth.signInWithPassword(
+            email: email,
+            password: password,
           );
-          return;
+          user = loginResponse.user ?? user;
+          session = loginResponse.session;
         }
 
         // Session active: ensure profile + role-specific record exist cleanly
@@ -321,15 +227,11 @@ class _SignupScreenState extends State<SignupScreen> {
     } on AuthException catch (e) {
       if (!mounted) return;
       setState(() {
-        _offerVerificationRecovery = SupabaseHelper.isAlreadyRegisteredError(e) ||
-            SupabaseHelper.isEmailRateLimitError(e);
         _errorBanner = SupabaseHelper.friendlyError(e);
       });
     } catch (e) {
       if (!mounted) return;
       setState(() {
-        _offerVerificationRecovery = SupabaseHelper.isAlreadyRegisteredError(e) ||
-            SupabaseHelper.isEmailRateLimitError(e);
         _errorBanner = SupabaseHelper.friendlyError(e);
       });
     } finally {
@@ -413,89 +315,13 @@ class _SignupScreenState extends State<SignupScreen> {
                               ),
                               const SizedBox(width: 8),
                               Expanded(
-                                child: Column(
-                                  crossAxisAlignment: CrossAxisAlignment.start,
-                                  children: [
-                                    Text(
-                                      _errorBanner!,
-                                      style: GoogleFonts.inter(
-                                        fontSize: 12.5,
-                                        fontWeight: FontWeight.w600,
-                                        color: const Color(0xFF991B1B),
-                                      ),
-                                    ),
-                                    if (_offerVerificationRecovery) ...[
-                                      const SizedBox(height: 6),
-                                      Wrap(
-                                        spacing: 12,
-                                        runSpacing: 4,
-                                        children: [
-                                          TextButton(
-                                            style: TextButton.styleFrom(
-                                              padding: EdgeInsets.zero,
-                                              minimumSize: const Size(0, 0),
-                                              tapTargetSize:
-                                                  MaterialTapTargetSize
-                                                      .shrinkWrap,
-                                            ),
-                                            onPressed:
-                                                (_isResendingVerification ||
-                                                        _resendCooldown
-                                                            .isActive)
-                                                    ? null
-                                                    : _resendAndOpenVerification,
-                                            child: Text(
-                                              _isResendingVerification
-                                                  ? 'Sending...'
-                                                  : _resendCooldown.isActive
-                                                      ? 'Resend in ${_resendCooldown.remainingSeconds}s'
-                                                      : 'Resend verification email',
-                                              style: GoogleFonts.inter(
-                                                fontSize: 12,
-                                                fontWeight: FontWeight.w700,
-                                                color: AppColors.primaryBlue,
-                                                decoration:
-                                                    TextDecoration.underline,
-                                              ),
-                                            ),
-                                          ),
-                                          TextButton(
-                                            style: TextButton.styleFrom(
-                                              padding: EdgeInsets.zero,
-                                              minimumSize: const Size(0, 0),
-                                              tapTargetSize:
-                                                  MaterialTapTargetSize
-                                                      .shrinkWrap,
-                                            ),
-                                            onPressed: () {
-                                              Navigator.push(
-                                                context,
-                                                MaterialPageRoute(
-                                                  builder: (_) =>
-                                                      EmailVerificationScreen(
-                                                    email: _emailController.text
-                                                        .trim(),
-                                                    role: _selectedRole,
-                                                    isVerified: false,
-                                                  ),
-                                                ),
-                                              );
-                                            },
-                                            child: Text(
-                                              'Verify via code',
-                                              style: GoogleFonts.inter(
-                                                fontSize: 12,
-                                                fontWeight: FontWeight.w700,
-                                                color: AppColors.deepNavy,
-                                                decoration:
-                                                    TextDecoration.underline,
-                                              ),
-                                            ),
-                                          ),
-                                        ],
-                                      ),
-                                    ],
-                                  ],
+                                child: Text(
+                                  _errorBanner!,
+                                  style: GoogleFonts.inter(
+                                    fontSize: 12.5,
+                                    fontWeight: FontWeight.w600,
+                                    color: const Color(0xFF991B1B),
+                                  ),
                                 ),
                               ),
                             ],
@@ -607,7 +433,7 @@ class _SignupScreenState extends State<SignupScreen> {
                           ),
                         ),
                         validator: (val) {
-                          if (val == null || val.trim().length < 2) {
+                          if (val == null || val.trim().isEmpty) {
                             return isCompany
                                 ? 'Company name is required'
                                 : 'Full name is required';
@@ -640,9 +466,7 @@ class _SignupScreenState extends State<SignupScreen> {
                         ),
                         validator: (val) {
                           final v = val?.trim() ?? '';
-                          if (v.isEmpty ||
-                              !v.contains('@') ||
-                              !v.contains('.')) {
+                          if (v.isEmpty || !v.contains('@')) {
                             return 'Enter a valid email address';
                           }
                           return null;
@@ -677,7 +501,7 @@ class _SignupScreenState extends State<SignupScreen> {
                           ),
                         ),
                         validator: (val) {
-                          if (val == null || val.trim().length < 2) {
+                          if (val == null || val.trim().isEmpty) {
                             return isCompany
                                 ? 'Please enter your industry sector'
                                 : 'Please enter your university or institute';
@@ -703,7 +527,7 @@ class _SignupScreenState extends State<SignupScreen> {
                         enabled: !_isLoading,
                         onFieldSubmitted: (_) => _handleRegister(),
                         decoration: InputDecoration(
-                          hintText: 'Minimum 6 characters',
+                          hintText: 'Enter password',
                           prefixIcon: const Icon(
                             Icons.lock_outline_rounded,
                             size: 20,
@@ -722,8 +546,8 @@ class _SignupScreenState extends State<SignupScreen> {
                           ),
                         ),
                         validator: (val) {
-                          if (val == null || val.trim().length < 6) {
-                            return 'Password must be at least 6 characters';
+                          if (val == null || val.trim().isEmpty) {
+                            return 'Password is required';
                           }
                           return null;
                         },

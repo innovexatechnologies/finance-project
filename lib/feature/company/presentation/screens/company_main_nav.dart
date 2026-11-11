@@ -486,18 +486,7 @@ class _CompanyMainNavState extends State<CompanyMainNav> {
                           ? profile.officialEmail.trim()
                           : 'Corporate Workspace');
 
-<<<<<<< HEAD
-                      final unreadChats = AppDataService.instance
-                          .getConversations()
-                          .fold<int>(
-                            0,
-                            (sum, c) => sum + ((c['unread'] as int?) ?? 0),
-                          );
-
-                      return Column(
-=======
                   return Column(
->>>>>>> origin/danishali
                         crossAxisAlignment: CrossAxisAlignment.stretch,
                         children: [
                           Padding(

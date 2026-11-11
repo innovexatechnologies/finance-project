@@ -13,7 +13,6 @@ import 'package:link_vibe/core/widgets/skillbridge_logo.dart';
 import 'package:link_vibe/core/widgets/student_avatar.dart';
 import 'package:link_vibe/feature/admin/presentation/screens/admin_dashboard_screen.dart';
 import 'package:link_vibe/feature/admin/presentation/screens/admin_login_screen.dart';
-import 'package:link_vibe/feature/auth/presentation/screens/email_verification_screen.dart';
 import 'package:link_vibe/feature/auth/presentation/screens/login_screen.dart';
 import 'package:link_vibe/feature/auth/presentation/screens/reset_password_screen.dart';
 import 'package:link_vibe/feature/auth/presentation/screens/signup_screen.dart';
@@ -25,7 +24,6 @@ import 'package:link_vibe/feature/company/services/company_profile_service.dart'
 import 'package:link_vibe/feature/company/services/company_project_service.dart';
 import 'package:link_vibe/feature/splash/presentation/screens/splash_screen.dart';
 import 'package:link_vibe/feature/student/certificates/presentation/screens/certificates_screen.dart';
-import 'package:link_vibe/feature/student/chat/presentation/screens/chat_list_screen.dart';
 import 'package:link_vibe/feature/student/feedback/presentation/screens/feedback_screen.dart';
 import 'package:link_vibe/feature/student/home/presentation/screens/student_home_screen.dart';
 import 'package:link_vibe/feature/student/my_projects/presentation/screens/my_projects_screen.dart';
@@ -164,50 +162,13 @@ void main() {
       );
     });
 
-    testWidgets('ChatListScreen renders empty state cleanly ($tag)', (
-      tester,
-    ) async {
-      await pumpAndVerifyScreen(
-        tester,
-        screen: const ChatListScreen(),
-        size: size,
-      );
-    });
-
     testWidgets(
-      'ResetPasswordScreen & EmailVerificationScreen render cleanly ($tag)',
+      'ResetPasswordScreen renders in-app reset view cleanly ($tag)',
       (tester) async {
         await pumpAndVerifyScreen(
           tester,
           screen: const ResetPasswordScreen(
             initialEmail: 'student@university.edu',
-            hasRecoverySession: true,
-          ),
-          size: size,
-        );
-        await pumpAndVerifyScreen(
-          tester,
-          screen: const ResetPasswordScreen(
-            initialEmail: 'student@university.edu',
-            hasRecoverySession: false,
-          ),
-          size: size,
-        );
-        await pumpAndVerifyScreen(
-          tester,
-          screen: const EmailVerificationScreen(
-            email: 'student@university.edu',
-            role: 'Student',
-            isVerified: true,
-          ),
-          size: size,
-        );
-        await pumpAndVerifyScreen(
-          tester,
-          screen: const EmailVerificationScreen(
-            email: 'company@partner.io',
-            role: 'Company',
-            isVerified: false,
           ),
           size: size,
         );
@@ -215,9 +176,9 @@ void main() {
     );
   }
 
-  group('Portal Role & Strict Auth Routing', () {
+  group('Portal Role & Direct Auth Flows', () {
     test(
-      'SupabaseHelper.friendlyError translates DNS & SocketException errors',
+      'SupabaseHelper error helpers classify auth states without credential limits',
       () {
         final msg = SupabaseHelper.friendlyError(
           Exception(
@@ -225,19 +186,20 @@ void main() {
           ),
         );
         expect(msg, contains('internet connection'));
-        expect(
-          SupabaseHelper.authRedirectUri,
-          'io.supabase.campusconnect://login-callback/',
-        );
         expect(SupabaseHelper.isInteractiveAuthInProgress, isFalse);
 
         SupabaseHelper.beginInteractiveAuth();
-        expect(SupabaseHelper.shouldIgnoreSignedInEvent, isTrue);
+        expect(SupabaseHelper.isInteractiveAuthInProgress, isTrue);
         SupabaseHelper.endInteractiveAuth();
         expect(SupabaseHelper.isInteractiveAuthInProgress, isFalse);
-        expect(SupabaseHelper.shouldIgnoreSignedInEvent, isTrue);
         SupabaseHelper.clearAuthFlags();
-        expect(SupabaseHelper.shouldIgnoreSignedInEvent, isFalse);
+
+        const weakPassErr = AuthApiException(
+          'Password should be at least 6 characters',
+          statusCode: '422',
+          code: 'weak_password',
+        );
+        expect(SupabaseHelper.isWeakPasswordError(weakPassErr), isTrue);
 
         const rateLimitErr = AuthApiException(
           'email rate limit exceeded',
@@ -245,30 +207,6 @@ void main() {
           code: 'over_email_send_rate_limit',
         );
         expect(SupabaseHelper.isEmailRateLimitError(rateLimitErr), isTrue);
-        expect(
-          SupabaseHelper.friendlyError(rateLimitErr),
-          contains('2 emails per hour'),
-        );
-        const cooldownErr = AuthApiException(
-          'For security purposes, you can only request this after 45 seconds.',
-          statusCode: '429',
-          code: 'over_request_rate_limit',
-        );
-        expect(SupabaseHelper.isEmailRateLimitError(cooldownErr), isFalse);
-        expect(
-          SupabaseHelper.friendlyError(cooldownErr),
-          contains('wait 60 seconds'),
-        );
-
-        final cooldown = ResendCooldown();
-        int ticks = 0;
-        cooldown.start(() => ticks++, seconds: 5);
-        expect(cooldown.isActive, isTrue);
-        expect(cooldown.remainingSeconds, 5);
-        expect(ticks, 1);
-        cooldown.dispose();
-        expect(cooldown.isActive, isFalse);
-        expect(cooldown.remainingSeconds, 0);
 
         const unconfirmedErr = AuthApiException(
           'Email not confirmed',
@@ -276,10 +214,7 @@ void main() {
           code: 'email_not_confirmed',
         );
         expect(SupabaseHelper.isEmailNotConfirmedError(unconfirmedErr), isTrue);
-        expect(
-          SupabaseHelper.extractRateLimitCooldownSeconds(cooldownErr),
-          45,
-        );
+
         const alreadyErr = AuthApiException(
           'User already registered',
           statusCode: '422',
@@ -289,33 +224,8 @@ void main() {
       },
     );
 
-    test(
-      'AppDataService persists and clears pending email verification context cleanly',
-      () async {
-        await AppDataService.instance.savePendingAuthContext(
-          flow: 'signup',
-          email: 'hr@acme.io',
-          role: 'Company',
-        );
-        expect(SupabaseHelper.pendingAuthFlow, 'signup');
-        expect(SupabaseHelper.pendingAuthEmail, 'hr@acme.io');
-        expect(SupabaseHelper.pendingAuthRole, 'Company');
-
-        SupabaseHelper.clearAuthFlags();
-        await AppDataService.instance.init();
-        expect(SupabaseHelper.pendingAuthFlow, 'signup');
-        expect(SupabaseHelper.pendingAuthEmail, 'hr@acme.io');
-        expect(SupabaseHelper.pendingAuthRole, 'Company');
-
-        await AppDataService.instance.clearPendingAuthContext();
-        expect(SupabaseHelper.pendingAuthFlow, isNull);
-        expect(SupabaseHelper.pendingAuthEmail, isNull);
-        expect(SupabaseHelper.pendingAuthRole, isNull);
-      },
-    );
-
     testWidgets(
-      'Company EmailVerificationScreen renders verified & unverified states cleanly under AppTheme transitions',
+      'Signup logs directly into portal with zero verification and zero password length limit; Forgot Password resets in-app',
       (tester) async {
         tester.view.physicalSize = const Size(412, 915);
         tester.view.devicePixelRatio = 1.0;
@@ -323,57 +233,67 @@ void main() {
 
         await tester.pumpWidget(
           MaterialApp(
-            key: const ValueKey('company_verify_unverified'),
             theme: AppTheme.lightTheme,
-            home: const EmailVerificationScreen(
-              email: 'founder@acme.io',
-              role: 'Company',
-              isVerified: false,
-              initialInfo: 'Verification email resent to founder@acme.io.',
-            ),
+            home: const SignupScreen(initialRole: 'Student'),
           ),
         );
         await tester.pumpAndSettle();
 
-        expect(find.text('Verify Your Email'), findsOneWidget);
-        expect(find.text('Verify & Activate Account'), findsOneWidget);
-        expect(find.text('Resend Email'), findsOneWidget);
+        final fields = find.byType(TextFormField);
+        await tester.enterText(fields.at(0), 'A');
+        await tester.enterText(fields.at(1), 'a@b');
+        await tester.enterText(fields.at(2), 'U');
+        await tester.enterText(fields.at(3), '12'); // < 6 chars allowed!
+
+        await tester.ensureVisible(find.text('Create Student Account'));
+        await tester.tap(find.text('Create Student Account'));
+        await tester.pumpAndSettle();
+
+        // Direct login into StudentMainNav (zero email verification gate)
+        expect(find.byType(StudentMainNav), findsOneWidget);
+        expect(AppDataService.instance.isLoggedIn, isTrue);
         expect(
-          find.text('Verification email resent to founder@acme.io.'),
-          findsOneWidget,
+          AppDataService.instance.verifyLocalCredentials('a@b', '12'),
+          isTrue,
         );
-
-        await tester.pumpWidget(
-          MaterialApp(
-            key: const ValueKey('company_verify_unverified'),
-            theme: AppTheme.lightTheme,
-            home: const EmailVerificationScreen(
-              email: 'founder@acme.io',
-              role: 'Company',
-              isVerified: true,
-            ),
-          ),
-        );
-        await tester.pumpAndSettle();
-
-        expect(find.text('Email Verified Successfully'), findsOneWidget);
-        expect(find.text('Continue to Company Portal'), findsOneWidget);
-        await tester.tap(find.text('Continue to Company Portal'));
-        await tester.pumpAndSettle();
-
-        expect(find.byType(LoginScreen), findsOneWidget);
-        expect(find.text('Sign In as Company'), findsOneWidget);
         expect(tester.takeException(), isNull);
 
+        // Log out and test direct in-app Forgot Password -> ResetPasswordScreen
+        await AppDataService.instance.clearAuthSession();
         await tester.pumpWidget(
           MaterialApp(
-            key: const ValueKey('company_signup_screen'),
+            key: const ValueKey('login_reset_flow'),
             theme: AppTheme.lightTheme,
-            home: const SignupScreen(initialRole: 'Company'),
+            home: const LoginScreen(initialRole: 'Student'),
           ),
         );
         await tester.pumpAndSettle();
-        expect(find.text('Create Company Account'), findsOneWidget);
+
+        await tester.enterText(find.byType(TextFormField).at(0), 'a@b');
+        await tester.ensureVisible(find.text('Forgot Password?'));
+        await tester.tap(find.text('Forgot Password?'));
+        await tester.pumpAndSettle();
+
+        expect(find.byType(ResetPasswordScreen), findsOneWidget);
+        expect(find.text('Set a new password directly in the app'), findsOneWidget);
+        expect(find.text('Resend Reset Email'), findsNothing);
+
+        final resetFields = find.byType(TextFormField);
+        await tester.enterText(resetFields.at(1), '9');
+        await tester.enterText(resetFields.at(2), '9');
+        await tester.ensureVisible(find.text('Reset Password').last);
+        await tester.tap(find.text('Reset Password').last);
+        await tester.pumpAndSettle();
+
+        expect(find.text('Password Updated'), findsOneWidget);
+        expect(
+          AppDataService.instance.verifyLocalCredentials('a@b', '9'),
+          isTrue,
+        );
+
+        await tester.tap(find.text('Continue to Sign In'));
+        await tester.pumpAndSettle();
+        expect(find.byType(LoginScreen), findsOneWidget);
         expect(tester.takeException(), isNull);
       },
     );
@@ -614,9 +534,23 @@ void main() {
           findsOneWidget,
         );
         expect(find.text('Alerts'), findsNothing);
+        expect(find.byTooltip('Messages'), findsNothing);
+        expect(find.byIcon(Icons.chat_bubble_outline_rounded), findsNothing);
         expect(find.byIcon(Icons.notifications_none_rounded), findsNothing);
         expect(find.byIcon(Icons.notifications_outlined), findsNothing);
         expect(find.byIcon(Icons.notifications_rounded), findsNothing);
+        expect(tester.takeException(), isNull);
+
+        await tester.pumpWidget(
+          const MaterialApp(
+            key: ValueKey('change_password_no_email_reset'),
+            home: ChangePasswordScreen(),
+          ),
+        );
+        await tester.pumpAndSettle();
+        expect(find.text('Reset via Email'), findsNothing);
+        expect(find.text('Send Password Reset Email'), findsNothing);
+        expect(find.text('Update Password Now'), findsOneWidget);
         expect(tester.takeException(), isNull);
       },
     );
@@ -938,7 +872,7 @@ void main() {
     );
 
     test(
-      'CompanyProfileService caches workspace snapshot cleanly and markConversationRead persists read IDs',
+      'CompanyProfileService caches workspace snapshot cleanly',
       () async {
         await AppDataService.instance.saveAuthSession(
           role: 'Company',
@@ -997,35 +931,11 @@ void main() {
         );
         expect(CompanyProjectService().allProjects.length, 1);
         expect(CompanyProfileService.hasLoadedWorkspace, isTrue);
-
-        // Verify unread message markConversationRead zeroes unread & persists read IDs across init
-        SharedPreferences.setMockInitialValues({
-          'cc_is_logged_in_v1': true,
-          'cc_user_id_v1': 'comp-user-1',
-          'cc_chat_conversations_v1':
-              '[{"id":"conv_1","peerUserId":"stu-1","company":"Ali Student","supervisor":"Ali Student","projectTitle":"AI Analytics","lastMessage":"Hello!","time":"1m ago","unread":2,"messages":[{"id":"m1","isMe":false,"sender":"Ali Student","text":"Hi","time":"2m ago"},{"id":"m2","isMe":false,"sender":"Ali Student","text":"Hello!","time":"1m ago"}]}]',
-        });
-        await AppDataService.instance.init();
-        expect(
-          AppDataService.instance.getConversation('conv_1')?['unread'],
-          2,
-        );
-        await AppDataService.instance.markConversationRead('conv_1');
-        expect(
-          AppDataService.instance.getConversation('conv_1')?['unread'],
-          0,
-        );
-
-        await AppDataService.instance.init();
-        expect(
-          AppDataService.instance.getConversation('conv_1')?['unread'],
-          0,
-        );
       },
     );
 
     testWidgets(
-      'CompanyDashboardScreen renders immediately without blocking sync spinner across tab navigation, and Student executive UI renders cleanly',
+      'CompanyDashboardScreen renders immediately without blocking sync spinner across tab navigation, and Student executive UI has zero messaging or notifications',
       (tester) async {
         tester.view.physicalSize = const Size(412, 915);
         tester.view.devicePixelRatio = 1.0;
@@ -1039,6 +949,8 @@ void main() {
           find.text('Synchronizing Corporate Workspace...'),
           findsNothing,
         );
+        expect(find.byIcon(Icons.notifications_none_rounded), findsNothing);
+        expect(find.byIcon(Icons.chat_bubble_outline_rounded), findsNothing);
 
         await tester.tap(find.text('Projects'));
         await tester.pumpAndSettle();
@@ -1062,7 +974,8 @@ void main() {
         expect(find.byType(ExecutiveHeroBanner), findsOneWidget);
         expect(find.byType(ExecutiveStatCard), findsNWidgets(4));
         expect(find.text('Workspace Overview'), findsOneWidget);
-        expect(find.byTooltip('Messages'), findsOneWidget);
+        expect(find.byTooltip('Messages'), findsNothing);
+        expect(find.byIcon(Icons.chat_bubble_outline_rounded), findsNothing);
         expect(find.byTooltip('Open Workspace Menu'), findsOneWidget);
         expect(tester.takeException(), isNull);
       },

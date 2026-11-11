@@ -6,7 +6,6 @@ import 'package:link_vibe/core/services/app_data_service.dart';
 import 'package:link_vibe/core/services/supabase_helper.dart';
 import 'package:link_vibe/core/widgets/skillbridge_logo.dart';
 import 'package:link_vibe/feature/admin/presentation/screens/admin_login_screen.dart';
-import 'package:link_vibe/feature/auth/presentation/screens/email_verification_screen.dart';
 import 'package:link_vibe/feature/auth/presentation/screens/reset_password_screen.dart';
 import 'package:link_vibe/feature/company/presentation/screens/company_main_nav.dart';
 import 'package:link_vibe/feature/company/services/company_profile_service.dart';
@@ -30,9 +29,6 @@ class _LoginScreenState extends State<LoginScreen> {
   late String _selectedRole;
   bool _isLoading = false;
   bool _obscurePassword = true;
-  bool _needsEmailConfirmation = false;
-  bool _isResendingConfirmation = false;
-  final ResendCooldown _resendCooldown = ResendCooldown();
   String? _errorBanner;
 
   @override
@@ -43,73 +39,14 @@ class _LoginScreenState extends State<LoginScreen> {
 
   @override
   void dispose() {
-    _resendCooldown.dispose();
     _emailController.dispose();
     _passwordController.dispose();
     super.dispose();
   }
 
-  Future<void> _resendVerificationEmail() async {
-    final email = _emailController.text.trim();
-    if (email.isEmpty ||
-        _isResendingConfirmation ||
-        _resendCooldown.isActive) {
-      return;
-    }
-    final supabase = SupabaseHelper.clientOrNull;
-    if (supabase == null) return;
-
-    setState(() => _isResendingConfirmation = true);
-    await AppDataService.instance.savePendingAuthContext(
-      flow: 'signup',
-      email: email,
-      role: _selectedRole,
-    );
-    try {
-      await supabase.auth.resend(
-        type: OtpType.signup,
-        email: email,
-        emailRedirectTo: SupabaseHelper.emailRedirectUrl,
-      );
-      if (!mounted) return;
-      _resendCooldown.start(() {
-        if (mounted) setState(() {});
-      });
-      Navigator.push(
-        context,
-        MaterialPageRoute(
-          builder: (_) => EmailVerificationScreen(
-            email: email,
-            role: _selectedRole,
-            isVerified: false,
-            initialInfo:
-                'Verification link & code resent to $email. Please check your inbox or spam folder.',
-          ),
-        ),
-      );
-    } catch (e) {
-      if (!mounted) return;
-      if (SupabaseHelper.isEmailRateLimitError(e) ||
-          SupabaseHelper.friendlyError(e).toLowerCase().contains('seconds')) {
-        _resendCooldown.start(
-          () {
-            if (mounted) setState(() {});
-          },
-          seconds: SupabaseHelper.extractRateLimitCooldownSeconds(e),
-        );
-      }
-      setState(() => _errorBanner = SupabaseHelper.friendlyError(e));
-    } finally {
-      if (mounted) {
-        setState(() => _isResendingConfirmation = false);
-      }
-    }
-  }
-
   Future<void> _handleLogin() async {
     setState(() {
       _errorBanner = null;
-      _needsEmailConfirmation = false;
     });
 
     if (!_formKey.currentState!.validate()) {
@@ -126,10 +63,23 @@ class _LoginScreenState extends State<LoginScreen> {
       // 1. Real Supabase Cloud Authentication (when initialized)
       final supabase = SupabaseHelper.clientOrNull;
       if (supabase != null) {
-        final authResponse = await supabase.auth.signInWithPassword(
-          email: email,
-          password: password,
-        );
+        AuthResponse authResponse;
+        try {
+          authResponse = await supabase.auth.signInWithPassword(
+            email: email,
+            password: password,
+          );
+        } on AuthException catch (loginErr) {
+          if (SupabaseHelper.isEmailNotConfirmedError(loginErr)) {
+            await SupabaseHelper.confirmUserEmailInApp(email);
+            authResponse = await supabase.auth.signInWithPassword(
+              email: email,
+              password: password,
+            );
+          } else {
+            rethrow;
+          }
+        }
         final user = authResponse.user;
         if (user == null) {
           throw const AuthException('Unable to verify account credentials.');
@@ -347,16 +297,7 @@ class _LoginScreenState extends State<LoginScreen> {
       });
     } on AuthException catch (e) {
       if (!mounted) return;
-      final needsConfirm = SupabaseHelper.isEmailNotConfirmedError(e);
-      if (needsConfirm) {
-        AppDataService.instance.savePendingAuthContext(
-          flow: 'signup',
-          email: email,
-          role: _selectedRole,
-        );
-      }
       setState(() {
-        _needsEmailConfirmation = needsConfirm;
         _errorBanner = SupabaseHelper.friendlyError(e);
       });
     } catch (e) {
@@ -371,146 +312,11 @@ class _LoginScreenState extends State<LoginScreen> {
   }
 
   void _openForgotPasswordDialog() {
-    final resetCtrl = TextEditingController(text: _emailController.text.trim());
-    bool submitting = false;
-    String? feedbackMsg;
-    bool isSuccess = false;
-
-    showDialog(
-      context: context,
-      builder: (ctx) => StatefulBuilder(
-        builder: (dialogCtx, setDialogState) => AlertDialog(
-          shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(18)),
-          title: Row(
-            children: [
-              const Icon(Icons.lock_reset_rounded, color: AppColors.primaryBlue),
-              const SizedBox(width: 10),
-              Expanded(
-                child: Text(
-                  'Reset Password',
-                  style: GoogleFonts.poppins(
-                    fontSize: 17,
-                    fontWeight: FontWeight.w700,
-                    color: AppColors.deepNavy,
-                  ),
-                ),
-              ),
-            ],
-          ),
-          content: ConstrainedBox(
-            constraints: const BoxConstraints(maxWidth: 400),
-            child: Column(
-              mainAxisSize: MainAxisSize.min,
-              crossAxisAlignment: CrossAxisAlignment.start,
-              children: [
-                Text(
-                  'Enter your registered email address and we will send a password recovery link.',
-                  style: GoogleFonts.inter(
-                    fontSize: 13,
-                    color: AppColors.grayText,
-                    height: 1.4,
-                  ),
-                ),
-                const SizedBox(height: 14),
-                TextField(
-                  controller: resetCtrl,
-                  keyboardType: TextInputType.emailAddress,
-                  decoration: const InputDecoration(
-                    labelText: 'Email Address',
-                    prefixIcon: Icon(Icons.email_outlined, size: 20),
-                  ),
-                ),
-                if (feedbackMsg != null) ...[
-                  const SizedBox(height: 12),
-                  Container(
-                    padding: const EdgeInsets.all(10),
-                    decoration: BoxDecoration(
-                      color: isSuccess ? AppColors.successBg : AppColors.errorBg,
-                      borderRadius: BorderRadius.circular(10),
-                    ),
-                    child: Text(
-                      feedbackMsg!,
-                      style: GoogleFonts.inter(
-                        fontSize: 12,
-                        fontWeight: FontWeight.w600,
-                        color: isSuccess
-                            ? const Color(0xFF166534)
-                            : const Color(0xFF991B1B),
-                      ),
-                    ),
-                  ),
-                ],
-              ],
-            ),
-          ),
-          actions: [
-            TextButton(
-              onPressed: () => Navigator.pop(ctx),
-              child: const Text('Close'),
-            ),
-            ElevatedButton(
-              onPressed: submitting
-                  ? null
-                  : () async {
-                      final target = resetCtrl.text.trim();
-                      if (target.isEmpty || !target.contains('@')) {
-                        setDialogState(() {
-                          isSuccess = false;
-                          feedbackMsg = 'Please enter a valid email address.';
-                        });
-                        return;
-                      }
-                      setDialogState(() {
-                        submitting = true;
-                        feedbackMsg = null;
-                      });
-                      try {
-                        final supabase = SupabaseHelper.clientOrNull;
-                        if (supabase == null) {
-                          throw Exception('Supabase client unavailable.');
-                        }
-                        await AppDataService.instance.savePendingAuthContext(
-                          flow: 'recovery',
-                          email: target,
-                          role: _selectedRole,
-                        );
-                        await supabase.auth.resetPasswordForEmail(
-                          target,
-                          redirectTo: SupabaseHelper.emailRedirectUrl,
-                        );
-                        if (!dialogCtx.mounted) return;
-                        Navigator.pop(dialogCtx);
-                        if (!mounted) return;
-                        Navigator.push(
-                          context,
-                          MaterialPageRoute(
-                            builder: (_) => ResetPasswordScreen(
-                              initialEmail: target,
-                              hasRecoverySession: false,
-                            ),
-                          ),
-                        );
-                      } catch (e) {
-                        if (!dialogCtx.mounted) return;
-                        setDialogState(() {
-                          submitting = false;
-                          isSuccess = false;
-                          feedbackMsg = SupabaseHelper.friendlyError(e);
-                        });
-                      }
-                    },
-              child: submitting
-                  ? const SizedBox(
-                      width: 16,
-                      height: 16,
-                      child: CircularProgressIndicator(
-                        strokeWidth: 2,
-                        color: Colors.white,
-                      ),
-                    )
-                  : const Text('Send Link'),
-            ),
-          ],
+    Navigator.push(
+      context,
+      MaterialPageRoute(
+        builder: (_) => ResetPasswordScreen(
+          initialEmail: _emailController.text.trim(),
         ),
       ),
     );
@@ -630,90 +436,13 @@ class _LoginScreenState extends State<LoginScreen> {
                                   ),
                                   const SizedBox(width: 8),
                                   Expanded(
-                                    child: Column(
-                                      crossAxisAlignment:
-                                          CrossAxisAlignment.start,
-                                      children: [
-                                        Text(
-                                          _errorBanner!,
-                                          style: GoogleFonts.inter(
-                                            fontSize: 12.5,
-                                            fontWeight: FontWeight.w600,
-                                            color: const Color(0xFF991B1B),
-                                          ),
-                                        ),
-                                        if (_needsEmailConfirmation) ...[
-                                          const SizedBox(height: 6),
-                                          Wrap(
-                                            spacing: 12,
-                                            runSpacing: 4,
-                                            children: [
-                                              TextButton(
-                                                style: TextButton.styleFrom(
-                                                  padding: EdgeInsets.zero,
-                                                  minimumSize: const Size(0, 0),
-                                                  tapTargetSize:
-                                                      MaterialTapTargetSize
-                                                          .shrinkWrap,
-                                                ),
-                                                onPressed: (_isResendingConfirmation ||
-                                                        _resendCooldown
-                                                            .isActive)
-                                                    ? null
-                                                    : _resendVerificationEmail,
-                                                child: Text(
-                                                  _isResendingConfirmation
-                                                      ? 'Sending...'
-                                                      : _resendCooldown.isActive
-                                                          ? 'Resend in ${_resendCooldown.remainingSeconds}s'
-                                                          : 'Resend verification email',
-                                                  style: GoogleFonts.inter(
-                                                    fontSize: 12,
-                                                    fontWeight: FontWeight.w700,
-                                                    color: AppColors.primaryBlue,
-                                                    decoration:
-                                                        TextDecoration.underline,
-                                                  ),
-                                                ),
-                                              ),
-                                              TextButton(
-                                                style: TextButton.styleFrom(
-                                                  padding: EdgeInsets.zero,
-                                                  minimumSize: const Size(0, 0),
-                                                  tapTargetSize:
-                                                      MaterialTapTargetSize
-                                                          .shrinkWrap,
-                                                ),
-                                                onPressed: () {
-                                                  Navigator.push(
-                                                    context,
-                                                    MaterialPageRoute(
-                                                      builder: (_) =>
-                                                          EmailVerificationScreen(
-                                                        email: _emailController
-                                                            .text
-                                                            .trim(),
-                                                        role: _selectedRole,
-                                                        isVerified: false,
-                                                      ),
-                                                    ),
-                                                  );
-                                                },
-                                                child: Text(
-                                                  'Verify via code',
-                                                  style: GoogleFonts.inter(
-                                                    fontSize: 12,
-                                                    fontWeight: FontWeight.w700,
-                                                    color: AppColors.deepNavy,
-                                                    decoration:
-                                                        TextDecoration.underline,
-                                                  ),
-                                                ),
-                                              ),
-                                            ],
-                                          ),
-                                        ],
-                                      ],
+                                    child: Text(
+                                      _errorBanner!,
+                                      style: GoogleFonts.inter(
+                                        fontSize: 12.5,
+                                        fontWeight: FontWeight.w600,
+                                        color: const Color(0xFF991B1B),
+                                      ),
                                     ),
                                   ),
                                 ],
@@ -750,7 +479,6 @@ class _LoginScreenState extends State<LoginScreen> {
                                         : () => setState(() {
                                               _selectedRole = role;
                                               _errorBanner = null;
-                                              _needsEmailConfirmation = false;
                                             }),
                                     child: AnimatedContainer(
                                       duration:
@@ -832,7 +560,7 @@ class _LoginScreenState extends State<LoginScreen> {
                               if (v.isEmpty) {
                                 return 'Email address is required';
                               }
-                              if (!v.contains('@') || !v.contains('.')) {
+                              if (!v.contains('@')) {
                                 return 'Enter a valid email address';
                               }
                               return null;

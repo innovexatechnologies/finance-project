@@ -8,7 +8,6 @@ import 'package:link_vibe/core/widgets/executive_ui.dart';
 import 'package:link_vibe/core/widgets/student_avatar.dart';
 import 'package:link_vibe/core/services/supabase_helper.dart';
 import 'package:link_vibe/feature/student/certificates/presentation/screens/certificates_screen.dart';
-import 'package:link_vibe/feature/student/chat/presentation/screens/chat_list_screen.dart';
 import 'package:link_vibe/feature/student/saved/presentation/screens/saved_projects_screen.dart';
 import 'package:link_vibe/feature/student/settings/presentation/screens/settings_screen.dart';
 
@@ -884,24 +883,6 @@ class _StudentProfileScreenState extends State<StudentProfileScreen> {
                                 );
                               },
                               AppColors.primaryBlue,
-                            ),
-                            const Divider(
-                              height: 1,
-                              indent: 50,
-                              color: AppColors.borderLight,
-                            ),
-                            _buildMenuItem(
-                              Icons.chat_bubble_outline_rounded,
-                              'Messages with Companies',
-                              () {
-                                Navigator.push(
-                                  context,
-                                  MaterialPageRoute(
-                                    builder: (_) => const ChatListScreen(),
-                                  ),
-                                );
-                              },
-                              const Color(0xFF7C3AED),
                             ),
                           ],
                         ),

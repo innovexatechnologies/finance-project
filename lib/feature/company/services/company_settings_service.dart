@@ -79,8 +79,9 @@ class CompanySettingsService {
     required String newPassword,
   }) async {
     lastError = null;
-    if (currentPassword.isEmpty || newPassword.length < 6) {
-      lastError = 'New password must be at least 6 characters.';
+    final trimmedNew = newPassword.trim();
+    if (currentPassword.isEmpty || trimmedNew.isEmpty) {
+      lastError = 'Please enter your current and new password.';
       return false;
     }
 
@@ -100,7 +101,26 @@ class CompanySettingsService {
             SupabaseHelper.endInteractiveAuth();
           }
         }
-        await supabase.auth.updateUser(UserAttributes(password: newPassword));
+        try {
+          await supabase.auth.updateUser(UserAttributes(password: trimmedNew));
+        } on AuthException catch (e) {
+          if (email != null &&
+              email.isNotEmpty &&
+              SupabaseHelper.isWeakPasswordError(e)) {
+            await SupabaseHelper.resetPasswordInApp(
+              email: email,
+              newPassword: trimmedNew,
+            );
+          } else {
+            rethrow;
+          }
+        }
+        if (email != null && email.isNotEmpty) {
+          await AppDataService.instance.updateAccountPassword(
+            email,
+            trimmedNew,
+          );
+        }
         return true;
       } on AuthException catch (e) {
         lastError = e.message;
@@ -157,21 +177,6 @@ class CompanySettingsService {
           await supabase.from('companies').delete().eq('user_id', user.id);
         } catch (e) {
           debugPrint('Delete companies cleanup skipped: $e');
-        }
-
-        try {
-          await supabase
-              .from('messages')
-              .delete()
-              .or('sender_id.eq.${user.id},receiver_id.eq.${user.id}');
-        } catch (e) {
-          debugPrint('Delete messages cleanup skipped: $e');
-        }
-
-        try {
-          await supabase.from('notifications').delete().eq('user_id', user.id);
-        } catch (e) {
-          debugPrint('Delete notifications cleanup skipped: $e');
         }
 
         try {

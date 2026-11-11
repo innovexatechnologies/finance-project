@@ -5,7 +5,6 @@ import 'package:supabase_flutter/supabase_flutter.dart'
 import 'package:link_vibe/core/constants/app_colors.dart';
 import 'package:link_vibe/core/services/app_data_service.dart';
 import 'package:link_vibe/core/services/supabase_helper.dart';
-import 'package:link_vibe/feature/auth/presentation/screens/reset_password_screen.dart';
 
 class ChangePasswordScreen extends StatefulWidget {
   const ChangePasswordScreen({super.key});
@@ -19,7 +18,6 @@ class _ChangePasswordScreenState extends State<ChangePasswordScreen> {
   final _newPasswordController = TextEditingController();
   final _confirmPasswordController = TextEditingController();
 
-  bool _isSendingEmail = false;
   bool _isUpdatingPassword = false;
   bool _obscureNewPass = true;
   bool _obscureConfirmPass = true;
@@ -44,80 +42,8 @@ class _ChangePasswordScreenState extends State<ChangePasswordScreen> {
     super.dispose();
   }
 
-  Future<void> _handleSendResetEmail() async {
-    final email = _emailController.text.trim();
-    if (email.isEmpty || !email.contains('@')) {
-      ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(
-          content: Text('Please enter a valid email address'),
-          backgroundColor: Colors.redAccent,
-        ),
-      );
-      return;
-    }
-
-    final supabase = SupabaseHelper.clientOrNull;
-    if (supabase == null) {
-      ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(
-          content: Text(
-            'Cloud authentication service is unavailable. Connect to Supabase to send password reset emails.',
-          ),
-          backgroundColor: AppColors.statusPending,
-        ),
-      );
-      return;
-    }
-
-    setState(() => _isSendingEmail = true);
-
-    try {
-      await supabase.auth.resetPasswordForEmail(
-        email,
-        redirectTo: SupabaseHelper.emailRedirectUrl,
-      );
-
-      if (!mounted) return;
-      ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(
-          content: Text(
-            'Password reset link sent to $email. Please check your inbox or spam folder.',
-          ),
-          backgroundColor: AppColors.statusOpen,
-          duration: const Duration(seconds: 4),
-        ),
-      );
-      Navigator.push(
-        context,
-        MaterialPageRoute(
-          builder: (_) => ResetPasswordScreen(
-            initialEmail: email,
-            hasRecoverySession: false,
-          ),
-        ),
-      );
-    } on AuthException catch (e) {
-      if (!mounted) return;
-      ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(
-          content: Text(SupabaseHelper.friendlyError(e)),
-          backgroundColor: Colors.redAccent,
-        ),
-      );
-    } catch (e) {
-      if (!mounted) return;
-      ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(
-          content: Text(SupabaseHelper.friendlyError(e)),
-          backgroundColor: Colors.redAccent,
-        ),
-      );
-    } finally {
-      if (mounted) setState(() => _isSendingEmail = false);
-    }
-  }
-
   Future<void> _handleUpdatePassword() async {
+    final email = _emailController.text.trim();
     final newPass = _newPasswordController.text.trim();
     final confirmPass = _confirmPasswordController.text.trim();
 
@@ -125,16 +51,6 @@ class _ChangePasswordScreenState extends State<ChangePasswordScreen> {
       ScaffoldMessenger.of(context).showSnackBar(
         const SnackBar(
           content: Text('Please fill both password fields'),
-          backgroundColor: Colors.redAccent,
-        ),
-      );
-      return;
-    }
-
-    if (newPass.length < 6) {
-      ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(
-          content: Text('Password must be at least 6 characters long'),
           backgroundColor: Colors.redAccent,
         ),
       );
@@ -154,12 +70,28 @@ class _ChangePasswordScreenState extends State<ChangePasswordScreen> {
     setState(() => _isUpdatingPassword = true);
 
     try {
-      final email = _emailController.text.trim();
-
       final supabase = SupabaseHelper.clientOrNull;
       final user = supabase?.auth.currentUser;
       if (supabase != null && user != null) {
-        await supabase.auth.updateUser(UserAttributes(password: newPass));
+        try {
+          await supabase.auth.updateUser(UserAttributes(password: newPass));
+        } on AuthException catch (e) {
+          final targetEmail = email.isNotEmpty ? email : (user.email ?? '');
+          if (targetEmail.isNotEmpty &&
+              SupabaseHelper.isWeakPasswordError(e)) {
+            await SupabaseHelper.resetPasswordInApp(
+              email: targetEmail,
+              newPassword: newPass,
+            );
+          } else {
+            rethrow;
+          }
+        }
+      } else if (supabase != null && email.isNotEmpty) {
+        await SupabaseHelper.resetPasswordInApp(
+          email: email,
+          newPassword: newPass,
+        );
       }
 
       if (email.isNotEmpty) {
@@ -181,13 +113,16 @@ class _ChangePasswordScreenState extends State<ChangePasswordScreen> {
     } on AuthException catch (e) {
       if (!mounted) return;
       ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(content: Text(e.message), backgroundColor: Colors.redAccent),
+        SnackBar(
+          content: Text(SupabaseHelper.friendlyError(e)),
+          backgroundColor: Colors.redAccent,
+        ),
       );
     } catch (e) {
       if (!mounted) return;
       ScaffoldMessenger.of(context).showSnackBar(
         SnackBar(
-          content: Text('Unable to update password: $e'),
+          content: Text('Unable to update password: ${SupabaseHelper.friendlyError(e)}'),
           backgroundColor: Colors.redAccent,
         ),
       );
@@ -217,7 +152,6 @@ class _ChangePasswordScreenState extends State<ChangePasswordScreen> {
             child: Column(
               crossAxisAlignment: CrossAxisAlignment.start,
               children: [
-                // Header Info Card
                 Container(
                   padding: const EdgeInsets.all(16),
                   decoration: BoxDecoration(
@@ -249,7 +183,7 @@ class _ChangePasswordScreenState extends State<ChangePasswordScreen> {
                             ),
                             const SizedBox(height: 2),
                             Text(
-                              'Reset your password via your registered email link or update it directly for your active session.',
+                              'Update your SkillBridge password directly inside the app with no email verification required.',
                               style: GoogleFonts.inter(
                                 fontSize: 12,
                                 color: AppColors.darkText,
@@ -263,27 +197,19 @@ class _ChangePasswordScreenState extends State<ChangePasswordScreen> {
                 ),
                 const SizedBox(height: 24),
 
-                // Method 1: Email Reset Link
                 Text(
-                  'Reset via Email',
+                  'Account Email',
                   style: GoogleFonts.poppins(
-                    fontSize: 15,
-                    fontWeight: FontWeight.bold,
+                    fontSize: 14,
+                    fontWeight: FontWeight.w600,
                     color: AppColors.deepNavy,
                   ),
                 ),
-                const SizedBox(height: 6),
-                Text(
-                  'A password reset link will be sent to your registered email address.',
-                  style: GoogleFonts.inter(
-                      fontSize: 12, color: AppColors.grayText),
-                ),
-                const SizedBox(height: 12),
+                const SizedBox(height: 8),
                 TextField(
                   controller: _emailController,
                   keyboardType: TextInputType.emailAddress,
                   decoration: InputDecoration(
-                    labelText: 'Registered Email',
                     hintText: 'Enter your account email',
                     prefixIcon: const Icon(
                       Icons.email_outlined,
@@ -294,61 +220,7 @@ class _ChangePasswordScreenState extends State<ChangePasswordScreen> {
                     ),
                   ),
                 ),
-                const SizedBox(height: 12),
-                SizedBox(
-                  width: double.infinity,
-                  height: 48,
-                  child: ElevatedButton.icon(
-                    onPressed: _isSendingEmail ? null : _handleSendResetEmail,
-                    icon: _isSendingEmail
-                        ? const SizedBox(
-                            width: 18,
-                            height: 18,
-                            child: CircularProgressIndicator(
-                              color: Colors.white,
-                              strokeWidth: 2,
-                            ),
-                          )
-                        : const Icon(Icons.send_rounded, size: 18),
-                    label: Text(
-                      _isSendingEmail
-                          ? 'Sending Link...'
-                          : 'Send Password Reset Email',
-                      style: GoogleFonts.poppins(
-                        fontWeight: FontWeight.w600,
-                        fontSize: 14,
-                      ),
-                    ),
-                    style: ElevatedButton.styleFrom(
-                      backgroundColor: AppColors.primaryBlue,
-                      foregroundColor: Colors.white,
-                      shape: RoundedRectangleBorder(
-                        borderRadius: BorderRadius.circular(12),
-                      ),
-                    ),
-                  ),
-                ),
-                const SizedBox(height: 32),
-
-                // Method 2: Direct Password Update
-                Row(
-                  children: [
-                    const Expanded(child: Divider()),
-                    Padding(
-                      padding: const EdgeInsets.symmetric(horizontal: 12),
-                      child: Text(
-                        'OR UPDATE DIRECTLY',
-                        style: GoogleFonts.inter(
-                          fontSize: 11,
-                          fontWeight: FontWeight.bold,
-                          color: AppColors.grayText,
-                        ),
-                      ),
-                    ),
-                    const Expanded(child: Divider()),
-                  ],
-                ),
-                const SizedBox(height: 24),
+                const SizedBox(height: 16),
 
                 Text(
                   'New Password',
@@ -363,7 +235,7 @@ class _ChangePasswordScreenState extends State<ChangePasswordScreen> {
                   controller: _newPasswordController,
                   obscureText: _obscureNewPass,
                   decoration: InputDecoration(
-                    hintText: 'Enter new password (min. 6 chars)',
+                    hintText: 'Enter new password',
                     prefixIcon: const Icon(
                       Icons.lock_outline_rounded,
                       color: AppColors.primaryBlue,
@@ -418,7 +290,7 @@ class _ChangePasswordScreenState extends State<ChangePasswordScreen> {
                     ),
                   ),
                 ),
-                const SizedBox(height: 20),
+                const SizedBox(height: 22),
 
                 SizedBox(
                   width: double.infinity,

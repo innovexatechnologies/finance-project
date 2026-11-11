@@ -6,7 +6,6 @@ import 'package:link_vibe/core/services/supabase_helper.dart';
 import 'package:link_vibe/core/widgets/app_empty_state.dart';
 import 'package:link_vibe/core/widgets/executive_ui.dart';
 import 'package:link_vibe/core/widgets/status_badge.dart';
-import 'package:link_vibe/feature/student/chat/presentation/screens/chat_list_screen.dart';
 import 'package:link_vibe/feature/student/feedback/presentation/screens/feedback_screen.dart';
 import 'package:link_vibe/feature/student/submissions/presentation/screens/submit_work_screen.dart';
 
@@ -319,28 +318,6 @@ class _MyApplicationsScreenState extends State<MyApplicationsScreen> {
                           : 'Submit Deliverable',
                       style: GoogleFonts.poppins(fontSize: 12.5),
                     ),
-                  ),
-                  OutlinedButton.icon(
-                    style: OutlinedButton.styleFrom(
-                      padding: const EdgeInsets.symmetric(
-                          horizontal: 14, vertical: 9),
-                    ),
-                    onPressed: () async {
-                      await AppDataService.instance.openOrCreateConversation(
-                        companyName: company,
-                        peerUserId: app['companyUserId']?.toString(),
-                        projectTitle: title,
-                      );
-                      if (!context.mounted) return;
-                      Navigator.push(
-                        context,
-                        MaterialPageRoute(
-                            builder: (_) => const ChatListScreen()),
-                      );
-                    },
-                    icon: const Icon(Icons.chat_bubble_outline_rounded,
-                        size: 15),
-                    label: const Text('Message', style: TextStyle(fontSize: 12.5)),
                   ),
                 ],
               ),

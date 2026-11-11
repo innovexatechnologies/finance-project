@@ -84,7 +84,7 @@ class PrivacyPolicyScreen extends StatelessWidget {
           ),
           _buildSection(
             '3. How We Use Information',
-            'Your information is used strictly to:\n• Allow partner companies to review project applications.\n• Enable supervisors to communicate with assigned students.\n• Generate verified project completion certificates.',
+            'Your information is used strictly to:\n• Allow partner companies to review project applications.\n• Enable supervisors to review and evaluate assigned project deliverables.\n• Generate verified project completion certificates.',
           ),
           _buildSection(
             '4. Controlled Visibility & Sharing',

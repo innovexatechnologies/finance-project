@@ -12,7 +12,6 @@ import 'package:link_vibe/core/widgets/status_badge.dart';
 import 'package:link_vibe/core/widgets/student_avatar.dart';
 import 'package:link_vibe/feature/student/applications/presentation/screens/my_applications_screen.dart';
 import 'package:link_vibe/feature/student/certificates/presentation/screens/certificates_screen.dart';
-import 'package:link_vibe/feature/student/chat/presentation/screens/chat_list_screen.dart';
 import 'package:link_vibe/feature/student/explore/presentation/screens/explore_projects_screen.dart';
 import 'package:link_vibe/feature/student/project_details/presentation/screens/student_project_details_screen.dart';
 import 'package:link_vibe/feature/student/saved/presentation/screens/saved_projects_screen.dart';
@@ -118,9 +117,6 @@ class _StudentHomeScreenState extends State<StudentHomeScreen> {
         final completedProjects =
             AppDataService.instance.completedProjectsCount;
         final certs = AppDataService.instance.certificatesCount;
-        final totalUnreadChats = AppDataService.instance
-            .getConversations()
-            .fold<int>(0, (sum, c) => sum + ((c['unread'] as int?) ?? 0));
 
         return Scaffold(
           backgroundColor: AppColors.background,
@@ -179,26 +175,6 @@ class _StudentHomeScreenState extends State<StudentHomeScreen> {
               ],
             ),
             actions: [
-              Padding(
-                padding: EdgeInsets.only(
-                  right: widget.onOpenDrawer != null ? 8 : 14,
-                ),
-                child: Center(
-                  child: ExecutiveHeaderIconButton(
-                    icon: Icons.chat_bubble_outline_rounded,
-                    tooltip: 'Messages',
-                    badgeCount: totalUnreadChats,
-                    onPressed: () {
-                      Navigator.push(
-                        context,
-                        MaterialPageRoute(
-                          builder: (_) => const ChatListScreen(),
-                        ),
-                      );
-                    },
-                  ),
-                ),
-              ),
               if (widget.onOpenDrawer != null)
                 Padding(
                   padding: const EdgeInsets.only(right: 14),
@@ -448,13 +424,12 @@ class _StudentHomeScreenState extends State<StudentHomeScreen> {
                             const SectionHeader(
                               title: 'Quick Actions',
                               subtitle:
-                                  'Explore projects, certificates & company messages',
+                                  'Explore projects, applications & certificates',
                             ),
                             const SizedBox(height: 12),
                             _buildQuickActionsGrid(
                               isWide: isWide,
                               isCompact: isCompact,
-                              unreadChats: totalUnreadChats,
                             ),
                             const SizedBox(height: 26),
 
@@ -621,7 +596,6 @@ class _StudentHomeScreenState extends State<StudentHomeScreen> {
   Widget _buildQuickActionsGrid({
     required bool isWide,
     required bool isCompact,
-    required int unreadChats,
   }) {
     final tiles = [
       _buildActionTile(
@@ -659,15 +633,15 @@ class _StudentHomeScreenState extends State<StudentHomeScreen> {
         },
       ),
       _buildActionTile(
-        icon: Icons.chat_bubble_outline_rounded,
-        title: unreadChats > 0 ? 'Messages ($unreadChats)' : 'Messages',
-        subtitle: 'Company chat',
+        icon: Icons.send_rounded,
+        title: 'Applications',
+        subtitle: 'Track proposals',
         color: AppColors.indigoAccent,
         bgColor: const Color(0xFFEDE9FE),
         onTap: () {
           Navigator.push(
             context,
-            MaterialPageRoute(builder: (_) => const ChatListScreen()),
+            MaterialPageRoute(builder: (_) => const MyApplicationsScreen()),
           );
         },
       ),

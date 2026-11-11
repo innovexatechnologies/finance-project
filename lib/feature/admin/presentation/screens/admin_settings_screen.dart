@@ -2387,7 +2387,7 @@ class _AdminSettingsScreenState extends State<AdminSettingsScreen>
                 controller: _newPasswordCtrl,
                 obscureText: true,
                 decoration: InputDecoration(
-                  labelText: 'New Password (Min 8 characters)',
+                  labelText: 'New Password',
                   border: OutlineInputBorder(
                     borderRadius: BorderRadius.circular(8),
                   ),
@@ -2433,11 +2433,11 @@ class _AdminSettingsScreenState extends State<AdminSettingsScreen>
                 : () async {
                     final newP = _newPasswordCtrl.text;
                     final confP = _confirmPasswordCtrl.text;
-                    if (newP.length < 8) {
+                    if (newP.trim().isEmpty) {
                       ScaffoldMessenger.of(context).showSnackBar(
                         const SnackBar(
                           content: Text(
-                            'New password must be at least 8 characters long.',
+                            'Please enter a new password.',
                           ),
                           behavior: SnackBarBehavior.floating,
                         ),

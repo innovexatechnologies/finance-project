@@ -46,11 +46,6 @@ class _SplashScreenState extends State<SplashScreen>
 
     _autoLoginTimer = Timer(const Duration(milliseconds: 220), () {
       if (!mounted) return;
-      if (SupabaseHelper.pendingEmailVerification ||
-          SupabaseHelper.pendingPasswordRecovery ||
-          SupabaseHelper.pendingAuthCallbackError != null) {
-        return;
-      }
       if (AppDataService.instance.isLoggedIn) {
         _bootstrapAndNavigate();
       }

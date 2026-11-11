@@ -219,31 +219,32 @@ void main() {
     expect(AppDataService.instance.getPrivacySettings()['profileVisibility'], isFalse);
   });
 
-  test('Persistent Chat & Company Messaging across app restarts', () async {
-    final convId = await AppDataService.instance.openOrCreateConversation(
-      companyName: 'Test Partner Corp',
-      supervisorName: 'Project Lead',
-      projectTitle: 'Cloud Migration',
+  test('In-app short password & credential update persists across app restarts', () async {
+    await AppDataService.instance.registerUserAccount(
+      email: 'direct@skillbridge.pk',
+      password: 'ab',
+      name: 'A',
+      university: 'X',
+      role: 'Student',
     );
-    expect(AppDataService.instance.getConversations(), isNotEmpty);
-
-    await AppDataService.instance.sendChatMessage(
-      conversationId: convId,
-      text: 'Here is my updated portfolio and deliverables link!',
+    expect(
+      AppDataService.instance.verifyLocalCredentials('direct@skillbridge.pk', 'ab'),
+      isTrue,
     );
 
-    final updatedConv = AppDataService.instance.getConversation(convId);
-    expect(updatedConv, isNotNull);
-    final msgs = updatedConv!['messages'] as List;
-    expect(msgs.any((m) => m['text'].toString().contains('updated portfolio')), isTrue);
+    await AppDataService.instance.updateAccountPassword('direct@skillbridge.pk', '123');
 
     // SIMULATE APP CLOSE & REOPEN
     await AppDataService.instance.init();
 
-    final reloadedConv = AppDataService.instance.getConversation(convId);
-    expect(reloadedConv, isNotNull);
-    final reloadedMsgs = reloadedConv!['messages'] as List;
-    expect(reloadedMsgs.any((m) => m['text'].toString().contains('updated portfolio')), isTrue);
+    expect(
+      AppDataService.instance.verifyLocalCredentials('direct@skillbridge.pk', 'ab'),
+      isFalse,
+    );
+    expect(
+      AppDataService.instance.verifyLocalCredentials('direct@skillbridge.pk', '123'),
+      isTrue,
+    );
   });
 
   test('Signup University and Profile Info Persistence', () async {

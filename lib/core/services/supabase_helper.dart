@@ -1,96 +1,24 @@
 import 'dart:async';
 import 'dart:math';
-import 'package:flutter/foundation.dart' show VoidCallback, kIsWeb;
 import 'package:supabase_flutter/supabase_flutter.dart';
 
 /// Safe wrapper & utilities for Supabase client access across runtime & tests.
 class SupabaseHelper {
   SupabaseHelper._();
 
-  static const String authRedirectUri =
-      'io.supabase.campusconnect://login-callback/';
-
-  /// Returns mobile deep-link callback URI on Android/iOS/desktop, or the
-  /// active web origin when running in Flutter Web (avoiding localhost:3000
-  /// Site URL blanks).
-  static String? get emailRedirectUrl {
-    if (!kIsWeb) return authRedirectUri;
-    final base = Uri.base;
-    if (base.hasAuthority &&
-        (base.scheme == 'http' || base.scheme == 'https')) {
-      return '${base.origin}/';
-    }
-    return null;
-  }
-
-  /// Guard set while LoginScreen / SignupScreen / AdminAuthService perform an
-  /// interactive auth call so the global deep-link listener only handles
-  /// external verification/recovery redirects.
   static bool isInteractiveAuthInProgress = false;
-  static DateTime? _lastInteractiveAuthAt;
 
   static void beginInteractiveAuth() {
     isInteractiveAuthInProgress = true;
-    _lastInteractiveAuthAt = DateTime.now();
   }
 
   static void endInteractiveAuth() {
     isInteractiveAuthInProgress = false;
-    _lastInteractiveAuthAt = DateTime.now();
-  }
-
-  static bool get shouldIgnoreSignedInEvent {
-    if (isInteractiveAuthInProgress) return true;
-    final last = _lastInteractiveAuthAt;
-    if (last != null &&
-        DateTime.now().difference(last) < const Duration(seconds: 2)) {
-      return true;
-    }
-    return false;
   }
 
   static void clearAuthFlags() {
     isInteractiveAuthInProgress = false;
-    _lastInteractiveAuthAt = null;
-    pendingPasswordRecovery = false;
-    pendingEmailVerification = false;
-    pendingAuthCallbackError = null;
-    pendingAuthFlow = null;
-    pendingAuthEmail = null;
-    pendingAuthRole = null;
   }
-
-  /// Set if a password recovery deep link arrives during app cold boot before
-  /// the widget tree mounts.
-  static bool pendingPasswordRecovery = false;
-
-  /// Set if a signup/verification deep link completes during cold boot before
-  /// the widget tree mounts.
-  static bool pendingEmailVerification = false;
-
-  /// Tracks the latest in-flight email auth flow (`'signup'` or `'recovery'`)
-  /// plus the email and portal role so deep-link error callbacks route cleanly.
-  static String? pendingAuthFlow;
-  static String? pendingAuthEmail;
-  static String? pendingAuthRole;
-
-  static void setPendingAuthContext({
-    required String flow,
-    String? email,
-    String? role,
-  }) {
-    pendingAuthFlow = flow;
-    if (email != null && email.trim().isNotEmpty) {
-      pendingAuthEmail = email.trim();
-    }
-    if (role != null && role.trim().isNotEmpty) {
-      pendingAuthRole = role.trim();
-    }
-  }
-
-  /// Captures an auth callback error (e.g. expired link or PKCE mismatch)
-  /// arriving during cold boot so the UI can show a dedicated recovery screen.
-  static String? pendingAuthCallbackError;
 
   static final Random _random = Random();
   static final RegExp _uuidRegex = RegExp(
@@ -247,12 +175,23 @@ class SupabaseHelper {
     return 'Student';
   }
 
+  static bool isWeakPasswordError(Object error) {
+    final msg = error is AuthException ? error.message : error.toString();
+    final lower = msg.toLowerCase();
+    final code = error is AuthException ? (error.code?.toLowerCase() ?? '') : '';
+    return code == 'weak_password' ||
+        lower.contains('password should be at least') ||
+        lower.contains('weak_password');
+  }
+
   static bool isEmailRateLimitError(Object error) {
     final msg = error is AuthException ? error.message : error.toString();
     final lower = msg.toLowerCase();
     final code = error is AuthException ? (error.code?.toLowerCase() ?? '') : '';
     return code == 'over_email_send_rate_limit' ||
+        code == 'over_request_rate_limit' ||
         lower.contains('over_email_send_rate_limit') ||
+        lower.contains('over_request_rate_limit') ||
         lower.contains('email rate limit exceeded');
   }
 
@@ -262,8 +201,7 @@ class SupabaseHelper {
     final code = error is AuthException ? (error.code?.toLowerCase() ?? '') : '';
     return code == 'email_not_confirmed' ||
         lower.contains('email_not_confirmed') ||
-        lower.contains('email not confirmed') ||
-        lower.contains('email is not verified');
+        lower.contains('email not confirmed');
   }
 
   static bool isAlreadyRegisteredError(Object error) {
@@ -276,31 +214,66 @@ class SupabaseHelper {
         lower.contains('already exists');
   }
 
-  /// Extracts a cooldown duration in seconds from rate-limit errors when
-  /// specified by GoTrue (e.g. "after 45 seconds"), falling back to [fallback].
-  static int extractRateLimitCooldownSeconds(
-    Object error, {
-    int fallback = 60,
-  }) {
-    final msg = error is AuthException ? error.message : error.toString();
-    final match = RegExp(
-      r'(\d+)\s*seconds?',
-      caseSensitive: false,
-    ).firstMatch(msg);
-    if (match != null) {
-      final parsed = int.tryParse(match.group(1) ?? '');
-      if (parsed != null && parsed > 0 && parsed <= 300) {
-        return parsed;
-      }
+  /// Best-effort SQL RPC call to auto-confirm an unconfirmed Supabase Auth user.
+  static Future<void> confirmUserEmailInApp(String email) async {
+    final supabase = clientOrNull;
+    final cleanEmail = email.trim().toLowerCase();
+    if (supabase == null || cleanEmail.isEmpty) return;
+    try {
+      await supabase.rpc(
+        'confirm_user_email_in_app',
+        params: {'target_email': cleanEmail},
+      );
+    } catch (_) {}
+  }
+
+  /// Creates an immediately confirmed Supabase Auth account directly in DB
+  /// (used when server SMTP or signup constraints block direct signup).
+  static Future<void> registerUserInApp({
+    required String email,
+    required String password,
+    required String name,
+    required String role,
+    required String organization,
+  }) async {
+    final supabase = clientOrNull;
+    if (supabase == null) {
+      throw const AuthException('Supabase client unavailable.');
     }
-    return fallback;
+    await supabase.rpc(
+      'register_user_in_app',
+      params: {
+        'target_email': email.trim().toLowerCase(),
+        'target_password': password.trim(),
+        'full_name': name.trim(),
+        'user_type': role.trim(),
+        'organization': organization.trim(),
+      },
+    );
+  }
+
+  /// Resets any registered user's password directly in Supabase via RPC.
+  static Future<void> resetPasswordInApp({
+    required String email,
+    required String newPassword,
+  }) async {
+    final supabase = clientOrNull;
+    if (supabase == null) {
+      throw const AuthException('Supabase client unavailable.');
+    }
+    await supabase.rpc(
+      'reset_user_password_in_app',
+      params: {
+        'target_email': email.trim().toLowerCase(),
+        'new_password': newPassword.trim(),
+      },
+    );
   }
 
   /// Converts raw network/auth/platform exceptions into readable UI messages.
   static String friendlyError(Object error) {
     final msg = error is AuthException ? error.message : error.toString();
     final lower = msg.toLowerCase();
-    final code = error is AuthException ? (error.code?.toLowerCase() ?? '') : '';
 
     if (lower.contains('failed host lookup') ||
         lower.contains('socketexception') ||
@@ -312,27 +285,16 @@ class SupabaseHelper {
         lower.contains('timed out')) {
       return 'Unable to reach the server. Please check your internet connection (Wi-Fi / Mobile Data) and try again.';
     }
-    if (isEmailRateLimitError(error)) {
-      return 'Email sending limit reached (Supabase free SMTP allows only 2 emails per hour). Please wait before requesting another email, use your 6-digit code in "Verify via code", or sign in with a verified account (or disable Confirm Email / configure Custom SMTP in Supabase Dashboard).';
-    }
-    if (code == 'over_request_rate_limit' ||
-        lower.contains('over_request_rate_limit') ||
-        lower.contains('for security purposes, you can only request this')) {
-      return 'Too many requests in a short time. Please wait 60 seconds and try again.';
-    }
     if (lower.contains('invalid login credentials')) {
       return 'Incorrect email or password. Please verify and try again.';
     }
-    if (lower.contains('email not confirmed')) {
-      return 'Email is not verified yet. Please confirm the link in your inbox before signing in.';
+    if (lower.contains('no account found')) {
+      return 'No account found for this email address.';
     }
     if (lower.contains('user already registered') ||
         lower.contains('already registered') ||
         lower.contains('already exists')) {
       return 'An account with this email already exists. Please sign in instead.';
-    }
-    if (lower.contains('password should be at least')) {
-      return 'Password must be at least 6 characters long.';
     }
 
     var cleaned = msg.trim();
@@ -340,38 +302,5 @@ class SupabaseHelper {
       cleaned = cleaned.substring('Exception: '.length).trim();
     }
     return cleaned.isEmpty ? 'Something went wrong. Please try again.' : cleaned;
-  }
-}
-
-/// Shared countdown timer preventing repeated email sends that exhaust
-/// Supabase's strict built-in SMTP hourly quota.
-class ResendCooldown {
-  Timer? _timer;
-  int _remainingSeconds = 0;
-
-  int get remainingSeconds => _remainingSeconds;
-  bool get isActive => _remainingSeconds > 0;
-
-  void start(VoidCallback onTick, {int seconds = 60}) {
-    _timer?.cancel();
-    _remainingSeconds = seconds;
-    onTick();
-    if (seconds <= 0) return;
-    _timer = Timer.periodic(const Duration(seconds: 1), (timer) {
-      if (_remainingSeconds <= 1) {
-        _remainingSeconds = 0;
-        timer.cancel();
-        _timer = null;
-      } else {
-        _remainingSeconds--;
-      }
-      onTick();
-    });
-  }
-
-  void dispose() {
-    _timer?.cancel();
-    _timer = null;
-    _remainingSeconds = 0;
   }
 }

@@ -48,19 +48,14 @@ class AppDataService extends ChangeNotifier {
   Map<String, dynamic> _profile = {};
   List<String> _skills = [];
   List<Map<String, dynamic>> _certificates = [];
-  List<Map<String, dynamic>> _conversations = [];
   List<Map<String, dynamic>> _supportTickets = [];
   Map<String, Map<String, dynamic>> _userAccounts = {};
-  final Set<String> _locallyReadMessageIds = <String>{};
-  String? _loadedReadIdsUserId;
-  String? _activeConversationId;
 
   static const Map<String, bool> _defaultPrivacySettings = {
     'profileVisibility': true,
     'showEmail': true,
     'showPhone': false,
     'publicPortfolio': true,
-    'allowCompanyMessages': true,
   };
 
   final Map<String, bool> _privacySettings =
@@ -80,51 +75,15 @@ class AppDataService extends ChangeNotifier {
   static const _kSkills = 'cc_skills_v1';
   static const _kCertificates = 'cc_certificates_v1';
   static const _kPrivacySettings = 'cc_privacy_prefs_v1';
-  static const _kChatConversations = 'cc_chat_conversations_v1';
   static const _kSupportTickets = 'cc_support_tickets_v1';
   static const _kUserAccounts = 'cc_user_accounts_v1';
-  static const _kPendingAuthFlow = 'cc_pending_auth_flow_v1';
-  static const _kPendingAuthEmail = 'cc_pending_auth_email_v1';
-  static const _kPendingAuthRole = 'cc_pending_auth_role_v1';
-  static const _kReadMessageIdsPrefix = 'cc_read_msg_ids_v1_';
   static const _kCompanyPanelCachePrefix = 'cc_company_panel_cache_v1_';
-
-  void setActiveConversation(String? conversationId) {
-    _activeConversationId = conversationId;
-  }
 
   String _scopeId([String? explicitUserId]) {
     final uid = (explicitUserId ?? _userId).trim();
     if (uid.isNotEmpty) return uid;
     final supaId = SupabaseHelper.currentUserId?.trim() ?? '';
     return supaId.isNotEmpty ? supaId : 'local';
-  }
-
-  void _ensureReadIdsLoaded([String? userId]) {
-    final uid = _scopeId(userId);
-    if (_loadedReadIdsUserId == uid || _prefs == null) return;
-    _loadedReadIdsUserId = uid;
-    _locallyReadMessageIds.clear();
-    final raw = _prefs!.getString('$_kReadMessageIdsPrefix$uid');
-    if (raw != null && raw.isNotEmpty) {
-      try {
-        final decoded = jsonDecode(raw);
-        if (decoded is List) {
-          _locallyReadMessageIds.addAll(decoded.map((e) => e.toString()));
-        }
-      } catch (_) {}
-    }
-  }
-
-  Future<void> _persistReadMessageIds([String? userId]) async {
-    if (_prefs == null) return;
-    final uid = _scopeId(userId);
-    final list = _locallyReadMessageIds.length > 500
-        ? _locallyReadMessageIds
-            .skip(_locallyReadMessageIds.length - 500)
-            .toList()
-        : _locallyReadMessageIds.toList();
-    await _prefs!.setString('$_kReadMessageIdsPrefix$uid', jsonEncode(list));
   }
 
   Future<void> saveCompanyPanelCache(Map<String, dynamic> cacheData) async {
@@ -176,17 +135,6 @@ class AppDataService extends ChangeNotifier {
     _userEmail = _prefs!.getString(_kUserEmail) ?? '';
     _userName = _prefs!.getString(_kUserName) ?? '';
     _userId = _prefs!.getString(_kUserId) ?? '';
-    _loadedReadIdsUserId = null;
-    _ensureReadIdsLoaded(_userId);
-
-    final savedFlow = _prefs!.getString(_kPendingAuthFlow);
-    if (savedFlow != null && savedFlow.isNotEmpty) {
-      SupabaseHelper.setPendingAuthContext(
-        flow: savedFlow,
-        email: _prefs!.getString(_kPendingAuthEmail),
-        role: _prefs!.getString(_kPendingAuthRole),
-      );
-    }
 
     // 1. Saved Projects
     _savedProjects = _decodeList(_prefs!.getString(_kSavedProjects));
@@ -269,27 +217,7 @@ class AppDataService extends ChangeNotifier {
       }
     }
 
-    // 11. Chat Conversations
-    _conversations = [];
-    final chatJson = _prefs!.getString(_kChatConversations);
-    if (chatJson != null) {
-      try {
-        final List decoded = jsonDecode(chatJson);
-        _conversations = decoded.map((e) {
-          final m = Map<String, dynamic>.from(e);
-          if (m['messages'] is List) {
-            m['messages'] = (m['messages'] as List)
-                .map((msg) => Map<String, dynamic>.from(msg as Map))
-                .toList();
-          }
-          return m;
-        }).toList();
-      } catch (e) {
-        debugPrint('Error loading conversations: $e');
-      }
-    }
-
-    // 12. Support Tickets
+    // 11. Support Tickets
     _supportTickets = _decodeList(_prefs!.getString(_kSupportTickets));
 
     // 13. Offline-test Local User Accounts Registry
@@ -675,108 +603,7 @@ class AppDataService extends ChangeNotifier {
           }
         }
 
-        // 8. Messages grouped into conversations
-        try {
-          _ensureReadIdsLoaded(user.id);
-          final msgRows = await supabase
-              .from('messages')
-              .select()
-              .or('sender_id.eq.${user.id},receiver_id.eq.${user.id}')
-              .order('created_at', ascending: true);
-
-          final List<String> autoMarkReadIds = [];
-          final Map<String, Map<String, dynamic>> convMap = {};
-          for (final raw in msgRows) {
-            final m = Map<String, dynamic>.from(raw);
-            final msgId = m['id']?.toString() ?? '';
-            final senderId = m['sender_id']?.toString() ?? '';
-            final receiverId = m['receiver_id']?.toString() ?? '';
-            final isMe = senderId == user.id;
-            final peerId = isMe ? receiverId : senderId;
-            final convId = (m['conversation_id']?.toString().isNotEmpty == true)
-                ? m['conversation_id'].toString()
-                : 'conv_${peerId.isNotEmpty ? peerId : (m['company_name'] ?? 'general')}';
-
-            final peerName = isMe
-                ? (m['receiver_name']?.toString().trim() ?? '')
-                : (m['sender_name']?.toString().trim() ?? '');
-            final rawCompany = m['company_name']?.toString().trim() ?? '';
-            final isCompanyUser = _userRole.toLowerCase() == 'company';
-            final companyName = isCompanyUser
-                ? (peerName.isNotEmpty
-                    ? peerName
-                    : (rawCompany.isNotEmpty ? rawCompany : 'Student'))
-                : (rawCompany.isNotEmpty
-                    ? rawCompany
-                    : (peerName.isNotEmpty ? peerName : 'Partner'));
-            final supervisorName =
-                peerName.isNotEmpty ? peerName : companyName;
-
-            convMap.putIfAbsent(
-              convId,
-              () => {
-                'id': convId,
-                'peerUserId': peerId,
-                'company': companyName,
-                'supervisor': supervisorName,
-                'projectTitle': m['project_title']?.toString() ?? '',
-                'lastMessage': '',
-                'time': 'Recently',
-                'unread': 0,
-                'messages': <Map<String, dynamic>>[],
-              },
-            );
-
-            final entry = convMap[convId]!;
-            final text = m['message_text']?.toString() ?? '';
-            final relTime = SupabaseHelper.formatRelativeTime(m['created_at']);
-            final msgs = entry['messages'] as List<Map<String, dynamic>>;
-
-            msgs.add({
-              'id': msgId,
-              'isMe': isMe,
-              'sender': isMe ? 'Me' : supervisorName,
-              'text': text,
-              'time': relTime,
-            });
-            entry['lastMessage'] = text;
-            entry['time'] = relTime;
-
-            final isOpenThread =
-                _activeConversationId != null && _activeConversationId == convId;
-            final isLocallyRead =
-                msgId.isNotEmpty && _locallyReadMessageIds.contains(msgId);
-            if (!isMe && m['is_read'] != true && isOpenThread) {
-              if (msgId.isNotEmpty) {
-                _locallyReadMessageIds.add(msgId);
-                if (SupabaseHelper.isUuid(msgId)) autoMarkReadIds.add(msgId);
-              }
-            } else if (!isMe && m['is_read'] != true && !isLocallyRead) {
-              entry['unread'] = (entry['unread'] as int) + 1;
-            }
-          }
-
-          if (autoMarkReadIds.isNotEmpty) {
-            await _persistReadMessageIds(user.id);
-            try {
-              await supabase
-                  .from('messages')
-                  .update({'is_read': true})
-                  .inFilter('id', autoMarkReadIds)
-                  .eq('receiver_id', user.id);
-            } catch (_) {}
-          }
-
-          _conversations = convMap.values.toList().reversed.toList();
-          await _prefs?.setString(
-            _kChatConversations,
-            jsonEncode(_conversations),
-          );
-        } catch (e) {
-          debugPrint('Error fetching messages: $e');
-        }
-
-        // 9. Support Tickets
+        // 8. Support Tickets
         try {
           final ticketRows = await supabase
               .from('support_tickets')
@@ -842,101 +669,6 @@ class AppDataService extends ChangeNotifier {
       _isSyncing = false;
       _safeNotifyListeners();
     }
-  }
-
-  /// Fetches active partner contacts for initiating real Supabase chats.
-  /// For students: lists registered companies & active application companies.
-  /// For companies: lists registered students & project applicants.
-  Future<List<Map<String, dynamic>>> fetchAvailableChatContacts() async {
-    final List<Map<String, dynamic>> contacts = [];
-    final Set<String> seenIds = {};
-    final isCompanyUser = _userRole.toLowerCase() == 'company';
-
-    final supabase = SupabaseHelper.clientOrNull;
-    if (supabase != null) {
-      if (isCompanyUser) {
-        try {
-          final rows = await supabase
-              .from('students')
-              .select(
-                'id, user_id, full_name, university, degree, department, verification_status',
-              )
-              .order('full_name');
-          for (final raw in rows) {
-            final row = Map<String, dynamic>.from(raw);
-            final uid = row['user_id']?.toString() ?? '';
-            if (uid.isEmpty || uid == _userId || seenIds.contains(uid)) continue;
-            seenIds.add(uid);
-            final fullName = (row['full_name']?.toString().trim().isNotEmpty == true)
-                ? row['full_name'].toString().trim()
-                : 'Student';
-            final university = row['university']?.toString().trim() ?? '';
-            final degree = row['degree']?.toString().trim() ?? '';
-            final department = row['department']?.toString().trim() ?? '';
-            contacts.add({
-              'userId': uid,
-              'companyName': fullName,
-              'supervisorName': [
-                if (degree.isNotEmpty) degree,
-                if (university.isNotEmpty) university,
-              ].join(' • '),
-              'industry': department.isNotEmpty ? department : university,
-              'isVerified': row['verification_status'] == 'verified',
-            });
-          }
-        } catch (e) {
-          debugPrint('Error fetching student chat contacts: $e');
-        }
-      } else {
-        try {
-          final rows = await supabase
-              .from('companies')
-              .select(
-                'id, user_id, company_name, contact_person, industry, verification_status',
-              )
-              .order('company_name');
-          for (final raw in rows) {
-            final row = Map<String, dynamic>.from(raw);
-            final uid = row['user_id']?.toString() ?? '';
-            if (uid.isEmpty || uid == _userId || seenIds.contains(uid)) continue;
-            seenIds.add(uid);
-            contacts.add({
-              'userId': uid,
-              'companyName': row['company_name']?.toString() ?? 'Company Partner',
-              'supervisorName':
-                  (row['contact_person']?.toString().trim().isNotEmpty == true)
-                      ? row['contact_person'].toString().trim()
-                      : (row['company_name']?.toString() ?? 'Team Lead'),
-              'industry': row['industry']?.toString() ?? '',
-              'isVerified': row['verification_status'] == 'verified',
-            });
-          }
-        } catch (e) {
-          debugPrint('Error fetching company chat contacts: $e');
-        }
-      }
-    }
-
-    if (!isCompanyUser) {
-      // Fallback to companies discovered on loaded applications if needed
-      for (final app in _applications) {
-        final uid = app['companyUserId']?.toString() ?? '';
-        final comp = app['company']?.toString() ?? '';
-        if (comp.isEmpty) continue;
-        final key = uid.isNotEmpty ? uid : comp.toLowerCase();
-        if (seenIds.contains(key)) continue;
-        seenIds.add(key);
-        contacts.add({
-          'userId': uid,
-          'companyName': comp,
-          'supervisorName': '$comp Team',
-          'industry': 'Active Application',
-          'isVerified': true,
-        });
-      }
-    }
-
-    return contacts;
   }
 
   String _formatDbDate(dynamic raw) {
@@ -1523,210 +1255,6 @@ class AppDataService extends ChangeNotifier {
   }
 
   // ===========================================================================
-  // CHAT & MESSAGING (REAL PERSISTENCE ONLY — ZERO SIMULATED REPLIES)
-  // ===========================================================================
-
-  List<Map<String, dynamic>> getConversations() =>
-      List.unmodifiable(_conversations);
-
-  Map<String, dynamic>? getConversation(String id) {
-    try {
-      return _conversations.firstWhere((c) => c['id'] == id);
-    } catch (_) {
-      return null;
-    }
-  }
-
-  /// Opens an existing conversation thread with a company/peer or creates one cleanly.
-  Future<String> openOrCreateConversation({
-    required String companyName,
-    String? peerUserId,
-    String? supervisorName,
-    String? projectTitle,
-  }) async {
-    final cleanPeerId = (peerUserId ?? '').trim();
-    final existing = _conversations.firstWhere(
-      (c) {
-        if (cleanPeerId.isNotEmpty && c['peerUserId'] == cleanPeerId) {
-          return true;
-        }
-        return (c['company']?.toString().toLowerCase() ?? '') ==
-            companyName.trim().toLowerCase();
-      },
-      orElse: () => {},
-    );
-
-    if (existing.isNotEmpty) {
-      return existing['id'].toString();
-    }
-
-    final myId = SupabaseHelper.currentUserId ?? _userId;
-    final convId = (SupabaseHelper.isUuid(myId) &&
-            SupabaseHelper.isUuid(cleanPeerId))
-        ? 'conv_${myId}_$cleanPeerId'
-        : 'conv_${DateTime.now().millisecondsSinceEpoch}';
-
-    final newConv = <String, dynamic>{
-      'id': convId,
-      'peerUserId': cleanPeerId,
-      'company': companyName.trim().isNotEmpty ? companyName.trim() : 'Partner',
-      'supervisor':
-          (supervisorName != null && supervisorName.trim().isNotEmpty)
-              ? supervisorName.trim()
-              : companyName.trim(),
-      'projectTitle': projectTitle ?? '',
-      'lastMessage': 'No messages yet',
-      'time': 'Now',
-      'unread': 0,
-      'messages': <Map<String, dynamic>>[],
-    };
-
-    _conversations.insert(0, newConv);
-    _safeNotifyListeners();
-    if (_prefs != null) {
-      await _prefs!.setString(_kChatConversations, jsonEncode(_conversations));
-    }
-    return convId;
-  }
-
-  Future<void> markConversationRead(String conversationId) async {
-    final conv = _conversations.firstWhere(
-      (c) => c['id'] == conversationId,
-      orElse: () => {},
-    );
-    if (conv.isEmpty) return;
-
-    final supabase = SupabaseHelper.clientOrNull;
-    final user = supabase?.auth.currentUser;
-    _ensureReadIdsLoaded(user?.id);
-
-    final rawMsgs = conv['messages'] as List? ?? [];
-    final incomingUuids = <String>[];
-    var addedAnyReadId = false;
-
-    for (final raw in rawMsgs) {
-      if (raw is! Map) continue;
-      if (raw['isMe'] == true) continue;
-      final mid = raw['id']?.toString().trim() ?? '';
-      if (mid.isNotEmpty && _locallyReadMessageIds.add(mid)) {
-        addedAnyReadId = true;
-      }
-      if (SupabaseHelper.isUuid(mid)) {
-        incomingUuids.add(mid);
-      }
-    }
-
-    final hadUnread = (conv['unread'] as int? ?? 0) > 0;
-    if (hadUnread || addedAnyReadId) {
-      conv['unread'] = 0;
-      _safeNotifyListeners();
-      if (_prefs != null) {
-        await _prefs!.setString(
-          _kChatConversations,
-          jsonEncode(_conversations),
-        );
-      }
-      await _persistReadMessageIds(user?.id);
-    }
-
-    if (supabase != null && user != null && (hadUnread || addedAnyReadId)) {
-      try {
-        await supabase
-            .from('messages')
-            .update({'is_read': true})
-            .eq('conversation_id', conversationId)
-            .eq('receiver_id', user.id);
-      } catch (_) {}
-
-      final peerId = conv['peerUserId']?.toString().trim() ?? '';
-      if (SupabaseHelper.isUuid(peerId)) {
-        try {
-          await supabase
-              .from('messages')
-              .update({'is_read': true})
-              .eq('sender_id', peerId)
-              .eq('receiver_id', user.id);
-        } catch (_) {}
-      }
-
-      if (incomingUuids.isNotEmpty) {
-        try {
-          await supabase
-              .from('messages')
-              .update({'is_read': true})
-              .inFilter('id', incomingUuids)
-              .eq('receiver_id', user.id);
-        } catch (_) {}
-      }
-    }
-  }
-
-  Future<void> sendChatMessage({
-    required String conversationId,
-    required String text,
-  }) async {
-    final cleanText = text.trim();
-    if (cleanText.isEmpty) return;
-
-    final conv = _conversations.firstWhere(
-      (c) => c['id'] == conversationId,
-      orElse: () => {},
-    );
-    if (conv.isEmpty) return;
-
-    const nowTime = 'Just now';
-    final senderName = _profile['name']?.toString().isNotEmpty == true
-        ? _profile['name'].toString()
-        : (_userName.isNotEmpty ? _userName : 'Me');
-    final userMsg = {
-      'id': SupabaseHelper.generateUuid(),
-      'isMe': true,
-      'sender': senderName,
-      'text': cleanText,
-      'time': nowTime,
-    };
-
-    final List<Map<String, dynamic>> msgs =
-        List<Map<String, dynamic>>.from(conv['messages'] as List? ?? []);
-    msgs.add(userMsg);
-    conv['messages'] = msgs;
-    conv['lastMessage'] = cleanText;
-    conv['time'] = nowTime;
-
-    _safeNotifyListeners();
-
-    if (_prefs != null) {
-      await _prefs!.setString(_kChatConversations, jsonEncode(_conversations));
-    }
-
-    final supabase = SupabaseHelper.clientOrNull;
-    final user = supabase?.auth.currentUser;
-    if (supabase != null && user != null) {
-      final peerUserId = conv['peerUserId']?.toString();
-      try {
-        await supabase.from('messages').insert({
-          'id': userMsg['id'],
-          'conversation_id': conversationId,
-          'sender_id': user.id,
-          if (SupabaseHelper.isUuid(peerUserId)) 'receiver_id': peerUserId,
-          'sender_name': senderName,
-          'receiver_name': conv['supervisor'] ?? conv['company'] ?? 'Partner',
-          'company_name': _userRole.toLowerCase() == 'company'
-              ? senderName
-              : (conv['company'] ?? ''),
-          'project_title': conv['projectTitle'] ?? '',
-          'message_text': cleanText,
-          'is_read': false,
-          'created_at': DateTime.now().toIso8601String(),
-        });
-
-      } catch (e) {
-        debugPrint('Supabase message insert error: $e');
-      }
-    }
-  }
-
-  // ===========================================================================
   // SUPPORT TICKETS
   // ===========================================================================
 
@@ -1830,38 +1358,6 @@ class AppDataService extends ChangeNotifier {
     }
   }
 
-  Future<void> savePendingAuthContext({
-    required String flow,
-    String? email,
-    String? role,
-  }) async {
-    SupabaseHelper.setPendingAuthContext(
-      flow: flow,
-      email: email,
-      role: role,
-    );
-    if (_prefs != null) {
-      await _prefs!.setString(_kPendingAuthFlow, flow);
-      if (email != null && email.trim().isNotEmpty) {
-        await _prefs!.setString(_kPendingAuthEmail, email.trim());
-      }
-      if (role != null && role.trim().isNotEmpty) {
-        await _prefs!.setString(_kPendingAuthRole, role.trim());
-      }
-    }
-  }
-
-  Future<void> clearPendingAuthContext() async {
-    SupabaseHelper.pendingAuthFlow = null;
-    SupabaseHelper.pendingAuthEmail = null;
-    SupabaseHelper.pendingAuthRole = null;
-    if (_prefs != null) {
-      await _prefs!.remove(_kPendingAuthFlow);
-      await _prefs!.remove(_kPendingAuthEmail);
-      await _prefs!.remove(_kPendingAuthRole);
-    }
-  }
-
   /// Clears all user-scoped state & preferences so switching accounts never leaks data.
   Future<void> clearAuthSession() async {
     final previousUid = _scopeId();
@@ -1872,9 +1368,6 @@ class AppDataService extends ChangeNotifier {
     _userEmail = '';
     _userName = '';
     _userId = '';
-    _activeConversationId = null;
-    _loadedReadIdsUserId = null;
-    _locallyReadMessageIds.clear();
     SupabaseHelper.clearAuthFlags();
 
     await clearCompanyPanelCache(previousUid);
@@ -1885,7 +1378,6 @@ class AppDataService extends ChangeNotifier {
     _profile = {};
     _skills = [];
     _certificates = [];
-    _conversations = [];
     _supportTickets = [];
     _privacySettings
       ..clear()
@@ -1905,12 +1397,8 @@ class AppDataService extends ChangeNotifier {
       await _prefs!.remove(_kProfile);
       await _prefs!.remove(_kSkills);
       await _prefs!.remove(_kCertificates);
-      await _prefs!.remove(_kChatConversations);
       await _prefs!.remove(_kSupportTickets);
       await _prefs!.remove(_kPrivacySettings);
-      await _prefs!.remove(_kPendingAuthFlow);
-      await _prefs!.remove(_kPendingAuthEmail);
-      await _prefs!.remove(_kPendingAuthRole);
     }
   }
 

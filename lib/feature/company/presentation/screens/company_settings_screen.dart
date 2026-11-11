@@ -104,7 +104,7 @@ class _CompanySettingsScreenState extends State<CompanySettingsScreen> {
                     ),
                     const SizedBox(height: 8),
                     Text(
-                      'Ensure your corporate account uses a strong password with at least 6 characters.',
+                      'Update the password for your corporate workspace.',
                       style: GoogleFonts.inter(
                         fontSize: 12.5,
                         color: AppColors.grayText,
@@ -218,9 +218,9 @@ class _CompanySettingsScreenState extends State<CompanySettingsScreen> {
                                   );
                                   return;
                                 }
-                                if (newP.length < 6) {
+                                if (newP.isEmpty) {
                                   setModalState(
-                                    () => errorMessage = 'New password must be at least 6 characters.',
+                                    () => errorMessage = 'Please enter a new password.',
                                   );
                                   return;
                                 }

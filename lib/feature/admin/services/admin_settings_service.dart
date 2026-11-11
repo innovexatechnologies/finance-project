@@ -1231,12 +1231,24 @@ class AdminSettingsService {
     required String newPassword,
     required String adminEmail,
   }) async {
-    if (newPassword.length < 8) return false;
+    final trimmedNew = newPassword.trim();
+    if (trimmedNew.isEmpty) return false;
 
     final supabase = SupabaseHelper.clientOrNull;
     if (supabase != null && supabase.auth.currentUser != null) {
       try {
-        await supabase.auth.updateUser(UserAttributes(password: newPassword));
+        try {
+          await supabase.auth.updateUser(UserAttributes(password: trimmedNew));
+        } on AuthException catch (e) {
+          if (SupabaseHelper.isWeakPasswordError(e)) {
+            await SupabaseHelper.resetPasswordInApp(
+              email: adminEmail,
+              newPassword: trimmedNew,
+            );
+          } else {
+            rethrow;
+          }
+        }
       } catch (e) {
         debugPrint('AdminSettingsService changePassword error: $e');
         return false;

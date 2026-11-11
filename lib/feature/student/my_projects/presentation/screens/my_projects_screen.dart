@@ -8,7 +8,6 @@ import 'package:link_vibe/core/widgets/app_empty_state.dart';
 import 'package:link_vibe/core/widgets/executive_ui.dart';
 import 'package:link_vibe/core/widgets/status_badge.dart';
 import 'package:link_vibe/feature/student/certificates/presentation/screens/certificates_screen.dart';
-import 'package:link_vibe/feature/student/chat/presentation/screens/chat_list_screen.dart';
 import 'package:link_vibe/feature/student/feedback/presentation/screens/feedback_screen.dart';
 import 'package:link_vibe/feature/student/project_details/presentation/screens/student_project_details_screen.dart';
 import 'package:link_vibe/feature/student/submissions/presentation/screens/submit_work_screen.dart';
@@ -81,23 +80,6 @@ class _MyProjectsScreenState extends State<MyProjectsScreen>
         setState(() => _isRefreshing = false);
       }
     }
-  }
-
-  Future<void> _openCompanyChat(Map<String, dynamic> project) async {
-    final company = (project['company']?.toString().trim().isNotEmpty == true)
-        ? project['company'].toString().trim()
-        : 'Partner Company';
-    await AppDataService.instance.openOrCreateConversation(
-      companyName: company,
-      peerUserId: project['companyUserId']?.toString(),
-      supervisorName: '$company Lead',
-      projectTitle: project['title']?.toString(),
-    );
-    if (!mounted) return;
-    Navigator.push(
-      context,
-      MaterialPageRoute(builder: (_) => const ChatListScreen()),
-    );
   }
 
   @override
@@ -400,15 +382,6 @@ class _MyProjectsScreenState extends State<MyProjectsScreen>
                     );
                   },
                   child: const Text('Details'),
-                ),
-                OutlinedButton.icon(
-                  style: OutlinedButton.styleFrom(
-                    padding: const EdgeInsets.symmetric(
-                        horizontal: 12, vertical: 10),
-                  ),
-                  onPressed: () => _openCompanyChat(project),
-                  icon: const Icon(Icons.chat_bubble_outline_rounded, size: 15),
-                  label: const Text('Message'),
                 ),
                 OutlinedButton.icon(
                   style: OutlinedButton.styleFrom(

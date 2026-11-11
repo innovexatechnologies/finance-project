@@ -46,12 +46,6 @@ class _HelpCenterScreenState extends State<HelpCenterScreen> {
       'category': 'Certificates',
     },
     {
-      'question': 'How does messaging and company communication work?',
-      'answer':
-          'You can communicate directly with assigned company leads via the Messages & Chat section. All project conversations and supervisor notes are safely stored and updated in real-time.',
-      'category': 'Communication',
-    },
-    {
       'question': 'Can I edit my profile information after signing up?',
       'answer':
           'Yes. Open the Profile tab and tap the "Edit Profile" button to update your name, university, skills, and bio at any time.',
