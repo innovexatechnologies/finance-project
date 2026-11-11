@@ -156,7 +156,7 @@ class AdminProjectService {
   }
 
   (AdminProjectStatus, AdminPublicationStatus) _parseDbStatus(String dbStatus) {
-    switch (dbStatus.toLowerCase()) {
+    switch (dbStatus.trim().toLowerCase()) {
       case 'draft':
         return (AdminProjectStatus.draft, AdminPublicationStatus.unpublished);
       case 'pending review':
@@ -166,6 +166,8 @@ class AdminProjectService {
           AdminPublicationStatus.pendingModeration,
         );
       case 'in progress':
+      case 'in_progress':
+      case 'ongoing':
       case 'active':
         return (AdminProjectStatus.active, AdminPublicationStatus.published);
       case 'completed':

@@ -216,9 +216,15 @@ class AdminStudentService {
       for (final entry in profilesById.entries) {
         if (seenUserIds.contains(entry.key)) continue;
         final p = entry.value;
-        final name = (p['name']?.toString().trim().isNotEmpty == true)
-            ? p['name'].toString().trim()
-            : 'Student Member';
+        final accStatusRaw =
+            p['account_status']?.toString().trim().toLowerCase() ?? '';
+        final rawProfileName = p['name']?.toString().trim() ?? '';
+        if (accStatusRaw == 'deleted' ||
+            rawProfileName.toLowerCase() == 'deleted account') {
+          continue;
+        }
+        final name =
+            rawProfileName.isNotEmpty ? rawProfileName : 'Student Member';
         final createdDt =
             SupabaseHelper.parseDate(p['created_at']) ?? DateTime.now();
         final regDate =

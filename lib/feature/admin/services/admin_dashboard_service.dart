@@ -50,7 +50,7 @@ class AdminDashboardService {
       ValueNotifier<List<AdminActivityItem>>([]);
 
   final ValueNotifier<String> selectedDateRangeNotifier =
-      ValueNotifier<String>('Last 30 Days');
+      ValueNotifier<String>('All Time');
   final ValueNotifier<bool> isLoadingNotifier = ValueNotifier<bool>(false);
 
   void _initListeners() {
@@ -66,8 +66,10 @@ class AdminDashboardService {
   }
 
   /// Loads every dataset for the entire Admin Console directly from Supabase.
-  Future<void> loadAllAdminData() async {
-    isLoadingNotifier.value = true;
+  Future<void> loadAllAdminData({bool showLoading = true}) async {
+    if (showLoading) {
+      isLoadingNotifier.value = true;
+    }
     try {
       await Future.wait([
         AdminCompanyService().loadFromSupabase(),
@@ -84,7 +86,9 @@ class AdminDashboardService {
     } catch (e) {
       debugPrint('AdminDashboardService loadAllAdminData error: $e');
     } finally {
-      isLoadingNotifier.value = false;
+      if (isLoadingNotifier.value) {
+        isLoadingNotifier.value = false;
+      }
     }
   }
 
@@ -421,7 +425,7 @@ class AdminDashboardService {
   }
 
   void reset() {
-    selectedDateRangeNotifier.value = 'Last 30 Days';
+    selectedDateRangeNotifier.value = 'All Time';
     isLoadingNotifier.value = false;
     activitiesNotifier.value = [];
     statsNotifier.value = const PlatformStatsModel(
