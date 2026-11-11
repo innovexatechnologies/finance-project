@@ -16,10 +16,15 @@ import 'package:link_vibe/feature/admin/presentation/screens/admin_login_screen.
 import 'package:link_vibe/feature/auth/presentation/screens/login_screen.dart';
 import 'package:link_vibe/feature/auth/presentation/screens/reset_password_screen.dart';
 import 'package:link_vibe/feature/auth/presentation/screens/signup_screen.dart';
+import 'package:link_vibe/feature/company/models/applicant_model.dart';
+import 'package:link_vibe/feature/company/models/assignment_model.dart';
 import 'package:link_vibe/feature/company/models/company_profile_model.dart';
 import 'package:link_vibe/feature/company/models/project_model.dart';
 import 'package:link_vibe/feature/company/presentation/screens/company_dashboard.dart';
 import 'package:link_vibe/feature/company/presentation/screens/company_main_nav.dart';
+import 'package:link_vibe/feature/company/presentation/screens/company_profile_screen.dart';
+import 'package:link_vibe/feature/company/services/company_applicant_service.dart';
+import 'package:link_vibe/feature/company/services/company_assignment_service.dart';
 import 'package:link_vibe/feature/company/services/company_profile_service.dart';
 import 'package:link_vibe/feature/company/services/company_project_service.dart';
 import 'package:link_vibe/feature/splash/presentation/screens/splash_screen.dart';
@@ -935,48 +940,273 @@ void main() {
     );
 
     testWidgets(
-      'CompanyDashboardScreen renders immediately without blocking sync spinner across tab navigation, and Student executive UI has zero messaging or notifications',
+      'CompanyPanel navbar, quick actions, and drawer work without freezing under AppTheme; StudentPanel uses crisp IndexedStack without rolling animation or navbar duplicates in drawer',
       (tester) async {
         tester.view.physicalSize = const Size(412, 915);
         tester.view.devicePixelRatio = 1.0;
         addTearDown(() => tester.view.resetPhysicalSize());
 
-        await tester.pumpWidget(const MaterialApp(home: CompanyMainNav()));
-        await tester.pump(const Duration(milliseconds: 50));
-
-        expect(find.byType(CompanyDashboardScreen), findsOneWidget);
-        expect(
-          find.text('Synchronizing Corporate Workspace...'),
-          findsNothing,
+        CompanyProfileService().currentProfileNotifier.value =
+            const CompanyProfileModel(
+          id: 'comp-nav-1',
+          companyName: 'FastCloud Labs',
+          industry: 'Cloud Services',
+          description: 'Cloud Systems',
+          officialEmail: 'hr@fastcloud.io',
+          websiteUrl: 'https://fastcloud.io',
+          contactPersonName: 'Sara',
+          phoneNumber: '03001234567',
+          city: 'Lahore',
+          completeAddress: 'Gulberg',
+          logoInitial: 'FL',
+          isVerified: true,
+          lastUpdated: 'Just now',
         );
-        expect(find.byIcon(Icons.notifications_none_rounded), findsNothing);
-        expect(find.byIcon(Icons.chat_bubble_outline_rounded), findsNothing);
-
-        await tester.tap(find.text('Projects'));
-        await tester.pumpAndSettle();
-        await tester.tap(find.text('Home'));
-        await tester.pumpAndSettle();
-
-        expect(
-          find.text('Synchronizing Corporate Workspace...'),
-          findsNothing,
-        );
-        expect(find.text('Workspace Overview'), findsOneWidget);
-        expect(tester.takeException(), isNull);
+        CompanyProjectService().projectsNotifier.value = [
+          ProjectModel(
+            id: 'proj-nav-1',
+            title: 'AI Analytics Platform',
+            category: 'Web Development',
+            description: 'Metrics platform',
+            requirements: 'Flutter',
+            skillsRequired: ['Flutter', 'REST API'],
+            deliverables: 'Dashboard App',
+            deadline: '2026-12-30',
+            projectType: 'Remote',
+            openings: 2,
+            additionalInstructions: '',
+            companyName: 'FastCloud Labs',
+            companyId: 'comp-nav-1',
+            status: 'Open',
+            duration: '4 weeks',
+            budget: 'Paid',
+          ),
+        ];
+        CompanyApplicantService().applicantsNotifier.value = [
+          ApplicantModel(
+            id: 'app-nav-1',
+            studentId: 'stu-nav-1',
+            projectId: 'proj-nav-1',
+            projectTitle: 'AI Analytics Platform',
+            name: 'Zara Khan',
+            email: 'zara@nust.edu.pk',
+            university: 'NUST',
+            degree: 'BSCS',
+            cgpa: 3.8,
+            skills: ['Flutter'],
+            appliedDate: 'Today',
+            proposalSummary: 'Experienced developer',
+            status: 'Pending',
+          ),
+        ];
+        CompanyAssignmentService().assignmentsNotifier.value = [
+          const AssignmentModel(
+            id: 'assign-nav-1',
+            companyId: 'comp-nav-1',
+            projectId: 'proj-nav-1',
+            projectTitle: 'AI Analytics Platform',
+            projectCategory: 'Web Development',
+            projectStatus: 'In Progress',
+            startDate: 'Today',
+            deadline: '2026-12-30',
+            studentId: 'stu-nav-1',
+            applicantId: 'app-nav-1',
+            studentName: 'Zara Khan',
+            studentUniversity: 'NUST',
+            studentDegree: 'BSCS',
+            studentAvatarInitial: 'ZK',
+            progress: 0.4,
+          ),
+        ];
 
         await tester.pumpWidget(
-          const MaterialApp(
-            key: ValueKey('student_exec_nav'),
-            home: StudentMainNav(),
+          MaterialApp(
+            theme: AppTheme.lightTheme,
+            home: const CompanyMainNav(),
           ),
         );
         await tester.pumpAndSettle();
+
+        expect(find.byType(CompanyDashboardScreen), findsOneWidget);
+        expect(find.byKey(const ValueKey('company_nav_stack')), findsOneWidget);
+        expect(
+          find.text('Synchronizing Corporate Workspace...'),
+          findsNothing,
+        );
+
+        // Verify ALL 5 BottomNavigationBar tabs respond and switch IndexedStack index
+        final companyNav = find.byType(BottomNavigationBar);
+        await tester.tap(
+          find.descendant(of: companyNav, matching: find.text('Projects')),
+        );
+        await tester.pumpAndSettle();
+        expect(
+          tester
+              .widget<IndexedStack>(find.byKey(const ValueKey('company_nav_stack')))
+              .index,
+          1,
+        );
+        expect(find.text('Company Projects'), findsOneWidget);
+
+        await tester.tap(
+          find.descendant(of: companyNav, matching: find.text('Post')),
+        );
+        await tester.pumpAndSettle();
+        expect(
+          tester
+              .widget<IndexedStack>(find.byKey(const ValueKey('company_nav_stack')))
+              .index,
+          2,
+        );
+        expect(find.text('Create Industry Project Challenge'), findsOneWidget);
+
+        await tester.tap(
+          find.descendant(of: companyNav, matching: find.text('Applicants')),
+        );
+        await tester.pumpAndSettle();
+        expect(
+          tester
+              .widget<IndexedStack>(find.byKey(const ValueKey('company_nav_stack')))
+              .index,
+          3,
+        );
+        expect(find.text('Student Applicants'), findsOneWidget);
+
+        await tester.tap(
+          find.descendant(of: companyNav, matching: find.text('Deliverables')),
+        );
+        await tester.pumpAndSettle();
+        expect(
+          tester
+              .widget<IndexedStack>(find.byKey(const ValueKey('company_nav_stack')))
+              .index,
+          4,
+        );
+        expect(find.text('Assigned Projects'), findsOneWidget);
+
+        await tester.tap(
+          find.descendant(of: companyNav, matching: find.text('Home')),
+        );
+        await tester.pumpAndSettle();
+        expect(
+          tester
+              .widget<IndexedStack>(find.byKey(const ValueKey('company_nav_stack')))
+              .index,
+          0,
+        );
+        expect(find.text('Workspace Overview'), findsOneWidget);
+
+        // Verify Dashboard Quick Action buttons also work cleanly
+        await tester.ensureVisible(find.text('Post Challenge'));
+        await tester.tap(find.text('Post Challenge'));
+        await tester.pumpAndSettle();
+        expect(
+          tester
+              .widget<IndexedStack>(find.byKey(const ValueKey('company_nav_stack')))
+              .index,
+          2,
+        );
+        await tester.tap(
+          find.descendant(of: companyNav, matching: find.text('Home')),
+        );
+        await tester.pumpAndSettle();
+
+        // Verify Company Drawer opens & does not duplicate navbar 'Home' item
+        await tester.tap(find.byTooltip('Open Workspace Menu'));
+        await tester.pumpAndSettle();
+        final companyDrawer = find.byType(Drawer);
+        expect(companyDrawer, findsOneWidget);
+        expect(
+          find.descendant(of: companyDrawer, matching: find.text('Home')),
+          findsNothing,
+        );
+        expect(
+          find.descendant(
+            of: companyDrawer,
+            matching: find.text('Company Profile'),
+          ),
+          findsOneWidget,
+        );
+        await tester.tap(
+          find.descendant(
+            of: companyDrawer,
+            matching: find.text('Company Profile'),
+          ),
+        );
+        await tester.pumpAndSettle();
+        expect(find.byType(CompanyProfileScreen), findsOneWidget);
+        expect(tester.takeException(), isNull);
+
+        // Verify Student Panel: no cube transition & drawer removes navbar duplicates
+        expect(
+          AppTheme.lightTheme.pageTransitionsTheme.builders[TargetPlatform.android],
+          isA<FadeUpwardsPageTransitionsBuilder>(),
+        );
+        await tester.pumpWidget(
+          MaterialApp(
+            key: const ValueKey('student_exec_nav'),
+            theme: AppTheme.lightTheme,
+            home: const StudentMainNav(),
+          ),
+        );
+        await tester.pumpAndSettle();
+        expect(find.byKey(const ValueKey('student_nav_stack')), findsOneWidget);
         expect(find.byType(ExecutiveHeroBanner), findsOneWidget);
         expect(find.byType(ExecutiveStatCard), findsNWidgets(4));
-        expect(find.text('Workspace Overview'), findsOneWidget);
-        expect(find.byTooltip('Messages'), findsNothing);
-        expect(find.byIcon(Icons.chat_bubble_outline_rounded), findsNothing);
         expect(find.byTooltip('Open Workspace Menu'), findsOneWidget);
+
+        final studentNav = find.byType(BottomNavigationBar);
+        for (final tab in ['Explore', 'My Projects', 'Profile', 'Home']) {
+          await tester.tap(
+            find.descendant(of: studentNav, matching: find.text(tab)),
+          );
+          await tester.pumpAndSettle();
+        }
+        expect(
+          tester
+              .widget<IndexedStack>(find.byKey(const ValueKey('student_nav_stack')))
+              .index,
+          0,
+        );
+
+        await tester.tap(find.byTooltip('Open Workspace Menu'));
+        await tester.pumpAndSettle();
+        final studentDrawer = find.byType(Drawer);
+        expect(studentDrawer, findsOneWidget);
+        for (final navDup in ['Home', 'Explore', 'My Projects', 'Profile']) {
+          expect(
+            find.descendant(of: studentDrawer, matching: find.text(navDup)),
+            findsNothing,
+          );
+        }
+        expect(
+          find.descendant(
+            of: studentDrawer,
+            matching: find.text('My Applications'),
+          ),
+          findsOneWidget,
+        );
+        expect(
+          find.descendant(
+            of: studentDrawer,
+            matching: find.text('Saved Projects'),
+          ),
+          findsOneWidget,
+        );
+        expect(
+          find.descendant(
+            of: studentDrawer,
+            matching: find.text('Certificates'),
+          ),
+          findsOneWidget,
+        );
+        expect(
+          find.descendant(
+            of: studentDrawer,
+            matching: find.text('Settings & Help'),
+          ),
+          findsOneWidget,
+        );
         expect(tester.takeException(), isNull);
       },
     );

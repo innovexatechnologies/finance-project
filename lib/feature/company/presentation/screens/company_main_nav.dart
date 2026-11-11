@@ -3,7 +3,6 @@ import 'package:flutter/services.dart';
 import 'package:google_fonts/google_fonts.dart';
 import 'package:link_vibe/core/constants/app_colors.dart';
 import 'package:link_vibe/core/services/supabase_helper.dart';
-import 'package:link_vibe/core/widgets/rubik_cube_transition.dart';
 import 'package:link_vibe/feature/auth/presentation/screens/login_screen.dart';
 import 'package:link_vibe/feature/company/models/applicant_model.dart';
 import 'package:link_vibe/feature/company/models/assignment_model.dart';
@@ -33,12 +32,11 @@ class _CompanyMainNavState extends State<CompanyMainNav> {
   late int _currentIndex;
   final List<int> _tabHistory = [0];
   DateTime? _lastBackPressTime;
-  GlobalKey<ScaffoldState>? _scaffoldKeyCache;
-  bool? _isSyncingWorkspace;
+  final GlobalKey<ScaffoldState> _scaffoldKey = GlobalKey<ScaffoldState>();
+  bool _isSyncingWorkspace = false;
+  bool _isDrawerOpen = false;
 
-  GlobalKey<ScaffoldState> get _scaffoldKey =>
-      _scaffoldKeyCache ??= GlobalKey<ScaffoldState>();
-  bool get _isSyncing => _isSyncingWorkspace ?? false;
+  bool get _isSyncing => _isSyncingWorkspace;
 
   CompanyProfileService get _profileService => CompanyProfileService();
   CompanySettingsService get _settingsService => CompanySettingsService();
@@ -241,6 +239,7 @@ class _CompanyMainNavState extends State<CompanyMainNav> {
       CompanyDashboardScreen(
         onTabChange: _onTabChange,
         onOpenDrawer: _openDrawer,
+        isDrawerOpen: _isDrawerOpen,
       ),
       CompanyProjectsListScreen(onTabChange: _onTabChange),
       PostProjectScreen(onTabChange: _onTabChange),
@@ -318,9 +317,15 @@ class _CompanyMainNavState extends State<CompanyMainNav> {
       child: Scaffold(
         key: _scaffoldKey,
         endDrawerEnableOpenDragGesture: _currentIndex == 0,
+        onEndDrawerChanged: (isOpen) {
+          if (mounted && _isDrawerOpen != isOpen) {
+            setState(() => _isDrawerOpen = isOpen);
+          }
+        },
         endDrawer: _buildStandardDrawer(drawerWidth),
-        body: RubikCubeTabView(
-          currentIndex: _currentIndex,
+        body: IndexedStack(
+          key: const ValueKey('company_nav_stack'),
+          index: _currentIndex.clamp(0, screens.length - 1),
           children: screens,
         ),
         bottomNavigationBar: Container(
@@ -361,7 +366,7 @@ class _CompanyMainNavState extends State<CompanyMainNav> {
                           .length;
 
                       return BottomNavigationBar(
-                        currentIndex: _currentIndex,
+                        currentIndex: _currentIndex.clamp(0, 4),
                         onTap: _onTabChange,
                         backgroundColor: Colors.transparent,
                         elevation: 0,
@@ -577,14 +582,6 @@ class _CompanyMainNavState extends State<CompanyMainNav> {
                               child: Column(
                                 crossAxisAlignment: CrossAxisAlignment.stretch,
                                 children: [
-                                  _buildDrawerMenuRow(
-                                    icon: Icons.home_rounded,
-                                    accentColor: AppColors.primaryBlue,
-                                    title: 'Home',
-                                    isSelected: _currentIndex == 0,
-                                    onTap: () => _onTabChange(0),
-                                  ),
-                                  const SizedBox(height: 4),
                                   _buildDrawerMenuRow(
                                     icon: Icons.business_outlined,
                                     accentColor: AppColors.deepNavy,

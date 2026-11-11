@@ -3,7 +3,6 @@ import 'package:flutter/services.dart';
 import 'package:google_fonts/google_fonts.dart';
 import 'package:link_vibe/core/constants/app_colors.dart';
 import 'package:link_vibe/core/services/app_data_service.dart';
-import 'package:link_vibe/core/widgets/rubik_cube_transition.dart';
 import 'package:link_vibe/core/widgets/student_avatar.dart';
 import 'package:link_vibe/feature/admin/services/admin_auth_service.dart';
 import 'package:link_vibe/feature/auth/presentation/screens/login_screen.dart';
@@ -29,11 +28,8 @@ class _StudentMainNavState extends State<StudentMainNav> {
   late int _currentIndex;
   final List<int> _tabHistory = [0];
   DateTime? _lastBackPressTime;
-  GlobalKey<ScaffoldState>? _scaffoldKeyCache;
+  final GlobalKey<ScaffoldState> _scaffoldKey = GlobalKey<ScaffoldState>();
   bool _isSyncing = false;
-
-  GlobalKey<ScaffoldState> get _scaffoldKey =>
-      _scaffoldKeyCache ??= GlobalKey<ScaffoldState>();
 
   @override
   void initState() {
@@ -233,8 +229,9 @@ class _StudentMainNavState extends State<StudentMainNav> {
         key: _scaffoldKey,
         endDrawerEnableOpenDragGesture: _currentIndex == 0,
         endDrawer: _buildStandardDrawer(drawerWidth),
-        body: RubikCubeTabView(
-          currentIndex: _currentIndex,
+        body: IndexedStack(
+          key: const ValueKey('student_nav_stack'),
+          index: _currentIndex.clamp(0, screens.length - 1),
           children: screens,
         ),
         bottomNavigationBar: Container(
@@ -412,14 +409,6 @@ class _StudentMainNavState extends State<StudentMainNav> {
                     child: Column(
                       crossAxisAlignment: CrossAxisAlignment.stretch,
                       children: [
-                        _buildDrawerMenuRow(
-                          icon: Icons.home_rounded,
-                          accentColor: AppColors.primaryBlue,
-                          title: 'Home',
-                          isSelected: _currentIndex == 0,
-                          onTap: () => _onTabChange(0),
-                        ),
-                        const SizedBox(height: 4),
                         _buildDrawerMenuRow(
                           icon: Icons.send_outlined,
                           accentColor: AppColors.indigoAccent,

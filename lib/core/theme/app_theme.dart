@@ -1,7 +1,6 @@
 import 'package:flutter/material.dart';
 import 'package:google_fonts/google_fonts.dart';
 import 'package:link_vibe/core/constants/app_colors.dart';
-import 'package:link_vibe/core/widgets/rubik_cube_transition.dart';
 
 class AppTheme {
   static ThemeData get lightTheme {
@@ -180,11 +179,11 @@ class AppTheme {
       ),
       pageTransitionsTheme: const PageTransitionsTheme(
         builders: {
-          TargetPlatform.android: RubikCubePageTransitionsBuilder(),
-          TargetPlatform.iOS: RubikCubePageTransitionsBuilder(),
-          TargetPlatform.windows: RubikCubePageTransitionsBuilder(),
-          TargetPlatform.macOS: RubikCubePageTransitionsBuilder(),
-          TargetPlatform.linux: RubikCubePageTransitionsBuilder(),
+          TargetPlatform.android: FadeUpwardsPageTransitionsBuilder(),
+          TargetPlatform.iOS: FadeUpwardsPageTransitionsBuilder(),
+          TargetPlatform.windows: FadeUpwardsPageTransitionsBuilder(),
+          TargetPlatform.macOS: FadeUpwardsPageTransitionsBuilder(),
+          TargetPlatform.linux: FadeUpwardsPageTransitionsBuilder(),
         },
       ),
     );

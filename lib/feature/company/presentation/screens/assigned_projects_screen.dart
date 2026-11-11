@@ -1023,17 +1023,17 @@ class _AssignedProjectsScreenState extends State<AssignedProjectsScreen> {
               child: Column(
                 crossAxisAlignment: CrossAxisAlignment.start,
                 children: [
-                  Row(
-                    crossAxisAlignment: CrossAxisAlignment.start,
-                    children: [
-                      Expanded(
-                        child: InkWell(
-                          borderRadius: BorderRadius.circular(10),
-                          onTap: () => _navigateToProjectDetails(assignment),
-                          child: Column(
-                            crossAxisAlignment: CrossAxisAlignment.start,
-                            children: [
-                              Wrap(
+                  InkWell(
+                    borderRadius: BorderRadius.circular(10),
+                    onTap: () => _navigateToProjectDetails(assignment),
+                    child: Column(
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      children: [
+                        Row(
+                          crossAxisAlignment: CrossAxisAlignment.center,
+                          children: [
+                            Expanded(
+                              child: Wrap(
                                 spacing: 8,
                                 runSpacing: 6,
                                 crossAxisAlignment: WrapCrossAlignment.center,
@@ -1058,12 +1058,16 @@ class _AssignedProjectsScreenState extends State<AssignedProjectsScreen> {
                                           color: AppColors.primaryBlue,
                                         ),
                                         const SizedBox(width: 5),
-                                        Text(
-                                          assignment.projectCategory,
-                                          style: GoogleFonts.inter(
-                                            fontSize: 11,
-                                            fontWeight: FontWeight.w700,
-                                            color: AppColors.primaryBlue,
+                                        Flexible(
+                                          child: Text(
+                                            assignment.projectCategory,
+                                            maxLines: 1,
+                                            overflow: TextOverflow.ellipsis,
+                                            style: GoogleFonts.inter(
+                                              fontSize: 11,
+                                              fontWeight: FontWeight.w700,
+                                              color: AppColors.primaryBlue,
+                                            ),
                                           ),
                                         ),
                                       ],
@@ -1078,36 +1082,40 @@ class _AssignedProjectsScreenState extends State<AssignedProjectsScreen> {
                                         color: AppColors.grayText,
                                       ),
                                       const SizedBox(width: 4),
-                                      Text(
-                                        'Due ${assignment.deadline}',
-                                        style: GoogleFonts.inter(
-                                          fontSize: 11.5,
-                                          fontWeight: FontWeight.w500,
-                                          color: AppColors.grayText,
+                                      Flexible(
+                                        child: Text(
+                                          'Due ${assignment.deadline}',
+                                          maxLines: 1,
+                                          overflow: TextOverflow.ellipsis,
+                                          style: GoogleFonts.inter(
+                                            fontSize: 11.5,
+                                            fontWeight: FontWeight.w500,
+                                            color: AppColors.grayText,
+                                          ),
                                         ),
                                       ),
                                     ],
                                   ),
                                 ],
                               ),
-                              const SizedBox(height: 9),
-                              Text(
-                                assignment.projectTitle,
-                                style: GoogleFonts.poppins(
-                                  fontSize: 16,
-                                  fontWeight: FontWeight.w700,
-                                  color: AppColors.deepNavy,
-                                  height: 1.3,
-                                  letterSpacing: -0.2,
-                                ),
-                              ),
-                            ],
+                            ),
+                            const SizedBox(width: 8),
+                            StatusBadge(label: assignment.submissionStatus),
+                          ],
+                        ),
+                        const SizedBox(height: 9),
+                        Text(
+                          assignment.projectTitle,
+                          style: GoogleFonts.poppins(
+                            fontSize: 16,
+                            fontWeight: FontWeight.w700,
+                            color: AppColors.deepNavy,
+                            height: 1.3,
+                            letterSpacing: -0.2,
                           ),
                         ),
-                      ),
-                      const SizedBox(width: 8),
-                      StatusBadge(label: assignment.submissionStatus),
-                    ],
+                      ],
+                    ),
                   ),
                   const SizedBox(height: 14),
                   Material(
@@ -1241,15 +1249,19 @@ class _AssignedProjectsScreenState extends State<AssignedProjectsScreen> {
                               color: AppColors.primaryBlue,
                             ),
                             const SizedBox(width: 6),
-                            Text(
-                              'Milestone Completion',
-                              style: GoogleFonts.inter(
-                                fontSize: 12,
-                                fontWeight: FontWeight.w600,
-                                color: AppColors.darkText,
+                            Expanded(
+                              child: Text(
+                                'Milestone Completion',
+                                maxLines: 1,
+                                overflow: TextOverflow.ellipsis,
+                                style: GoogleFonts.inter(
+                                  fontSize: 12,
+                                  fontWeight: FontWeight.w600,
+                                  color: AppColors.darkText,
+                                ),
                               ),
                             ),
-                            const Spacer(),
+                            const SizedBox(width: 8),
                             Container(
                               padding: const EdgeInsets.symmetric(
                                 horizontal: 8,

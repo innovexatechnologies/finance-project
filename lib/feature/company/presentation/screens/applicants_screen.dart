@@ -342,9 +342,14 @@ class _ApplicantsScreenState extends State<ApplicantsScreen> {
           return ValueListenableBuilder<List<ApplicantModel>>(
             valueListenable: _applicantService.applicantsNotifier,
             builder: (context, allApplicants, _) {
+              final seenProjIds = <String>{};
+              final uniqueProjects = projects
+                  .where((p) => p.id.isNotEmpty && seenProjIds.add(p.id))
+                  .toList();
+
               final hasValidProjectSelection =
                   _currentProjectId != null &&
-                  projects.any((p) => p.id == _currentProjectId);
+                  uniqueProjects.any((p) => p.id == _currentProjectId);
               final effectiveProjectId =
                   hasValidProjectSelection ? _currentProjectId : null;
 
@@ -404,7 +409,7 @@ class _ApplicantsScreenState extends State<ApplicantsScreen> {
                 child: Column(
                   children: [
                     _buildTopFilters(
-                      projects: projects,
+                      projects: uniqueProjects,
                       projectScoped: projectScoped,
                       effectiveProjectId: effectiveProjectId,
                       totalCount: projectScoped.length,
