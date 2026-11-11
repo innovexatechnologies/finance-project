@@ -291,6 +291,9 @@ class SupabaseHelper {
     if (lower.contains('no account found')) {
       return 'No account found for this email address.';
     }
+    if (lower.contains('invalid api key')) {
+      return 'Invalid API key. Check SUPABASE_URL and SUPABASE_ANON_KEY in .env against your Supabase project API Keys, then restart the app.';
+    }
     if (lower.contains('user already registered') ||
         lower.contains('already registered') ||
         lower.contains('already exists')) {
