@@ -173,6 +173,141 @@ class AdminAnalyticsService {
     return points;
   }
 
+  /// Exact chronological day-by-day records (oldest -> newest) for daily student intake,
+  /// daily company registrations, student-vs-company comparison, and full daily record ledger.
+  List<DailyPlatformRecord> getDailyPlatformRecords(
+    AnalyticsTimeframe timeframe,
+  ) {
+    final students = _studentService.allStudents;
+    final companies = _companyService.allCompanies;
+    final projects = _projectService.allProjects;
+
+    final now = DateTime.now();
+    final today = DateTime(now.year, now.month, now.day);
+
+    DateTime dateOnly(DateTime dt) {
+      final local = dt.toLocal();
+      return DateTime(local.year, local.month, local.day);
+    }
+
+    String dayKey(DateTime d) =>
+        '${d.year.toString().padLeft(4, '0')}-${d.month.toString().padLeft(2, '0')}-${d.day.toString().padLeft(2, '0')}';
+
+    const months = [
+      'Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun',
+      'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec',
+    ];
+
+    final Map<String, List<AdminStudentModel>> studentsByDay = {};
+    for (final s in students) {
+      final k = dayKey(dateOnly(s.registrationDateTime));
+      studentsByDay.putIfAbsent(k, () => []).add(s);
+    }
+
+    final Map<String, List<AdminCompanyModel>> companiesByDay = {};
+    for (final c in companies) {
+      final k = dayKey(dateOnly(c.registrationDateTime));
+      companiesByDay.putIfAbsent(k, () => []).add(c);
+    }
+
+    final Map<String, List<AdminProjectModel>> projectsByDay = {};
+    for (final p in projects) {
+      final k = dayKey(dateOnly(p.createdDateTime));
+      projectsByDay.putIfAbsent(k, () => []).add(p);
+    }
+
+    DateTime startDay;
+    switch (timeframe) {
+      case AnalyticsTimeframe.last7Days:
+        startDay = today.subtract(const Duration(days: 6));
+        break;
+      case AnalyticsTimeframe.last30Days:
+        startDay = today.subtract(const Duration(days: 29));
+        break;
+      case AnalyticsTimeframe.thisQuarter:
+        startDay = today.subtract(const Duration(days: 89));
+        break;
+      case AnalyticsTimeframe.thisYear:
+        startDay = DateTime(today.year, 1, 1);
+        break;
+      case AnalyticsTimeframe.allTime:
+        final dates = <DateTime>[
+          for (final s in students) dateOnly(s.registrationDateTime),
+          for (final c in companies) dateOnly(c.registrationDateTime),
+          for (final p in projects) dateOnly(p.createdDateTime),
+        ];
+        if (dates.isEmpty) {
+          startDay = today.subtract(const Duration(days: 6));
+        } else {
+          dates.sort();
+          final earliest = dates.first;
+          final minWindow = today.subtract(const Duration(days: 6));
+          startDay = earliest.isBefore(minWindow) ? earliest : minWindow;
+        }
+        break;
+    }
+
+    final Set<DateTime> daysToInclude = {};
+    if (today.difference(startDay).inDays <= 60) {
+      for (int i = 0; !startDay.add(Duration(days: i)).isAfter(today); i++) {
+        daysToInclude.add(startDay.add(Duration(days: i)));
+      }
+    } else {
+      // Include recent 30 days continuously plus every earlier recorded day with activity
+      final recentStart = today.subtract(const Duration(days: 29));
+      for (int i = 0; !recentStart.add(Duration(days: i)).isAfter(today); i++) {
+        daysToInclude.add(recentStart.add(Duration(days: i)));
+      }
+      for (final s in students) {
+        final d = dateOnly(s.registrationDateTime);
+        if (!d.isBefore(startDay) && !d.isAfter(today)) daysToInclude.add(d);
+      }
+      for (final c in companies) {
+        final d = dateOnly(c.registrationDateTime);
+        if (!d.isBefore(startDay) && !d.isAfter(today)) daysToInclude.add(d);
+      }
+      for (final p in projects) {
+        final d = dateOnly(p.createdDateTime);
+        if (!d.isBefore(startDay) && !d.isAfter(today)) daysToInclude.add(d);
+      }
+    }
+
+    final sortedDays = daysToInclude.toList()..sort();
+    final firstIncludedDay = sortedDays.isNotEmpty ? sortedDays.first : startDay;
+
+    int runningStudents = students
+        .where((s) => dateOnly(s.registrationDateTime).isBefore(firstIncludedDay))
+        .length;
+    int runningCompanies = companies
+        .where((c) => dateOnly(c.registrationDateTime).isBefore(firstIncludedDay))
+        .length;
+
+    return sortedDays.map((day) {
+      final k = dayKey(day);
+      final dayStudents = studentsByDay[k] ?? const [];
+      final dayCompanies = companiesByDay[k] ?? const [];
+      final dayProjects = projectsByDay[k] ?? const [];
+
+      runningStudents += dayStudents.length;
+      runningCompanies += dayCompanies.length;
+
+      final monthName = months[day.month - 1];
+      return DailyPlatformRecord(
+        date: day,
+        dateKey: k,
+        shortLabel: '${day.day} $monthName',
+        fullDateLabel: '${day.day} $monthName ${day.year}',
+        studentCount: dayStudents.length,
+        companyCount: dayCompanies.length,
+        projectCount: dayProjects.length,
+        totalStudentsToDate: runningStudents,
+        totalCompaniesToDate: runningCompanies,
+        studentNames: dayStudents.map((s) => s.name).toList(),
+        companyNames: dayCompanies.map((c) => c.companyName).toList(),
+      );
+    }).toList();
+  }
+
   // 2. PROJECT & COMPLETION TRENDS (strictly from live projects)
   List<ProjectTrendPoint> getProjectTrends(
     AnalyticsTimeframe timeframe,
@@ -541,6 +676,18 @@ class AdminAnalyticsService {
     buffer.writeln('Export Generated: ${DateTime.now().toIso8601String()}');
     buffer.writeln('Selected Timeframe: ${timeframe.label}');
     buffer.writeln('Category Filter: $categoryFilter');
+    buffer.writeln('');
+    buffer.writeln(
+      'DATE,STUDENTS_JOINED,COMPANIES_REGISTERED,PROJECTS_CREATED,CUMULATIVE_STUDENTS,CUMULATIVE_COMPANIES',
+    );
+
+    final dailyRows = getDailyPlatformRecords(timeframe).reversed.toList();
+    for (final d in dailyRows) {
+      buffer.writeln(
+        '"${d.fullDateLabel}",${d.studentCount},${d.companyCount},${d.projectCount},${d.totalStudentsToDate},${d.totalCompaniesToDate}',
+      );
+    }
+
     buffer.writeln('');
     buffer.writeln(
       'PERIOD,STUDENT_REGISTRATIONS,COMPANY_REGISTRATIONS,PROJECTS_PUBLISHED,PROJECTS_COMPLETED,APPLICATIONS,COMPLETION_RATE_PCT,GROWTH_RATE_PCT,HEALTH_STATUS',

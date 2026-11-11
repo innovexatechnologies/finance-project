@@ -1,37 +1,24 @@
+import 'dart:math' as math;
+
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:google_fonts/google_fonts.dart';
 import 'package:link_vibe/core/constants/app_colors.dart';
-import 'package:link_vibe/core/widgets/app_empty_state.dart';
 import 'package:link_vibe/feature/admin/models/admin_analytics_model.dart';
-import 'package:link_vibe/feature/admin/models/admin_project_model.dart';
-import 'package:link_vibe/feature/admin/presentation/screens/admin_dashboard_screen.dart';
 import 'package:link_vibe/feature/admin/presentation/screens/admin_login_screen.dart';
-import 'package:link_vibe/feature/admin/presentation/screens/admin_settings_screen.dart';
-import 'package:link_vibe/feature/admin/presentation/screens/application_monitoring_screen.dart';
-import 'package:link_vibe/feature/admin/presentation/screens/certificate_management_screen.dart';
-import 'package:link_vibe/feature/admin/presentation/screens/company_management_screen.dart';
-import 'package:link_vibe/feature/admin/presentation/screens/company_verifications_screen.dart';
-import 'package:link_vibe/feature/admin/presentation/screens/project_management_screen.dart';
-import 'package:link_vibe/feature/admin/presentation/screens/student_management_screen.dart';
 import 'package:link_vibe/feature/admin/presentation/widgets/admin_sidebar.dart';
 import 'package:link_vibe/feature/admin/presentation/widgets/admin_top_navbar.dart';
 import 'package:link_vibe/feature/admin/presentation/widgets/bi_bar_chart.dart';
-import 'package:link_vibe/feature/admin/presentation/widgets/bi_donut_chart.dart';
 import 'package:link_vibe/feature/admin/presentation/widgets/bi_line_chart.dart';
 import 'package:link_vibe/feature/admin/services/admin_analytics_service.dart';
-import 'package:link_vibe/feature/admin/services/admin_application_monitoring_service.dart';
 import 'package:link_vibe/feature/admin/services/admin_auth_service.dart';
-import 'package:link_vibe/feature/admin/services/admin_certificate_service.dart';
 import 'package:link_vibe/feature/admin/services/admin_company_service.dart';
-import 'package:link_vibe/feature/admin/services/admin_dashboard_service.dart';
 import 'package:link_vibe/feature/admin/services/admin_project_service.dart';
-import 'package:link_vibe/feature/admin/services/admin_settings_service.dart';
 import 'package:link_vibe/feature/admin/services/admin_student_service.dart';
 
-/// Enterprise Reports & Business Intelligence Analytics Hub.
-/// Computes all KPIs, trends, category distributions, skills matrix,
-/// verification metrics, and printable reports strictly from live Supabase state.
+/// Reports & Analytics Hub showing daily Student intake graphs,
+/// daily Company registration graphs, complete day-by-day records,
+/// and live Student vs Company quantity comparison from Supabase.
 class ReportsAnalyticsScreen extends StatefulWidget {
   const ReportsAnalyticsScreen({super.key});
 
@@ -39,40 +26,34 @@ class ReportsAnalyticsScreen extends StatefulWidget {
   State<ReportsAnalyticsScreen> createState() => _ReportsAnalyticsScreenState();
 }
 
-class _ReportsAnalyticsScreenState extends State<ReportsAnalyticsScreen>
-    with SingleTickerProviderStateMixin {
+class _ReportsAnalyticsScreenState extends State<ReportsAnalyticsScreen> {
   final AdminAnalyticsService _analyticsService = AdminAnalyticsService();
   final AdminAuthService _authService = AdminAuthService();
   final GlobalKey<ScaffoldState> _scaffoldKey = GlobalKey<ScaffoldState>();
 
-  AnalyticsTimeframe _selectedTimeframe = AnalyticsTimeframe.last30Days;
-  String _selectedCategory = 'All Categories';
+  AnalyticsTimeframe _selectedTimeframe = AnalyticsTimeframe.allTime;
   bool _isSidebarCollapsed = false;
   bool _isRefreshing = false;
-
-  late TabController _tabController;
+  bool _onlyActivityDays = false;
+  bool _showAllLedgerDays = false;
 
   @override
   void initState() {
     super.initState();
-    _tabController = TabController(length: 6, vsync: this);
+    if (AdminStudentService().totalCount == 0 &&
+        AdminCompanyService().totalCount == 0 &&
+        AdminProjectService().totalCount == 0) {
+      Future.microtask(_silentInitialSync);
+    }
   }
 
-  @override
-  void dispose() {
-    _tabController.dispose();
-    super.dispose();
-  }
-
-  List<String> _buildCategoryOptions() {
-    final set = <String>{'All Categories'};
-    for (final c in AdminSettingsService().categoriesNotifier.value) {
-      if (c.name.trim().isNotEmpty) set.add(c.name.trim());
+  Future<void> _silentInitialSync() async {
+    if (_isRefreshing || !mounted) return;
+    setState(() => _isRefreshing = true);
+    await _analyticsService.reloadAllAndRefresh();
+    if (mounted) {
+      setState(() => _isRefreshing = false);
     }
-    for (final p in AdminProjectService().allProjects) {
-      if (p.category.trim().isNotEmpty) set.add(p.category.trim());
-    }
-    return set.toList();
   }
 
   Future<void> _handleRefresh() async {
@@ -83,98 +64,85 @@ class _ReportsAnalyticsScreenState extends State<ReportsAnalyticsScreen>
     setState(() => _isRefreshing = false);
     ScaffoldMessenger.of(context).showSnackBar(
       const SnackBar(
-        content: Text('Platform analytics refreshed from live database.'),
-        duration: Duration(seconds: 2),
-        backgroundColor: AppColors.darkNavy,
+        content: Text('Daily analytics and platform records synced.'),
+        backgroundColor: AppColors.primary,
         behavior: SnackBarBehavior.floating,
       ),
     );
   }
 
   void _onRouteSelected(String routeId) {
-    if (_scaffoldKey.currentState?.isEndDrawerOpen ?? false) {
-      Navigator.pop(context);
-    }
-    if (routeId == 'analytics' || routeId == 'reports') {
-      return;
-    }
-    if (routeId == 'dashboard') {
-      Navigator.pushReplacement(
-        context,
-        MaterialPageRoute(builder: (_) => const AdminDashboardScreen()),
-      );
-    } else if (routeId == 'student_verifications') {
-      Navigator.pushReplacement(
-        context,
-        MaterialPageRoute(builder: (_) => const StudentManagementScreen()),
-      );
-    } else if (routeId == 'company_verifications') {
-      Navigator.pushReplacement(
-        context,
-        MaterialPageRoute(builder: (_) => const CompanyVerificationsScreen()),
-      );
-    } else if (routeId == 'company_management') {
-      Navigator.pushReplacement(
-        context,
-        MaterialPageRoute(builder: (_) => const CompanyManagementScreen()),
-      );
-    } else if (routeId == 'projects_audit' || routeId == 'projects') {
-      Navigator.pushReplacement(
-        context,
-        MaterialPageRoute(builder: (_) => const ProjectManagementScreen()),
-      );
-    } else if (routeId == 'compliance' || routeId == 'application_monitoring') {
-      Navigator.pushReplacement(
-        context,
-        MaterialPageRoute(
-          builder: (_) => const ApplicationMonitoringScreen(),
-        ),
-      );
-    } else if (routeId == 'audit_logs' || routeId == 'certificates') {
-      Navigator.pushReplacement(
-        context,
-        MaterialPageRoute(
-          builder: (_) => const CertificateManagementScreen(),
-        ),
-      );
-    } else if (routeId == 'settings') {
-      Navigator.pushReplacement(
-        context,
-        MaterialPageRoute(builder: (_) => const AdminSettingsScreen()),
-      );
-    }
+    AdminSidebar.navigateToRoute(
+      context,
+      scaffoldKey: _scaffoldKey,
+      currentRouteId: 'analytics',
+      targetRouteId: routeId,
+    );
   }
 
   Future<void> _handleSignOut() async {
-    await _authService.logout();
-    if (!mounted) return;
-    Navigator.pushAndRemoveUntil(
-      context,
-      MaterialPageRoute(builder: (_) => const AdminLoginScreen()),
-      (route) => false,
+    final confirm = await showDialog<bool>(
+      context: context,
+      builder: (ctx) => AlertDialog(
+        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(14)),
+        title: const Row(
+          children: [
+            Icon(Icons.logout_rounded, color: AppColors.error),
+            SizedBox(width: 10),
+            Text('Sign Out'),
+          ],
+        ),
+        content: const Text(
+          'Sign out of the administrator console and return to the login portal?',
+        ),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.pop(ctx, false),
+            child: const Text('Cancel'),
+          ),
+          ElevatedButton(
+            onPressed: () => Navigator.pop(ctx, true),
+            style: ElevatedButton.styleFrom(
+              backgroundColor: AppColors.error,
+              foregroundColor: Colors.white,
+            ),
+            child: const Text('Sign Out'),
+          ),
+        ],
+      ),
     );
+
+    if (confirm == true) {
+      await _authService.logout();
+      if (!mounted) return;
+      Navigator.pushAndRemoveUntil(
+        context,
+        MaterialPageRoute(builder: (_) => const AdminLoginScreen()),
+        (route) => false,
+      );
+    }
   }
 
   @override
   Widget build(BuildContext context) {
-    final isDesktop = MediaQuery.of(context).size.width >= 1024;
+    final width = MediaQuery.of(context).size.width;
+    final isDesktop = width >= 1024;
+    final isMobile = width < 680;
 
     return Scaffold(
       key: _scaffoldKey,
-      backgroundColor: const Color(0xFFF8FAFC),
+      backgroundColor: AppColors.background,
       endDrawer: isDesktop
           ? null
           : Drawer(
-              backgroundColor: AppColors.darkNavy,
+              width: 270,
               child: AdminSidebar(
                 activeRouteId: 'analytics',
                 onRouteSelected: _onRouteSelected,
                 onSignOut: _handleSignOut,
-                isCollapsed: false,
               ),
             ),
       body: Row(
-        crossAxisAlignment: CrossAxisAlignment.start,
         children: [
           if (isDesktop)
             AdminSidebar(
@@ -190,63 +158,73 @@ class _ReportsAnalyticsScreenState extends State<ReportsAnalyticsScreen>
             child: Column(
               children: [
                 AdminTopNavbar(
-                  pageTitle: 'Reports & Business Intelligence',
-                  breadcrumb: 'Analytics Hub',
+                  pageTitle: 'Reports and Analytics',
+                  breadcrumb: 'Platform Analytics',
                   onOpenDrawer: () => _scaffoldKey.currentState?.openEndDrawer(),
                   onSignOut: _handleSignOut,
                 ),
                 Expanded(
-                  child: ValueListenableBuilder<DateTime>(
-                    valueListenable: _analyticsService.lastRefreshedNotifier,
-                    builder: (context, _, _) {
-                      final categories = _buildCategoryOptions();
-                      final effectiveCategory = categories.contains(_selectedCategory)
-                          ? _selectedCategory
-                          : 'All Categories';
+                  child: AnimatedBuilder(
+                    animation: Listenable.merge([
+                      AdminStudentService().studentsNotifier,
+                      AdminCompanyService().companiesNotifier,
+                      AdminProjectService().projectsNotifier,
+                      _analyticsService.lastRefreshedNotifier,
+                    ]),
+                    builder: (context, _) {
+                      final dailyRecords = _analyticsService
+                          .getDailyPlatformRecords(_selectedTimeframe);
+                      final totalStudents = AdminStudentService().totalCount;
+                      final totalCompanies = AdminCompanyService().totalCount;
+                      final totalProjects = AdminProjectService().totalCount;
+                      final lastSynced =
+                          _analyticsService.lastRefreshedNotifier.value;
 
-                      final verificationSummary =
-                          _analyticsService.getVerificationAnalytics();
-                      final engagementSummary =
-                          _analyticsService.getUserEngagement();
-                      final regTrends = _analyticsService.getRegistrationTrends(
-                        _selectedTimeframe,
-                        effectiveCategory,
-                      );
-                      final projTrends = _analyticsService.getProjectTrends(
-                        _selectedTimeframe,
-                        effectiveCategory,
-                      );
-                      final categoryDist = _analyticsService
-                          .getCategoryDistribution(effectiveCategory);
-
-                      return SingleChildScrollView(
-                        padding: const EdgeInsets.symmetric(
-                          horizontal: 20,
-                          vertical: 20,
-                        ),
-                        child: Column(
-                          crossAxisAlignment: CrossAxisAlignment.start,
-                          children: [
-                            _buildControlHeader(categories, effectiveCategory),
-                            const SizedBox(height: 20),
-                            _buildKpiCards(
-                              verificationSummary,
-                              engagementSummary,
-                              regTrends,
-                            ),
-                            const SizedBox(height: 24),
-                            _buildTabBar(),
-                            const SizedBox(height: 20),
-                            _buildTabViews(
-                              categoryFilter: effectiveCategory,
-                              regTrends: regTrends,
-                              projTrends: projTrends,
-                              categoryDist: categoryDist,
-                              verificationSummary: verificationSummary,
-                              engagementSummary: engagementSummary,
-                            ),
-                            const SizedBox(height: 36),
-                          ],
+                      return RefreshIndicator(
+                        onRefresh: _handleRefresh,
+                        color: AppColors.primary,
+                        child: SingleChildScrollView(
+                          physics: const AlwaysScrollableScrollPhysics(),
+                          padding: EdgeInsets.all(isMobile ? 16 : 24),
+                          child: Column(
+                            crossAxisAlignment: CrossAxisAlignment.start,
+                            children: [
+                              _buildHeaderSection(
+                                isMobile: isMobile,
+                                totalStudents: totalStudents,
+                                totalCompanies: totalCompanies,
+                                totalProjects: totalProjects,
+                                lastSynced: lastSynced,
+                              ),
+                              const SizedBox(height: 16),
+                              _buildTimeframeStrip(),
+                              const SizedBox(height: 20),
+                              _buildKpiSummarySection(
+                                width: width,
+                                dailyRecords: dailyRecords,
+                                totalStudents: totalStudents,
+                                totalCompanies: totalCompanies,
+                              ),
+                              const SizedBox(height: 22),
+                              _buildDailyGraphsSection(
+                                width: width,
+                                dailyRecords: dailyRecords,
+                              ),
+                              const SizedBox(height: 22),
+                              _buildQuantityComparisonSection(
+                                width: width,
+                                dailyRecords: dailyRecords,
+                                totalStudents: totalStudents,
+                                totalCompanies: totalCompanies,
+                              ),
+                              const SizedBox(height: 22),
+                              _buildDailyLedgerSection(
+                                isMobile: isMobile,
+                                dailyRecords: dailyRecords,
+                              ),
+                              const SizedBox(height: 36),
+                            ],
+                          ),
                         ),
                       );
                     },
@@ -260,14 +238,350 @@ class _ReportsAnalyticsScreenState extends State<ReportsAnalyticsScreen>
     );
   }
 
-  Widget _buildControlHeader(
-    List<String> categories,
-    String effectiveCategory,
-  ) {
+  Widget _buildHeaderSection({
+    required bool isMobile,
+    required int totalStudents,
+    required int totalCompanies,
+    required int totalProjects,
+    required DateTime lastSynced,
+  }) {
+    final syncedTime =
+        '${lastSynced.hour.toString().padLeft(2, '0')}:${lastSynced.minute.toString().padLeft(2, '0')}';
+
+    final titleBlock = Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        Row(
+          children: [
+            Container(
+              padding: const EdgeInsets.all(9),
+              decoration: BoxDecoration(
+                color: AppColors.primary.withValues(alpha: 0.1),
+                borderRadius: BorderRadius.circular(10),
+              ),
+              child: const Icon(
+                Icons.analytics_rounded,
+                color: AppColors.primary,
+                size: 20,
+              ),
+            ),
+            const SizedBox(width: 12),
+            Expanded(
+              child: Text(
+                'Daily Intake & Quantity Analytics',
+                style: GoogleFonts.poppins(
+                  fontSize: isMobile ? 18 : 21,
+                  fontWeight: FontWeight.w700,
+                  color: AppColors.textPrimary,
+                ),
+              ),
+            ),
+          ],
+        ),
+        const SizedBox(height: 6),
+        Text(
+          'Live day-by-day log of students joined, companies registered, and quantity comparison • Total: $totalStudents Students, $totalCompanies Companies, $totalProjects Projects • Synced at $syncedTime',
+          style: const TextStyle(
+            fontSize: 12.5,
+            color: AppColors.textSecondary,
+            height: 1.4,
+          ),
+        ),
+      ],
+    );
+
+    final actionButtons = Wrap(
+      spacing: 10,
+      runSpacing: 10,
+      children: [
+        OutlinedButton.icon(
+          onPressed: _isRefreshing ? null : _handleRefresh,
+          icon: _isRefreshing
+              ? const SizedBox(
+                  width: 14,
+                  height: 14,
+                  child: CircularProgressIndicator(strokeWidth: 2),
+                )
+              : const Icon(Icons.refresh_rounded, size: 17),
+          label: Text(_isRefreshing ? 'Syncing...' : 'Refresh'),
+          style: OutlinedButton.styleFrom(
+            foregroundColor: AppColors.darkNavy,
+            side: const BorderSide(color: AppColors.border),
+            backgroundColor: AppColors.cardSurface,
+            padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 11),
+            shape: RoundedRectangleBorder(
+              borderRadius: BorderRadius.circular(10),
+            ),
+          ),
+        ),
+        ElevatedButton.icon(
+          onPressed: _showExportCsvModal,
+          icon: const Icon(Icons.download_rounded, size: 17),
+          label: const Text('Export CSV'),
+          style: ElevatedButton.styleFrom(
+            backgroundColor: AppColors.primary,
+            foregroundColor: Colors.white,
+            elevation: 0,
+            padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 11),
+            shape: RoundedRectangleBorder(
+              borderRadius: BorderRadius.circular(10),
+            ),
+          ),
+        ),
+      ],
+    );
+
     return Container(
-      padding: const EdgeInsets.all(20),
+      width: double.infinity,
+      padding: EdgeInsets.all(isMobile ? 16 : 20),
       decoration: BoxDecoration(
-        color: Colors.white,
+        color: AppColors.cardSurface,
+        borderRadius: BorderRadius.circular(14),
+        border: Border.all(color: AppColors.border),
+        boxShadow: [
+          BoxShadow(
+            color: Colors.black.withValues(alpha: 0.025),
+            blurRadius: 10,
+            offset: const Offset(0, 3),
+          ),
+        ],
+      ),
+      child: isMobile
+          ? Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                titleBlock,
+                const SizedBox(height: 14),
+                actionButtons,
+              ],
+            )
+          : Row(
+              crossAxisAlignment: CrossAxisAlignment.center,
+              children: [
+                Expanded(child: titleBlock),
+                const SizedBox(width: 16),
+                actionButtons,
+              ],
+            ),
+    );
+  }
+
+  Widget _buildTimeframeStrip() {
+    return Container(
+      width: double.infinity,
+      padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 10),
+      decoration: BoxDecoration(
+        color: AppColors.cardSurface,
+        borderRadius: BorderRadius.circular(12),
+        border: Border.all(color: AppColors.border),
+      ),
+      child: Wrap(
+        spacing: 8,
+        runSpacing: 8,
+        crossAxisAlignment: WrapCrossAlignment.center,
+        children: [
+          const Row(
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              Icon(
+                Icons.calendar_today_rounded,
+                size: 15,
+                color: AppColors.textSecondary,
+              ),
+              SizedBox(width: 6),
+              Text(
+                'Record Window:',
+                style: TextStyle(
+                  fontSize: 12,
+                  fontWeight: FontWeight.w600,
+                  color: AppColors.textSecondary,
+                ),
+              ),
+            ],
+          ),
+          ...AnalyticsTimeframe.values.map((tf) {
+            final isSelected = _selectedTimeframe == tf;
+            return ChoiceChip(
+              label: Text(
+                tf.label,
+                style: TextStyle(
+                  fontSize: 12,
+                  fontWeight: isSelected ? FontWeight.w700 : FontWeight.w500,
+                  color: isSelected ? Colors.white : AppColors.textPrimary,
+                ),
+              ),
+              selected: isSelected,
+              selectedColor: AppColors.primary,
+              backgroundColor: AppColors.background,
+              side: BorderSide(
+                color: isSelected ? AppColors.primary : AppColors.border,
+              ),
+              showCheckmark: false,
+              visualDensity: VisualDensity.compact,
+              onSelected: (_) {
+                setState(() {
+                  _selectedTimeframe = tf;
+                  _showAllLedgerDays = false;
+                });
+              },
+            );
+          }),
+        ],
+      ),
+    );
+  }
+
+  Widget _buildKpiSummarySection({
+    required double width,
+    required List<DailyPlatformRecord> dailyRecords,
+    required int totalStudents,
+    required int totalCompanies,
+  }) {
+    final now = DateTime.now();
+    final todayKey = _formatDateKey(now);
+    DailyPlatformRecord? todayRecord;
+    for (final r in dailyRecords) {
+      if (r.dateKey == todayKey) {
+        todayRecord = r;
+        break;
+      }
+    }
+
+    final int todayStudents = todayRecord?.studentCount ?? 0;
+    final int todayCompanies = todayRecord?.companyCount ?? 0;
+
+    final int periodStudents = dailyRecords.fold(
+      0,
+      (sum, r) => sum + r.studentCount,
+    );
+    final int periodCompanies = dailyRecords.fold(
+      0,
+      (sum, r) => sum + r.companyCount,
+    );
+
+    final activeDays = dailyRecords.where((r) => r.hasActivity).toList();
+    DailyPlatformRecord? peakDay;
+    for (final r in activeDays) {
+      final score = r.studentCount + r.companyCount;
+      final peakScore =
+          peakDay == null ? -1 : peakDay.studentCount + peakDay.companyCount;
+      if (score >= peakScore) {
+        peakDay = r;
+      }
+    }
+
+    final ratioLabel = _formatQuantityRatio(totalStudents, totalCompanies);
+    final diff = totalStudents - totalCompanies;
+    final comparisonSummary = diff > 0
+        ? 'Students ahead by +$diff overall'
+        : diff < 0
+            ? 'Companies ahead by +${diff.abs()} overall'
+            : 'Equal quantity overall';
+
+    final cards = [
+      _buildKpiCard(
+        icon: Icons.school_rounded,
+        accent: AppColors.primary,
+        badgeText: '+$todayStudents Today',
+        value: '$totalStudents',
+        label: 'Total Students',
+        subtitle: '$periodStudents joined in ${_selectedTimeframe.label}',
+      ),
+      _buildKpiCard(
+        icon: Icons.business_rounded,
+        accent: AppColors.accentTeal,
+        badgeText: '+$todayCompanies Today',
+        value: '$totalCompanies',
+        label: 'Total Companies',
+        subtitle: '$periodCompanies registered in ${_selectedTimeframe.label}',
+      ),
+      _buildKpiCard(
+        icon: Icons.compare_arrows_rounded,
+        accent: AppColors.indigoAccent,
+        badgeText: 'Ratio $ratioLabel',
+        value: '$totalStudents vs $totalCompanies',
+        label: 'Students vs Companies',
+        subtitle: comparisonSummary,
+      ),
+      _buildKpiCard(
+        icon: Icons.event_note_rounded,
+        accent: AppColors.success,
+        badgeText: '${activeDays.length} Active Days',
+        value: peakDay?.shortLabel ?? 'None',
+        label: 'Peak Activity Day',
+        subtitle: peakDay == null
+            ? 'No registrations in selected window'
+            : '${peakDay.studentCount} students • ${peakDay.companyCount} companies',
+      ),
+    ];
+
+    if (width >= 1100) {
+      return Row(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          for (int i = 0; i < cards.length; i++) ...[
+            Expanded(child: cards[i]),
+            if (i < cards.length - 1) const SizedBox(width: 14),
+          ],
+        ],
+      );
+    }
+
+    if (width >= 600) {
+      return Column(
+        children: [
+          Row(
+            children: [
+              Expanded(child: cards[0]),
+              const SizedBox(width: 14),
+              Expanded(child: cards[1]),
+            ],
+          ),
+          const SizedBox(height: 14),
+          Row(
+            children: [
+              Expanded(child: cards[2]),
+              const SizedBox(width: 14),
+              Expanded(child: cards[3]),
+            ],
+          ),
+        ],
+      );
+    }
+
+    return Column(
+      children: [
+        Row(
+          children: [
+            Expanded(child: cards[0]),
+            const SizedBox(width: 12),
+            Expanded(child: cards[1]),
+          ],
+        ),
+        const SizedBox(height: 12),
+        Row(
+          children: [
+            Expanded(child: cards[2]),
+            const SizedBox(width: 12),
+            Expanded(child: cards[3]),
+          ],
+        ),
+      ],
+    );
+  }
+
+  Widget _buildKpiCard({
+    required IconData icon,
+    required Color accent,
+    required String badgeText,
+    required String value,
+    required String label,
+    required String subtitle,
+  }) {
+    return Container(
+      padding: const EdgeInsets.all(16),
+      decoration: BoxDecoration(
+        color: AppColors.cardSurface,
         borderRadius: BorderRadius.circular(14),
         border: Border.all(color: AppColors.border),
         boxShadow: [
@@ -278,375 +592,506 @@ class _ReportsAnalyticsScreenState extends State<ReportsAnalyticsScreen>
           ),
         ],
       ),
-      child: LayoutBuilder(
-        builder: (context, constraints) {
-          final isNarrow = constraints.maxWidth < 860;
-
-          final filters = Wrap(
-            spacing: 12,
-            runSpacing: 12,
-            crossAxisAlignment: WrapCrossAlignment.center,
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Row(
             children: [
               Container(
-                padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 4),
+                padding: const EdgeInsets.all(8),
                 decoration: BoxDecoration(
-                  color: AppColors.background,
-                  borderRadius: BorderRadius.circular(8),
-                  border: Border.all(color: AppColors.border),
+                  color: accent.withValues(alpha: 0.12),
+                  borderRadius: BorderRadius.circular(9),
                 ),
-                child: DropdownButtonHideUnderline(
-                  child: DropdownButton<AnalyticsTimeframe>(
-                    value: _selectedTimeframe,
-                    icon: const Icon(
-                      Icons.calendar_today_outlined,
-                      size: 16,
-                      color: AppColors.primary,
-                    ),
-                    style: GoogleFonts.inter(
-                      fontSize: 13,
-                      fontWeight: FontWeight.w600,
-                      color: AppColors.textPrimary,
-                    ),
-                    onChanged: (val) {
-                      if (val != null) setState(() => _selectedTimeframe = val);
-                    },
-                    items: AnalyticsTimeframe.values.map((tf) {
-                      return DropdownMenuItem(
-                        value: tf,
-                        child: Text(tf.label),
-                      );
-                    }).toList(),
-                  ),
-                ),
+                child: Icon(icon, size: 18, color: accent),
               ),
-              Container(
-                constraints: const BoxConstraints(maxWidth: 260),
-                padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 4),
-                decoration: BoxDecoration(
-                  color: AppColors.background,
-                  borderRadius: BorderRadius.circular(8),
-                  border: Border.all(color: AppColors.border),
-                ),
-                child: DropdownButtonHideUnderline(
-                  child: DropdownButton<String>(
-                    value: effectiveCategory,
-                    isExpanded: false,
-                    icon: const Icon(
-                      Icons.filter_list,
-                      size: 16,
-                      color: AppColors.accentTeal,
+              const SizedBox(width: 8),
+              Expanded(
+                child: Align(
+                  alignment: Alignment.centerRight,
+                  child: Container(
+                    padding: const EdgeInsets.symmetric(
+                      horizontal: 8,
+                      vertical: 3,
                     ),
-                    style: GoogleFonts.inter(
-                      fontSize: 13,
-                      fontWeight: FontWeight.w600,
-                      color: AppColors.textPrimary,
+                    decoration: BoxDecoration(
+                      color: accent.withValues(alpha: 0.1),
+                      borderRadius: BorderRadius.circular(20),
                     ),
-                    onChanged: (val) {
-                      if (val != null) setState(() => _selectedCategory = val);
-                    },
-                    items: categories.map((c) {
-                      return DropdownMenuItem(
-                        value: c,
-                        child: Text(
-                          c.length > 26 ? '${c.substring(0, 23)}...' : c,
-                        ),
-                      );
-                    }).toList(),
-                  ),
-                ),
-              ),
-              IconButton(
-                onPressed: _isRefreshing ? null : _handleRefresh,
-                icon: _isRefreshing
-                    ? const SizedBox(
-                        width: 18,
-                        height: 18,
-                        child: CircularProgressIndicator(strokeWidth: 2),
-                      )
-                    : const Icon(
-                        Icons.refresh_rounded,
-                        size: 20,
-                        color: AppColors.primary,
+                    child: Text(
+                      badgeText,
+                      maxLines: 1,
+                      overflow: TextOverflow.ellipsis,
+                      style: TextStyle(
+                        fontSize: 10.5,
+                        fontWeight: FontWeight.w700,
+                        color: accent,
                       ),
-                tooltip: 'Refresh Live Metrics',
-              ),
-            ],
-          );
-
-          final actions = Wrap(
-            spacing: 12,
-            runSpacing: 10,
-            children: [
-              OutlinedButton.icon(
-                onPressed: _showExportCsvModal,
-                icon: const Icon(Icons.download_rounded, size: 16),
-                label: const Text('Export CSV'),
-                style: OutlinedButton.styleFrom(
-                  foregroundColor: AppColors.primary,
-                  side: const BorderSide(color: AppColors.primary),
-                  padding: const EdgeInsets.symmetric(
-                    horizontal: 14,
-                    vertical: 12,
-                  ),
-                  shape: RoundedRectangleBorder(
-                    borderRadius: BorderRadius.circular(8),
-                  ),
-                ),
-              ),
-              ElevatedButton.icon(
-                onPressed: () => _handleGenerateReport(effectiveCategory),
-                icon: const Icon(Icons.assessment_outlined, size: 16),
-                label: const Text('Generate Report'),
-                style: ElevatedButton.styleFrom(
-                  backgroundColor: AppColors.primary,
-                  foregroundColor: Colors.white,
-                  elevation: 0,
-                  padding: const EdgeInsets.symmetric(
-                    horizontal: 16,
-                    vertical: 12,
-                  ),
-                  shape: RoundedRectangleBorder(
-                    borderRadius: BorderRadius.circular(8),
+                    ),
                   ),
                 ),
               ),
             ],
-          );
-
-          if (isNarrow) {
-            return Column(
-              crossAxisAlignment: CrossAxisAlignment.start,
-              children: [
-                filters,
-                const SizedBox(height: 14),
-                actions,
-              ],
-            );
-          }
-          return Row(
-            mainAxisAlignment: MainAxisAlignment.spaceBetween,
-            children: [
-              Expanded(child: filters),
-              const SizedBox(width: 12),
-              actions,
-            ],
-          );
-        },
+          ),
+          const SizedBox(height: 14),
+          FittedBox(
+            fit: BoxFit.scaleDown,
+            alignment: Alignment.centerLeft,
+            child: Text(
+              value,
+              style: GoogleFonts.poppins(
+                fontSize: 22,
+                fontWeight: FontWeight.w700,
+                color: AppColors.textPrimary,
+              ),
+            ),
+          ),
+          const SizedBox(height: 3),
+          Text(
+            label,
+            maxLines: 1,
+            overflow: TextOverflow.ellipsis,
+            style: const TextStyle(
+              fontSize: 12.5,
+              fontWeight: FontWeight.w600,
+              color: AppColors.darkNavy,
+            ),
+          ),
+          const SizedBox(height: 4),
+          Text(
+            subtitle,
+            maxLines: 2,
+            overflow: TextOverflow.ellipsis,
+            style: const TextStyle(
+              fontSize: 11,
+              color: AppColors.textSecondary,
+              height: 1.3,
+            ),
+          ),
+        ],
       ),
     );
   }
 
-  Widget _buildKpiCards(
-    VerificationAnalyticsSummary verification,
-    UserEngagementSummary engagement,
-    List<RegistrationTrendPoint> regTrends,
-  ) {
-    final studentService = AdminStudentService();
-    final companyService = AdminCompanyService();
-    final projectService = AdminProjectService();
-    final appMonitoringService = AdminApplicationMonitoringService();
+  Widget _buildDailyGraphsSection({
+    required double width,
+    required List<DailyPlatformRecord> dailyRecords,
+  }) {
+    final studentGroups = dailyRecords
+        .map(
+          (r) => BiBarDataGroup(
+            label: r.shortLabel,
+            value1: r.studentCount.toDouble(),
+            value2: 0,
+          ),
+        )
+        .toList();
 
-    final latestReg = regTrends.isNotEmpty ? regTrends.last : null;
-    final studentTotal = studentService.totalCount;
-    final companyTotal = companyService.totalCount;
-    final projects = projectService.allProjects;
-    final activeSprints =
-        projects.where((p) => p.status == AdminProjectStatus.active).length;
-    final completedSprints =
-        projects.where((p) => p.status == AdminProjectStatus.completed).length;
-    final completionVelocity = projects.isEmpty
-        ? 0.0
-        : double.parse(
-            ((completedSprints / projects.length) * 100.0).toStringAsFixed(1),
-          );
+    final companyGroups = dailyRecords
+        .map(
+          (r) => BiBarDataGroup(
+            label: r.shortLabel,
+            value1: r.companyCount.toDouble(),
+            value2: 0,
+          ),
+        )
+        .toList();
 
-    final representedUnis = studentService.allStudents
-        .map((s) => s.university.trim())
-        .where((u) => u.isNotEmpty)
-        .toSet()
-        .length;
-    final growthDelta = latestReg != null
-        ? '${latestReg.growthRatePercentage >= 0 ? "+" : ""}${latestReg.growthRatePercentage.toStringAsFixed(1)}%'
-        : '0.0%';
+    final int periodStudents = dailyRecords.fold(
+      0,
+      (sum, r) => sum + r.studentCount,
+    );
+    final int periodCompanies = dailyRecords.fold(
+      0,
+      (sum, r) => sum + r.companyCount,
+    );
 
-    return LayoutBuilder(
-      builder: (context, constraints) {
-        final width = constraints.maxWidth;
-        final int crossAxisCount = width >= 1200
-            ? 6
-            : width >= 800
-                ? 3
-                : width >= 460
-                    ? 2
-                    : 1;
+    final int peakStudents = dailyRecords.fold<int>(
+      0,
+      (m, r) => math.max(m, r.studentCount),
+    );
+    final int peakCompanies = dailyRecords.fold<int>(
+      0,
+      (m, r) => math.max(m, r.companyCount),
+    );
 
-        return GridView.count(
-          crossAxisCount: crossAxisCount,
-          shrinkWrap: true,
-          physics: const NeverScrollableScrollPhysics(),
-          mainAxisSpacing: 16,
-          crossAxisSpacing: 16,
-          childAspectRatio: crossAxisCount == 1 ? 2.6 : 1.45,
-          children: [
-            _buildKpiCard(
-              title: 'Total Students',
-              value: '$studentTotal',
-              delta: growthDelta,
-              isPositiveDelta: true,
-              subtitle: '$representedUnis Institutions Represented',
-              icon: Icons.school_rounded,
-              accentColor: AppColors.primary,
+    final double avgStudents = dailyRecords.isEmpty
+        ? 0
+        : periodStudents / dailyRecords.length;
+    final double avgCompanies = dailyRecords.isEmpty
+        ? 0
+        : periodCompanies / dailyRecords.length;
+
+    final studentCard = _buildCardContainer(
+      title: 'Daily Student Intake Graph',
+      subtitle:
+          'How many students joined each day (${_selectedTimeframe.label})',
+      trailingBadge: '$periodStudents joined',
+      trailingColor: AppColors.primary,
+      child: Column(
+        children: [
+          _buildScrollableBarChart(
+            groups: studentGroups,
+            series1Label: 'Students Joined',
+            series1Color: AppColors.primary,
+            isPaired: false,
+            height: 230,
+          ),
+          const SizedBox(height: 14),
+          Container(
+            padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 10),
+            decoration: BoxDecoration(
+              color: AppColors.background,
+              borderRadius: BorderRadius.circular(10),
+              border: Border.all(color: AppColors.border),
             ),
-            _buildKpiCard(
-              title: 'Partner Companies',
-              value: '$companyTotal',
-              delta: '${companyService.verifiedCount} Verified',
-              isPositiveDelta: true,
-              subtitle: '${companyService.pendingCount} Pending Verification',
-              icon: Icons.business_rounded,
-              accentColor: AppColors.accentTeal,
+            child: Row(
+              mainAxisAlignment: MainAxisAlignment.spaceAround,
+              children: [
+                _buildMiniMetric('Window Total', '$periodStudents'),
+                _buildMiniMetric(
+                  'Avg / Day',
+                  avgStudents.toStringAsFixed(1),
+                ),
+                _buildMiniMetric('Peak Day', '$peakStudents'),
+                _buildMiniMetric(
+                  'Active Days',
+                  '${dailyRecords.where((r) => r.studentCount > 0).length}',
+                ),
+              ],
             ),
-            _buildKpiCard(
-              title: 'Active Sprints',
-              value: '$activeSprints',
-              delta: '${completionVelocity.toStringAsFixed(1)}% Done',
-              isPositiveDelta: true,
-              subtitle: '${projects.length} Total Projects',
-              icon: Icons.rocket_launch_rounded,
-              accentColor: const Color(0xFF6366F1),
+          ),
+        ],
+      ),
+    );
+
+    final companyCard = _buildCardContainer(
+      title: 'Daily Company Registrations Graph',
+      subtitle:
+          'How many companies registered each day (${_selectedTimeframe.label})',
+      trailingBadge: '$periodCompanies registered',
+      trailingColor: AppColors.accentTeal,
+      child: Column(
+        children: [
+          _buildScrollableBarChart(
+            groups: companyGroups,
+            series1Label: 'Companies Registered',
+            series1Color: AppColors.accentTeal,
+            isPaired: false,
+            height: 230,
+          ),
+          const SizedBox(height: 14),
+          Container(
+            padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 10),
+            decoration: BoxDecoration(
+              color: AppColors.background,
+              borderRadius: BorderRadius.circular(10),
+              border: Border.all(color: AppColors.border),
             ),
-            _buildKpiCard(
-              title: 'Verification Rate',
-              value: '${verification.approvalRatePercentage}%',
-              delta: '${verification.pendingCount} Pending',
-              isPositiveDelta: verification.pendingCount == 0,
-              subtitle: '${verification.approvedCount} Approved Accounts',
-              icon: Icons.verified_user_rounded,
-              accentColor: AppColors.success,
+            child: Row(
+              mainAxisAlignment: MainAxisAlignment.spaceAround,
+              children: [
+                _buildMiniMetric('Window Total', '$periodCompanies'),
+                _buildMiniMetric(
+                  'Avg / Day',
+                  avgCompanies.toStringAsFixed(1),
+                ),
+                _buildMiniMetric('Peak Day', '$peakCompanies'),
+                _buildMiniMetric(
+                  'Active Days',
+                  '${dailyRecords.where((r) => r.companyCount > 0).length}',
+                ),
+              ],
             ),
-            _buildKpiCard(
-              title: 'Applications Log',
-              value: '${engagement.totalApplications}',
-              delta: '${engagement.averageApplicationsPerProject} Avg/Proj',
-              isPositiveDelta: true,
-              subtitle: '${engagement.acceptedApplications} Placed Students',
-              icon: Icons.send_rounded,
-              accentColor: const Color(0xFFF59E0B),
-            ),
-            _buildKpiCard(
-              title: 'Verification Coverage',
-              value: '${engagement.engagementIndex.toStringAsFixed(1)}%',
-              delta: '${appMonitoringService.reportedCount} Flagged',
-              isPositiveDelta: appMonitoringService.reportedCount == 0,
-              subtitle:
-                  '${appMonitoringService.requiringInvestigationCount} Under Review',
-              icon: Icons.favorite_rounded,
-              accentColor: const Color(0xFF10B981),
-            ),
-          ],
-        );
-      },
+          ),
+        ],
+      ),
+    );
+
+    if (width >= 1024) {
+      return Row(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Expanded(child: studentCard),
+          const SizedBox(width: 18),
+          Expanded(child: companyCard),
+        ],
+      );
+    }
+
+    return Column(
+      children: [
+        studentCard,
+        const SizedBox(height: 18),
+        companyCard,
+      ],
     );
   }
 
-  Widget _buildKpiCard({
+  Widget _buildQuantityComparisonSection({
+    required double width,
+    required List<DailyPlatformRecord> dailyRecords,
+    required int totalStudents,
+    required int totalCompanies,
+  }) {
+    final int combinedTotal = totalStudents + totalCompanies;
+    final double studentShare =
+        combinedTotal == 0 ? 0.0 : (totalStudents / combinedTotal) * 100.0;
+    final double companyShare =
+        combinedTotal == 0 ? 0.0 : (totalCompanies / combinedTotal) * 100.0;
+    final int diff = totalStudents - totalCompanies;
+    final String ratioText = _formatQuantityRatio(totalStudents, totalCompanies);
+
+    final int periodStudents = dailyRecords.fold(
+      0,
+      (sum, r) => sum + r.studentCount,
+    );
+    final int periodCompanies = dailyRecords.fold(
+      0,
+      (sum, r) => sum + r.companyCount,
+    );
+
+    final pairedGroups = dailyRecords
+        .map(
+          (r) => BiBarDataGroup(
+            label: r.shortLabel,
+            value1: r.studentCount.toDouble(),
+            value2: r.companyCount.toDouble(),
+          ),
+        )
+        .toList();
+
+    final cumulativePoints = dailyRecords
+        .map(
+          (r) => BiLineDataPoint(
+            label: r.shortLabel,
+            value1: r.totalStudentsToDate.toDouble(),
+            value2: r.totalCompaniesToDate.toDouble(),
+          ),
+        )
+        .toList();
+
+    final ratioHeaderCard = _buildCardContainer(
+      title: 'Students vs Companies Quantity Comparison',
+      subtitle:
+          'Direct head-to-head comparison of registered Student and Company quantities',
+      trailingBadge: 'Ratio $ratioText',
+      trailingColor: AppColors.indigoAccent,
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Row(
+            children: [
+              Expanded(
+                child: _buildComparisonSideBox(
+                  title: 'Students',
+                  count: totalStudents,
+                  sharePct: studentShare,
+                  periodDelta: periodStudents,
+                  color: AppColors.primary,
+                  icon: Icons.school_rounded,
+                ),
+              ),
+              const SizedBox(width: 12),
+              Expanded(
+                child: _buildComparisonSideBox(
+                  title: 'Companies',
+                  count: totalCompanies,
+                  sharePct: companyShare,
+                  periodDelta: periodCompanies,
+                  color: AppColors.accentTeal,
+                  icon: Icons.business_rounded,
+                ),
+              ),
+            ],
+          ),
+          const SizedBox(height: 16),
+          ClipRRect(
+            borderRadius: BorderRadius.circular(999),
+            child: SizedBox(
+              height: 14,
+              child: combinedTotal == 0
+                  ? Container(
+                      color: AppColors.surfaceAlt,
+                      alignment: Alignment.center,
+                    )
+                  : Row(
+                      children: [
+                        if (totalStudents > 0)
+                          Expanded(
+                            flex: totalStudents,
+                            child: Container(color: AppColors.primary),
+                          ),
+                        if (totalStudents > 0 && totalCompanies > 0)
+                          const SizedBox(width: 2),
+                        if (totalCompanies > 0)
+                          Expanded(
+                            flex: totalCompanies,
+                            child: Container(color: AppColors.accentTeal),
+                          ),
+                      ],
+                    ),
+            ),
+          ),
+          const SizedBox(height: 10),
+          Wrap(
+            spacing: 12,
+            runSpacing: 8,
+            crossAxisAlignment: WrapCrossAlignment.center,
+            children: [
+              _buildLegendBadge(
+                color: AppColors.primary,
+                text:
+                    'Students: $totalStudents (${studentShare.toStringAsFixed(1)}%)',
+              ),
+              _buildLegendBadge(
+                color: AppColors.accentTeal,
+                text:
+                    'Companies: $totalCompanies (${companyShare.toStringAsFixed(1)}%)',
+              ),
+              Container(
+                padding: const EdgeInsets.symmetric(
+                  horizontal: 10,
+                  vertical: 5,
+                ),
+                decoration: BoxDecoration(
+                  color: AppColors.indigoAccent.withValues(alpha: 0.08),
+                  borderRadius: BorderRadius.circular(20),
+                ),
+                child: Text(
+                  diff > 0
+                      ? 'Difference: +$diff more Students than Companies'
+                      : diff < 0
+                          ? 'Difference: +${diff.abs()} more Companies than Students'
+                          : 'Difference: Equal quantities ($totalStudents each)',
+                  style: const TextStyle(
+                    fontSize: 11.5,
+                    fontWeight: FontWeight.w700,
+                    color: AppColors.indigoAccent,
+                  ),
+                ),
+              ),
+            ],
+          ),
+        ],
+      ),
+    );
+
+    final dailyComparisonChart = _buildCardContainer(
+      title: 'Daily Quantity Comparison (Students vs Companies)',
+      subtitle:
+          'Side-by-side daily registration counts for ${_selectedTimeframe.label}',
+      trailingBadge: '$periodStudents vs $periodCompanies',
+      trailingColor: AppColors.primary,
+      child: _buildScrollableBarChart(
+        groups: pairedGroups,
+        series1Label: 'Students',
+        series1Color: AppColors.primary,
+        series2Label: 'Companies',
+        series2Color: AppColors.accentTeal,
+        isPaired: true,
+        height: 245,
+      ),
+    );
+
+    final cumulativeGrowthChart = _buildCardContainer(
+      title: 'Cumulative Quantity Growth Curve',
+      subtitle:
+          'Total Students vs Total Companies accumulated day by day',
+      trailingBadge: '$totalStudents / $totalCompanies Total',
+      trailingColor: AppColors.success,
+      child: BiLineChart(
+        points: cumulativePoints,
+        metric1Label: 'Total Students',
+        metric1Color: AppColors.primary,
+        metric2Label: 'Total Companies',
+        metric2Color: AppColors.accentTeal,
+        height: 245,
+      ),
+    );
+
+    return Column(
+      children: [
+        ratioHeaderCard,
+        const SizedBox(height: 18),
+        if (width >= 1024)
+          Row(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              Expanded(child: dailyComparisonChart),
+              const SizedBox(width: 18),
+              Expanded(child: cumulativeGrowthChart),
+            ],
+          )
+        else ...[
+          dailyComparisonChart,
+          const SizedBox(height: 18),
+          cumulativeGrowthChart,
+        ],
+      ],
+    );
+  }
+
+  Widget _buildComparisonSideBox({
     required String title,
-    required String value,
-    required String delta,
-    required bool isPositiveDelta,
-    required String subtitle,
+    required int count,
+    required double sharePct,
+    required int periodDelta,
+    required Color color,
     required IconData icon,
-    required Color accentColor,
   }) {
     return Container(
       padding: const EdgeInsets.all(14),
       decoration: BoxDecoration(
-        color: Colors.white,
+        color: color.withValues(alpha: 0.06),
         borderRadius: BorderRadius.circular(12),
-        border: Border.all(color: AppColors.border),
-        boxShadow: [
-          BoxShadow(
-            color: Colors.black.withValues(alpha: 0.02),
-            blurRadius: 6,
-            offset: const Offset(0, 2),
-          ),
-        ],
+        border: Border.all(color: color.withValues(alpha: 0.2)),
       ),
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
-        mainAxisAlignment: MainAxisAlignment.spaceBetween,
         children: [
           Row(
             children: [
+              Icon(icon, size: 17, color: color),
+              const SizedBox(width: 6),
               Expanded(
                 child: Text(
                   title,
                   maxLines: 1,
                   overflow: TextOverflow.ellipsis,
-                  style: GoogleFonts.inter(
-                    fontSize: 12,
-                    fontWeight: FontWeight.w600,
-                    color: AppColors.textMuted,
+                  style: TextStyle(
+                    fontSize: 12.5,
+                    fontWeight: FontWeight.w700,
+                    color: color,
                   ),
                 ),
               ),
-              const SizedBox(width: 6),
-              Container(
-                padding: const EdgeInsets.all(6),
-                decoration: BoxDecoration(
-                  color: accentColor.withValues(alpha: 0.1),
-                  borderRadius: BorderRadius.circular(8),
+              Text(
+                '${sharePct.toStringAsFixed(1)}%',
+                style: TextStyle(
+                  fontSize: 12,
+                  fontWeight: FontWeight.w700,
+                  color: color,
                 ),
-                child: Icon(icon, size: 16, color: accentColor),
               ),
             ],
           ),
-          Row(
-            crossAxisAlignment: CrossAxisAlignment.baseline,
-            textBaseline: TextBaseline.alphabetic,
-            children: [
-              Text(
-                value,
-                style: GoogleFonts.poppins(
-                  fontSize: 20,
-                  fontWeight: FontWeight.bold,
-                  color: AppColors.textPrimary,
-                  letterSpacing: -0.5,
-                ),
-              ),
-              const SizedBox(width: 8),
-              Flexible(
-                child: Container(
-                  padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 2),
-                  decoration: BoxDecoration(
-                    color: (isPositiveDelta ? AppColors.success : AppColors.warning)
-                        .withValues(alpha: 0.1),
-                    borderRadius: BorderRadius.circular(4),
-                  ),
-                  child: Text(
-                    delta,
-                    maxLines: 1,
-                    overflow: TextOverflow.ellipsis,
-                    style: TextStyle(
-                      fontSize: 10,
-                      fontWeight: FontWeight.bold,
-                      color: isPositiveDelta
-                          ? AppColors.success
-                          : const Color(0xFFD97706),
-                    ),
-                  ),
-                ),
-              ),
-            ],
+          const SizedBox(height: 8),
+          Text(
+            '$count',
+            style: GoogleFonts.poppins(
+              fontSize: 24,
+              fontWeight: FontWeight.w700,
+              color: AppColors.textPrimary,
+            ),
           ),
           Text(
-            subtitle,
+            '+$periodDelta in ${_selectedTimeframe.label}',
             maxLines: 1,
             overflow: TextOverflow.ellipsis,
             style: const TextStyle(
               fontSize: 11,
               color: AppColors.textSecondary,
-              fontWeight: FontWeight.w500,
             ),
           ),
         ],
@@ -654,970 +1099,694 @@ class _ReportsAnalyticsScreenState extends State<ReportsAnalyticsScreen>
     );
   }
 
-  Widget _buildTabBar() {
+  Widget _buildLegendBadge({
+    required Color color,
+    required String text,
+  }) {
+    return Row(
+      mainAxisSize: MainAxisSize.min,
+      children: [
+        Container(
+          width: 10,
+          height: 10,
+          decoration: BoxDecoration(
+            color: color,
+            borderRadius: BorderRadius.circular(3),
+          ),
+        ),
+        const SizedBox(width: 6),
+        Text(
+          text,
+          style: const TextStyle(
+            fontSize: 12,
+            fontWeight: FontWeight.w600,
+            color: AppColors.textPrimary,
+          ),
+        ),
+      ],
+    );
+  }
+
+  Widget _buildDailyLedgerSection({
+    required bool isMobile,
+    required List<DailyPlatformRecord> dailyRecords,
+  }) {
+    final allDesc = dailyRecords.reversed.toList();
+    final activeDesc = allDesc.where((r) => r.hasActivity).toList();
+    final filteredList = _onlyActivityDays ? activeDesc : allDesc;
+
+    const int initialCap = 15;
+    final bool hasMoreThanCap = filteredList.length > initialCap;
+    final visibleList = _showAllLedgerDays || !hasMoreThanCap
+        ? filteredList
+        : filteredList.take(initialCap).toList();
+
+    final todayKey = _formatDateKey(DateTime.now());
+
+    return _buildCardContainer(
+      title: 'Complete Day-by-Day Record Book',
+      subtitle:
+          'Every recorded day with Student arrivals, Company registrations, Projects created, and daily Student vs Company comparison',
+      trailingBadge: '${filteredList.length} Days Listed',
+      trailingColor: AppColors.darkNavy,
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Wrap(
+            spacing: 8,
+            runSpacing: 8,
+            children: [
+              ChoiceChip(
+                label: Text('All Days (${allDesc.length})'),
+                selected: !_onlyActivityDays,
+                selectedColor: AppColors.darkNavy,
+                labelStyle: TextStyle(
+                  fontSize: 12,
+                  fontWeight: FontWeight.w600,
+                  color: !_onlyActivityDays ? Colors.white : AppColors.textPrimary,
+                ),
+                showCheckmark: false,
+                visualDensity: VisualDensity.compact,
+                onSelected: (_) {
+                  setState(() {
+                    _onlyActivityDays = false;
+                    _showAllLedgerDays = false;
+                  });
+                },
+              ),
+              ChoiceChip(
+                label: Text('Activity Days Only (${activeDesc.length})'),
+                selected: _onlyActivityDays,
+                selectedColor: AppColors.primary,
+                labelStyle: TextStyle(
+                  fontSize: 12,
+                  fontWeight: FontWeight.w600,
+                  color: _onlyActivityDays ? Colors.white : AppColors.textPrimary,
+                ),
+                showCheckmark: false,
+                visualDensity: VisualDensity.compact,
+                onSelected: (_) {
+                  setState(() {
+                    _onlyActivityDays = true;
+                    _showAllLedgerDays = false;
+                  });
+                },
+              ),
+            ],
+          ),
+          const SizedBox(height: 14),
+          if (visibleList.isEmpty)
+            Container(
+              width: double.infinity,
+              padding: const EdgeInsets.symmetric(vertical: 28, horizontal: 16),
+              decoration: BoxDecoration(
+                color: AppColors.background,
+                borderRadius: BorderRadius.circular(12),
+                border: Border.all(color: AppColors.border),
+              ),
+              child: Column(
+                children: [
+                  const Icon(
+                    Icons.event_note_rounded,
+                    size: 30,
+                    color: AppColors.textMuted,
+                  ),
+                  const SizedBox(height: 8),
+                  const Text(
+                    'No activity recorded for this filter.',
+                    style: TextStyle(
+                      fontSize: 13,
+                      fontWeight: FontWeight.w600,
+                      color: AppColors.textPrimary,
+                    ),
+                  ),
+                  const SizedBox(height: 4),
+                  Text(
+                    _onlyActivityDays
+                        ? 'Switch to "All Days" or select "All-Time" above to view every calendar date.'
+                        : 'New student and company registrations will automatically appear here.',
+                    textAlign: TextAlign.center,
+                    style: const TextStyle(
+                      fontSize: 12,
+                      color: AppColors.textMuted,
+                    ),
+                  ),
+                ],
+              ),
+            )
+          else if (isMobile)
+            Column(
+              children: visibleList
+                  .map(
+                    (r) => _buildDailyMobileRecordCard(
+                      record: r,
+                      isToday: r.dateKey == todayKey,
+                    ),
+                  )
+                  .toList(),
+            )
+          else
+            _buildDesktopDailyTable(visibleList, todayKey),
+          if (hasMoreThanCap) ...[
+            const SizedBox(height: 12),
+            Center(
+              child: OutlinedButton.icon(
+                onPressed: () {
+                  setState(() => _showAllLedgerDays = !_showAllLedgerDays);
+                },
+                icon: Icon(
+                  _showAllLedgerDays
+                      ? Icons.expand_less_rounded
+                      : Icons.expand_more_rounded,
+                  size: 18,
+                ),
+                label: Text(
+                  _showAllLedgerDays
+                      ? 'Show Recent $initialCap Days'
+                      : 'Show All ${filteredList.length} Days',
+                ),
+                style: OutlinedButton.styleFrom(
+                  foregroundColor: AppColors.primary,
+                  side: const BorderSide(color: AppColors.border),
+                  shape: RoundedRectangleBorder(
+                    borderRadius: BorderRadius.circular(10),
+                  ),
+                ),
+              ),
+            ),
+          ],
+        ],
+      ),
+    );
+  }
+
+  Widget _buildDailyMobileRecordCard({
+    required DailyPlatformRecord record,
+    required bool isToday,
+  }) {
+    final compText = _dailyComparisonLabel(record);
+    final compColor = _dailyComparisonColor(record);
+
+    return Container(
+      margin: const EdgeInsets.only(bottom: 10),
+      padding: const EdgeInsets.all(14),
+      decoration: BoxDecoration(
+        color: record.hasActivity
+            ? AppColors.primary.withValues(alpha: 0.025)
+            : AppColors.background,
+        borderRadius: BorderRadius.circular(12),
+        border: Border.all(
+          color: isToday
+              ? AppColors.primary.withValues(alpha: 0.45)
+              : AppColors.border,
+        ),
+      ),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Row(
+            children: [
+              Expanded(
+                child: Row(
+                  children: [
+                    Flexible(
+                      child: Text(
+                        record.fullDateLabel,
+                        maxLines: 1,
+                        overflow: TextOverflow.ellipsis,
+                        style: GoogleFonts.poppins(
+                          fontSize: 13.5,
+                          fontWeight: FontWeight.w700,
+                          color: AppColors.textPrimary,
+                        ),
+                      ),
+                    ),
+                    if (isToday) ...[
+                      const SizedBox(width: 6),
+                      Container(
+                        padding: const EdgeInsets.symmetric(
+                          horizontal: 7,
+                          vertical: 2,
+                        ),
+                        decoration: BoxDecoration(
+                          color: AppColors.primary,
+                          borderRadius: BorderRadius.circular(6),
+                        ),
+                        child: const Text(
+                          'Today',
+                          style: TextStyle(
+                            fontSize: 10,
+                            fontWeight: FontWeight.w700,
+                            color: Colors.white,
+                          ),
+                        ),
+                      ),
+                    ],
+                  ],
+                ),
+              ),
+              const SizedBox(width: 8),
+              Flexible(
+                child: Container(
+                  padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 3),
+                  decoration: BoxDecoration(
+                    color: compColor.withValues(alpha: 0.1),
+                    borderRadius: BorderRadius.circular(20),
+                  ),
+                  child: Text(
+                    compText,
+                    maxLines: 1,
+                    overflow: TextOverflow.ellipsis,
+                    style: TextStyle(
+                      fontSize: 10.5,
+                      fontWeight: FontWeight.w700,
+                      color: compColor,
+                    ),
+                  ),
+                ),
+              ),
+            ],
+          ),
+          const SizedBox(height: 10),
+          Row(
+            children: [
+              Expanded(
+                child: _buildDayCountPill(
+                  label: 'Students Joined',
+                  daily: '+${record.studentCount}',
+                  cumulative: 'Total: ${record.totalStudentsToDate}',
+                  color: AppColors.primary,
+                ),
+              ),
+              const SizedBox(width: 8),
+              Expanded(
+                child: _buildDayCountPill(
+                  label: 'Companies Reg.',
+                  daily: '+${record.companyCount}',
+                  cumulative: 'Total: ${record.totalCompaniesToDate}',
+                  color: AppColors.accentTeal,
+                ),
+              ),
+              const SizedBox(width: 8),
+              Expanded(
+                child: _buildDayCountPill(
+                  label: 'Projects',
+                  daily: '+${record.projectCount}',
+                  cumulative: 'Daily',
+                  color: AppColors.indigoAccent,
+                ),
+              ),
+            ],
+          ),
+          if (record.studentNames.isNotEmpty) ...[
+            const SizedBox(height: 10),
+            Text(
+              'Students: ${record.studentNames.join(', ')}',
+              style: const TextStyle(
+                fontSize: 11.5,
+                color: AppColors.textPrimary,
+                height: 1.35,
+              ),
+            ),
+          ],
+          if (record.companyNames.isNotEmpty) ...[
+            const SizedBox(height: 4),
+            Text(
+              'Companies: ${record.companyNames.join(', ')}',
+              style: const TextStyle(
+                fontSize: 11.5,
+                color: AppColors.darkNavy,
+                height: 1.35,
+              ),
+            ),
+          ],
+        ],
+      ),
+    );
+  }
+
+  Widget _buildDayCountPill({
+    required String label,
+    required String daily,
+    required String cumulative,
+    required Color color,
+  }) {
+    return Container(
+      padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 8),
+      decoration: BoxDecoration(
+        color: AppColors.cardSurface,
+        borderRadius: BorderRadius.circular(9),
+        border: Border.all(color: AppColors.border),
+      ),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Text(
+            label,
+            maxLines: 1,
+            overflow: TextOverflow.ellipsis,
+            style: const TextStyle(
+              fontSize: 10,
+              color: AppColors.textSecondary,
+              fontWeight: FontWeight.w600,
+            ),
+          ),
+          const SizedBox(height: 3),
+          Text(
+            daily,
+            style: GoogleFonts.poppins(
+              fontSize: 15,
+              fontWeight: FontWeight.w700,
+              color: color,
+            ),
+          ),
+          Text(
+            cumulative,
+            maxLines: 1,
+            overflow: TextOverflow.ellipsis,
+            style: const TextStyle(
+              fontSize: 10,
+              color: AppColors.textMuted,
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+
+  Widget _buildDesktopDailyTable(
+    List<DailyPlatformRecord> records,
+    String todayKey,
+  ) {
     return Container(
       decoration: BoxDecoration(
-        color: Colors.white,
         borderRadius: BorderRadius.circular(12),
         border: Border.all(color: AppColors.border),
       ),
-      child: TabBar(
-        controller: _tabController,
-        isScrollable: true,
-        labelColor: AppColors.primary,
-        unselectedLabelColor: AppColors.textMuted,
-        indicatorColor: AppColors.primary,
-        indicatorWeight: 3,
-        labelStyle: GoogleFonts.inter(
-          fontSize: 13,
-          fontWeight: FontWeight.bold,
-        ),
-        unselectedLabelStyle: GoogleFonts.inter(
-          fontSize: 13,
-          fontWeight: FontWeight.w500,
-        ),
-        tabs: const [
-          Tab(icon: Icon(Icons.dashboard_outlined, size: 16), text: 'Executive Overview'),
-          Tab(icon: Icon(Icons.how_to_reg_outlined, size: 16), text: 'Registration & Verifications'),
-          Tab(icon: Icon(Icons.task_alt_outlined, size: 16), text: 'Projects & Completion'),
-          Tab(icon: Icon(Icons.category_outlined, size: 16), text: 'Categories & Skills Demand'),
-          Tab(icon: Icon(Icons.group_work_outlined, size: 16), text: 'Engagement & Funnel'),
-          Tab(icon: Icon(Icons.table_chart_outlined, size: 16), text: 'Detailed Data Ledger'),
-        ],
-      ),
-    );
-  }
-
-  Widget _buildTabViews({
-    required String categoryFilter,
-    required List<RegistrationTrendPoint> regTrends,
-    required List<ProjectTrendPoint> projTrends,
-    required List<CategoryDistributionItem> categoryDist,
-    required VerificationAnalyticsSummary verificationSummary,
-    required UserEngagementSummary engagementSummary,
-  }) {
-    return SizedBox(
-      height: 660,
-      child: TabBarView(
-        controller: _tabController,
+      clipBehavior: Clip.antiAlias,
+      child: Column(
         children: [
-          _buildExecutiveOverviewTab(regTrends, categoryDist),
-          _buildRegistrationAndVerificationTab(regTrends, verificationSummary),
-          _buildProjectsAndCompletionTab(projTrends, categoryFilter),
-          _buildCategoriesAndSkillsTab(categoryDist),
-          _buildEngagementAndFunnelTab(engagementSummary),
-          _buildDetailedDataLedgerTab(),
-        ],
-      ),
-    );
-  }
-
-  Widget _buildExecutiveOverviewTab(
-    List<RegistrationTrendPoint> regTrends,
-    List<CategoryDistributionItem> categoryDist,
-  ) {
-    final tableRows = _analyticsService.getDetailedTableRows(_selectedTimeframe);
-    final appsByPeriod = {
-      for (final row in tableRows) row.periodLabel: row.applicationsSubmitted,
-    };
-
-    final linePoints = regTrends.map((r) {
-      return BiLineDataPoint(
-        label: r.label,
-        value1: r.studentRegistrations.toDouble(),
-        value2: r.companyRegistrations.toDouble(),
-        value3: (appsByPeriod[r.label] ?? 0).toDouble(),
-      );
-    }).toList();
-
-    final donutSegments = categoryDist.map((c) {
-      return BiDonutSegment(
-        label: c.categoryName,
-        value: c.projectCount.toDouble(),
-        color: c.color,
-      );
-    }).toList();
-
-    return LayoutBuilder(
-      builder: (context, constraints) {
-        final isWidescreen = constraints.maxWidth >= 960;
-
-        final lineCard = _buildCardContainer(
-          title: 'Cohort Registration & Application Trends',
-          subtitle: 'Live periodic comparison between student signups, companies, and applications.',
-          child: BiLineChart(
-            points: linePoints,
-            metric1Label: 'Students',
-            metric1Color: AppColors.primary,
-            metric2Label: 'Companies',
-            metric2Color: AppColors.accentTeal,
-            metric3Label: 'Applications',
-            metric3Color: const Color(0xFFF59E0B),
-            height: 250,
-          ),
-        );
-
-        final donutCard = _buildCardContainer(
-          title: 'Project Category Distribution',
-          subtitle: 'Share of academic sprints hosted across engineering disciplines.',
-          child: BiDonutChart(
-            segments: donutSegments,
-            centerTitle: '${categoryDist.fold(0, (sum, c) => sum + c.projectCount)}',
-            centerSubtitle: 'Total Sprints',
-            chartRadius: 80,
-            strokeWidth: 22,
-          ),
-        );
-
-        if (isWidescreen) {
-          return Row(
-            crossAxisAlignment: CrossAxisAlignment.start,
-            children: [
-              Expanded(flex: 6, child: lineCard),
-              const SizedBox(width: 20),
-              Expanded(flex: 4, child: donutCard),
-            ],
-          );
-        }
-        return SingleChildScrollView(
-          child: Column(
-            children: [
-              lineCard,
-              const SizedBox(height: 20),
-              donutCard,
-            ],
-          ),
-        );
-      },
-    );
-  }
-
-  Widget _buildRegistrationAndVerificationTab(
-    List<RegistrationTrendPoint> regTrends,
-    VerificationAnalyticsSummary verification,
-  ) {
-    final barGroups = regTrends.map((r) {
-      return BiBarDataGroup(
-        label: r.label,
-        value1: r.studentRegistrations.toDouble(),
-        value2: r.companyRegistrations.toDouble(),
-      );
-    }).toList();
-
-    final verificationSegments = [
-      BiDonutSegment(
-        label: 'Approved Credentials',
-        value: verification.approvedCount.toDouble(),
-        color: AppColors.success,
-      ),
-      BiDonutSegment(
-        label: 'Pending In-Review',
-        value: verification.pendingCount.toDouble(),
-        color: AppColors.warning,
-      ),
-      BiDonutSegment(
-        label: 'Rejected Submissions',
-        value: verification.rejectedCount.toDouble(),
-        color: AppColors.error,
-      ),
-    ];
-
-    return LayoutBuilder(
-      builder: (context, constraints) {
-        final isWidescreen = constraints.maxWidth >= 960;
-
-        final barCard = _buildCardContainer(
-          title: 'New Registrations (Students vs Companies)',
-          subtitle: 'Periodic registration volume across authenticated student and corporate users.',
-          child: BiBarChart(
-            dataGroups: barGroups,
-            series1Label: 'Students',
-            series1Color: AppColors.primary,
-            series2Label: 'Companies',
-            series2Color: AppColors.accentTeal,
-            height: 250,
-          ),
-        );
-
-        final verifCard = _buildCardContainer(
-          title: 'Verification Breakdown & Audit',
-          subtitle: 'Institutional student & corporate accounts across verification stages.',
-          child: Column(
-            children: [
-              BiDonutChart(
-                segments: verificationSegments,
-                centerTitle: '${verification.approvalRatePercentage}%',
-                centerSubtitle: 'Approval Rate',
-                chartRadius: 75,
-                strokeWidth: 20,
-              ),
-              const SizedBox(height: 16),
-              Container(
-                width: double.infinity,
-                padding: const EdgeInsets.all(12),
-                decoration: BoxDecoration(
-                  color: AppColors.background,
-                  borderRadius: BorderRadius.circular(8),
-                ),
-                child: Wrap(
-                  spacing: 16,
-                  runSpacing: 8,
-                  alignment: WrapAlignment.spaceAround,
-                  children: [
-                    _buildMiniMetric('Pending Queue', '${verification.pendingCount}'),
-                    _buildMiniMetric('Student Total', '${verification.studentVerificationsTotal}'),
-                    _buildMiniMetric('Corporate Total', '${verification.companyVerificationsTotal}'),
-                  ],
-                ),
-              ),
-            ],
-          ),
-        );
-
-        if (isWidescreen) {
-          return Row(
-            crossAxisAlignment: CrossAxisAlignment.start,
-            children: [
-              Expanded(flex: 6, child: barCard),
-              const SizedBox(width: 20),
-              Expanded(flex: 4, child: verifCard),
-            ],
-          );
-        }
-        return SingleChildScrollView(
-          child: Column(
-            children: [
-              barCard,
-              const SizedBox(height: 20),
-              verifCard,
-            ],
-          ),
-        );
-      },
-    );
-  }
-
-  Widget _buildProjectsAndCompletionTab(
-    List<ProjectTrendPoint> projTrends,
-    String categoryFilter,
-  ) {
-    final allProjects = AdminProjectService().allProjects;
-    final filteredProjects = categoryFilter == 'All Categories'
-        ? allProjects
-        : allProjects
-            .where((p) => p.category.toLowerCase() == categoryFilter.toLowerCase())
-            .toList();
-
-    final activeCount =
-        filteredProjects.where((p) => p.status == AdminProjectStatus.active).length;
-    final completedCount =
-        filteredProjects.where((p) => p.status == AdminProjectStatus.completed).length;
-    final publishedCount =
-        filteredProjects.where((p) => p.status == AdminProjectStatus.published).length;
-    final closedOrOtherCount = filteredProjects
-        .where((p) =>
-            p.status == AdminProjectStatus.closed ||
-            p.status == AdminProjectStatus.draft ||
-            p.status == AdminProjectStatus.pendingReview ||
-            p.status == AdminProjectStatus.rejected ||
-            p.status == AdminProjectStatus.removed)
-        .length;
-
-    final completionRateStr = filteredProjects.isEmpty
-        ? '0.0%'
-        : '${((completedCount / filteredProjects.length) * 100.0).toStringAsFixed(1)}%';
-    final issuedCerts = AdminCertificateService().issuedCount;
-    final totalApps = AdminApplicationMonitoringService().totalCount;
-
-    final barGroups = projTrends.map((p) {
-      return BiBarDataGroup(
-        label: p.label,
-        value1: p.projectsPublished.toDouble(),
-        value2: p.projectsCompleted.toDouble(),
-      );
-    }).toList();
-
-    final statusSegments = [
-      BiDonutSegment(
-        label: 'Active Ongoing',
-        value: activeCount.toDouble(),
-        color: const Color(0xFF6366F1),
-      ),
-      BiDonutSegment(
-        label: 'Completed & Certified',
-        value: completedCount.toDouble(),
-        color: AppColors.success,
-      ),
-      BiDonutSegment(
-        label: 'Published (Recruiting)',
-        value: publishedCount.toDouble(),
-        color: AppColors.accentTeal,
-      ),
-      BiDonutSegment(
-        label: 'Closed / Pending / Draft',
-        value: closedOrOtherCount.toDouble(),
-        color: AppColors.textMuted,
-      ),
-    ];
-
-    return LayoutBuilder(
-      builder: (context, constraints) {
-        final isWidescreen = constraints.maxWidth >= 960;
-
-        final barCard = _buildCardContainer(
-          title: 'Project Lifecycle Velocity (Published vs Completed)',
-          subtitle: 'Comparison between open listings and completed project deliverables.',
-          child: BiBarChart(
-            dataGroups: barGroups,
-            series1Label: 'Published Sprints',
-            series1Color: const Color(0xFF6366F1),
-            series2Label: 'Completed',
-            series2Color: AppColors.success,
-            height: 250,
-          ),
-        );
-
-        final statusCard = _buildCardContainer(
-          title: 'Project Status Distribution',
-          subtitle: 'Current operational state of all corporate collaboration projects.',
-          child: Column(
-            children: [
-              BiDonutChart(
-                segments: statusSegments,
-                centerTitle: '${filteredProjects.length}',
-                centerSubtitle: 'Total Projects',
-                chartRadius: 75,
-                strokeWidth: 20,
-              ),
-              const SizedBox(height: 16),
-              Container(
-                width: double.infinity,
-                padding: const EdgeInsets.all(12),
-                decoration: BoxDecoration(
-                  color: AppColors.background,
-                  borderRadius: BorderRadius.circular(8),
-                ),
-                child: Wrap(
-                  spacing: 16,
-                  runSpacing: 8,
-                  alignment: WrapAlignment.spaceAround,
-                  children: [
-                    _buildMiniMetric('Completion Rate', completionRateStr),
-                    _buildMiniMetric('Certificates Issued', '$issuedCerts'),
-                    _buildMiniMetric('Applications Logged', '$totalApps'),
-                  ],
-                ),
-              ),
-            ],
-          ),
-        );
-
-        if (isWidescreen) {
-          return Row(
-            crossAxisAlignment: CrossAxisAlignment.start,
-            children: [
-              Expanded(flex: 6, child: barCard),
-              const SizedBox(width: 20),
-              Expanded(flex: 4, child: statusCard),
-            ],
-          );
-        }
-        return SingleChildScrollView(
-          child: Column(
-            children: [
-              barCard,
-              const SizedBox(height: 20),
-              statusCard,
-            ],
-          ),
-        );
-      },
-    );
-  }
-
-  Widget _buildCategoriesAndSkillsTab(
-    List<CategoryDistributionItem> categoryDist,
-  ) {
-    final skills = _analyticsService.getTopSkills();
-
-    return LayoutBuilder(
-      builder: (context, constraints) {
-        final isWidescreen = constraints.maxWidth >= 960;
-
-        final categoryTableCard = _buildCardContainer(
-          title: 'Academic Category Throughput',
-          subtitle: 'Student participation, corporate sponsor count, and completed sprints by domain.',
-          child: categoryDist.isEmpty
-              ? const AppEmptyState(
-                  compact: true,
-                  icon: Icons.category_outlined,
-                  title: 'No Category Metrics Yet',
-                  subtitle: 'Category participation metrics will populate once projects exist.',
-                )
-              : SingleChildScrollView(
-                  scrollDirection: Axis.horizontal,
-                  child: DataTable(
-                    headingRowHeight: 40,
-                    dataRowMinHeight: 48,
-                    dataRowMaxHeight: 52,
-                    columns: const [
-                      DataColumn(label: Text('Category', style: TextStyle(fontWeight: FontWeight.bold))),
-                      DataColumn(label: Text('Projects', style: TextStyle(fontWeight: FontWeight.bold))),
-                      DataColumn(label: Text('Students', style: TextStyle(fontWeight: FontWeight.bold))),
-                      DataColumn(label: Text('Companies', style: TextStyle(fontWeight: FontWeight.bold))),
-                      DataColumn(label: Text('Share', style: TextStyle(fontWeight: FontWeight.bold))),
-                    ],
-                    rows: categoryDist.map((c) {
-                      return DataRow(
-                        cells: [
-                          DataCell(
-                            Row(
-                              mainAxisSize: MainAxisSize.min,
-                              children: [
-                                Container(
-                                  width: 8,
-                                  height: 8,
-                                  decoration: BoxDecoration(
-                                    color: c.color,
-                                    shape: BoxShape.circle,
-                                  ),
-                                ),
-                                const SizedBox(width: 8),
-                                Text(
-                                  c.categoryName,
-                                  style: const TextStyle(
-                                    fontWeight: FontWeight.w600,
-                                    fontSize: 12,
-                                  ),
-                                ),
-                              ],
-                            ),
-                          ),
-                          DataCell(Text('${c.projectCount}')),
-                          DataCell(Text('${c.studentParticipants}')),
-                          DataCell(Text('${c.companyCount}')),
-                          DataCell(
-                            Container(
-                              padding: const EdgeInsets.symmetric(
-                                horizontal: 8,
-                                vertical: 3,
-                              ),
-                              decoration: BoxDecoration(
-                                color: c.color.withValues(alpha: 0.1),
-                                borderRadius: BorderRadius.circular(6),
-                              ),
-                              child: Text(
-                                '${c.percentage}%',
-                                style: TextStyle(
-                                  color: c.color,
-                                  fontWeight: FontWeight.bold,
-                                  fontSize: 11,
-                                ),
-                              ),
-                            ),
-                          ),
-                        ],
-                      );
-                    }).toList(),
+          Container(
+            padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
+            color: AppColors.surfaceAlt,
+            child: const Row(
+              children: [
+                Expanded(
+                  flex: 2,
+                  child: Text(
+                    'DATE',
+                    style: TextStyle(
+                      fontSize: 11,
+                      fontWeight: FontWeight.w700,
+                      color: AppColors.textSecondary,
+                      letterSpacing: 0.4,
+                    ),
                   ),
                 ),
-        );
-
-        final skillsCard = _buildCardContainer(
-          title: 'Most In-Demand Industry Skills',
-          subtitle: 'Technical competencies requested in corporate project scopes vs student profiles.',
-          child: skills.isEmpty
-              ? const AppEmptyState(
-                  compact: true,
-                  icon: Icons.psychology_outlined,
-                  title: 'No Skills Data Yet',
-                  subtitle: 'Skill demand statistics will appear once projects or student profiles list skills.',
-                )
-              : ListView.separated(
-                  shrinkWrap: true,
-                  physics: const NeverScrollableScrollPhysics(),
-                  itemCount: skills.length,
-                  separatorBuilder: (_, index) =>
-                      const Divider(height: 12, color: AppColors.border),
-                  itemBuilder: (context, i) {
-                    final s = skills[i];
-                    return Row(
-                      children: [
-                        Expanded(
-                          flex: 4,
-                          child: Column(
-                            crossAxisAlignment: CrossAxisAlignment.start,
-                            children: [
-                              Text(
-                                s.skillName,
-                                style: const TextStyle(
-                                  fontWeight: FontWeight.w600,
-                                  fontSize: 13,
-                                ),
-                                maxLines: 1,
-                                overflow: TextOverflow.ellipsis,
-                              ),
-                              Text(
-                                s.primaryCategory,
-                                style: const TextStyle(
-                                  color: AppColors.textMuted,
-                                  fontSize: 11,
-                                ),
-                                maxLines: 1,
-                                overflow: TextOverflow.ellipsis,
-                              ),
-                            ],
-                          ),
-                        ),
-                        Expanded(
-                          flex: 3,
-                          child: Text(
-                            '${s.projectRequirementCount} Projects (${s.certifiedStudentCount} Students)',
-                            style: const TextStyle(
-                              fontSize: 12,
-                              color: AppColors.textSecondary,
-                            ),
-                            maxLines: 1,
-                            overflow: TextOverflow.ellipsis,
-                          ),
-                        ),
-                        const SizedBox(width: 8),
-                        Container(
-                          padding: const EdgeInsets.symmetric(
-                            horizontal: 8,
-                            vertical: 4,
-                          ),
-                          decoration: BoxDecoration(
-                            color: AppColors.success.withValues(alpha: 0.1),
-                            borderRadius: BorderRadius.circular(6),
-                          ),
-                          child: Text(
-                            '${s.demandGrowthRate}%',
-                            style: const TextStyle(
-                              fontSize: 11,
-                              fontWeight: FontWeight.bold,
-                              color: AppColors.success,
-                            ),
-                          ),
-                        ),
-                      ],
-                    );
-                  },
+                Expanded(
+                  flex: 2,
+                  child: Text(
+                    'STUDENTS JOINED',
+                    style: TextStyle(
+                      fontSize: 11,
+                      fontWeight: FontWeight.w700,
+                      color: AppColors.textSecondary,
+                      letterSpacing: 0.4,
+                    ),
+                  ),
                 ),
-        );
-
-        if (isWidescreen) {
-          return Row(
-            crossAxisAlignment: CrossAxisAlignment.start,
-            children: [
-              Expanded(flex: 5, child: categoryTableCard),
-              const SizedBox(width: 20),
-              Expanded(flex: 5, child: skillsCard),
-            ],
-          );
-        }
-        return SingleChildScrollView(
-          child: Column(
-            children: [
-              categoryTableCard,
-              const SizedBox(height: 20),
-              skillsCard,
-            ],
+                Expanded(
+                  flex: 2,
+                  child: Text(
+                    'COMPANIES REGISTERED',
+                    style: TextStyle(
+                      fontSize: 11,
+                      fontWeight: FontWeight.w700,
+                      color: AppColors.textSecondary,
+                      letterSpacing: 0.4,
+                    ),
+                  ),
+                ),
+                Expanded(
+                  child: Text(
+                    'PROJECTS',
+                    style: TextStyle(
+                      fontSize: 11,
+                      fontWeight: FontWeight.w700,
+                      color: AppColors.textSecondary,
+                      letterSpacing: 0.4,
+                    ),
+                  ),
+                ),
+                Expanded(
+                  flex: 2,
+                  child: Text(
+                    'DAILY COMPARISON',
+                    style: TextStyle(
+                      fontSize: 11,
+                      fontWeight: FontWeight.w700,
+                      color: AppColors.textSecondary,
+                      letterSpacing: 0.4,
+                    ),
+                  ),
+                ),
+              ],
+            ),
           ),
-        );
-      },
+          for (int i = 0; i < records.length; i++) ...[
+            if (i > 0) const Divider(height: 1, color: AppColors.border),
+            _buildDesktopDailyRow(records[i], records[i].dateKey == todayKey),
+          ],
+        ],
+      ),
     );
   }
 
-  Widget _buildEngagementAndFunnelTab(UserEngagementSummary engagement) {
-    final totalApps = engagement.totalApplications;
-    final denom = totalApps > 0 ? totalApps.toDouble() : 1.0;
+  Widget _buildDesktopDailyRow(DailyPlatformRecord r, bool isToday) {
+    final compText = _dailyComparisonLabel(r);
+    final compColor = _dailyComparisonColor(r);
 
+    return Container(
+      padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
+      color: r.hasActivity
+          ? AppColors.primary.withValues(alpha: 0.02)
+          : AppColors.cardSurface,
+      child: Row(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Expanded(
+            flex: 2,
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Row(
+                  children: [
+                    Flexible(
+                      child: Text(
+                        r.fullDateLabel,
+                        maxLines: 1,
+                        overflow: TextOverflow.ellipsis,
+                        style: const TextStyle(
+                          fontSize: 13,
+                          fontWeight: FontWeight.w700,
+                          color: AppColors.textPrimary,
+                        ),
+                      ),
+                    ),
+                    if (isToday) ...[
+                      const SizedBox(width: 6),
+                      Container(
+                        padding: const EdgeInsets.symmetric(
+                          horizontal: 6,
+                          vertical: 2,
+                        ),
+                        decoration: BoxDecoration(
+                          color: AppColors.primary,
+                          borderRadius: BorderRadius.circular(5),
+                        ),
+                        child: const Text(
+                          'Today',
+                          style: TextStyle(
+                            fontSize: 10,
+                            fontWeight: FontWeight.w700,
+                            color: Colors.white,
+                          ),
+                        ),
+                      ),
+                    ],
+                  ],
+                ),
+                const SizedBox(height: 2),
+                Text(
+                  r.dateKey,
+                  style: const TextStyle(
+                    fontSize: 11,
+                    color: AppColors.textMuted,
+                  ),
+                ),
+              ],
+            ),
+          ),
+          Expanded(
+            flex: 2,
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Text(
+                  '+${r.studentCount}  (Total: ${r.totalStudentsToDate})',
+                  style: TextStyle(
+                    fontSize: 13,
+                    fontWeight: FontWeight.w700,
+                    color: r.studentCount > 0
+                        ? AppColors.primary
+                        : AppColors.textPrimary,
+                  ),
+                ),
+                if (r.studentNames.isNotEmpty) ...[
+                  const SizedBox(height: 2),
+                  Text(
+                    r.studentNames.join(', '),
+                    style: const TextStyle(
+                      fontSize: 11,
+                      color: AppColors.textSecondary,
+                    ),
+                  ),
+                ],
+              ],
+            ),
+          ),
+          Expanded(
+            flex: 2,
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Text(
+                  '+${r.companyCount}  (Total: ${r.totalCompaniesToDate})',
+                  style: TextStyle(
+                    fontSize: 13,
+                    fontWeight: FontWeight.w700,
+                    color: r.companyCount > 0
+                        ? AppColors.accentTeal
+                        : AppColors.textPrimary,
+                  ),
+                ),
+                if (r.companyNames.isNotEmpty) ...[
+                  const SizedBox(height: 2),
+                  Text(
+                    r.companyNames.join(', '),
+                    style: const TextStyle(
+                      fontSize: 11,
+                      color: AppColors.textSecondary,
+                    ),
+                  ),
+                ],
+              ],
+            ),
+          ),
+          Expanded(
+            child: Text(
+              '+${r.projectCount}',
+              style: TextStyle(
+                fontSize: 13,
+                fontWeight: FontWeight.w700,
+                color: r.projectCount > 0
+                    ? AppColors.indigoAccent
+                    : AppColors.textSecondary,
+              ),
+            ),
+          ),
+          Expanded(
+            flex: 2,
+            child: Align(
+              alignment: Alignment.centerLeft,
+              child: Container(
+                padding: const EdgeInsets.symmetric(horizontal: 9, vertical: 4),
+                decoration: BoxDecoration(
+                  color: compColor.withValues(alpha: 0.1),
+                  borderRadius: BorderRadius.circular(20),
+                ),
+                child: Text(
+                  compText,
+                  style: TextStyle(
+                    fontSize: 11,
+                    fontWeight: FontWeight.w700,
+                    color: compColor,
+                  ),
+                ),
+              ),
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+
+  Widget _buildScrollableBarChart({
+    required List<BiBarDataGroup> groups,
+    required String series1Label,
+    required Color series1Color,
+    String? series2Label,
+    Color series2Color = AppColors.accentTeal,
+    required bool isPaired,
+    required double height,
+  }) {
     return LayoutBuilder(
       builder: (context, constraints) {
-        final isWidescreen = constraints.maxWidth >= 960;
+        final double minSlotWidth = isPaired ? 32.0 : 22.0;
+        final double neededWidth = groups.length * minSlotWidth;
+        final bool needsHorizontalScroll = neededWidth > constraints.maxWidth;
 
-        final funnelCard = _buildCardContainer(
-          title: 'Application Pipeline Funnel',
-          subtitle: 'Live screening and placement conversion rate from submission to sprint assignment.',
-          child: totalApps == 0
-              ? const AppEmptyState(
-                  compact: true,
-                  icon: Icons.filter_alt_outlined,
-                  title: 'No Application Funnel Data',
-                  subtitle: 'Funnel conversion stages will populate once students submit applications.',
-                )
-              : Column(
-                  children: [
-                    _buildFunnelStage(
-                      '1. Applications Submitted',
-                      totalApps,
-                      1.0,
-                      AppColors.primary,
-                    ),
-                    const SizedBox(height: 12),
-                    _buildFunnelStage(
-                      '2. Under Corporate Review',
-                      engagement.pendingApplications,
-                      (engagement.pendingApplications / denom).clamp(0.0, 1.0),
-                      const Color(0xFF6366F1),
-                    ),
-                    const SizedBox(height: 12),
-                    _buildFunnelStage(
-                      '3. Accepted & Assigned',
-                      engagement.acceptedApplications,
-                      (engagement.acceptedApplications / denom).clamp(0.0, 1.0),
-                      AppColors.success,
-                    ),
-                    const SizedBox(height: 12),
-                    _buildFunnelStage(
-                      '4. Rejected / Closed',
-                      engagement.rejectedApplications,
-                      (engagement.rejectedApplications / denom).clamp(0.0, 1.0),
-                      AppColors.error,
-                    ),
-                  ],
-                ),
+        final chart = BiBarChart(
+          dataGroups: groups,
+          series1Label: series1Label,
+          series1Color: series1Color,
+          series2Label: series2Label,
+          series2Color: series2Color,
+          height: height,
         );
 
-        final userStatsCard = _buildCardContainer(
-          title: 'Active Community Health & Retention',
-          subtitle: 'Platform participation, corporate-student balance, and acceptance efficiency.',
-          child: Column(
-            children: [
-              _buildParticipationBar(
-                'Active Student Cohort',
-                engagement.activeStudents,
-                engagement.totalStudents,
-                AppColors.primary,
-              ),
-              const SizedBox(height: 16),
-              _buildParticipationBar(
-                'Active Corporate Partners',
-                engagement.activeCompanies,
-                engagement.totalCompanies,
-                AppColors.accentTeal,
-              ),
-              const SizedBox(height: 24),
-              Container(
-                padding: const EdgeInsets.all(16),
-                decoration: BoxDecoration(
-                  color: AppColors.background,
-                  borderRadius: BorderRadius.circular(10),
-                  border: Border.all(color: AppColors.border),
-                ),
-                child: Column(
-                  children: [
-                    Row(
-                      mainAxisAlignment: MainAxisAlignment.spaceBetween,
-                      children: [
-                        const Expanded(
-                          child: Text(
-                            'Acceptance Conversion Rate',
-                            style: TextStyle(
-                              fontWeight: FontWeight.w600,
-                              fontSize: 13,
-                            ),
-                          ),
-                        ),
-                        Text(
-                          '${engagement.applicationAcceptanceRate}%',
-                          style: const TextStyle(
-                            fontWeight: FontWeight.bold,
-                            fontSize: 14,
-                            color: AppColors.primary,
-                          ),
-                        ),
-                      ],
-                    ),
-                    const SizedBox(height: 12),
-                    Row(
-                      mainAxisAlignment: MainAxisAlignment.spaceBetween,
-                      children: [
-                        const Expanded(
-                          child: Text(
-                            'Average Applications Per Project',
-                            style: TextStyle(
-                              fontWeight: FontWeight.w600,
-                              fontSize: 13,
-                            ),
-                          ),
-                        ),
-                        Text(
-                          '${engagement.averageApplicationsPerProject}',
-                          style: const TextStyle(
-                            fontWeight: FontWeight.bold,
-                            fontSize: 14,
-                            color: AppColors.accentTeal,
-                          ),
-                        ),
-                      ],
-                    ),
-                    const SizedBox(height: 12),
-                    Row(
-                      mainAxisAlignment: MainAxisAlignment.spaceBetween,
-                      children: [
-                        const Expanded(
-                          child: Text(
-                            'Verified Account Coverage',
-                            style: TextStyle(
-                              fontWeight: FontWeight.w600,
-                              fontSize: 13,
-                            ),
-                          ),
-                        ),
-                        Text(
-                          '${engagement.engagementIndex}%',
-                          style: const TextStyle(
-                            fontWeight: FontWeight.bold,
-                            fontSize: 14,
-                            color: AppColors.success,
-                          ),
-                        ),
-                      ],
-                    ),
-                  ],
-                ),
-              ),
-            ],
-          ),
-        );
-
-        if (isWidescreen) {
-          return Row(
-            crossAxisAlignment: CrossAxisAlignment.start,
-            children: [
-              Expanded(flex: 5, child: funnelCard),
-              const SizedBox(width: 20),
-              Expanded(flex: 5, child: userStatsCard),
-            ],
-          );
+        if (!needsHorizontalScroll || groups.isEmpty) {
+          return chart;
         }
-        return SingleChildScrollView(
-          child: Column(
-            children: [
-              funnelCard,
-              const SizedBox(height: 20),
-              userStatsCard,
-            ],
-          ),
+
+        return Column(
+          crossAxisAlignment: CrossAxisAlignment.end,
+          children: [
+            SingleChildScrollView(
+              scrollDirection: Axis.horizontal,
+              child: SizedBox(
+                width: neededWidth,
+                child: chart,
+              ),
+            ),
+            const SizedBox(height: 4),
+            const Text(
+              'Scroll horizontally to view all days',
+              style: TextStyle(fontSize: 10.5, color: AppColors.textMuted),
+            ),
+          ],
         );
       },
-    );
-  }
-
-  Widget _buildFunnelStage(
-    String label,
-    int count,
-    double widthFactor,
-    Color color,
-  ) {
-    return Column(
-      crossAxisAlignment: CrossAxisAlignment.start,
-      children: [
-        Row(
-          mainAxisAlignment: MainAxisAlignment.spaceBetween,
-          children: [
-            Expanded(
-              child: Text(
-                label,
-                style: const TextStyle(
-                  fontSize: 12,
-                  fontWeight: FontWeight.w600,
-                ),
-                overflow: TextOverflow.ellipsis,
-              ),
-            ),
-            const SizedBox(width: 8),
-            Text(
-              '$count Applicants',
-              style: const TextStyle(fontSize: 12, fontWeight: FontWeight.bold),
-            ),
-          ],
-        ),
-        const SizedBox(height: 6),
-        Container(
-          width: double.infinity,
-          height: 16,
-          decoration: BoxDecoration(
-            color: AppColors.background,
-            borderRadius: BorderRadius.circular(4),
-          ),
-          alignment: Alignment.centerLeft,
-          child: FractionallySizedBox(
-            widthFactor: widthFactor.clamp(0.0, 1.0),
-            alignment: Alignment.centerLeft,
-            child: Container(
-              height: 16,
-              decoration: BoxDecoration(
-                color: color,
-                borderRadius: BorderRadius.circular(4),
-              ),
-            ),
-          ),
-        ),
-      ],
-    );
-  }
-
-  Widget _buildParticipationBar(
-    String label,
-    int active,
-    int total,
-    Color color,
-  ) {
-    final pct = total > 0 ? (active / total) : 0.0;
-    return Column(
-      crossAxisAlignment: CrossAxisAlignment.start,
-      children: [
-        Row(
-          mainAxisAlignment: MainAxisAlignment.spaceBetween,
-          children: [
-            Expanded(
-              child: Text(
-                label,
-                style: const TextStyle(
-                  fontSize: 12,
-                  fontWeight: FontWeight.w600,
-                ),
-                overflow: TextOverflow.ellipsis,
-              ),
-            ),
-            const SizedBox(width: 8),
-            Text(
-              '$active / $total (${(pct * 100).toStringAsFixed(1)}%)',
-              style: const TextStyle(fontSize: 12, fontWeight: FontWeight.bold),
-            ),
-          ],
-        ),
-        const SizedBox(height: 6),
-        LinearProgressIndicator(
-          value: pct.clamp(0.0, 1.0),
-          backgroundColor: color.withValues(alpha: 0.15),
-          valueColor: AlwaysStoppedAnimation<Color>(color),
-          minHeight: 8,
-          borderRadius: BorderRadius.circular(4),
-        ),
-      ],
-    );
-  }
-
-  Widget _buildDetailedDataLedgerTab() {
-    final rows = _analyticsService.getDetailedTableRows(_selectedTimeframe);
-
-    return _buildCardContainer(
-      title: 'Historical Audit Data Ledger',
-      subtitle: 'Precise tabular cohort records across selected timeframe: ${_selectedTimeframe.label}.',
-      child: rows.isEmpty
-          ? const AppEmptyState(
-              compact: true,
-              icon: Icons.table_rows_outlined,
-              title: 'No Cohort Ledger Data',
-              subtitle: 'Cohort breakdowns appear once students, companies, projects, or applications are recorded.',
-            )
-          : SingleChildScrollView(
-              child: SingleChildScrollView(
-                scrollDirection: Axis.horizontal,
-                child: DataTable(
-                  headingRowHeight: 44,
-                  dataRowMinHeight: 52,
-                  dataRowMaxHeight: 56,
-                  columns: const [
-                    DataColumn(label: Text('Period / Interval', style: TextStyle(fontWeight: FontWeight.bold))),
-                    DataColumn(label: Text('Student Intake', style: TextStyle(fontWeight: FontWeight.bold))),
-                    DataColumn(label: Text('Corporate Signups', style: TextStyle(fontWeight: FontWeight.bold))),
-                    DataColumn(label: Text('Projects Published', style: TextStyle(fontWeight: FontWeight.bold))),
-                    DataColumn(label: Text('Completed', style: TextStyle(fontWeight: FontWeight.bold))),
-                    DataColumn(label: Text('Applications', style: TextStyle(fontWeight: FontWeight.bold))),
-                    DataColumn(label: Text('Completion Rate', style: TextStyle(fontWeight: FontWeight.bold))),
-                    DataColumn(label: Text('Growth Rate', style: TextStyle(fontWeight: FontWeight.bold))),
-                    DataColumn(label: Text('Health Status', style: TextStyle(fontWeight: FontWeight.bold))),
-                  ],
-                  rows: rows.map((r) {
-                    Color badgeColor;
-                    if (r.healthStatus == 'Optimal' ||
-                        r.healthStatus == 'Expanding') {
-                      badgeColor = AppColors.success;
-                    } else if (r.healthStatus == 'Active') {
-                      badgeColor = AppColors.primary;
-                    } else {
-                      badgeColor = AppColors.textMuted;
-                    }
-
-                    return DataRow(
-                      cells: [
-                        DataCell(
-                          Text(
-                            r.periodLabel,
-                            style: const TextStyle(
-                              fontWeight: FontWeight.bold,
-                              fontSize: 12,
-                            ),
-                          ),
-                        ),
-                        DataCell(Text('${r.studentRegistrations}')),
-                        DataCell(Text('${r.companyRegistrations}')),
-                        DataCell(Text('${r.projectsPublished}')),
-                        DataCell(Text('${r.projectsCompleted}')),
-                        DataCell(Text('${r.applicationsSubmitted}')),
-                        DataCell(
-                          Text(
-                            '${r.completionRate}%',
-                            style: const TextStyle(fontWeight: FontWeight.w600),
-                          ),
-                        ),
-                        DataCell(
-                          Text(
-                            '${r.growthRate}%',
-                            style: const TextStyle(
-                              color: AppColors.success,
-                              fontWeight: FontWeight.bold,
-                            ),
-                          ),
-                        ),
-                        DataCell(
-                          Container(
-                            padding: const EdgeInsets.symmetric(
-                              horizontal: 8,
-                              vertical: 4,
-                            ),
-                            decoration: BoxDecoration(
-                              color: badgeColor.withValues(alpha: 0.1),
-                              borderRadius: BorderRadius.circular(6),
-                            ),
-                            child: Text(
-                              r.healthStatus,
-                              style: TextStyle(
-                                color: badgeColor,
-                                fontWeight: FontWeight.bold,
-                                fontSize: 11,
-                              ),
-                            ),
-                          ),
-                        ),
-                      ],
-                    );
-                  }).toList(),
-                ),
-              ),
-            ),
     );
   }
 
   Widget _buildCardContainer({
     required String title,
     required String subtitle,
+    String? trailingBadge,
+    Color trailingColor = AppColors.primary,
     required Widget child,
   }) {
     return Container(
+      width: double.infinity,
       padding: const EdgeInsets.all(20),
       decoration: BoxDecoration(
-        color: Colors.white,
+        color: AppColors.cardSurface,
         borderRadius: BorderRadius.circular(14),
         border: Border.all(color: AppColors.border),
         boxShadow: [
           BoxShadow(
-            color: Colors.black.withValues(alpha: 0.02),
+            color: Colors.black.withValues(alpha: 0.025),
             blurRadius: 8,
             offset: const Offset(0, 2),
           ),
@@ -1626,18 +1795,54 @@ class _ReportsAnalyticsScreenState extends State<ReportsAnalyticsScreen>
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
-          Text(
-            title,
-            style: GoogleFonts.poppins(
-              fontSize: 15,
-              fontWeight: FontWeight.bold,
-              color: AppColors.textPrimary,
-            ),
-          ),
-          const SizedBox(height: 4),
-          Text(
-            subtitle,
-            style: const TextStyle(fontSize: 12, color: AppColors.textMuted),
+          Row(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              Expanded(
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    Text(
+                      title,
+                      style: GoogleFonts.poppins(
+                        fontSize: 15,
+                        fontWeight: FontWeight.bold,
+                        color: AppColors.textPrimary,
+                      ),
+                    ),
+                    const SizedBox(height: 4),
+                    Text(
+                      subtitle,
+                      style: const TextStyle(
+                        fontSize: 12,
+                        color: AppColors.textSecondary,
+                      ),
+                    ),
+                  ],
+                ),
+              ),
+              if (trailingBadge != null) ...[
+                const SizedBox(width: 10),
+                Container(
+                  padding: const EdgeInsets.symmetric(
+                    horizontal: 10,
+                    vertical: 5,
+                  ),
+                  decoration: BoxDecoration(
+                    color: trailingColor.withValues(alpha: 0.1),
+                    borderRadius: BorderRadius.circular(20),
+                  ),
+                  child: Text(
+                    trailingBadge,
+                    style: TextStyle(
+                      fontSize: 11,
+                      fontWeight: FontWeight.w700,
+                      color: trailingColor,
+                    ),
+                  ),
+                ),
+              ],
+            ],
           ),
           const SizedBox(height: 16),
           child,
@@ -1666,461 +1871,48 @@ class _ReportsAnalyticsScreenState extends State<ReportsAnalyticsScreen>
     );
   }
 
-  void _handleGenerateReport(String categoryFilter) {
-    final report = _analyticsService.generateExecutiveReport(
-      timeframe: _selectedTimeframe,
-      categoryFilter: categoryFilter,
-      adminEmail: _authService.currentAdmin?.email ?? 'admin@campusconnect.edu.pk',
-    );
-    final stats = AdminDashboardService().statsNotifier.value;
-    final verif = _analyticsService.getVerificationAnalytics();
-    final studentVerified = AdminStudentService().verifiedCount;
-    final companyVerified = AdminCompanyService().verifiedCount;
+  String _formatDateKey(DateTime dt) {
+    return '${dt.year}-${dt.month.toString().padLeft(2, '0')}-${dt.day.toString().padLeft(2, '0')}';
+  }
 
-    showDialog(
-      context: context,
-      builder: (ctx) {
-        return Dialog(
-          shape: RoundedRectangleBorder(
-            borderRadius: BorderRadius.circular(16),
-          ),
-          child: ConstrainedBox(
-            constraints: const BoxConstraints(maxWidth: 780, maxHeight: 740),
-            child: Padding(
-              padding: const EdgeInsets.all(24),
-              child: Column(
-                crossAxisAlignment: CrossAxisAlignment.start,
-                children: [
-                  Row(
-                    children: [
-                      Container(
-                        padding: const EdgeInsets.all(10),
-                        decoration: BoxDecoration(
-                          color: AppColors.darkNavy,
-                          borderRadius: BorderRadius.circular(10),
-                        ),
-                        child: const Icon(
-                          Icons.assessment_rounded,
-                          color: Colors.white,
-                          size: 24,
-                        ),
-                      ),
-                      const SizedBox(width: 14),
-                      Expanded(
-                        child: Column(
-                          crossAxisAlignment: CrossAxisAlignment.start,
-                          children: [
-                            Text(
-                              'CampusConnect Executive Business Intelligence Audit',
-                              style: GoogleFonts.poppins(
-                                fontSize: 15,
-                                fontWeight: FontWeight.bold,
-                                color: AppColors.textPrimary,
-                              ),
-                              maxLines: 2,
-                              overflow: TextOverflow.ellipsis,
-                            ),
-                            Text(
-                              'Report Identifier: ${report.reportId} • ${report.timeframe.label}',
-                              style: const TextStyle(
-                                fontSize: 12,
-                                color: AppColors.textMuted,
-                              ),
-                            ),
-                          ],
-                        ),
-                      ),
-                      IconButton(
-                        icon: const Icon(Icons.close),
-                        onPressed: () => Navigator.pop(ctx),
-                      ),
-                    ],
-                  ),
-                  const Divider(height: 24, color: AppColors.border),
+  String _formatQuantityRatio(int students, int companies) {
+    if (students == 0 && companies == 0) return '0 : 0';
+    if (companies == 0) return '$students : 0';
+    if (students == 0) return '0 : $companies';
+    if (students >= companies) {
+      return '${(students / companies).toStringAsFixed(1)} : 1';
+    }
+    return '1 : ${(companies / students).toStringAsFixed(1)}';
+  }
 
-                  Expanded(
-                    child: SingleChildScrollView(
-                      child: Column(
-                        crossAxisAlignment: CrossAxisAlignment.start,
-                        children: [
-                          Container(
-                            width: double.infinity,
-                            padding: const EdgeInsets.all(16),
-                            decoration: BoxDecoration(
-                              color: AppColors.background,
-                              borderRadius: BorderRadius.circular(10),
-                              border: Border.all(color: AppColors.border),
-                            ),
-                            child: Column(
-                              crossAxisAlignment: CrossAxisAlignment.start,
-                              children: [
-                                Wrap(
-                                  spacing: 16,
-                                  runSpacing: 6,
-                                  alignment: WrapAlignment.spaceBetween,
-                                  children: [
-                                    Text(
-                                      'Generated By: ${report.generatedByAdmin}',
-                                      style: const TextStyle(
-                                        fontSize: 12,
-                                        fontWeight: FontWeight.w600,
-                                      ),
-                                    ),
-                                    Text(
-                                      'Date: ${report.generatedAt.toLocal().toString().substring(0, 16)}',
-                                      style: const TextStyle(
-                                        fontSize: 12,
-                                        color: AppColors.textMuted,
-                                      ),
-                                    ),
-                                  ],
-                                ),
-                                const SizedBox(height: 8),
-                                Wrap(
-                                  spacing: 12,
-                                  runSpacing: 6,
-                                  alignment: WrapAlignment.spaceBetween,
-                                  children: [
-                                    Text(
-                                      'Category Focus: ${report.categoryFilter}',
-                                      style: const TextStyle(
-                                        fontSize: 12,
-                                        color: AppColors.textSecondary,
-                                      ),
-                                    ),
-                                    Container(
-                                      padding: const EdgeInsets.symmetric(
-                                        horizontal: 8,
-                                        vertical: 2,
-                                      ),
-                                      decoration: BoxDecoration(
-                                        color: AppColors.success
-                                            .withValues(alpha: 0.1),
-                                        borderRadius: BorderRadius.circular(4),
-                                      ),
-                                      child: const Text(
-                                        'Status: AUTHORIZED & SEALED',
-                                        style: TextStyle(
-                                          fontSize: 10,
-                                          fontWeight: FontWeight.bold,
-                                          color: AppColors.success,
-                                        ),
-                                      ),
-                                    ),
-                                  ],
-                                ),
-                              ],
-                            ),
-                          ),
-                          const SizedBox(height: 18),
-                          Text(
-                            '1. Executive Analysis & Summary',
-                            style: GoogleFonts.poppins(
-                              fontSize: 14,
-                              fontWeight: FontWeight.bold,
-                              color: AppColors.textPrimary,
-                            ),
-                          ),
-                          const SizedBox(height: 6),
-                          Text(
-                            report.executiveSummary,
-                            style: const TextStyle(
-                              fontSize: 13,
-                              height: 1.5,
-                              color: AppColors.textSecondary,
-                            ),
-                          ),
-                          const SizedBox(height: 20),
-                          Text(
-                            '2. Live Platform Throughput Ledger',
-                            style: GoogleFonts.poppins(
-                              fontSize: 14,
-                              fontWeight: FontWeight.bold,
-                              color: AppColors.textPrimary,
-                            ),
-                          ),
-                          const SizedBox(height: 10),
-                          Table(
-                            border: TableBorder.all(
-                              color: AppColors.border,
-                              width: 1,
-                            ),
-                            children: [
-                              const TableRow(
-                                decoration: BoxDecoration(
-                                  color: AppColors.background,
-                                ),
-                                children: [
-                                  Padding(
-                                    padding: EdgeInsets.all(8),
-                                    child: Text(
-                                      'Metric',
-                                      style: TextStyle(
-                                        fontWeight: FontWeight.bold,
-                                        fontSize: 12,
-                                      ),
-                                    ),
-                                  ),
-                                  Padding(
-                                    padding: EdgeInsets.all(8),
-                                    child: Text(
-                                      'Live Value',
-                                      style: TextStyle(
-                                        fontWeight: FontWeight.bold,
-                                        fontSize: 12,
-                                      ),
-                                    ),
-                                  ),
-                                  Padding(
-                                    padding: EdgeInsets.all(8),
-                                    child: Text(
-                                      'Platform Standing',
-                                      style: TextStyle(
-                                        fontWeight: FontWeight.bold,
-                                        fontSize: 12,
-                                      ),
-                                    ),
-                                  ),
-                                ],
-                              ),
-                              TableRow(
-                                children: [
-                                  const Padding(
-                                    padding: EdgeInsets.all(8),
-                                    child: Text(
-                                      'Student Registrations',
-                                      style: TextStyle(fontSize: 12),
-                                    ),
-                                  ),
-                                  Padding(
-                                    padding: const EdgeInsets.all(8),
-                                    child: Text(
-                                      '${stats.totalStudents}',
-                                      style: const TextStyle(
-                                        fontSize: 12,
-                                        fontWeight: FontWeight.bold,
-                                      ),
-                                    ),
-                                  ),
-                                  Padding(
-                                    padding: const EdgeInsets.all(8),
-                                    child: Text(
-                                      '$studentVerified Verified Accounts',
-                                      style: const TextStyle(
-                                        fontSize: 12,
-                                        color: AppColors.success,
-                                      ),
-                                    ),
-                                  ),
-                                ],
-                              ),
-                              TableRow(
-                                children: [
-                                  const Padding(
-                                    padding: EdgeInsets.all(8),
-                                    child: Text(
-                                      'Registered Corporate Partners',
-                                      style: TextStyle(fontSize: 12),
-                                    ),
-                                  ),
-                                  Padding(
-                                    padding: const EdgeInsets.all(8),
-                                    child: Text(
-                                      '${stats.totalCompanies}',
-                                      style: const TextStyle(
-                                        fontSize: 12,
-                                        fontWeight: FontWeight.bold,
-                                      ),
-                                    ),
-                                  ),
-                                  Padding(
-                                    padding: const EdgeInsets.all(8),
-                                    child: Text(
-                                      '$companyVerified Verified Entities',
-                                      style: const TextStyle(
-                                        fontSize: 12,
-                                        color: AppColors.primary,
-                                      ),
-                                    ),
-                                  ),
-                                ],
-                              ),
-                              TableRow(
-                                children: [
-                                  const Padding(
-                                    padding: EdgeInsets.all(8),
-                                    child: Text(
-                                      'Project Completion Rate',
-                                      style: TextStyle(fontSize: 12),
-                                    ),
-                                  ),
-                                  Padding(
-                                    padding: const EdgeInsets.all(8),
-                                    child: Text(
-                                      '${stats.completionRate.toStringAsFixed(1)}%',
-                                      style: const TextStyle(
-                                        fontSize: 12,
-                                        fontWeight: FontWeight.bold,
-                                      ),
-                                    ),
-                                  ),
-                                  Padding(
-                                    padding: const EdgeInsets.all(8),
-                                    child: Text(
-                                      '${stats.completedProjects} / ${stats.totalProjects} Projects Completed',
-                                      style: const TextStyle(
-                                        fontSize: 12,
-                                        color: AppColors.success,
-                                      ),
-                                    ),
-                                  ),
-                                ],
-                              ),
-                              TableRow(
-                                children: [
-                                  const Padding(
-                                    padding: EdgeInsets.all(8),
-                                    child: Text(
-                                      'Verification Approval Rate',
-                                      style: TextStyle(fontSize: 12),
-                                    ),
-                                  ),
-                                  Padding(
-                                    padding: const EdgeInsets.all(8),
-                                    child: Text(
-                                      '${verif.approvalRatePercentage.toStringAsFixed(1)}%',
-                                      style: const TextStyle(
-                                        fontSize: 12,
-                                        fontWeight: FontWeight.bold,
-                                      ),
-                                    ),
-                                  ),
-                                  Padding(
-                                    padding: const EdgeInsets.all(8),
-                                    child: Text(
-                                      '${verif.pendingCount} Pending Queue',
-                                      style: const TextStyle(
-                                        fontSize: 12,
-                                        color: AppColors.textSecondary,
-                                      ),
-                                    ),
-                                  ),
-                                ],
-                              ),
-                            ],
-                          ),
-                          const SizedBox(height: 20),
-                          Container(
-                            padding: const EdgeInsets.all(12),
-                            decoration: BoxDecoration(
-                              color: AppColors.darkNavy.withValues(alpha: 0.05),
-                              borderRadius: BorderRadius.circular(8),
-                              border: Border.all(color: AppColors.border),
-                            ),
-                            child: Row(
-                              children: [
-                                const Icon(
-                                  Icons.security_rounded,
-                                  size: 18,
-                                  color: AppColors.darkNavy,
-                                ),
-                                const SizedBox(width: 8),
-                                Expanded(
-                                  child: Text(
-                                    'Integrity Checksum: ${report.cryptographicChecksum}',
-                                    style: const TextStyle(
-                                      fontSize: 11,
-                                      fontFamily: 'monospace',
-                                      color: AppColors.textPrimary,
-                                    ),
-                                  ),
-                                ),
-                              ],
-                            ),
-                          ),
-                        ],
-                      ),
-                    ),
-                  ),
+  String _dailyComparisonLabel(DailyPlatformRecord r) {
+    if (r.studentCount == 0 && r.companyCount == 0) {
+      return 'No Signups';
+    }
+    if (r.studentCount > r.companyCount) {
+      final delta = r.studentCount - r.companyCount;
+      return 'Students +$delta (${r.studentCount} vs ${r.companyCount})';
+    }
+    if (r.companyCount > r.studentCount) {
+      final delta = r.companyCount - r.studentCount;
+      return 'Companies +$delta (${r.studentCount} vs ${r.companyCount})';
+    }
+    return 'Equal (${r.studentCount} vs ${r.companyCount})';
+  }
 
-                  const Divider(height: 24, color: AppColors.border),
-                  Wrap(
-                    spacing: 10,
-                    runSpacing: 10,
-                    alignment: WrapAlignment.spaceBetween,
-                    crossAxisAlignment: WrapCrossAlignment.center,
-                    children: [
-                      TextButton.icon(
-                        onPressed: () {
-                          Clipboard.setData(
-                            ClipboardData(text: report.executiveSummary),
-                          );
-                          ScaffoldMessenger.of(context).showSnackBar(
-                            const SnackBar(
-                              content: Text('Summary copied to clipboard.'),
-                              behavior: SnackBarBehavior.floating,
-                            ),
-                          );
-                        },
-                        icon: const Icon(Icons.copy_rounded, size: 16),
-                        label: const Text('Copy Summary'),
-                      ),
-                      Wrap(
-                        spacing: 10,
-                        runSpacing: 8,
-                        children: [
-                          OutlinedButton.icon(
-                            onPressed: () {
-                              Navigator.pop(ctx);
-                              _showExportCsvModal();
-                            },
-                            icon: const Icon(Icons.table_view_rounded, size: 16),
-                            label: const Text('Export Ledger Data'),
-                          ),
-                          ElevatedButton.icon(
-                            onPressed: () {
-                              Clipboard.setData(
-                                ClipboardData(text: report.executiveSummary),
-                              );
-                              Navigator.pop(ctx);
-                              ScaffoldMessenger.of(context).showSnackBar(
-                                SnackBar(
-                                  content: Text(
-                                    'Executive Report ${report.reportId} logged & copied.',
-                                  ),
-                                  backgroundColor: AppColors.success,
-                                  behavior: SnackBarBehavior.floating,
-                                ),
-                              );
-                            },
-                            icon: const Icon(Icons.check_circle_outline, size: 16),
-                            label: const Text('Done'),
-                            style: ElevatedButton.styleFrom(
-                              backgroundColor: AppColors.primary,
-                              foregroundColor: Colors.white,
-                            ),
-                          ),
-                        ],
-                      ),
-                    ],
-                  ),
-                ],
-              ),
-            ),
-          ),
-        );
-      },
-    );
+  Color _dailyComparisonColor(DailyPlatformRecord r) {
+    if (r.studentCount == 0 && r.companyCount == 0) {
+      return AppColors.textMuted;
+    }
+    if (r.studentCount > r.companyCount) return AppColors.primary;
+    if (r.companyCount > r.studentCount) return AppColors.accentTeal;
+    return AppColors.indigoAccent;
   }
 
   void _showExportCsvModal() {
-    final categories = _buildCategoryOptions();
-    final effectiveCategory = categories.contains(_selectedCategory)
-        ? _selectedCategory
-        : 'All Categories';
     final csvData = _analyticsService.exportAnalyticsCsv(
       _selectedTimeframe,
-      effectiveCategory,
+      'All Categories',
     );
 
     showDialog(
@@ -2162,7 +1954,7 @@ class _ReportsAnalyticsScreenState extends State<ReportsAnalyticsScreen>
                   ),
                   const SizedBox(height: 12),
                   const Text(
-                    'The CSV output below contains live cohort breakdowns, category shares, and skill demand statistics:',
+                    'The CSV output below contains day-by-day student and company registrations, comparison totals, and cohort breakdowns:',
                     style: TextStyle(fontSize: 12, color: AppColors.textMuted),
                   ),
                   const SizedBox(height: 16),
@@ -2202,7 +1994,9 @@ class _ReportsAnalyticsScreenState extends State<ReportsAnalyticsScreen>
                           Navigator.pop(ctx);
                           ScaffoldMessenger.of(context).showSnackBar(
                             const SnackBar(
-                              content: Text('CSV Data successfully copied to clipboard.'),
+                              content: Text(
+                                'CSV Data successfully copied to clipboard.',
+                              ),
                               backgroundColor: AppColors.success,
                               behavior: SnackBarBehavior.floating,
                             ),

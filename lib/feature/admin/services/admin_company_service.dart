@@ -101,9 +101,21 @@ class AdminCompanyService {
         final id = row['id']?.toString() ?? '';
         final userId = row['user_id']?.toString();
         if (userId != null && userId.isNotEmpty) seenUserIds.add(userId);
-        final name = (row['company_name']?.toString().trim().isNotEmpty == true)
-            ? row['company_name'].toString().trim()
-            : 'Corporate Partner';
+        final prof = userId != null ? companyProfilesById[userId] : null;
+        final rawAcc = (row['account_status']?.toString().trim().toLowerCase() ??
+            prof?['account_status']?.toString().trim().toLowerCase() ??
+            'active');
+        final rawCompanyName = row['company_name']?.toString().trim() ?? '';
+        final profName = prof?['name']?.toString().trim() ?? '';
+        final name = rawCompanyName.isNotEmpty
+            ? rawCompanyName
+            : (profName.isNotEmpty ? profName : 'Corporate Partner');
+        if (rawAcc == 'deleted' || name.toLowerCase() == 'deleted account') {
+          continue;
+        }
+        final officialEmail = (row['email']?.toString().trim().isNotEmpty == true)
+            ? row['email'].toString().trim()
+            : (prof?['email']?.toString().trim() ?? '');
 
         final rawVerif =
             (row['verification_status']?.toString().toLowerCase() ?? 'not_submitted');
@@ -116,7 +128,6 @@ class AdminCompanyService {
           verifState = CompanyVerificationState.pending;
         }
 
-        final rawAcc = (row['account_status']?.toString().toLowerCase() ?? 'active');
         final accState = rawAcc == 'suspended'
             ? CompanyAccountState.suspended
             : CompanyAccountState.active;
@@ -156,8 +167,9 @@ class AdminCompanyService {
             logoInitial: (row['logo_initial']?.toString().trim().isNotEmpty == true)
                 ? row['logo_initial'].toString().trim()
                 : SupabaseHelper.initialsFor(name, fallback: 'CO'),
-            officialEmail: row['email']?.toString() ?? '',
-            isEmailVerified: row['is_email_verified'] == true,
+            officialEmail: officialEmail,
+            isEmailVerified:
+                row['is_email_verified'] == true || prof?['is_verified'] == true,
             industry: (row['industry']?.toString().trim().isNotEmpty == true)
                 ? row['industry'].toString().trim()
                 : 'General Technology',

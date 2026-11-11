@@ -68,13 +68,31 @@ class _BiLineChartState extends State<BiLineChart> {
       );
     }
 
-    double maxVal = 10;
+    double maxVal = 4;
     for (final p in widget.points) {
       if (_showSeries1) maxVal = max(maxVal, p.value1);
       if (_showSeries2) maxVal = max(maxVal, p.value2);
       if (_showSeries3 && p.value3 != null) maxVal = max(maxVal, p.value3!);
     }
-    final double yCeiling = (maxVal * 1.15).ceilToDouble();
+    final double yCeiling = (maxVal * 1.2).ceilToDouble();
+
+    void handlePointerX(double width, double localDx) {
+      final chartWidth = width - 40;
+      final localX = localDx - 40;
+      if (localX >= 0 && localX <= chartWidth) {
+        if (widget.points.length == 1) {
+          if (_hoveredIndex != 0) setState(() => _hoveredIndex = 0);
+          return;
+        }
+        final segmentWidth = chartWidth / (widget.points.length - 1);
+        final index = (localX / segmentWidth)
+            .round()
+            .clamp(0, widget.points.length - 1);
+        if (_hoveredIndex != index) {
+          setState(() => _hoveredIndex = index);
+        }
+      }
+    }
 
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
@@ -111,37 +129,28 @@ class _BiLineChartState extends State<BiLineChart> {
           child: LayoutBuilder(
             builder: (context, constraints) {
               final width = constraints.maxWidth;
-              return MouseRegion(
-                onHover: (event) {
-                  final chartWidth = width - 40;
-                  final localX = event.localPosition.dx - 40;
-                  if (localX >= 0 && localX <= chartWidth) {
-                    if (widget.points.length == 1) {
-                      if (_hoveredIndex != 0) setState(() => _hoveredIndex = 0);
-                      return;
-                    }
-                    final segmentWidth = chartWidth / (widget.points.length - 1);
-                    final index = (localX / segmentWidth)
-                        .round()
-                        .clamp(0, widget.points.length - 1);
-                    if (_hoveredIndex != index) {
-                      setState(() => _hoveredIndex = index);
-                    }
-                  }
-                },
-                onExit: (_) => setState(() => _hoveredIndex = null),
-                child: CustomPaint(
-                  size: Size(width, widget.height),
-                  painter: _BiLineChartPainter(
-                    points: widget.points,
-                    yCeiling: yCeiling,
-                    metric1Color: widget.metric1Color,
-                    metric2Color: widget.metric2Color,
-                    metric3Color: widget.metric3Color ?? Colors.amber,
-                    showSeries1: _showSeries1,
-                    showSeries2: _showSeries2,
-                    showSeries3: _showSeries3,
-                    hoveredIndex: _hoveredIndex,
+              return GestureDetector(
+                behavior: HitTestBehavior.opaque,
+                onTapDown: (d) => handlePointerX(width, d.localPosition.dx),
+                onHorizontalDragUpdate: (d) =>
+                    handlePointerX(width, d.localPosition.dx),
+                child: MouseRegion(
+                  onHover: (event) =>
+                      handlePointerX(width, event.localPosition.dx),
+                  onExit: (_) => setState(() => _hoveredIndex = null),
+                  child: CustomPaint(
+                    size: Size(width, widget.height),
+                    painter: _BiLineChartPainter(
+                      points: widget.points,
+                      yCeiling: yCeiling,
+                      metric1Color: widget.metric1Color,
+                      metric2Color: widget.metric2Color,
+                      metric3Color: widget.metric3Color ?? Colors.amber,
+                      showSeries1: _showSeries1,
+                      showSeries2: _showSeries2,
+                      showSeries3: _showSeries3,
+                      hoveredIndex: _hoveredIndex,
+                    ),
                   ),
                 ),
               );
@@ -361,14 +370,20 @@ class _BiLineChartPainter extends CustomPainter {
       return Offset(x, y);
     }
 
+    final int labelStep =
+        points.length <= 7 ? 1 : (points.length / 6).ceil().clamp(1, 30);
     for (int i = 0; i < points.length; i++) {
+      final isHovered = hoveredIndex == i;
+      if (!(i == 0 || i == points.length - 1 || i % labelStep == 0 || isHovered)) {
+        continue;
+      }
       final x = singlePoint ? leftPad + (chartWidth / 2) : leftPad + (i * stepX);
       textPainter.text = TextSpan(
         text: points[i].label,
         style: TextStyle(
-          color: hoveredIndex == i ? AppColors.textPrimary : AppColors.textMuted,
+          color: isHovered ? AppColors.textPrimary : AppColors.textMuted,
           fontSize: 10,
-          fontWeight: hoveredIndex == i ? FontWeight.bold : FontWeight.normal,
+          fontWeight: isHovered ? FontWeight.bold : FontWeight.normal,
         ),
       );
       textPainter.layout();

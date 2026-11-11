@@ -49,9 +49,15 @@ class AdminStudentModel {
   final String portfolioUrl;
   final String githubUrl;
   final String bio;
+  final int applicationsCount;
   final int projectsCompletedCount;
   final int activeProjectsCount;
   final List<StudentAuditRecord> auditHistory;
+
+  bool get isEngagedInProjects =>
+      applicationsCount > 0 ||
+      activeProjectsCount > 0 ||
+      projectsCompletedCount > 0;
 
   const AdminStudentModel({
     required this.id,
@@ -77,6 +83,7 @@ class AdminStudentModel {
     required this.portfolioUrl,
     required this.githubUrl,
     required this.bio,
+    this.applicationsCount = 0,
     this.projectsCompletedCount = 0,
     this.activeProjectsCount = 0,
     required this.auditHistory,
@@ -107,6 +114,7 @@ class AdminStudentModel {
     String? portfolioUrl,
     String? githubUrl,
     String? bio,
+    int? applicationsCount,
     int? projectsCompletedCount,
     int? activeProjectsCount,
     List<StudentAuditRecord>? auditHistory,
@@ -140,6 +148,7 @@ class AdminStudentModel {
       portfolioUrl: portfolioUrl ?? this.portfolioUrl,
       githubUrl: githubUrl ?? this.githubUrl,
       bio: bio ?? this.bio,
+      applicationsCount: applicationsCount ?? this.applicationsCount,
       projectsCompletedCount:
           projectsCompletedCount ?? this.projectsCompletedCount,
       activeProjectsCount: activeProjectsCount ?? this.activeProjectsCount,

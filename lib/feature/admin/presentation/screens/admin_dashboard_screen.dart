@@ -6,14 +6,6 @@ import 'package:link_vibe/core/constants/app_colors.dart';
 import 'package:link_vibe/feature/admin/models/admin_dashboard_model.dart';
 import 'package:link_vibe/feature/admin/models/admin_user_model.dart';
 import 'package:link_vibe/feature/admin/presentation/screens/admin_login_screen.dart';
-import 'package:link_vibe/feature/admin/presentation/screens/admin_settings_screen.dart';
-import 'package:link_vibe/feature/admin/presentation/screens/application_monitoring_screen.dart';
-import 'package:link_vibe/feature/admin/presentation/screens/certificate_management_screen.dart';
-import 'package:link_vibe/feature/admin/presentation/screens/company_management_screen.dart';
-import 'package:link_vibe/feature/admin/presentation/screens/company_verifications_screen.dart';
-import 'package:link_vibe/feature/admin/presentation/screens/project_management_screen.dart';
-import 'package:link_vibe/feature/admin/presentation/screens/reports_analytics_screen.dart';
-import 'package:link_vibe/feature/admin/presentation/screens/student_management_screen.dart';
 import 'package:link_vibe/feature/admin/presentation/widgets/admin_sidebar.dart';
 import 'package:link_vibe/feature/admin/presentation/widgets/admin_top_navbar.dart';
 import 'package:link_vibe/feature/admin/services/admin_auth_service.dart';
@@ -124,36 +116,12 @@ class _AdminDashboardScreenState extends State<AdminDashboardScreen> {
   }
 
   void _onRouteSelected(String routeId) {
-    if (_scaffoldKey.currentState?.isEndDrawerOpen ?? false) {
-      Navigator.pop(context);
-    }
-    if (routeId == _activeRouteId) return;
-
-    Widget? target;
-    if (routeId == 'company_verifications') {
-      target = const CompanyVerificationsScreen();
-    } else if (routeId == 'company_management') {
-      target = const CompanyManagementScreen();
-    } else if (routeId == 'student_verifications') {
-      target = const StudentManagementScreen();
-    } else if (routeId == 'projects_audit' || routeId == 'projects') {
-      target = const ProjectManagementScreen();
-    } else if (routeId == 'compliance' || routeId == 'application_monitoring') {
-      target = const ApplicationMonitoringScreen();
-    } else if (routeId == 'audit_logs' || routeId == 'certificates') {
-      target = const CertificateManagementScreen();
-    } else if (routeId == 'analytics' || routeId == 'reports') {
-      target = const ReportsAnalyticsScreen();
-    } else if (routeId == 'settings') {
-      target = const AdminSettingsScreen();
-    }
-
-    if (target != null) {
-      Navigator.pushReplacement(
-        context,
-        MaterialPageRoute(builder: (_) => target!),
-      );
-    }
+    AdminSidebar.navigateToRoute(
+      context,
+      scaffoldKey: _scaffoldKey,
+      currentRouteId: _activeRouteId,
+      targetRouteId: routeId,
+    );
   }
 
   List<_QuantityMetricItem> _buildQuantityItems(PlatformStatsModel stats) {
