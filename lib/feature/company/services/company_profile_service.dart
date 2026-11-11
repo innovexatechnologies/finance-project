@@ -61,12 +61,14 @@ class CompanyProfileService {
           .from('profiles')
           .select()
           .eq('id', user.id)
+          .limit(1)
           .maybeSingle();
 
       var companyRow = await supabase
           .from('companies')
           .select()
           .eq('user_id', user.id)
+          .limit(1)
           .maybeSingle();
 
       if (companyRow == null) {

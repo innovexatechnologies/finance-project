@@ -10,7 +10,7 @@ import 'package:link_vibe/core/widgets/status_badge.dart';
 import 'package:link_vibe/feature/student/applications/presentation/screens/my_applications_screen.dart';
 import 'package:link_vibe/feature/student/certificates/presentation/screens/certificates_screen.dart';
 import 'package:link_vibe/feature/student/explore/presentation/screens/explore_projects_screen.dart';
-import 'package:link_vibe/feature/student/notifications/presentation/screens/notifications_screen.dart';
+import 'package:link_vibe/core/widgets/student_avatar.dart';
 import 'package:link_vibe/feature/student/project_details/presentation/screens/student_project_details_screen.dart';
 
 class StudentHomeScreen extends StatefulWidget {
@@ -96,8 +96,6 @@ class _StudentHomeScreenState extends State<StudentHomeScreen> {
       builder: (context, _) {
         final profile = AppDataService.instance.getProfile();
         final studentName = _resolveStudentName(profile);
-        final initials =
-            SupabaseHelper.initialsFor(studentName, fallback: 'ST');
         final university = profile['university']?.toString().trim() ?? '';
 
         final openProjects = AppDataService.instance.getOpenProjects();
@@ -108,8 +106,7 @@ class _StudentHomeScreenState extends State<StudentHomeScreen> {
         final completedProjects =
             AppDataService.instance.completedProjectsCount;
         final certs = AppDataService.instance.certificatesCount;
-        final unreadCount = AppDataService.instance.unreadNotificationsCount;
-
+    
         return Scaffold(
           backgroundColor: AppColors.background,
           body: SafeArea(
@@ -130,32 +127,20 @@ class _StudentHomeScreenState extends State<StudentHomeScreen> {
                         Row(
                           children: [
                             GestureDetector(
-                              onTap: () => widget.onTabChange?.call(4),
-                              child: Container(
-                                width: 48,
-                                height: 48,
-                                decoration: BoxDecoration(
-                                  shape: BoxShape.circle,
-                                  gradient: AppColors.brandGradient,
-                                  boxShadow: [
-                                    BoxShadow(
-                                      color: AppColors.primaryBlue
-                                          .withValues(alpha: 0.2),
-                                      blurRadius: 10,
-                                      offset: const Offset(0, 4),
-                                    ),
-                                  ],
-                                ),
-                                child: Center(
-                                  child: Text(
-                                    initials,
-                                    style: GoogleFonts.poppins(
-                                      fontSize: 16,
-                                      fontWeight: FontWeight.bold,
-                                      color: Colors.white,
-                                    ),
+                              onTap: () => widget.onTabChange?.call(3),
+                              child: StudentAvatar(
+                                name: studentName,
+                                avatarUrl: profile['avatarUrl']?.toString(),
+                                avatarBase64: profile['avatarBase64']?.toString(),
+                                size: 48,
+                                shadows: [
+                                  BoxShadow(
+                                    color: AppColors.primaryBlue
+                                        .withValues(alpha: 0.2),
+                                    blurRadius: 10,
+                                    offset: const Offset(0, 4),
                                   ),
-                                ),
+                                ],
                               ),
                             ),
                             const SizedBox(width: 14),
@@ -186,62 +171,6 @@ class _StudentHomeScreenState extends State<StudentHomeScreen> {
                                   ),
                                 ],
                               ),
-                            ),
-                            const SizedBox(width: 10),
-                            Stack(
-                              clipBehavior: Clip.none,
-                              children: [
-                                Container(
-                                  decoration: BoxDecoration(
-                                    color: AppColors.cardWhite,
-                                    shape: BoxShape.circle,
-                                    border:
-                                        Border.all(color: AppColors.lightGray),
-                                    boxShadow: AppColors.softShadow,
-                                  ),
-                                  child: IconButton(
-                                    tooltip: 'Notifications',
-                                    icon: const Icon(
-                                      Icons.notifications_none_rounded,
-                                      color: AppColors.deepNavy,
-                                      size: 22,
-                                    ),
-                                    onPressed: () {
-                                      Navigator.push(
-                                        context,
-                                        MaterialPageRoute(
-                                          builder: (_) =>
-                                              const NotificationsScreen(),
-                                        ),
-                                      );
-                                    },
-                                  ),
-                                ),
-                                if (unreadCount > 0)
-                                  Positioned(
-                                    top: 4,
-                                    right: 4,
-                                    child: Container(
-                                      padding: const EdgeInsets.all(4),
-                                      decoration: BoxDecoration(
-                                        color: AppColors.primaryBlue,
-                                        shape: BoxShape.circle,
-                                        border: Border.all(
-                                          color: Colors.white,
-                                          width: 1.5,
-                                        ),
-                                      ),
-                                      child: Text(
-                                        unreadCount > 9 ? '9+' : '$unreadCount',
-                                        style: const TextStyle(
-                                          color: Colors.white,
-                                          fontSize: 9,
-                                          fontWeight: FontWeight.bold,
-                                        ),
-                                      ),
-                                    ),
-                                  ),
-                              ],
                             ),
                           ],
                         ),
@@ -484,7 +413,7 @@ class _StudentHomeScreenState extends State<StudentHomeScreen> {
                                 'Profile',
                                 const Color(0xFFEDE9FE),
                                 const Color(0xFF7C3AED),
-                                () => widget.onTabChange?.call(4),
+                                () => widget.onTabChange?.call(3),
                               ),
                             ),
                           ],

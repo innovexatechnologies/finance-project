@@ -14,9 +14,6 @@ class AdminProjectService {
   final ValueNotifier<List<AdminProjectModel>> projectsNotifier =
       ValueNotifier<List<AdminProjectModel>>([]);
 
-  // Stores project_id -> owner user_id for targeted governance notifications
-  final Map<String, String> _projectOwnerUserIds = {};
-
   List<AdminProjectModel> get allProjects => projectsNotifier.value;
 
   int get totalCount => projectsNotifier.value.length;
@@ -77,17 +74,11 @@ class AdminProjectService {
       } catch (_) {}
 
       final List<AdminProjectModel> loaded = [];
-      _projectOwnerUserIds.clear();
 
       for (final raw in rows) {
         final row = Map<String, dynamic>.from(raw);
         final id = row['id']?.toString() ?? '';
         final title = row['title']?.toString() ?? 'Untitled Project';
-        final ownerUid =
-            row['posted_by']?.toString() ?? row['user_id']?.toString() ?? '';
-        if (id.isNotEmpty && ownerUid.isNotEmpty) {
-          _projectOwnerUserIds[id] = ownerUid;
-        }
 
         final dbStatus = (row['status']?.toString() ?? 'Open').trim();
         final parsed = _parseDbStatus(dbStatus);
@@ -121,7 +112,10 @@ class AdminProjectService {
           AdminProjectModel(
             id: id,
             title: title,
-            companyId: row['company_id']?.toString() ?? ownerUid,
+            companyId: row['company_id']?.toString() ??
+                row['posted_by']?.toString() ??
+                row['user_id']?.toString() ??
+                '',
             companyName: row['company_name']?.toString() ?? 'Corporate Partner',
             category: row['category']?.toString() ?? 'Development',
             description: row['description']?.toString() ?? '',
@@ -318,20 +312,6 @@ class AdminProjectService {
           'updated_at': nowIso,
         }).eq('id', projectId);
 
-        final ownerId = _projectOwnerUserIds[projectId];
-        if (SupabaseHelper.isUuid(ownerId)) {
-          await supabase.from('notifications').insert({
-            'user_id': ownerId,
-            'title': 'Project Governance Update: ${project.title}',
-            'message': reason?.isNotEmpty == true
-                ? '$actionLabel — $reason'
-                : actionLabel,
-            'type': 'moderation',
-            'project_id': projectId,
-            'actor_name': moderatorName,
-          });
-        }
-
         await supabase.from('admin_audit_logs').insert({
           'admin_email':
               SupabaseHelper.currentUser?.email ?? 'admin@campusconnect.edu.pk',
@@ -447,6 +427,5 @@ class AdminProjectService {
 
   void reset() {
     projectsNotifier.value = [];
-    _projectOwnerUserIds.clear();
   }
 }

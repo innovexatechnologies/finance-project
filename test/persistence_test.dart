@@ -1,3 +1,4 @@
+import 'dart:typed_data';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 import 'package:link_vibe/core/services/app_data_service.dart';
@@ -204,20 +205,6 @@ void main() {
     expect(newCert['title'], equals('AI Machine Learning Certificate'));
   });
 
-  test('Persistent Notification Preferences across app restarts', () async {
-    // Modify preferences
-    await AppDataService.instance.updateNotificationPreference('pushNotifications', false);
-    await AppDataService.instance.updateNotificationPreference('deadlineReminders', true);
-
-    expect(AppDataService.instance.getNotificationPreferences()['pushNotifications'], isFalse);
-
-    // SIMULATE APP CLOSE & REOPEN
-    await AppDataService.instance.init();
-
-    expect(AppDataService.instance.getNotificationPreferences()['pushNotifications'], isFalse);
-    expect(AppDataService.instance.getNotificationPreferences()['deadlineReminders'], isTrue);
-  });
-
   test('Persistent Privacy Settings across app restarts', () async {
     await AppDataService.instance.updatePrivacySetting('showPhone', true);
     await AppDataService.instance.updatePrivacySetting('profileVisibility', false);
@@ -259,30 +246,6 @@ void main() {
     expect(reloadedMsgs.any((m) => m['text'].toString().contains('updated portfolio')), isTrue);
   });
 
-  test('Notification Blue Dot Badge Logic - vanishes when all read', () async {
-    // Add an unread notification
-    await AppDataService.instance.addNotification(
-      title: 'New Project Alert',
-      subtitle: 'Google posted a new project',
-      time: 'Just now',
-      type: 'default',
-    );
-
-    expect(AppDataService.instance.unreadNotificationsCount, greaterThan(0));
-
-    // Mark single notification read
-    final notifs = AppDataService.instance.getNotifications();
-    await AppDataService.instance.markNotificationRead(notifs.first['id']);
-
-    // Mark all read
-    await AppDataService.instance.markNotificationsRead();
-    expect(AppDataService.instance.unreadNotificationsCount, equals(0));
-
-    // SIMULATE APP CLOSE & REOPEN
-    await AppDataService.instance.init();
-    expect(AppDataService.instance.unreadNotificationsCount, equals(0));
-  });
-
   test('Signup University and Profile Info Persistence', () async {
     await AppDataService.instance.saveAuthSession(
       role: 'Student',
@@ -318,67 +281,6 @@ void main() {
 
     expect(AppDataService.instance.getSupportTickets(), isNotEmpty);
     expect(AppDataService.instance.getSupportTickets().first['subject'], equals('Deliverable file failed to load'));
-  });
-
-  test('Notification Deletion (Single & Bulk) Persistence', () async {
-    await AppDataService.instance.addNotification(
-      title: 'Delete Test 1',
-      subtitle: 'To be deleted',
-      time: 'Just now',
-      type: 'default',
-    );
-    await AppDataService.instance.addNotification(
-      title: 'Delete Test 2',
-      subtitle: 'To be deleted',
-      time: 'Just now',
-      type: 'default',
-    );
-
-    final notifs = AppDataService.instance.getNotifications();
-    final firstId = notifs.first['id'];
-    await AppDataService.instance.deleteNotification(firstId);
-
-    expect(AppDataService.instance.getNotifications().any((n) => n['id'] == firstId), isFalse);
-
-    // Bulk deletion
-    final remainingIds = AppDataService.instance.getNotifications().map((n) => n['id']).toList();
-    await AppDataService.instance.deleteNotifications(remainingIds);
-
-    expect(AppDataService.instance.getNotifications(), isEmpty);
-
-    // SIMULATE APP CLOSE & REOPEN
-    await AppDataService.instance.init();
-    expect(AppDataService.instance.getNotifications(), isEmpty);
-  });
-
-  test('Notification Preferences Gating for Chat Messages', () async {
-    // 1. With chatMessages == true (default)
-    await AppDataService.instance.updateNotificationPreference('chatMessages', true);
-    await AppDataService.instance.clearAllNotifications();
-
-    await AppDataService.instance.addNotification(
-      title: 'Company Message',
-      subtitle: 'Message from supervisor',
-      time: 'Just now',
-      type: 'chat',
-    );
-    expect(AppDataService.instance.unreadNotificationsCount, equals(1));
-
-    // 2. With chatMessages == false
-    await AppDataService.instance.updateNotificationPreference('chatMessages', false);
-    await AppDataService.instance.clearAllNotifications();
-
-    await AppDataService.instance.addNotification(
-      title: 'Company Message 2',
-      subtitle: 'Another message',
-      time: 'Just now',
-      type: 'chat',
-    );
-    expect(AppDataService.instance.unreadNotificationsCount, equals(0));
-
-    // Restart and verify preference persisted
-    await AppDataService.instance.init();
-    expect(AppDataService.instance.getNotificationPreferences()['chatMessages'], isFalse);
   });
 
   test('Privacy Settings Persistence (showEmail, showPhone, profileVisibility)', () async {
@@ -501,27 +403,74 @@ void main() {
     expect(AppDataService.instance.verifyLocalCredentials('student.test@campusconnect.pk', 'oldPassword1'), isFalse);
   });
 
-  test('Chat Notifications are strictly hidden when chatMessages preference is false', () async {
-    await AppDataService.instance.updateNotificationPreference('pushNotifications', true);
-    await AppDataService.instance.updateNotificationPreference('chatMessages', true);
-    await AppDataService.instance.clearAllNotifications();
+  test('Student Avatar base64 persistence and removal across app restarts', () async {
+    final samplePng = Uint8List.fromList([
+      137, 80, 78, 71, 13, 10, 26, 10, 0, 0, 0, 13, 73, 72, 68, 82,
+      0, 0, 0, 1, 0, 0, 0, 1, 8, 6, 0, 0, 0, 31, 21, 196, 137,
+      0, 0, 0, 10, 73, 68, 65, 84, 120, 156, 99, 0, 1, 0, 0, 5, 0, 1,
+      13, 10, 45, 180, 0, 0, 0, 0, 73, 69, 78, 68, 174, 66, 96, 130,
+    ]);
 
-    await AppDataService.instance.addNotification(
-      title: 'Company Message Active',
-      subtitle: 'Message from supervisor',
-      time: 'Just now',
-      type: 'chat',
+    await AppDataService.instance.updateStudentAvatar(
+      samplePng,
+      fileExtension: 'png',
+    );
+    expect(
+      AppDataService.instance.getProfile()['avatarBase64']?.toString(),
+      isNotEmpty,
     );
 
-    expect(AppDataService.instance.getNotifications().any((n) => n['type'] == 'chat'), isTrue);
-    expect(AppDataService.instance.unreadNotificationsCount, equals(1));
+    // SIMULATE APP CLOSE & REOPEN
+    await AppDataService.instance.init();
+    expect(
+      AppDataService.instance.getProfile()['avatarBase64']?.toString(),
+      isNotEmpty,
+    );
 
-    // Disable chat notifications
-    await AppDataService.instance.updateNotificationPreference('chatMessages', false);
+    await AppDataService.instance.removeStudentAvatar();
+    expect(AppDataService.instance.getProfile()['avatarBase64'], isNull);
+    expect(AppDataService.instance.getProfile()['avatarUrl'], isNull);
 
-    // Must be completely hidden from getNotifications and count must be 0!
-    expect(AppDataService.instance.getNotifications().any((n) => n['type'] == 'chat'), isFalse);
-    expect(AppDataService.instance.unreadNotificationsCount, equals(0));
+    await AppDataService.instance.init();
+    expect(AppDataService.instance.getProfile()['avatarBase64'], isNull);
+  });
+
+  test('Same email can log out and re-login cleanly across restarts', () async {
+    await AppDataService.instance.registerUserAccount(
+      email: 'sameuser@gmail.com',
+      password: 'Password123',
+      name: 'Same User',
+      university: 'NUST',
+      role: 'Student',
+    );
+    await AppDataService.instance.saveAuthSession(
+      role: 'Student',
+      email: 'sameuser@gmail.com',
+      name: 'Same User',
+      university: 'NUST',
+    );
+    expect(AppDataService.instance.isLoggedIn, isTrue);
+
+    await AppDataService.instance.clearAuthSession();
+    expect(AppDataService.instance.isLoggedIn, isFalse);
+    expect(
+      AppDataService.instance.verifyLocalCredentials(
+        'sameuser@gmail.com',
+        'Password123',
+      ),
+      isTrue,
+    );
+
+    await AppDataService.instance.saveAuthSession(
+      role: 'Student',
+      email: 'sameuser@gmail.com',
+      name: 'Same User',
+      university: 'NUST',
+    );
+    expect(AppDataService.instance.isLoggedIn, isTrue);
+    await AppDataService.instance.init();
+    expect(AppDataService.instance.isLoggedIn, isTrue);
+    expect(AppDataService.instance.userEmail, equals('sameuser@gmail.com'));
   });
 }
 

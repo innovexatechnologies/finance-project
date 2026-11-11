@@ -90,7 +90,7 @@ class _LoginScreenState extends State<LoginScreen> {
     final password = _passwordController.text.trim();
 
     setState(() => _isLoading = true);
-    SupabaseHelper.isInteractiveAuthInProgress = true;
+    SupabaseHelper.beginInteractiveAuth();
 
     try {
       // 1. Real Supabase Cloud Authentication (when initialized)
@@ -105,11 +105,17 @@ class _LoginScreenState extends State<LoginScreen> {
           throw const AuthException('Unable to verify account credentials.');
         }
 
-        final profileRow = await supabase
-            .from('profiles')
-            .select()
-            .eq('id', user.id)
-            .maybeSingle();
+        Map<String, dynamic>? profileRow;
+        try {
+          profileRow = await supabase
+              .from('profiles')
+              .select()
+              .eq('id', user.id)
+              .limit(1)
+              .maybeSingle();
+        } catch (e) {
+          debugPrint('LoginScreen profile lookup skipped: $e');
+        }
 
         final accountStatus =
             (profileRow?['account_status']?.toString() ?? 'active')
@@ -154,42 +160,52 @@ class _LoginScreenState extends State<LoginScreen> {
           return;
         }
 
-        // Role-specific suspension checks
+        // Role-specific suspension checks (guarded against legacy schemas / duplicate rows)
         if (actualRole == 'Student') {
-          final stuRow = await supabase
-              .from('students')
-              .select('account_status, suspension_reason')
-              .eq('user_id', user.id)
-              .maybeSingle();
-          if ((stuRow?['account_status']?.toString().toLowerCase() ?? '') ==
-              'suspended') {
-            final reason = stuRow?['suspension_reason']?.toString() ?? '';
-            await supabase.auth.signOut();
-            if (!mounted) return;
-            setState(() {
-              _errorBanner = reason.isNotEmpty
-                  ? 'Account suspended: $reason'
-                  : 'Your student account is currently suspended.';
-            });
-            return;
+          try {
+            final stuRow = await supabase
+                .from('students')
+                .select()
+                .eq('user_id', user.id)
+                .limit(1)
+                .maybeSingle();
+            if ((stuRow?['account_status']?.toString().toLowerCase() ?? '') ==
+                'suspended') {
+              final reason = stuRow?['suspension_reason']?.toString() ?? '';
+              await supabase.auth.signOut();
+              if (!mounted) return;
+              setState(() {
+                _errorBanner = reason.isNotEmpty
+                    ? 'Account suspended: $reason'
+                    : 'Your student account is currently suspended.';
+              });
+              return;
+            }
+          } catch (e) {
+            debugPrint('LoginScreen student status check skipped: $e');
           }
         } else if (actualRole == 'Company') {
-          final compRow = await supabase
-              .from('companies')
-              .select('account_status, suspension_reason')
-              .eq('user_id', user.id)
-              .maybeSingle();
-          if ((compRow?['account_status']?.toString().toLowerCase() ?? '') ==
-              'suspended') {
-            final reason = compRow?['suspension_reason']?.toString() ?? '';
-            await supabase.auth.signOut();
-            if (!mounted) return;
-            setState(() {
-              _errorBanner = reason.isNotEmpty
-                  ? 'Company account suspended: $reason'
-                  : 'Your company account is currently suspended.';
-            });
-            return;
+          try {
+            final compRow = await supabase
+                .from('companies')
+                .select()
+                .eq('user_id', user.id)
+                .limit(1)
+                .maybeSingle();
+            if ((compRow?['account_status']?.toString().toLowerCase() ?? '') ==
+                'suspended') {
+              final reason = compRow?['suspension_reason']?.toString() ?? '';
+              await supabase.auth.signOut();
+              if (!mounted) return;
+              setState(() {
+                _errorBanner = reason.isNotEmpty
+                    ? 'Company account suspended: $reason'
+                    : 'Your company account is currently suspended.';
+              });
+              return;
+            }
+          } catch (e) {
+            debugPrint('LoginScreen company status check skipped: $e');
           }
         }
 
@@ -228,14 +244,16 @@ class _LoginScreenState extends State<LoginScreen> {
         );
 
         if (actualRole == 'Company') {
-          Navigator.pushReplacement(
+          Navigator.pushAndRemoveUntil(
             context,
             MaterialPageRoute(builder: (_) => const CompanyDashboardScreen()),
+            (route) => false,
           );
         } else {
-          Navigator.pushReplacement(
+          Navigator.pushAndRemoveUntil(
             context,
             MaterialPageRoute(builder: (_) => const StudentMainNav()),
+            (route) => false,
           );
         }
         return;
@@ -278,14 +296,16 @@ class _LoginScreenState extends State<LoginScreen> {
 
         if (!mounted) return;
         if (actualRole == 'Company') {
-          Navigator.pushReplacement(
+          Navigator.pushAndRemoveUntil(
             context,
             MaterialPageRoute(builder: (_) => const CompanyDashboardScreen()),
+            (route) => false,
           );
         } else {
-          Navigator.pushReplacement(
+          Navigator.pushAndRemoveUntil(
             context,
             MaterialPageRoute(builder: (_) => const StudentMainNav()),
+            (route) => false,
           );
         }
         return;
@@ -306,7 +326,7 @@ class _LoginScreenState extends State<LoginScreen> {
       if (!mounted) return;
       setState(() => _errorBanner = SupabaseHelper.friendlyError(e));
     } finally {
-      SupabaseHelper.isInteractiveAuthInProgress = false;
+      SupabaseHelper.endInteractiveAuth();
       if (mounted) {
         setState(() => _isLoading = false);
       }

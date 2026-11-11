@@ -7,7 +7,6 @@ import 'package:link_vibe/feature/admin/services/admin_auth_service.dart';
 import 'package:link_vibe/feature/auth/presentation/screens/login_screen.dart';
 
 import 'change_password_screen.dart';
-import 'notification_preferences_screen.dart';
 import 'privacy_settings_screen.dart';
 import 'help_center_screen.dart';
 import 'contact_support_screen.dart';
@@ -74,7 +73,9 @@ class _SettingsScreenState extends State<SettingsScreen> {
 
     Navigator.pushAndRemoveUntil(
       context,
-      MaterialPageRoute(builder: (_) => const LoginScreen()),
+      MaterialPageRoute(
+        builder: (_) => const LoginScreen(initialRole: 'Student'),
+      ),
       (route) => false,
     );
   }
@@ -204,19 +205,6 @@ class _SettingsScreenState extends State<SettingsScreen> {
                     context,
                     MaterialPageRoute(
                       builder: (_) => const ChangePasswordScreen(),
-                    ),
-                  );
-                },
-              ),
-              _buildSettingsTile(
-                Icons.notifications_outlined,
-                'Notification Preferences',
-                'Alerts, chat notifications & deadline reminders',
-                () {
-                  Navigator.push(
-                    context,
-                    MaterialPageRoute(
-                      builder: (_) => const NotificationPreferencesScreen(),
                     ),
                   );
                 },

@@ -82,8 +82,11 @@ class _CompanySettingsScreenState extends State<CompanySettingsScreen> {
                       children: [
                         Row(
                           children: [
-                            const Icon(Icons.lock_reset_rounded,
-                                color: AppColors.primaryBlue, size: 24),
+                            const Icon(
+                              Icons.lock_reset_rounded,
+                              color: AppColors.primaryBlue,
+                              size: 24,
+                            ),
                             const SizedBox(width: 10),
                             Text(
                               'Change Password',
@@ -118,13 +121,18 @@ class _CompanySettingsScreenState extends State<CompanySettingsScreen> {
                           color: AppColors.errorBg,
                           borderRadius: BorderRadius.circular(10),
                           border: Border.all(
-                            color: AppColors.statusClosed.withValues(alpha: 0.3),
+                            color: AppColors.statusClosed.withValues(
+                              alpha: 0.3,
+                            ),
                           ),
                         ),
                         child: Row(
                           children: [
-                            const Icon(Icons.error_outline_rounded,
-                                color: AppColors.statusClosed, size: 17),
+                            const Icon(
+                              Icons.error_outline_rounded,
+                              color: AppColors.statusClosed,
+                              size: 17,
+                            ),
                             const SizedBox(width: 8),
                             Expanded(
                               child: Text(
@@ -152,7 +160,8 @@ class _CompanySettingsScreenState extends State<CompanySettingsScreen> {
                             size: 20,
                           ),
                           onPressed: () => setModalState(
-                              () => obscureCurrent = !obscureCurrent),
+                            () => obscureCurrent = !obscureCurrent,
+                          ),
                         ),
                       ),
                     ),
@@ -188,7 +197,8 @@ class _CompanySettingsScreenState extends State<CompanySettingsScreen> {
                             size: 20,
                           ),
                           onPressed: () => setModalState(
-                              () => obscureConfirm = !obscureConfirm),
+                            () => obscureConfirm = !obscureConfirm,
+                          ),
                         ),
                       ),
                     ),
@@ -204,18 +214,22 @@ class _CompanySettingsScreenState extends State<CompanySettingsScreen> {
                                 final confirmP = confirmPassCtrl.text.trim();
 
                                 if (current.isEmpty) {
-                                  setModalState(() => errorMessage =
-                                      'Please enter your current password.');
+                                  setModalState(
+                                    () => errorMessage =
+                                        'Please enter your current password.',
+                                  );
                                   return;
                                 }
                                 if (newP.length < 6) {
-                                  setModalState(() => errorMessage =
-                                      'New password must be at least 6 characters.');
+                                  setModalState(
+                                    () => errorMessage = 'New password must be at least 6 characters.',
+                                  );
                                   return;
                                 }
                                 if (newP != confirmP) {
-                                  setModalState(() => errorMessage =
-                                      'New password and confirmation do not match.');
+                                  setModalState(
+                                    () => errorMessage = 'New password and confirmation do not match.',
+                                  );
                                   return;
                                 }
 
@@ -224,22 +238,24 @@ class _CompanySettingsScreenState extends State<CompanySettingsScreen> {
                                   errorMessage = null;
                                 });
 
-                                final success =
-                                    await _settingsService.changePassword(
-                                  currentPassword: current,
-                                  newPassword: newP,
-                                );
+                                final success = await _settingsService
+                                    .changePassword(
+                                      currentPassword: current,
+                                      newPassword: newP,
+                                    );
 
                                 if (!ctx.mounted) return;
 
                                 if (success) {
                                   Navigator.pop(ctx);
                                   if (mounted) {
-                                    ScaffoldMessenger.of(this.context)
-                                        .showSnackBar(
+                                    ScaffoldMessenger.of(
+                                      this.context,
+                                    ).showSnackBar(
                                       const SnackBar(
                                         content: Text(
-                                            'Corporate password updated successfully.'),
+                                          'Corporate password updated successfully.',
+                                        ),
                                         backgroundColor: AppColors.statusOpen,
                                         behavior: SnackBarBehavior.floating,
                                       ),
@@ -248,8 +264,7 @@ class _CompanySettingsScreenState extends State<CompanySettingsScreen> {
                                 } else {
                                   setModalState(() {
                                     isSaving = false;
-                                    errorMessage = _settingsService.lastError ??
-                                        'Unable to update password. Verify your current password.';
+                                    errorMessage = _settingsService.lastError ?? 'Unable to update password. Verify your current password.';
                                   });
                                 }
                               },
@@ -318,8 +333,11 @@ class _CompanySettingsScreenState extends State<CompanySettingsScreen> {
                       children: [
                         Row(
                           children: [
-                            const Icon(Icons.support_agent_rounded,
-                                color: AppColors.primaryBlue, size: 24),
+                            const Icon(
+                              Icons.support_agent_rounded,
+                              color: AppColors.primaryBlue,
+                              size: 24,
+                            ),
                             const SizedBox(width: 10),
                             Text(
                               'Partner Support Desk',
@@ -350,7 +368,9 @@ class _CompanySettingsScreenState extends State<CompanySettingsScreen> {
                       initialValue: selectedCategory,
                       decoration: const InputDecoration(labelText: 'Category'),
                       items: categories
-                          .map((c) => DropdownMenuItem(value: c, child: Text(c)))
+                          .map(
+                            (c) => DropdownMenuItem(value: c, child: Text(c)),
+                          )
                           .toList(),
                       onChanged: (v) {
                         if (v != null) {
@@ -384,11 +404,13 @@ class _CompanySettingsScreenState extends State<CompanySettingsScreen> {
                             : () async {
                                 if (subjectCtrl.text.trim().isEmpty ||
                                     messageCtrl.text.trim().isEmpty) {
-                                  ScaffoldMessenger.of(this.context)
-                                      .showSnackBar(
+                                  ScaffoldMessenger.of(
+                                    this.context,
+                                  ).showSnackBar(
                                     const SnackBar(
                                       content: Text(
-                                          'Subject and details are both required.'),
+                                        'Subject and details are both required.',
+                                      ),
                                       backgroundColor: AppColors.statusClosed,
                                     ),
                                   );
@@ -397,10 +419,10 @@ class _CompanySettingsScreenState extends State<CompanySettingsScreen> {
                                 setModalState(() => isSubmitting = true);
                                 await AppDataService.instance
                                     .submitSupportTicket(
-                                  category: selectedCategory,
-                                  subject: subjectCtrl.text.trim(),
-                                  message: messageCtrl.text.trim(),
-                                );
+                                      category: selectedCategory,
+                                      subject: subjectCtrl.text.trim(),
+                                      message: messageCtrl.text.trim(),
+                                    );
                                 if (!ctx.mounted || !mounted) return;
                                 subjectCtrl.clear();
                                 messageCtrl.clear();
@@ -408,7 +430,8 @@ class _CompanySettingsScreenState extends State<CompanySettingsScreen> {
                                 ScaffoldMessenger.of(context).showSnackBar(
                                   const SnackBar(
                                     content: Text(
-                                        'Support ticket submitted to Governance Admin.'),
+                                      'Support ticket submitted to Governance Admin.',
+                                    ),
                                     backgroundColor: AppColors.statusOpen,
                                     behavior: SnackBarBehavior.floating,
                                   ),
@@ -528,7 +551,9 @@ class _CompanySettingsScreenState extends State<CompanySettingsScreen> {
       if (!mounted) return;
       Navigator.pushAndRemoveUntil(
         context,
-        MaterialPageRoute(builder: (_) => const LoginScreen()),
+        MaterialPageRoute(
+          builder: (_) => const LoginScreen(initialRole: 'Company'),
+        ),
         (route) => false,
       );
     }
@@ -561,10 +586,7 @@ class _CompanySettingsScreenState extends State<CompanySettingsScreen> {
         ),
         title: Text(
           'Organization Settings',
-          style: GoogleFonts.poppins(
-            fontSize: 17,
-            fontWeight: FontWeight.w700,
-          ),
+          style: GoogleFonts.poppins(fontSize: 17, fontWeight: FontWeight.w700),
         ),
       ),
       body: ValueListenableBuilder<CompanyProfileModel>(
@@ -596,8 +618,9 @@ class _CompanySettingsScreenState extends State<CompanySettingsScreen> {
                             children: [
                               CircleAvatar(
                                 radius: 26,
-                                backgroundColor:
-                                    Colors.white.withValues(alpha: 0.18),
+                                backgroundColor: Colors.white.withValues(
+                                  alpha: 0.18,
+                                ),
                                 child: Text(
                                   profile.logoInitial,
                                   style: GoogleFonts.poppins(
@@ -632,7 +655,9 @@ class _CompanySettingsScreenState extends State<CompanySettingsScreen> {
                                 ),
                               ),
                               StatusBadge(
-                                label: _verificationBadgeText(verification.status),
+                                label: _verificationBadgeText(
+                                  verification.status,
+                                ),
                               ),
                             ],
                           ),
@@ -643,17 +668,23 @@ class _CompanySettingsScreenState extends State<CompanySettingsScreen> {
                           children: [
                             ListTile(
                               contentPadding: EdgeInsets.zero,
-                              leading: const Icon(Icons.business_outlined,
-                                  color: AppColors.primaryBlue),
+                              leading: const Icon(
+                                Icons.business_outlined,
+                                color: AppColors.primaryBlue,
+                              ),
                               title: Text(
                                 'Edit Organization Profile',
                                 style: GoogleFonts.inter(
-                                    fontWeight: FontWeight.w600, fontSize: 14),
+                                  fontWeight: FontWeight.w600,
+                                  fontSize: 14,
+                                ),
                               ),
                               subtitle: Text(
                                 'Update company info, domain website, and primary contact',
                                 style: GoogleFonts.inter(
-                                    fontSize: 12, color: AppColors.grayText),
+                                  fontSize: 12,
+                                  color: AppColors.grayText,
+                                ),
                               ),
                               trailing: const Icon(Icons.chevron_right_rounded),
                               onTap: _navigateToEditProfile,
@@ -661,12 +692,16 @@ class _CompanySettingsScreenState extends State<CompanySettingsScreen> {
                             const Divider(height: 1),
                             ListTile(
                               contentPadding: EdgeInsets.zero,
-                              leading: const Icon(Icons.verified_user_outlined,
-                                  color: AppColors.primaryBlue),
+                              leading: const Icon(
+                                Icons.verified_user_outlined,
+                                color: AppColors.primaryBlue,
+                              ),
                               title: Text(
                                 'Company Verification Status',
                                 style: GoogleFonts.inter(
-                                    fontWeight: FontWeight.w600, fontSize: 14),
+                                  fontWeight: FontWeight.w600,
+                                  fontSize: 14,
+                                ),
                               ),
                               subtitle: Padding(
                                 padding: const EdgeInsets.only(top: 4),
@@ -674,7 +709,8 @@ class _CompanySettingsScreenState extends State<CompanySettingsScreen> {
                                   alignment: Alignment.centerLeft,
                                   child: StatusBadge(
                                     label: _verificationBadgeText(
-                                        verification.status),
+                                      verification.status,
+                                    ),
                                   ),
                                 ),
                               ),
@@ -692,68 +728,26 @@ class _CompanySettingsScreenState extends State<CompanySettingsScreen> {
                             const Divider(height: 1),
                             ListTile(
                               contentPadding: EdgeInsets.zero,
-                              leading: const Icon(Icons.lock_outline_rounded,
-                                  color: AppColors.primaryBlue),
+                              leading: const Icon(
+                                Icons.lock_outline_rounded,
+                                color: AppColors.primaryBlue,
+                              ),
                               title: Text(
                                 'Change Password',
                                 style: GoogleFonts.inter(
-                                    fontWeight: FontWeight.w600, fontSize: 14),
+                                  fontWeight: FontWeight.w600,
+                                  fontSize: 14,
+                                ),
                               ),
                               subtitle: Text(
                                 'Update your Supabase authentication credentials',
                                 style: GoogleFonts.inter(
-                                    fontSize: 12, color: AppColors.grayText),
+                                  fontSize: 12,
+                                  color: AppColors.grayText,
+                                ),
                               ),
                               trailing: const Icon(Icons.chevron_right_rounded),
                               onTap: _openChangePasswordModal,
-                            ),
-                          ],
-                        ),
-                        const SizedBox(height: 16),
-                        _buildSectionCard(
-                          title: 'Notifications',
-                          children: [
-                            SwitchListTile(
-                              contentPadding: EdgeInsets.zero,
-                              activeThumbColor: AppColors.primaryBlue,
-                              title: const Text('New Student Applications'),
-                              subtitle: const Text(
-                                  'Alert when a student applies to an active project'),
-                              value: settings.notifyNewApplications,
-                              onChanged: (v) => _settingsService.updateSettings(
-                                settings.copyWith(notifyNewApplications: v),
-                              ),
-                            ),
-                            SwitchListTile(
-                              contentPadding: EdgeInsets.zero,
-                              activeThumbColor: AppColors.primaryBlue,
-                              title: const Text('Deliverable Submissions'),
-                              subtitle: const Text(
-                                  'Notify when assigned students submit work'),
-                              value: settings.notifyMilestoneSubmissions,
-                              onChanged: (v) => _settingsService.updateSettings(
-                                settings.copyWith(notifyMilestoneSubmissions: v),
-                              ),
-                            ),
-                            SwitchListTile(
-                              contentPadding: EdgeInsets.zero,
-                              activeThumbColor: AppColors.primaryBlue,
-                              title: const Text('Governance & Verification Updates'),
-                              subtitle: const Text(
-                                  'Admin review updates on organization status'),
-                              value: settings.notifyStatusChanges,
-                              onChanged: (v) => _settingsService.updateSettings(
-                                settings.copyWith(notifyStatusChanges: v),
-                              ),
-                            ),
-                            SwitchListTile(
-                              contentPadding: EdgeInsets.zero,
-                              activeThumbColor: AppColors.primaryBlue,
-                              title: const Text('Weekly Recruitment Summary'),
-                              value: settings.notifyWeeklyDigest,
-                              onChanged: (v) => _settingsService.updateSettings(
-                                settings.copyWith(notifyWeeklyDigest: v),
-                              ),
                             ),
                           ],
                         ),
@@ -766,7 +760,8 @@ class _CompanySettingsScreenState extends State<CompanySettingsScreen> {
                               activeThumbColor: AppColors.primaryBlue,
                               title: const Text('Visible in Student Explore'),
                               subtitle: const Text(
-                                  'Allow verified students to discover your organization'),
+                                'Allow verified students to discover your organization',
+                              ),
                               value: settings.privacyDirectoryVisible,
                               onChanged: (v) => _settingsService.updateSettings(
                                 settings.copyWith(privacyDirectoryVisible: v),
@@ -784,7 +779,9 @@ class _CompanySettingsScreenState extends State<CompanySettingsScreen> {
                             SwitchListTile(
                               contentPadding: EdgeInsets.zero,
                               activeThumbColor: AppColors.primaryBlue,
-                              title: const Text('Share Anonymous Impact Metrics'),
+                              title: const Text(
+                                'Share Anonymous Impact Metrics',
+                              ),
                               value: settings.privacyShareAnalytics,
                               onChanged: (v) => _settingsService.updateSettings(
                                 settings.copyWith(privacyShareAnalytics: v),
@@ -798,17 +795,23 @@ class _CompanySettingsScreenState extends State<CompanySettingsScreen> {
                           children: [
                             ListTile(
                               contentPadding: EdgeInsets.zero,
-                              leading: const Icon(Icons.support_agent_rounded,
-                                  color: AppColors.primaryBlue),
+                              leading: const Icon(
+                                Icons.support_agent_rounded,
+                                color: AppColors.primaryBlue,
+                              ),
                               title: Text(
                                 'Partner Support & Tickets',
                                 style: GoogleFonts.inter(
-                                    fontWeight: FontWeight.w600, fontSize: 14),
+                                  fontWeight: FontWeight.w600,
+                                  fontSize: 14,
+                                ),
                               ),
                               subtitle: Text(
                                 'Contact Governance Admin or track submitted inquiries',
                                 style: GoogleFonts.inter(
-                                    fontSize: 12, color: AppColors.grayText),
+                                  fontSize: 12,
+                                  color: AppColors.grayText,
+                                ),
                               ),
                               trailing: const Icon(Icons.chevron_right_rounded),
                               onTap: _openHelpAndSupportModal,
@@ -816,8 +819,10 @@ class _CompanySettingsScreenState extends State<CompanySettingsScreen> {
                             const Divider(height: 1),
                             ListTile(
                               contentPadding: EdgeInsets.zero,
-                              leading: const Icon(Icons.logout_rounded,
-                                  color: AppColors.statusClosed),
+                              leading: const Icon(
+                                Icons.logout_rounded,
+                                color: AppColors.statusClosed,
+                              ),
                               title: Text(
                                 'Sign Out',
                                 style: GoogleFonts.inter(
@@ -848,27 +853,33 @@ class _CompanySettingsScreenState extends State<CompanySettingsScreen> {
   }) {
     return Container(
       width: double.infinity,
-      padding: const EdgeInsets.fromLTRB(18, 16, 18, 10),
       decoration: BoxDecoration(
-        color: AppColors.cardWhite,
         borderRadius: BorderRadius.circular(18),
         border: Border.all(color: AppColors.lightGray),
         boxShadow: AppColors.softShadow,
       ),
-      child: Column(
-        crossAxisAlignment: CrossAxisAlignment.start,
-        children: [
-          Text(
-            title,
-            style: GoogleFonts.poppins(
-              fontSize: 15,
-              fontWeight: FontWeight.w700,
-              color: AppColors.deepNavy,
-            ),
+      child: Material(
+        color: AppColors.cardWhite,
+        borderRadius: BorderRadius.circular(17),
+        clipBehavior: Clip.antiAlias,
+        child: Padding(
+          padding: const EdgeInsets.fromLTRB(18, 16, 18, 10),
+          child: Column(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              Text(
+                title,
+                style: GoogleFonts.poppins(
+                  fontSize: 15,
+                  fontWeight: FontWeight.w700,
+                  color: AppColors.deepNavy,
+                ),
+              ),
+              const SizedBox(height: 8),
+              ...children,
+            ],
           ),
-          const SizedBox(height: 8),
-          ...children,
-        ],
+        ),
       ),
     );
   }

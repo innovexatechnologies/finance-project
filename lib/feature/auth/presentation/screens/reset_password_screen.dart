@@ -110,6 +110,7 @@ class _ResetPasswordScreenState extends State<ResetPasswordScreen> {
     final newPassword = _newPassCtrl.text.trim();
 
     setState(() => _isSaving = true);
+    SupabaseHelper.beginInteractiveAuth();
 
     try {
       if (!_hasActiveRecoverySession) {
@@ -139,6 +140,7 @@ class _ResetPasswordScreenState extends State<ResetPasswordScreen> {
       if (!mounted) return;
       setState(() => _errorBanner = SupabaseHelper.friendlyError(e));
     } finally {
+      SupabaseHelper.endInteractiveAuth();
       if (mounted) setState(() => _isSaving = false);
     }
   }

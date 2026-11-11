@@ -101,6 +101,7 @@ class _EmailVerificationScreenState extends State<EmailVerificationScreen> {
       _errorBanner = null;
       _infoBanner = null;
     });
+    SupabaseHelper.beginInteractiveAuth();
 
     try {
       final res = await supabase.auth.verifyOTP(
@@ -117,6 +118,7 @@ class _EmailVerificationScreenState extends State<EmailVerificationScreen> {
       if (!mounted) return;
       setState(() => _errorBanner = SupabaseHelper.friendlyError(e));
     } finally {
+      SupabaseHelper.endInteractiveAuth();
       if (mounted) setState(() => _isWorking = false);
     }
   }
@@ -145,11 +147,17 @@ class _EmailVerificationScreenState extends State<EmailVerificationScreen> {
     });
 
     try {
-      final profileRow = await supabase
-          .from('profiles')
-          .select()
-          .eq('id', user.id)
-          .maybeSingle();
+      Map<String, dynamic>? profileRow;
+      try {
+        profileRow = await supabase
+            .from('profiles')
+            .select()
+            .eq('id', user.id)
+            .limit(1)
+            .maybeSingle();
+      } catch (e) {
+        debugPrint('EmailVerification profile lookup warning: $e');
+      }
 
       final role = await SupabaseHelper.resolveAccountRole(
         supabase,
@@ -167,7 +175,58 @@ class _EmailVerificationScreenState extends State<EmailVerificationScreen> {
       final resolvedUni =
           (profileRow?['university']?.toString().trim().isNotEmpty == true)
               ? profileRow!['university'].toString().trim()
-              : user.userMetadata?['university']?.toString();
+              : (user.userMetadata?['university']?.toString() ?? '');
+
+      if (profileRow == null) {
+        try {
+          await supabase.from('profiles').upsert({
+            'id': user.id,
+            'name': resolvedName,
+            'email': user.email ?? widget.email.trim(),
+            'user_type': role,
+            'university': resolvedUni,
+            'account_status': 'active',
+          });
+          if (role == 'Company') {
+            final existingComp = await supabase
+                .from('companies')
+                .select('id')
+                .eq('user_id', user.id)
+                .limit(1)
+                .maybeSingle();
+            if (existingComp == null) {
+              await supabase.from('companies').insert({
+                'user_id': user.id,
+                'company_name': resolvedName,
+                'email': user.email ?? widget.email.trim(),
+                'industry': resolvedUni.isNotEmpty
+                    ? resolvedUni
+                    : 'Software & Cloud Services',
+                'verification_status': 'not_submitted',
+                'logo_initial':
+                    SupabaseHelper.initialsFor(resolvedName, fallback: 'CO'),
+              });
+            }
+          } else if (role == 'Student') {
+            final existingStu = await supabase
+                .from('students')
+                .select('id')
+                .eq('user_id', user.id)
+                .limit(1)
+                .maybeSingle();
+            if (existingStu == null) {
+              await supabase.from('students').insert({
+                'user_id': user.id,
+                'full_name': resolvedName,
+                'email': user.email ?? widget.email.trim(),
+                'university': resolvedUni,
+              });
+            }
+          }
+        } catch (e) {
+          debugPrint('EmailVerification profile initialization warning: $e');
+        }
+      }
 
       await AppDataService.instance.saveAuthSession(
         role: role,

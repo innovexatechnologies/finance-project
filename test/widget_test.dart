@@ -1,8 +1,10 @@
+import 'dart:typed_data';
 import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 import 'package:link_vibe/core/services/app_data_service.dart';
 import 'package:link_vibe/core/services/supabase_helper.dart';
+import 'package:link_vibe/core/widgets/student_avatar.dart';
 import 'package:link_vibe/feature/admin/presentation/screens/admin_dashboard_screen.dart';
 import 'package:link_vibe/feature/admin/presentation/screens/admin_login_screen.dart';
 import 'package:link_vibe/feature/auth/presentation/screens/email_verification_screen.dart';
@@ -14,6 +16,7 @@ import 'package:link_vibe/feature/student/certificates/presentation/screens/cert
 import 'package:link_vibe/feature/student/chat/presentation/screens/chat_list_screen.dart';
 import 'package:link_vibe/feature/student/feedback/presentation/screens/feedback_screen.dart';
 import 'package:link_vibe/feature/student/home/presentation/screens/student_home_screen.dart';
+import 'package:link_vibe/feature/student/my_projects/presentation/screens/my_projects_screen.dart';
 import 'package:link_vibe/feature/student/presentation/screens/student_main_nav.dart';
 import 'package:link_vibe/feature/student/settings/presentation/screens/change_password_screen.dart';
 import 'package:link_vibe/feature/student/settings/presentation/screens/contact_support_screen.dart';
@@ -208,6 +211,14 @@ void main() {
         'io.supabase.campusconnect://login-callback/',
       );
       expect(SupabaseHelper.isInteractiveAuthInProgress, isFalse);
+
+      SupabaseHelper.beginInteractiveAuth();
+      expect(SupabaseHelper.shouldIgnoreSignedInEvent, isTrue);
+      SupabaseHelper.endInteractiveAuth();
+      expect(SupabaseHelper.isInteractiveAuthInProgress, isFalse);
+      expect(SupabaseHelper.shouldIgnoreSignedInEvent, isTrue);
+      SupabaseHelper.clearAuthFlags();
+      expect(SupabaseHelper.shouldIgnoreSignedInEvent, isFalse);
     });
 
     testWidgets(
@@ -320,7 +331,7 @@ void main() {
       await AppDataService.instance.addSkill('i');
 
       await tester.pumpWidget(
-        const MaterialApp(home: StudentMainNav(initialIndex: 4)),
+        const MaterialApp(home: StudentMainNav(initialIndex: 3)),
       );
       await tester.pumpAndSettle();
 
@@ -358,7 +369,7 @@ void main() {
       });
 
       await tester.pumpWidget(
-        const MaterialApp(home: StudentMainNav(initialIndex: 4)),
+        const MaterialApp(home: StudentMainNav(initialIndex: 3)),
       );
       await tester.pumpAndSettle();
 
@@ -381,6 +392,241 @@ void main() {
 
       expect(tester.takeException(), isNull);
       expect(find.text('Ayesha Noor'), findsOneWidget);
+    });
+
+    testWidgets(
+        'StudentProfileScreen Edit Academic Profile works cleanly at 320x568 with keyboard insets',
+        (tester) async {
+      tester.view.physicalSize = const Size(320, 568);
+      tester.view.devicePixelRatio = 1.0;
+      addTearDown(() {
+        tester.view.resetPhysicalSize();
+        tester.view.resetViewInsets();
+      });
+
+      await tester.pumpWidget(
+        const MaterialApp(home: StudentMainNav(initialIndex: 3)),
+      );
+      await tester.pumpAndSettle();
+
+      await tester.tap(find.byTooltip('Edit Profile'));
+      await tester.pump();
+      await tester.pump(const Duration(milliseconds: 50));
+
+      tester.view.viewInsets = const FakeViewPadding(bottom: 240);
+      await tester.pump(const Duration(milliseconds: 50));
+
+      await tester.enterText(find.byType(TextField).first, 'Zara Khan');
+      await tester.pump();
+
+      await tester.ensureVisible(find.text('Save Changes'));
+      await tester.tap(find.text('Save Changes'));
+      tester.view.viewInsets = FakeViewPadding.zero;
+      await tester.pump();
+      await tester.pump(const Duration(milliseconds: 100));
+      await tester.pumpAndSettle();
+
+      expect(tester.takeException(), isNull);
+      expect(find.text('Zara Khan'), findsOneWidget);
+    });
+
+    testWidgets(
+        'Notifications are completely removed from StudentMainNav and StudentHomeScreen',
+        (tester) async {
+      tester.view.physicalSize = const Size(412, 915);
+      tester.view.devicePixelRatio = 1.0;
+      addTearDown(() => tester.view.resetPhysicalSize());
+
+      await tester.pumpWidget(const MaterialApp(home: StudentMainNav()));
+      await tester.pumpAndSettle();
+
+      final nav = find.byType(BottomNavigationBar);
+      expect(find.descendant(of: nav, matching: find.text('Home')), findsOneWidget);
+      expect(find.descendant(of: nav, matching: find.text('Explore')), findsOneWidget);
+      expect(find.descendant(of: nav, matching: find.text('My Projects')), findsOneWidget);
+      expect(find.descendant(of: nav, matching: find.text('Profile')), findsOneWidget);
+      expect(find.text('Alerts'), findsNothing);
+      expect(find.byIcon(Icons.notifications_none_rounded), findsNothing);
+      expect(find.byIcon(Icons.notifications_outlined), findsNothing);
+      expect(find.byIcon(Icons.notifications_rounded), findsNothing);
+      expect(tester.takeException(), isNull);
+    });
+
+    testWidgets('MyProjectsScreen Refresh button refreshes projects with feedback',
+        (tester) async {
+      tester.view.physicalSize = const Size(412, 915);
+      tester.view.devicePixelRatio = 1.0;
+      addTearDown(() => tester.view.resetPhysicalSize());
+
+      await tester.pumpWidget(const MaterialApp(home: MyProjectsScreen()));
+      await tester.pumpAndSettle();
+
+      await tester.tap(find.byIcon(Icons.refresh_rounded));
+      await tester.pumpAndSettle();
+
+      expect(tester.takeException(), isNull);
+      expect(find.text('Refreshed local projects.'), findsOneWidget);
+    });
+
+    testWidgets(
+        'StudentProfileScreen displays StudentAvatar and opens photo options sheet',
+        (tester) async {
+      tester.view.physicalSize = const Size(412, 915);
+      tester.view.devicePixelRatio = 1.0;
+      addTearDown(() => tester.view.resetPhysicalSize());
+
+      final samplePng = Uint8List.fromList([
+        137, 80, 78, 71, 13, 10, 26, 10, 0, 0, 0, 13, 73, 72, 68, 82,
+        0, 0, 0, 1, 0, 0, 0, 1, 8, 6, 0, 0, 0, 31, 21, 196, 137,
+        0, 0, 0, 10, 73, 68, 65, 84, 120, 156, 99, 0, 1, 0, 0, 5, 0, 1,
+        13, 10, 45, 180, 0, 0, 0, 0, 73, 69, 78, 68, 174, 66, 96, 130,
+      ]);
+      await AppDataService.instance.updateStudentAvatar(
+        samplePng,
+        fileExtension: 'png',
+      );
+
+      await tester.pumpWidget(
+        const MaterialApp(home: StudentMainNav(initialIndex: 3)),
+      );
+      await tester.pumpAndSettle();
+
+      expect(find.byType(StudentAvatar), findsOneWidget);
+      expect(find.byType(Image), findsOneWidget);
+      expect(tester.takeException(), isNull);
+
+      await tester.tap(find.byTooltip('Change Profile Photo'));
+      await tester.pumpAndSettle();
+
+      expect(find.text('Profile Photo'), findsOneWidget);
+      expect(find.text('Choose from Gallery'), findsOneWidget);
+      expect(find.text('Remove Current Photo'), findsOneWidget);
+      expect(find.text('Edit Academic Profile'), findsOneWidget);
+    });
+
+    testWidgets(
+        'Student can log out via Settings and re-login with the same Gmail',
+        (tester) async {
+      tester.view.physicalSize = const Size(412, 915);
+      tester.view.devicePixelRatio = 1.0;
+      addTearDown(() => tester.view.resetPhysicalSize());
+
+      await AppDataService.instance.registerUserAccount(
+        email: 'student.relogin@gmail.com',
+        password: 'Password123',
+        name: 'Student Relogin',
+        university: 'FAST',
+        role: 'Student',
+      );
+
+      await tester.pumpWidget(const MaterialApp(home: LoginScreen()));
+      await tester.pumpAndSettle();
+
+      await tester.enterText(
+        find.byType(TextFormField).at(0),
+        'student.relogin@gmail.com',
+      );
+      await tester.enterText(
+        find.byType(TextFormField).at(1),
+        'Password123',
+      );
+      await tester.ensureVisible(find.text('Sign In as Student'));
+      await tester.tap(find.text('Sign In as Student'));
+      await tester.pumpAndSettle();
+      expect(find.byType(StudentMainNav), findsOneWidget);
+
+      await tester.tap(find.descendant(
+        of: find.byType(BottomNavigationBar),
+        matching: find.text('Profile'),
+      ));
+      await tester.pumpAndSettle();
+      await tester.tap(find.byTooltip('Settings'));
+      await tester.pumpAndSettle();
+
+      await tester.ensureVisible(find.text('Log Out'));
+      await tester.tap(find.text('Log Out'));
+      await tester.pumpAndSettle();
+      await tester.tap(find.text('Log Out').last);
+      await tester.pumpAndSettle();
+
+      expect(find.byType(LoginScreen), findsOneWidget);
+      expect(find.text('Sign In as Student'), findsOneWidget);
+
+      await tester.enterText(
+        find.byType(TextFormField).at(0),
+        'student.relogin@gmail.com',
+      );
+      await tester.enterText(
+        find.byType(TextFormField).at(1),
+        'Password123',
+      );
+      await tester.ensureVisible(find.text('Sign In as Student'));
+      await tester.tap(find.text('Sign In as Student'));
+      await tester.pumpAndSettle();
+
+      expect(find.byType(StudentMainNav), findsOneWidget);
+      expect(tester.takeException(), isNull);
+    });
+
+    testWidgets(
+        'Company can log out via CompanySettings and re-login with the same Gmail without wrong-role block',
+        (tester) async {
+      tester.view.physicalSize = const Size(412, 915);
+      tester.view.devicePixelRatio = 1.0;
+      addTearDown(() => tester.view.resetPhysicalSize());
+
+      await AppDataService.instance.registerUserAccount(
+        email: 'company.relogin@gmail.com',
+        password: 'Password123',
+        name: 'Company Relogin',
+        university: 'Cloud Tech',
+        role: 'Company',
+      );
+
+      await tester.pumpWidget(
+        const MaterialApp(home: LoginScreen(initialRole: 'Company')),
+      );
+      await tester.pumpAndSettle();
+
+      await tester.enterText(
+        find.byType(TextFormField).at(0),
+        'company.relogin@gmail.com',
+      );
+      await tester.enterText(
+        find.byType(TextFormField).at(1),
+        'Password123',
+      );
+      await tester.ensureVisible(find.text('Sign In as Company'));
+      await tester.tap(find.text('Sign In as Company'));
+      await tester.pumpAndSettle();
+      expect(find.byType(CompanyDashboardScreen), findsOneWidget);
+
+      await tester.tap(find.byTooltip('Settings'));
+      await tester.pumpAndSettle();
+
+      await tester.ensureVisible(find.text('Sign Out'));
+      await tester.tap(find.text('Sign Out'));
+      await tester.pumpAndSettle();
+      await tester.tap(find.text('Sign Out').last);
+      await tester.pumpAndSettle();
+
+      expect(find.byType(LoginScreen), findsOneWidget);
+      expect(find.text('Sign In as Company'), findsOneWidget);
+
+      await tester.enterText(
+        find.byType(TextFormField).at(0),
+        'company.relogin@gmail.com',
+      );
+      await tester.enterText(
+        find.byType(TextFormField).at(1),
+        'Password123',
+      );
+      await tester.ensureVisible(find.text('Sign In as Company'));
+      await tester.tap(find.text('Sign In as Company'));
+      await tester.pumpAndSettle();
+
+      expect(find.byType(CompanyDashboardScreen), findsOneWidget);
+      expect(tester.takeException(), isNull);
     });
   });
 }

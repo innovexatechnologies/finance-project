@@ -37,18 +37,11 @@ class CompanySettingsService {
           .maybeSingle();
 
       if (row != null) {
-        final np = row['notification_prefs'] is Map
-            ? Map<String, dynamic>.from(row['notification_prefs'] as Map)
-            : <String, dynamic>{};
         final ps = row['privacy_settings'] is Map
             ? Map<String, dynamic>.from(row['privacy_settings'] as Map)
             : <String, dynamic>{};
 
         settingsNotifier.value = CompanySettingsModel(
-          notifyNewApplications: np['notify_new_applications'] ?? true,
-          notifyMilestoneSubmissions: np['notify_milestone_submissions'] ?? true,
-          notifyStatusChanges: np['notify_status_changes'] ?? true,
-          notifyWeeklyDigest: np['notify_weekly_digest'] ?? false,
           privacyDirectoryVisible: ps['privacy_directory_visible'] ?? true,
           privacyShowContactPerson: ps['privacy_show_contact_person'] ?? true,
           privacyShareAnalytics: ps['privacy_share_analytics'] ?? true,
@@ -68,12 +61,6 @@ class CompanySettingsService {
       try {
         await supabase.from('user_settings').upsert({
           'user_id': user.id,
-          'notification_prefs': {
-            'notify_new_applications': updated.notifyNewApplications,
-            'notify_milestone_submissions': updated.notifyMilestoneSubmissions,
-            'notify_status_changes': updated.notifyStatusChanges,
-            'notify_weekly_digest': updated.notifyWeeklyDigest,
-          },
           'privacy_settings': {
             'privacy_directory_visible': updated.privacyDirectoryVisible,
             'privacy_show_contact_person': updated.privacyShowContactPerson,
@@ -103,10 +90,15 @@ class CompanySettingsService {
       try {
         final email = user.email;
         if (email != null && email.isNotEmpty) {
-          await supabase.auth.signInWithPassword(
-            email: email,
-            password: currentPassword,
-          );
+          SupabaseHelper.beginInteractiveAuth();
+          try {
+            await supabase.auth.signInWithPassword(
+              email: email,
+              password: currentPassword,
+            );
+          } finally {
+            SupabaseHelper.endInteractiveAuth();
+          }
         }
         await supabase.auth.updateUser(UserAttributes(password: newPassword));
         return true;
@@ -124,9 +116,10 @@ class CompanySettingsService {
   Future<void> logout() async {
     final supabase = SupabaseHelper.clientOrNull;
     try {
-      await supabase?.auth.signOut();
+      await supabase?.auth.signOut().timeout(const Duration(seconds: 3));
     } catch (_) {}
 
+    SupabaseHelper.clearAuthFlags();
     await AppDataService.instance.clearAuthSession();
     CompanyProfileService().reset();
     CompanyProjectService().reset();

@@ -33,6 +33,9 @@ void main() async {
       await Supabase.initialize(
         url: supabaseUrl,
         publishableKey: supabaseKey,
+        authOptions: const FlutterAuthClientOptions(
+          authFlowType: AuthFlowType.implicit,
+        ),
       );
       debugPrint('Supabase initialized successfully.');
     } catch (e) {
@@ -140,8 +143,7 @@ class _MyAppState extends State<MyApp> {
     }
 
     if (data.event == AuthChangeEvent.signedIn &&
-        !SupabaseHelper.isInteractiveAuthInProgress &&
-        !AppDataService.instance.isLoggedIn &&
+        !SupabaseHelper.shouldIgnoreSignedInEvent &&
         data.session?.user != null &&
         !_handlingAuthCallback) {
       _handlingAuthCallback = true;
@@ -163,6 +165,7 @@ class _MyAppState extends State<MyApp> {
           .from('profiles')
           .select()
           .eq('id', user.id)
+          .limit(1)
           .maybeSingle();
 
       final status = (profileRow?['account_status']?.toString() ?? 'active')

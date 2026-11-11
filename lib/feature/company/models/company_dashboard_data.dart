@@ -42,14 +42,12 @@ class CompanyProfileInfo {
   final String tagline;
   final String industry;
   final bool isVerified;
-  final int unreadNotificationsCount;
 
   const CompanyProfileInfo({
     required this.companyName,
     required this.tagline,
     required this.industry,
     this.isVerified = false,
-    this.unreadNotificationsCount = 0,
   });
 }
 

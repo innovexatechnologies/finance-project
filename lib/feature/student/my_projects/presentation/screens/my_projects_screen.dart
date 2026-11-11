@@ -21,6 +21,7 @@ class MyProjectsScreen extends StatefulWidget {
 class _MyProjectsScreenState extends State<MyProjectsScreen>
     with SingleTickerProviderStateMixin {
   late TabController _tabController;
+  bool _isRefreshing = false;
 
   @override
   void initState() {
@@ -32,6 +33,52 @@ class _MyProjectsScreenState extends State<MyProjectsScreen>
   void dispose() {
     _tabController.dispose();
     super.dispose();
+  }
+
+  Future<void> _refreshProjects({bool showFeedback = true}) async {
+    if (_isRefreshing) return;
+    setState(() => _isRefreshing = true);
+    try {
+      final hasClient = SupabaseHelper.clientOrNull != null;
+      if (hasClient) {
+        await AppDataService.instance.syncFromSupabase(forceRefresh: true);
+      } else {
+        await AppDataService.instance.init();
+      }
+      if (!mounted || !showFeedback) return;
+      final syncError = AppDataService.instance.lastSyncError;
+      ScaffoldMessenger.of(context)
+        ..hideCurrentSnackBar()
+        ..showSnackBar(
+          SnackBar(
+            content: Text(
+              syncError != null
+                  ? SupabaseHelper.friendlyError(syncError)
+                  : hasClient
+                      ? 'Projects and statuses refreshed.'
+                      : 'Refreshed local projects.',
+            ),
+            backgroundColor:
+                syncError != null ? AppColors.statusClosed : AppColors.statusOpen,
+            duration: const Duration(seconds: 2),
+          ),
+        );
+    } catch (e) {
+      if (mounted && showFeedback) {
+        ScaffoldMessenger.of(context)
+          ..hideCurrentSnackBar()
+          ..showSnackBar(
+            SnackBar(
+              content: Text(SupabaseHelper.friendlyError(e)),
+              backgroundColor: AppColors.statusClosed,
+            ),
+          );
+      }
+    } finally {
+      if (mounted) {
+        setState(() => _isRefreshing = false);
+      }
+    }
   }
 
   Future<void> _openCompanyChat(Map<String, dynamic> project) async {
@@ -77,10 +124,19 @@ class _MyProjectsScreenState extends State<MyProjectsScreen>
             centerTitle: false,
             actions: [
               IconButton(
-                tooltip: 'Sync Assignments',
-                icon: const Icon(Icons.refresh_rounded),
-                onPressed: () => AppDataService.instance
-                    .syncFromSupabase(forceRefresh: true),
+                tooltip:
+                    _isRefreshing ? 'Syncing Projects...' : 'Refresh Projects',
+                icon: _isRefreshing
+                    ? const SizedBox(
+                        width: 18,
+                        height: 18,
+                        child: CircularProgressIndicator(
+                          strokeWidth: 2.2,
+                          color: AppColors.primaryBlue,
+                        ),
+                      )
+                    : const Icon(Icons.refresh_rounded),
+                onPressed: _isRefreshing ? null : _refreshProjects,
               ),
               const SizedBox(width: 4),
             ],
@@ -107,8 +163,7 @@ class _MyProjectsScreenState extends State<MyProjectsScreen>
                 children: [
                   RefreshIndicator(
                     color: AppColors.primaryBlue,
-                    onRefresh: () => AppDataService.instance
-                        .syncFromSupabase(forceRefresh: true),
+                    onRefresh: _refreshProjects,
                     child: activeList.isEmpty
                         ? ListView(
                             physics: const AlwaysScrollableScrollPhysics(),
@@ -133,8 +188,7 @@ class _MyProjectsScreenState extends State<MyProjectsScreen>
                   ),
                   RefreshIndicator(
                     color: AppColors.primaryBlue,
-                    onRefresh: () => AppDataService.instance
-                        .syncFromSupabase(forceRefresh: true),
+                    onRefresh: _refreshProjects,
                     child: completedList.isEmpty
                         ? ListView(
                             physics: const AlwaysScrollableScrollPhysics(),

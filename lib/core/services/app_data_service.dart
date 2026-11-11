@@ -2,6 +2,7 @@ import 'dart:convert';
 import 'package:flutter/foundation.dart';
 import 'package:flutter/scheduler.dart';
 import 'package:shared_preferences/shared_preferences.dart';
+import 'package:supabase_flutter/supabase_flutter.dart' show FileOptions;
 import 'package:link_vibe/core/services/supabase_helper.dart';
 
 /// Central Persistent & Supabase-Synchronized Data Service for CampusConnect.
@@ -46,20 +47,10 @@ class AppDataService extends ChangeNotifier {
   Map<String, Map<String, dynamic>> _workSubmissions = {};
   Map<String, dynamic> _profile = {};
   List<String> _skills = [];
-  List<Map<String, dynamic>> _notifications = [];
   List<Map<String, dynamic>> _certificates = [];
   List<Map<String, dynamic>> _conversations = [];
   List<Map<String, dynamic>> _supportTickets = [];
   Map<String, Map<String, dynamic>> _userAccounts = {};
-
-  static const Map<String, bool> _defaultNotificationPrefs = {
-    'pushNotifications': true,
-    'emailAlerts': true,
-    'newProjectsAlert': true,
-    'applicationUpdates': true,
-    'chatMessages': true,
-    'deadlineReminders': true,
-  };
 
   static const Map<String, bool> _defaultPrivacySettings = {
     'profileVisibility': true,
@@ -68,9 +59,6 @@ class AppDataService extends ChangeNotifier {
     'publicPortfolio': true,
     'allowCompanyMessages': true,
   };
-
-  final Map<String, bool> _notificationPreferences =
-      Map<String, bool>.from(_defaultNotificationPrefs);
 
   final Map<String, bool> _privacySettings =
       Map<String, bool>.from(_defaultPrivacySettings);
@@ -87,9 +75,7 @@ class AppDataService extends ChangeNotifier {
   static const _kSubmissions = 'cc_submissions_v1';
   static const _kProfile = 'cc_profile_v1';
   static const _kSkills = 'cc_skills_v1';
-  static const _kNotifications = 'cc_notifications_v1';
   static const _kCertificates = 'cc_certificates_v1';
-  static const _kNotificationPreferences = 'cc_notif_prefs_v1';
   static const _kPrivacySettings = 'cc_privacy_prefs_v1';
   static const _kChatConversations = 'cc_chat_conversations_v1';
   static const _kSupportTickets = 'cc_support_tickets_v1';
@@ -175,30 +161,10 @@ class AppDataService extends ChangeNotifier {
     final skillsJson = _prefs!.getStringList(_kSkills);
     _skills = skillsJson != null ? List<String>.from(skillsJson) : [];
 
-    // 7. Notifications
-    _notifications = _decodeList(_prefs!.getString(_kNotifications));
-
-    // 8. Certificates
+    // 7. Certificates
     _certificates = _decodeList(_prefs!.getString(_kCertificates));
 
-    // 9. Notification Preferences
-    _notificationPreferences
-      ..clear()
-      ..addAll(_defaultNotificationPrefs);
-    final notifPrefsJson = _prefs!.getString(_kNotificationPreferences);
-    if (notifPrefsJson != null) {
-      try {
-        final Map decoded = jsonDecode(notifPrefsJson);
-        for (final entry in decoded.entries) {
-          _notificationPreferences[entry.key.toString()] =
-              entry.value == true;
-        }
-      } catch (e) {
-        debugPrint('Error loading notif prefs: $e');
-      }
-    }
-
-    // 10. Privacy Settings
+    // 8. Privacy Settings
     _privacySettings
       ..clear()
       ..addAll(_defaultPrivacySettings);
@@ -372,6 +338,7 @@ class AppDataService extends ChangeNotifier {
               .from('profiles')
               .select()
               .eq('id', user.id)
+              .limit(1)
               .maybeSingle();
           if (prof != null) {
             final name = prof['name']?.toString().trim() ?? '';
@@ -419,6 +386,7 @@ class AppDataService extends ChangeNotifier {
                 .from('students')
                 .select()
                 .eq('user_id', user.id)
+                .limit(1)
                 .maybeSingle();
             if (stu != null) {
               if (stu['full_name'] != null &&
@@ -695,33 +663,7 @@ class AppDataService extends ChangeNotifier {
           debugPrint('Error fetching messages: $e');
         }
 
-        // 9. Notifications
-        try {
-          final notifRows = await supabase
-              .from('notifications')
-              .select()
-              .eq('user_id', user.id)
-              .order('created_at', ascending: false);
-
-          _notifications = notifRows.map((raw) {
-            final n = Map<String, dynamic>.from(raw);
-            return {
-              'id': n['id']?.toString() ?? '',
-              'title': n['title']?.toString() ?? 'Notification',
-              'subtitle': n['message']?.toString() ?? '',
-              'time': SupabaseHelper.formatRelativeTime(n['created_at']),
-              'type': n['type']?.toString() ?? 'general',
-              'isRead': n['is_read'] == true,
-              'projectId': n['project_id']?.toString(),
-              'actorName': n['actor_name']?.toString(),
-            };
-          }).toList();
-          await _prefs?.setString(_kNotifications, jsonEncode(_notifications));
-        } catch (e) {
-          debugPrint('Error fetching notifications: $e');
-        }
-
-        // 10. Support Tickets
+        // 9. Support Tickets
         try {
           final ticketRows = await supabase
               .from('support_tickets')
@@ -759,22 +701,12 @@ class AppDataService extends ChangeNotifier {
               .eq('user_id', user.id)
               .maybeSingle();
           if (settingsRow != null) {
-            final np = settingsRow['notification_prefs'];
-            if (np is Map) {
-              for (final e in np.entries) {
-                _notificationPreferences[e.key.toString()] = e.value == true;
-              }
-            }
             final ps = settingsRow['privacy_settings'];
             if (ps is Map) {
               for (final e in ps.entries) {
                 _privacySettings[e.key.toString()] = e.value == true;
               }
             }
-            await _prefs?.setString(
-              _kNotificationPreferences,
-              jsonEncode(_notificationPreferences),
-            );
             await _prefs?.setString(
               _kPrivacySettings,
               jsonEncode(_privacySettings),
@@ -1022,15 +954,6 @@ class AppDataService extends ChangeNotifier {
     };
 
     _applications.insert(0, newApp);
-
-    await addNotification(
-      title: 'Application Submitted',
-      subtitle:
-          'Your application for "$projectTitle" was sent to $companyName.',
-      time: 'Just now',
-      type: 'submitted',
-    );
-
     _safeNotifyListeners();
 
     if (_prefs != null) {
@@ -1088,19 +1011,6 @@ class AppDataService extends ChangeNotifier {
         'status': 'Pending',
         'progress': 0.0,
       });
-
-      final companyOwnerId = project['companyUserId']?.toString() ?? '';
-      if (SupabaseHelper.isUuid(companyOwnerId)) {
-        await supabase.from('notifications').insert({
-          'user_id': companyOwnerId,
-          'title': 'New Applicant Received',
-          'message': '$studentName applied to "${app['title']}".',
-          'type': 'submitted',
-          if (SupabaseHelper.isUuid(projectId)) 'project_id': projectId,
-          'actor_name': studentName,
-          'is_read': false,
-        });
-      }
     } catch (e) {
       debugPrint('Supabase application insert failed: $e');
     }
@@ -1203,21 +1113,11 @@ class AppDataService extends ChangeNotifier {
 
     _workSubmissions[projectId] = subData;
 
-    String? companyUserId;
     final appIndex = _applications.indexWhere((a) => a['projectId'] == projectId);
     if (appIndex >= 0) {
       _applications[appIndex]['status'] = 'Under Review';
       _applications[appIndex]['progress'] = 0.85;
-      companyUserId = _applications[appIndex]['companyUserId']?.toString();
     }
-
-    await addNotification(
-      title: 'Work Submitted Successfully',
-      subtitle:
-          'Your deliverable for "$projectTitle" is now under review by $company.',
-      time: 'Just now',
-      type: 'submitted',
-    );
 
     _safeNotifyListeners();
 
@@ -1244,21 +1144,6 @@ class AppDataService extends ChangeNotifier {
             })
             .eq('project_id', projectId)
             .eq('student_id', user.id);
-
-        if (SupabaseHelper.isUuid(companyUserId)) {
-          final studentName =
-              _userName.isNotEmpty ? _userName : (_profile['name'] ?? 'Student');
-          await supabase.from('notifications').insert({
-            'user_id': companyUserId,
-            'title': 'Deliverable Submitted for Review',
-            'message':
-                '$studentName submitted work for "$projectTitle". Ready for review.',
-            'type': 'submitted',
-            'project_id': projectId,
-            'actor_name': studentName.toString(),
-            'is_read': false,
-          });
-        }
       } catch (e) {
         debugPrint('Supabase work submission sync failed: $e');
       }
@@ -1318,6 +1203,8 @@ class AppDataService extends ChangeNotifier {
             'cgpa': double.tryParse(_profile['cgpa'].toString()) ?? 0.0,
           'phone': _profile['phone'] ?? '',
           'bio': _profile['bio'] ?? '',
+          if (_profile['avatarUrl'] != null)
+            'avatar_url': _profile['avatarUrl'],
           'updated_at': DateTime.now().toIso8601String(),
         });
 
@@ -1404,230 +1291,95 @@ class AppDataService extends ChangeNotifier {
   }
 
   // ===========================================================================
-  // NOTIFICATIONS
+  // PROFILE AVATAR & PRIVACY PREFERENCES
   // ===========================================================================
 
-  List<Map<String, dynamic>> getNotifications() {
-    return _notifications.where((n) {
-      if (_notificationPreferences['pushNotifications'] == false) return false;
-      final type = n['type']?.toString();
-      if (type == 'chat' && _notificationPreferences['chatMessages'] == false) {
-        return false;
-      }
-      if ((type == 'submitted' ||
-              type == 'shortlisted' ||
-              type == 'assigned' ||
-              type == 'approved') &&
-          _notificationPreferences['applicationUpdates'] == false) {
-        return false;
-      }
-      if (type == 'recommendation' &&
-          _notificationPreferences['newProjectsAlert'] == false) {
-        return false;
-      }
-      if (type == 'deadline' &&
-          _notificationPreferences['deadlineReminders'] == false) {
-        return false;
-      }
-      return true;
-    }).toList();
-  }
-
-  Future<void> addNotification({
-    required String title,
-    required String subtitle,
-    required String time,
-    required String type,
+  /// Stores the chosen profile image locally (instant UI + offline fallback)
+  /// and uploads it to Supabase Storage + `public.profiles.avatar_url`.
+  Future<String?> updateStudentAvatar(
+    Uint8List bytes, {
+    String fileExtension = 'jpg',
   }) async {
-    if (_notificationPreferences['pushNotifications'] == false) return;
-    if (type == 'chat' && _notificationPreferences['chatMessages'] == false) {
-      return;
-    }
-    if ((type == 'submitted' ||
-            type == 'shortlisted' ||
-            type == 'assigned' ||
-            type == 'approved') &&
-        _notificationPreferences['applicationUpdates'] == false) {
-      return;
-    }
-    if (type == 'recommendation' &&
-        _notificationPreferences['newProjectsAlert'] == false) {
-      return;
-    }
-    if (type == 'deadline' &&
-        _notificationPreferences['deadlineReminders'] == false) {
-      return;
-    }
+    final cleanExt =
+        fileExtension.toLowerCase().replaceAll('.', '').isNotEmpty
+            ? fileExtension.toLowerCase().replaceAll('.', '')
+            : 'jpg';
+    final mimeType = cleanExt == 'png'
+        ? 'image/png'
+        : (cleanExt == 'webp' ? 'image/webp' : 'image/jpeg');
 
-    final notifId = SupabaseHelper.generateUuid();
-    _notifications.insert(0, {
-      'id': notifId,
-      'title': title,
-      'subtitle': subtitle,
-      'time': time,
-      'type': type,
-      'isRead': false,
-    });
-
+    _profile['avatarBase64'] = base64Encode(bytes);
     _safeNotifyListeners();
 
     if (_prefs != null) {
-      await _prefs!.setString(_kNotifications, jsonEncode(_notifications));
+      await _prefs!.setString(_kProfile, jsonEncode(_profile));
     }
 
     final supabase = SupabaseHelper.clientOrNull;
     final user = supabase?.auth.currentUser;
-    if (supabase != null && user != null) {
+    if (supabase == null || user == null) return null;
+
+    final fileName =
+        'avatars/${user.id}_${DateTime.now().millisecondsSinceEpoch}.$cleanExt';
+
+    String? uploadedUrl;
+    for (final bucket in const ['student-docs', 'public-files']) {
       try {
-        await supabase.from('notifications').insert({
-          'id': notifId,
-          'user_id': user.id,
-          'title': title,
-          'message': subtitle,
-          'type': type,
-          'is_read': false,
-        });
+        await supabase.storage.from(bucket).uploadBinary(
+              fileName,
+              bytes,
+              fileOptions: FileOptions(
+                upsert: true,
+                contentType: mimeType,
+              ),
+            );
+        uploadedUrl = supabase.storage.from(bucket).getPublicUrl(fileName);
+        break;
       } catch (e) {
-        debugPrint('Supabase insert notification failed: $e');
+        debugPrint('Avatar upload attempt on $bucket warning: $e');
       }
     }
-  }
 
-  int get unreadNotificationsCount {
-    return getNotifications().where((n) => n['isRead'] != true).length;
-  }
-
-  Future<void> markNotificationRead(dynamic id) async {
-    final idx =
-        _notifications.indexWhere((n) => n['id']?.toString() == id.toString());
-    if (idx < 0) return;
-    _notifications[idx]['isRead'] = true;
-    _safeNotifyListeners();
-    if (_prefs != null) {
-      await _prefs!.setString(_kNotifications, jsonEncode(_notifications));
-    }
-
-    final supabase = SupabaseHelper.clientOrNull;
-    final user = supabase?.auth.currentUser;
-    if (supabase != null &&
-        user != null &&
-        SupabaseHelper.isUuid(id?.toString())) {
+    if (uploadedUrl != null && uploadedUrl.isNotEmpty) {
+      _profile['avatarUrl'] = uploadedUrl;
+      _safeNotifyListeners();
+      if (_prefs != null) {
+        await _prefs!.setString(_kProfile, jsonEncode(_profile));
+      }
       try {
-        await supabase
-            .from('notifications')
-            .update({'is_read': true})
-            .eq('id', id.toString())
-            .eq('user_id', user.id);
-      } catch (_) {}
+        await supabase.from('profiles').update({
+          'avatar_url': uploadedUrl,
+          'updated_at': DateTime.now().toIso8601String(),
+        }).eq('id', user.id);
+      } catch (e) {
+        debugPrint('Supabase profile avatar_url update warning: $e');
+      }
     }
+    return uploadedUrl;
   }
 
-  Future<void> markNotificationsRead() async {
-    for (final n in _notifications) {
-      n['isRead'] = true;
-    }
+  /// Removes the student's profile photo locally and in Supabase `profiles`.
+  Future<void> removeStudentAvatar() async {
+    _profile.remove('avatarBase64');
+    _profile['avatarUrl'] = null;
     _safeNotifyListeners();
+
     if (_prefs != null) {
-      await _prefs!.setString(_kNotifications, jsonEncode(_notifications));
+      await _prefs!.setString(_kProfile, jsonEncode(_profile));
     }
 
     final supabase = SupabaseHelper.clientOrNull;
     final user = supabase?.auth.currentUser;
     if (supabase != null && user != null) {
       try {
-        await supabase
-            .from('notifications')
-            .update({'is_read': true})
-            .eq('user_id', user.id);
-      } catch (_) {}
+        await supabase.from('profiles').update({
+          'avatar_url': null,
+          'updated_at': DateTime.now().toIso8601String(),
+        }).eq('id', user.id);
+      } catch (e) {
+        debugPrint('Supabase profile avatar remove warning: $e');
+      }
     }
-  }
-
-  Future<void> deleteNotification(dynamic id) async {
-    _notifications
-        .removeWhere((n) => n['id']?.toString() == id.toString());
-    _safeNotifyListeners();
-    if (_prefs != null) {
-      await _prefs!.setString(_kNotifications, jsonEncode(_notifications));
-    }
-
-    final supabase = SupabaseHelper.clientOrNull;
-    final user = supabase?.auth.currentUser;
-    if (supabase != null &&
-        user != null &&
-        SupabaseHelper.isUuid(id?.toString())) {
-      try {
-        await supabase
-            .from('notifications')
-            .delete()
-            .eq('id', id.toString())
-            .eq('user_id', user.id);
-      } catch (_) {}
-    }
-  }
-
-  Future<void> deleteNotifications(List<dynamic> ids) async {
-    final strIds = ids.map((e) => e.toString()).toSet();
-    _notifications.removeWhere((n) => strIds.contains(n['id']?.toString()));
-    _safeNotifyListeners();
-    if (_prefs != null) {
-      await _prefs!.setString(_kNotifications, jsonEncode(_notifications));
-    }
-
-    final supabase = SupabaseHelper.clientOrNull;
-    final user = supabase?.auth.currentUser;
-    final uuidIds = strIds.where(SupabaseHelper.isUuid).toList();
-    if (supabase != null && user != null && uuidIds.isNotEmpty) {
-      try {
-        await supabase
-            .from('notifications')
-            .delete()
-            .inFilter('id', uuidIds)
-            .eq('user_id', user.id);
-      } catch (_) {}
-    }
-  }
-
-  Future<void> clearAllNotifications() async {
-    _notifications.clear();
-    _safeNotifyListeners();
-    if (_prefs != null) {
-      await _prefs!.setString(_kNotifications, jsonEncode(_notifications));
-    }
-
-    final supabase = SupabaseHelper.clientOrNull;
-    final user = supabase?.auth.currentUser;
-    if (supabase != null && user != null) {
-      try {
-        await supabase
-            .from('notifications')
-            .delete()
-            .eq('user_id', user.id);
-      } catch (_) {}
-    }
-  }
-
-  // ===========================================================================
-  // NOTIFICATION & PRIVACY PREFERENCES
-  // ===========================================================================
-
-  Map<String, bool> getNotificationPreferences() =>
-      Map.unmodifiable(_notificationPreferences);
-
-  Future<void> updateNotificationPreference(String key, bool value) async {
-    _notificationPreferences[key] = value;
-    if (key == 'chatMessages' && !value) {
-      _notifications.removeWhere((n) => n['type']?.toString() == 'chat');
-    }
-    _safeNotifyListeners();
-    if (_prefs != null) {
-      await _prefs!.setString(
-        _kNotificationPreferences,
-        jsonEncode(_notificationPreferences),
-      );
-      await _prefs!.setString(_kNotifications, jsonEncode(_notifications));
-    }
-    await _syncSettingsToSupabase();
   }
 
   Map<String, bool> getPrivacySettings() =>
@@ -1649,7 +1401,6 @@ class AppDataService extends ChangeNotifier {
     try {
       await supabase.from('user_settings').upsert({
         'user_id': user.id,
-        'notification_prefs': _notificationPreferences,
         'privacy_settings': _privacySettings,
         'updated_at': DateTime.now().toIso8601String(),
       });
@@ -1813,16 +1564,6 @@ class AppDataService extends ChangeNotifier {
           'created_at': DateTime.now().toIso8601String(),
         });
 
-        if (SupabaseHelper.isUuid(peerUserId)) {
-          await supabase.from('notifications').insert({
-            'user_id': peerUserId,
-            'title': 'New Message from $senderName',
-            'message': cleanText,
-            'type': 'chat',
-            'actor_name': senderName,
-            'is_read': false,
-          });
-        }
       } catch (e) {
         debugPrint('Supabase message insert error: $e');
       }
@@ -1855,13 +1596,6 @@ class AppDataService extends ChangeNotifier {
     };
 
     _supportTickets.insert(0, ticket);
-
-    await addNotification(
-      title: 'Support Ticket #$ticketNumber Submitted',
-      subtitle: 'Our support team will review "$subject" shortly.',
-      time: 'Just now',
-      type: 'submitted',
-    );
 
     _safeNotifyListeners();
 
@@ -1943,23 +1677,22 @@ class AppDataService extends ChangeNotifier {
   /// Clears all user-scoped state & preferences so switching accounts never leaks data.
   Future<void> clearAuthSession() async {
     _isLoggedIn = false;
+    _isSyncing = false;
+    _lastSyncError = null;
     _userRole = 'Student';
     _userEmail = '';
     _userName = '';
     _userId = '';
+    SupabaseHelper.clearAuthFlags();
 
     _savedProjects = [];
     _applications = [];
     _workSubmissions = {};
     _profile = {};
     _skills = [];
-    _notifications = [];
     _certificates = [];
     _conversations = [];
     _supportTickets = [];
-    _notificationPreferences
-      ..clear()
-      ..addAll(_defaultNotificationPrefs);
     _privacySettings
       ..clear()
       ..addAll(_defaultPrivacySettings);
@@ -1977,11 +1710,9 @@ class AppDataService extends ChangeNotifier {
       await _prefs!.remove(_kSubmissions);
       await _prefs!.remove(_kProfile);
       await _prefs!.remove(_kSkills);
-      await _prefs!.remove(_kNotifications);
       await _prefs!.remove(_kCertificates);
       await _prefs!.remove(_kChatConversations);
       await _prefs!.remove(_kSupportTickets);
-      await _prefs!.remove(_kNotificationPreferences);
       await _prefs!.remove(_kPrivacySettings);
     }
   }

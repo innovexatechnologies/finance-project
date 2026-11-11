@@ -220,16 +220,6 @@ class AdminCertificateService {
           'revoking_admin_name': adminName,
         }).eq('id', cert.id);
 
-        if (SupabaseHelper.isUuid(cert.studentId)) {
-          await supabase.from('notifications').insert({
-            'user_id': cert.studentId,
-            'title': 'Certificate Revoked: ${cert.credentialId}',
-            'message': cleanReason,
-            'type': 'certificate',
-            'actor_name': adminName,
-          });
-        }
-
         await supabase.from('admin_audit_logs').insert({
           'admin_email':
               SupabaseHelper.currentUser?.email ?? 'admin@campusconnect.edu.pk',
@@ -344,16 +334,6 @@ class AdminCertificateService {
           'revocation_reason': null,
           'revoking_admin_name': null,
         }).eq('id', cert.id);
-
-        if (SupabaseHelper.isUuid(cert.studentId)) {
-          await supabase.from('notifications').insert({
-            'user_id': cert.studentId,
-            'title': 'Certificate Reinstated: ${cert.credentialId}',
-            'message': cleanJustification,
-            'type': 'certificate',
-            'actor_name': adminName,
-          });
-        }
 
         await supabase.from('admin_audit_logs').insert({
           'admin_email':

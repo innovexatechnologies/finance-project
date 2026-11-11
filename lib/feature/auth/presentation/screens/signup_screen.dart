@@ -56,7 +56,7 @@ class _SignupScreenState extends State<SignupScreen> {
     final password = _passwordController.text.trim();
 
     setState(() => _isLoading = true);
-    SupabaseHelper.isInteractiveAuthInProgress = true;
+    SupabaseHelper.beginInteractiveAuth();
 
     try {
       final supabase = SupabaseHelper.clientOrNull;
@@ -118,6 +118,7 @@ class _SignupScreenState extends State<SignupScreen> {
               .from('companies')
               .select('id')
               .eq('user_id', user.id)
+              .limit(1)
               .maybeSingle();
           if (existingComp == null) {
             await supabase.from('companies').insert({
@@ -134,6 +135,7 @@ class _SignupScreenState extends State<SignupScreen> {
               .from('students')
               .select('id')
               .eq('user_id', user.id)
+              .limit(1)
               .maybeSingle();
           if (existingStu == null) {
             await supabase.from('students').insert({
@@ -184,14 +186,16 @@ class _SignupScreenState extends State<SignupScreen> {
       );
 
       if (_selectedRole == 'Company') {
-        Navigator.pushReplacement(
+        Navigator.pushAndRemoveUntil(
           context,
           MaterialPageRoute(builder: (_) => const CompanyDashboardScreen()),
+          (route) => false,
         );
       } else {
-        Navigator.pushReplacement(
+        Navigator.pushAndRemoveUntil(
           context,
           MaterialPageRoute(builder: (_) => const StudentMainNav()),
+          (route) => false,
         );
       }
     } on AuthException catch (e) {
@@ -201,7 +205,7 @@ class _SignupScreenState extends State<SignupScreen> {
       if (!mounted) return;
       setState(() => _errorBanner = SupabaseHelper.friendlyError(e));
     } finally {
-      SupabaseHelper.isInteractiveAuthInProgress = false;
+      SupabaseHelper.endInteractiveAuth();
       if (mounted) {
         setState(() => _isLoading = false);
       }

@@ -1,7 +1,9 @@
 import 'package:flutter/material.dart';
 import 'package:google_fonts/google_fonts.dart';
 import 'package:link_vibe/core/constants/app_colors.dart';
+import 'package:image_picker/image_picker.dart';
 import 'package:link_vibe/core/services/app_data_service.dart';
+import 'package:link_vibe/core/widgets/student_avatar.dart';
 import 'package:link_vibe/core/services/supabase_helper.dart';
 import 'package:link_vibe/feature/student/certificates/presentation/screens/certificates_screen.dart';
 import 'package:link_vibe/feature/student/chat/presentation/screens/chat_list_screen.dart';
@@ -18,6 +20,209 @@ class StudentProfileScreen extends StatefulWidget {
 }
 
 class _StudentProfileScreenState extends State<StudentProfileScreen> {
+  bool _isUploadingPhoto = false;
+
+  Future<void> _pickProfilePhoto() async {
+    if (_isUploadingPhoto) return;
+    try {
+      final picker = ImagePicker();
+      final picked = await picker.pickImage(
+        source: ImageSource.gallery,
+        maxWidth: 800,
+        maxHeight: 800,
+        imageQuality: 85,
+      );
+      if (picked == null) return;
+
+      final bytes = await picked.readAsBytes();
+      if (bytes.isEmpty) return;
+      if (bytes.length > 5 * 1024 * 1024) {
+        if (!mounted) return;
+        ScaffoldMessenger.of(context)
+          ..hideCurrentSnackBar()
+          ..showSnackBar(
+            const SnackBar(
+              content: Text('Please select an image smaller than 5 MB.'),
+              backgroundColor: AppColors.statusClosed,
+            ),
+          );
+        return;
+      }
+
+      if (mounted) {
+        setState(() => _isUploadingPhoto = true);
+      }
+
+      final nameLower = picked.name.toLowerCase();
+      final ext = nameLower.endsWith('.png')
+          ? 'png'
+          : (nameLower.endsWith('.webp') ? 'webp' : 'jpg');
+
+      await AppDataService.instance.updateStudentAvatar(
+        bytes,
+        fileExtension: ext,
+      );
+
+      if (!mounted) return;
+      ScaffoldMessenger.of(context)
+        ..hideCurrentSnackBar()
+        ..showSnackBar(
+          const SnackBar(
+            content: Text('Profile picture updated successfully.'),
+            backgroundColor: AppColors.statusOpen,
+          ),
+        );
+    } catch (e) {
+      if (!mounted) return;
+      ScaffoldMessenger.of(context)
+        ..hideCurrentSnackBar()
+        ..showSnackBar(
+          SnackBar(
+            content: Text('Could not pick photo: $e'),
+            backgroundColor: AppColors.statusClosed,
+          ),
+        );
+    } finally {
+      if (mounted) {
+        setState(() => _isUploadingPhoto = false);
+      }
+    }
+  }
+
+  Future<void> _removeProfilePhoto() async {
+    if (_isUploadingPhoto) return;
+    setState(() => _isUploadingPhoto = true);
+    try {
+      await AppDataService.instance.removeStudentAvatar();
+      if (!mounted) return;
+      ScaffoldMessenger.of(context)
+        ..hideCurrentSnackBar()
+        ..showSnackBar(
+          const SnackBar(
+            content: Text('Profile picture removed.'),
+            backgroundColor: AppColors.statusOpen,
+          ),
+        );
+    } finally {
+      if (mounted) {
+        setState(() => _isUploadingPhoto = false);
+      }
+    }
+  }
+
+  void _showAvatarOptionsSheet(bool hasPhoto) {
+    if (_isUploadingPhoto) return;
+    showModalBottomSheet<void>(
+      context: context,
+      backgroundColor: Colors.white,
+      shape: const RoundedRectangleBorder(
+        borderRadius: BorderRadius.vertical(top: Radius.circular(20)),
+      ),
+      builder: (sheetCtx) => SafeArea(
+        child: Padding(
+          padding: const EdgeInsets.fromLTRB(16, 12, 16, 16),
+          child: Column(
+            mainAxisSize: MainAxisSize.min,
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              Center(
+                child: Container(
+                  width: 40,
+                  height: 4,
+                  margin: const EdgeInsets.only(bottom: 14),
+                  decoration: BoxDecoration(
+                    color: AppColors.lightGray,
+                    borderRadius: BorderRadius.circular(10),
+                  ),
+                ),
+              ),
+              Text(
+                'Profile Photo',
+                style: GoogleFonts.poppins(
+                  fontSize: 16,
+                  fontWeight: FontWeight.w700,
+                  color: AppColors.deepNavy,
+                ),
+              ),
+              const SizedBox(height: 8),
+              ListTile(
+                contentPadding: EdgeInsets.zero,
+                leading: const CircleAvatar(
+                  backgroundColor: Color(0xFFEAF2FF),
+                  child: Icon(
+                    Icons.photo_library_outlined,
+                    color: AppColors.primaryBlue,
+                  ),
+                ),
+                title: Text(
+                  'Choose from Gallery',
+                  style: GoogleFonts.inter(
+                    fontWeight: FontWeight.w600,
+                    color: AppColors.deepNavy,
+                  ),
+                ),
+                subtitle: Text(
+                  'Select a photo from your device gallery',
+                  style: GoogleFonts.inter(
+                    fontSize: 12,
+                    color: AppColors.grayText,
+                  ),
+                ),
+                onTap: () {
+                  Navigator.pop(sheetCtx);
+                  _pickProfilePhoto();
+                },
+              ),
+              if (hasPhoto)
+                ListTile(
+                  contentPadding: EdgeInsets.zero,
+                  leading: CircleAvatar(
+                    backgroundColor:
+                        AppColors.statusClosed.withValues(alpha: 0.1),
+                    child: const Icon(
+                      Icons.delete_outline_rounded,
+                      color: AppColors.statusClosed,
+                    ),
+                  ),
+                  title: Text(
+                    'Remove Current Photo',
+                    style: GoogleFonts.inter(
+                      fontWeight: FontWeight.w600,
+                      color: AppColors.statusClosed,
+                    ),
+                  ),
+                  onTap: () {
+                    Navigator.pop(sheetCtx);
+                    _removeProfilePhoto();
+                  },
+                ),
+              ListTile(
+                contentPadding: EdgeInsets.zero,
+                leading: const CircleAvatar(
+                  backgroundColor: Color(0xFFF3F6FA),
+                  child: Icon(
+                    Icons.edit_outlined,
+                    color: AppColors.deepNavy,
+                  ),
+                ),
+                title: Text(
+                  'Edit Academic Profile',
+                  style: GoogleFonts.inter(
+                    fontWeight: FontWeight.w600,
+                    color: AppColors.deepNavy,
+                  ),
+                ),
+                onTap: () {
+                  Navigator.pop(sheetCtx);
+                  _showEditProfileDialog();
+                },
+              ),
+            ],
+          ),
+        ),
+      ),
+    );
+  }
   @override
   void initState() {
     super.initState();
@@ -236,65 +441,96 @@ class _StudentProfileScreenState extends State<StudentProfileScreen> {
                         const SizedBox(height: 16),
                       ],
 
-                      // Avatar & Edit
+                      // Avatar & Gallery Photo
                       Center(
-                        child: Stack(
-                          children: [
-                            Container(
-                              width: 92,
-                              height: 92,
-                              decoration: BoxDecoration(
-                                shape: BoxShape.circle,
-                                gradient: AppColors.brandGradient,
-                                border: Border.all(
-                                  color: Colors.white,
-                                  width: 3,
+                        child: Builder(
+                          builder: (_) {
+                            final currentProfile =
+                                AppDataService.instance.getProfile();
+                            final avatarUrl =
+                                currentProfile['avatarUrl']?.toString();
+                            final avatarBase64 =
+                                currentProfile['avatarBase64']?.toString();
+                            final hasPhoto = (avatarBase64 != null &&
+                                    avatarBase64.isNotEmpty) ||
+                                (avatarUrl != null && avatarUrl.isNotEmpty);
+
+                            return Stack(
+                              children: [
+                                GestureDetector(
+                                  onTap: () =>
+                                      _showAvatarOptionsSheet(hasPhoto),
+                                  child: Stack(
+                                    alignment: Alignment.center,
+                                    children: [
+                                      StudentAvatar(
+                                        name: name,
+                                        avatarUrl: avatarUrl,
+                                        avatarBase64: avatarBase64,
+                                        size: 92,
+                                        borderWidth: 3,
+                                        shadows: [
+                                          BoxShadow(
+                                            color: AppColors.primaryBlue
+                                                .withValues(alpha: 0.2),
+                                            blurRadius: 16,
+                                            offset: const Offset(0, 6),
+                                          ),
+                                        ],
+                                      ),
+                                      if (_isUploadingPhoto)
+                                        Container(
+                                          width: 92,
+                                          height: 92,
+                                          decoration: BoxDecoration(
+                                            shape: BoxShape.circle,
+                                            color: Colors.black
+                                                .withValues(alpha: 0.45),
+                                          ),
+                                          child: const Center(
+                                            child: SizedBox(
+                                              width: 24,
+                                              height: 24,
+                                              child: CircularProgressIndicator(
+                                                strokeWidth: 2.5,
+                                                color: Colors.white,
+                                              ),
+                                            ),
+                                          ),
+                                        ),
+                                    ],
+                                  ),
                                 ),
-                                boxShadow: [
-                                  BoxShadow(
-                                    color: AppColors.primaryBlue
-                                        .withValues(alpha: 0.2),
-                                    blurRadius: 16,
-                                    offset: const Offset(0, 6),
-                                  ),
-                                ],
-                              ),
-                              child: Center(
-                                child: Text(
-                                  SupabaseHelper.initialsFor(
-                                    name,
-                                    fallback: 'ST',
-                                  ),
-                                  style: GoogleFonts.poppins(
-                                    fontSize: 28,
-                                    fontWeight: FontWeight.bold,
-                                    color: Colors.white,
-                                  ),
-                                ),
-                              ),
-                            ),
-                            Positioned(
-                              bottom: 0,
-                              right: 0,
-                              child: GestureDetector(
-                                onTap: _showEditProfileDialog,
-                                child: Container(
-                                  padding: const EdgeInsets.all(7),
-                                  decoration: BoxDecoration(
-                                    color: AppColors.primaryBlue,
-                                    shape: BoxShape.circle,
-                                    border: Border.all(
-                                        color: Colors.white, width: 2),
-                                  ),
-                                  child: const Icon(
-                                    Icons.edit_rounded,
-                                    size: 14,
-                                    color: Colors.white,
+                                Positioned(
+                                  bottom: 0,
+                                  right: 0,
+                                  child: Tooltip(
+                                    message: 'Change Profile Photo',
+                                    child: GestureDetector(
+                                      onTap: () =>
+                                          _showAvatarOptionsSheet(hasPhoto),
+                                      child: Container(
+                                        padding: const EdgeInsets.all(7),
+                                        decoration: BoxDecoration(
+                                          color: AppColors.primaryBlue,
+                                          shape: BoxShape.circle,
+                                          border: Border.all(
+                                            color: Colors.white,
+                                            width: 2,
+                                          ),
+                                        ),
+                                        child: const Icon(
+                                          Icons.camera_alt_rounded,
+                                          size: 14,
+                                          color: Colors.white,
+                                        ),
+                                      ),
+                                    ),
                                   ),
                                 ),
-                              ),
-                            ),
-                          ],
+                              ],
+                            );
+                          },
                         ),
                       ),
                       const SizedBox(height: 14),
@@ -341,12 +577,15 @@ class _StudentProfileScreenState extends State<StudentProfileScreen> {
                               color: AppColors.grayText,
                             ),
                             const SizedBox(width: 4),
-                            Text(
-                              'Email hidden (Privacy Settings)',
-                              style: GoogleFonts.inter(
-                                fontSize: 12,
-                                fontStyle: FontStyle.italic,
-                                color: AppColors.grayText,
+                            Flexible(
+                              child: Text(
+                                'Email hidden (Privacy Settings)',
+                                overflow: TextOverflow.ellipsis,
+                                style: GoogleFonts.inter(
+                                  fontSize: 12,
+                                  fontStyle: FontStyle.italic,
+                                  color: AppColors.grayText,
+                                ),
                               ),
                             ),
                           ],
@@ -399,12 +638,14 @@ class _StudentProfileScreenState extends State<StudentProfileScreen> {
                             Row(
                               mainAxisAlignment: MainAxisAlignment.spaceBetween,
                               children: [
-                                Text(
-                                  'Academic Profile',
-                                  style: GoogleFonts.poppins(
-                                    fontSize: 14.5,
-                                    fontWeight: FontWeight.bold,
-                                    color: AppColors.deepNavy,
+                                Expanded(
+                                  child: Text(
+                                    'Academic Profile',
+                                    style: GoogleFonts.poppins(
+                                      fontSize: 14.5,
+                                      fontWeight: FontWeight.bold,
+                                      color: AppColors.deepNavy,
+                                    ),
                                   ),
                                 ),
                                 IconButton(
@@ -818,6 +1059,7 @@ class _AddSkillDialogState extends State<_AddSkillDialog> {
   @override
   Widget build(BuildContext context) {
     return AlertDialog(
+      insetPadding: const EdgeInsets.symmetric(horizontal: 20, vertical: 24),
       shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(18)),
       title: Row(
         children: [
@@ -1007,6 +1249,7 @@ class _EditAcademicProfileDialogState
   @override
   Widget build(BuildContext context) {
     return AlertDialog(
+      insetPadding: const EdgeInsets.symmetric(horizontal: 20, vertical: 24),
       shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(18)),
       title: Text(
         'Edit Academic Profile',
@@ -1015,10 +1258,12 @@ class _EditAcademicProfileDialogState
           color: AppColors.deepNavy,
         ),
       ),
-      content: SizedBox(
-        width: 440,
-        child: SingleChildScrollView(
-          child: Column(
+      content: ConstrainedBox(
+        constraints: const BoxConstraints(maxWidth: 440),
+        child: SizedBox(
+          width: double.maxFinite,
+          child: SingleChildScrollView(
+            child: Column(
             mainAxisSize: MainAxisSize.min,
             crossAxisAlignment: CrossAxisAlignment.start,
             children: [
@@ -1073,6 +1318,7 @@ class _EditAcademicProfileDialogState
             ],
           ),
         ),
+      ),
       ),
       actions: [
         TextButton(

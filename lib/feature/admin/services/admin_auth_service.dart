@@ -124,7 +124,7 @@ class AdminAuthService {
     final supabase = SupabaseHelper.clientOrNull;
 
     if (supabase != null) {
-      SupabaseHelper.isInteractiveAuthInProgress = true;
+      SupabaseHelper.beginInteractiveAuth();
       try {
         final response = await supabase.auth.signInWithPassword(
           email: normalizedEmail,
@@ -243,7 +243,7 @@ class AdminAuthService {
           SupabaseHelper.friendlyError(e),
         );
       } finally {
-        SupabaseHelper.isInteractiveAuthInProgress = false;
+        SupabaseHelper.endInteractiveAuth();
       }
     }
 
@@ -388,11 +388,12 @@ class AdminAuthService {
   Future<void> logout() async {
     final supabase = SupabaseHelper.clientOrNull;
     try {
-      await supabase?.auth.signOut();
+      await supabase?.auth.signOut().timeout(const Duration(seconds: 3));
     } catch (e) {
       debugPrint('AdminAuthService signOut error: $e');
     }
 
+    SupabaseHelper.clearAuthFlags();
     await AppDataService.instance.clearAuthSession();
     currentAdminNotifier.value = null;
     _rememberMeEnabled = false;

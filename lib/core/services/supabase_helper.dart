@@ -17,6 +17,35 @@ class SupabaseHelper {
   /// interactive auth call so the global deep-link listener only handles
   /// external verification/recovery redirects.
   static bool isInteractiveAuthInProgress = false;
+  static DateTime? _lastInteractiveAuthAt;
+
+  static void beginInteractiveAuth() {
+    isInteractiveAuthInProgress = true;
+    _lastInteractiveAuthAt = DateTime.now();
+  }
+
+  static void endInteractiveAuth() {
+    isInteractiveAuthInProgress = false;
+    _lastInteractiveAuthAt = DateTime.now();
+  }
+
+  static bool get shouldIgnoreSignedInEvent {
+    if (isInteractiveAuthInProgress) return true;
+    final last = _lastInteractiveAuthAt;
+    if (last != null &&
+        DateTime.now().difference(last) < const Duration(seconds: 2)) {
+      return true;
+    }
+    return false;
+  }
+
+  static void clearAuthFlags() {
+    isInteractiveAuthInProgress = false;
+    _lastInteractiveAuthAt = null;
+    pendingPasswordRecovery = false;
+    pendingEmailVerification = false;
+    pendingAuthCallbackError = null;
+  }
 
   /// Set if a password recovery deep link arrives during app cold boot before
   /// the widget tree mounts.
@@ -162,11 +191,11 @@ class SupabaseHelper {
     User user, {
     Map<String, dynamic>? profileRow,
   }) async {
-    String raw = (profileRow?['user_type']?.toString() ??
-            user.userMetadata?['user_type']?.toString() ??
-            '')
-        .trim()
-        .toLowerCase();
+    final profileType =
+        profileRow?['user_type']?.toString().trim().toLowerCase() ?? '';
+    final metaType =
+        user.userMetadata?['user_type']?.toString().trim().toLowerCase() ?? '';
+    String raw = profileType.isNotEmpty ? profileType : metaType;
 
     if (raw.isEmpty) {
       try {
@@ -174,6 +203,7 @@ class SupabaseHelper {
             .from('companies')
             .select('id')
             .eq('user_id', user.id)
+            .limit(1)
             .maybeSingle();
         if (comp != null) raw = 'company';
       } catch (_) {}

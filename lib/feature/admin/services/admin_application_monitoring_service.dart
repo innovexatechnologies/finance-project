@@ -514,18 +514,6 @@ class AdminApplicationMonitoringService {
             .update(updatePayload)
             .eq('id', applicationId);
 
-        if (SupabaseHelper.isUuid(app.studentId)) {
-          await supabase.from('notifications').insert({
-            'user_id': app.studentId,
-            'title': revokeApplication
-                ? 'Application Revoked by Governance'
-                : 'Application Compliance Update',
-            'message': resolutionSummary.trim(),
-            'type': 'compliance',
-            'actor_name': adminName,
-          });
-        }
-
         await supabase.from('admin_audit_logs').insert({
           'admin_email':
               SupabaseHelper.currentUser?.email ?? 'admin@campusconnect.edu.pk',

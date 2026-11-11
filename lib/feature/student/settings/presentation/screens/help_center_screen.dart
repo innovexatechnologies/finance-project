@@ -36,7 +36,7 @@ class _HelpCenterScreenState extends State<HelpCenterScreen> {
     {
       'question': 'What should I do if a company requests revisions?',
       'answer':
-          'If a company requests revisions, you will see a notification and status update in "My Projects". Open the assignment to read the supervisor\'s feedback, modify your work, and upload revised deliverables.',
+          'If a company requests revisions, you will see a status update in "My Projects". Open the assignment to read the supervisor\'s feedback, modify your work, and upload revised deliverables.',
       'category': 'Submissions',
     },
     {

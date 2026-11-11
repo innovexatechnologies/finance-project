@@ -2,7 +2,6 @@ import 'package:flutter/foundation.dart';
 import 'package:link_vibe/core/services/supabase_helper.dart';
 import 'package:link_vibe/feature/company/models/applicant_model.dart';
 import 'package:link_vibe/feature/company/models/project_model.dart';
-import 'package:link_vibe/feature/company/services/company_profile_service.dart';
 import 'package:link_vibe/feature/company/services/company_project_service.dart';
 
 class CompanyApplicantService {
@@ -337,46 +336,6 @@ class CompanyApplicantService {
           if (newStatus == 'Accepted') 'progress': 0.15,
           'updated_at': DateTime.now().toIso8601String(),
         }).eq('id', applicantId);
-
-        if (SupabaseHelper.isUuid(targetApplicant.studentId)) {
-          final companyName = CompanyProfileService().currentProfile.companyName;
-          final actor = companyName.isNotEmpty ? companyName : 'Company Partner';
-          String notifTitle;
-          String notifMsg;
-          String notifType;
-          if (newStatus == 'Accepted') {
-            notifTitle = 'Application Accepted!';
-            notifMsg =
-                'Congratulations! $actor accepted your application for "${targetApplicant.projectTitle}".';
-            notifType = 'approved';
-          } else if (newStatus == 'Shortlisted') {
-            notifTitle = 'Application Shortlisted';
-            notifMsg =
-                '$actor shortlisted your application for "${targetApplicant.projectTitle}".';
-            notifType = 'submitted';
-          } else if (newStatus == 'Rejected') {
-            notifTitle = 'Application Update';
-            notifMsg =
-                'Your application for "${targetApplicant.projectTitle}" was not selected at this time.';
-            notifType = 'revision';
-          } else {
-            notifTitle = 'Application Under Review';
-            notifMsg =
-                '$actor is reviewing your application for "${targetApplicant.projectTitle}".';
-            notifType = 'general';
-          }
-
-          await supabase.from('notifications').insert({
-            'user_id': targetApplicant.studentId,
-            'title': notifTitle,
-            'message': notifMsg,
-            'type': notifType,
-            if (SupabaseHelper.isUuid(targetApplicant.projectId))
-              'project_id': targetApplicant.projectId,
-            'actor_name': actor,
-            'is_read': false,
-          });
-        }
       } catch (e) {
         debugPrint('CompanyApplicantService updateApplicantStatus error: $e');
       }

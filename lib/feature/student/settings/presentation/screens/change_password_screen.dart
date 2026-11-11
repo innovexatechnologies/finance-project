@@ -77,14 +77,6 @@ class _ChangePasswordScreenState extends State<ChangePasswordScreen> {
         redirectTo: SupabaseHelper.emailRedirectUrl,
       );
 
-      await AppDataService.instance.addNotification(
-        title: 'Password Reset Email Sent',
-        subtitle:
-            'Password reset link sent to $email. Follow the instructions in your inbox.',
-        time: 'Just now',
-        type: 'default',
-      );
-
       if (!mounted) return;
       ScaffoldMessenger.of(context).showSnackBar(
         SnackBar(
@@ -173,13 +165,6 @@ class _ChangePasswordScreenState extends State<ChangePasswordScreen> {
       if (email.isNotEmpty) {
         await AppDataService.instance.updateAccountPassword(email, newPass);
       }
-
-      await AppDataService.instance.addNotification(
-        title: 'Password Changed Successfully',
-        subtitle: 'Your account password was updated securely.',
-        time: 'Just now',
-        type: 'approved',
-      );
 
       if (!mounted) return;
       _newPasswordController.clear();

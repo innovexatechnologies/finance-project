@@ -36,6 +36,7 @@ class CompanyVerificationService {
           .from('companies')
           .select()
           .eq('user_id', user.id)
+          .limit(1)
           .maybeSingle();
 
       if (row == null) {
