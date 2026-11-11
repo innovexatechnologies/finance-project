@@ -179,6 +179,13 @@ class _ExploreProjectsScreenState extends State<ExploreProjectsScreen> {
         ),
         actions: [
           ExecutiveHeaderIconButton(
+            tooltip: 'Open Shared Link',
+            icon: Icons.link_rounded,
+            iconColor: AppColors.primaryBlue,
+            onPressed: () => ShareService.showOpenSharedLinkDialog(context),
+          ),
+          const SizedBox(width: 8),
+          ExecutiveHeaderIconButton(
             tooltip: 'Refresh Live Catalog',
             icon: Icons.refresh_rounded,
             onPressed: _isLoading
@@ -229,6 +236,23 @@ class _ExploreProjectsScreenState extends State<ExploreProjectsScreen> {
                               child: TextField(
                                 controller: _searchController,
                                 onChanged: (_) => setState(() {}),
+                                onSubmitted: (value) async {
+                                  final opener =
+                                      ShareService.deepLinkTextOpener;
+                                  if (opener != null &&
+                                      value.toLowerCase().contains(
+                                        '${ShareService.appScheme}://',
+                                      )) {
+                                    final opened = await opener(
+                                      value,
+                                      context: context,
+                                    );
+                                    if (opened && mounted) {
+                                      _searchController.clear();
+                                      setState(() {});
+                                    }
+                                  }
+                                },
                                 decoration: InputDecoration(
                                   hintText:
                                       'Search projects, companies, skills...',

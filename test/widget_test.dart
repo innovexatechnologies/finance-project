@@ -1295,16 +1295,58 @@ void main() {
         expect(find.byTooltip('Share Profile'), findsNothing);
         expect(find.byIcon(Icons.share_outlined), findsNothing);
 
-        // 3. ExploreProjectsScreen has Share button
+        // 3. ExploreProjectsScreen has Share button & Open Shared Link button
+        DeepLinkService.instance.attachNavigatorKey(MyApp.navigatorKey);
         await tester.pumpWidget(
           MaterialApp(
             key: const ValueKey('dl_explore'),
+            navigatorKey: MyApp.navigatorKey,
             theme: AppTheme.lightTheme,
             home: const ExploreProjectsScreen(),
           ),
         );
         await tester.pumpAndSettle();
         expect(find.byTooltip('Share Project'), findsOneWidget);
+        expect(find.byTooltip('Open Shared Link'), findsOneWidget);
+
+        // Tapping Share Project opens the professional Share Sheet with link & actions
+        await tester.tap(find.byTooltip('Share Project'));
+        await tester.pumpAndSettle();
+        expect(find.text('Share Project'), findsOneWidget);
+        expect(find.text('Direct SkillBridge Link'), findsOneWidget);
+        expect(find.text('skillbridge://project/proj-dl-1'), findsOneWidget);
+        expect(find.text('Share via Apps'), findsOneWidget);
+        expect(find.text('Open in App'), findsOneWidget);
+
+        // Tapping Open in App opens StudentProjectDetailsScreen directly
+        await tester.tap(find.text('Open in App'));
+        await tester.pumpAndSettle();
+        expect(find.byType(StudentProjectDetailsScreen), findsOneWidget);
+        Navigator.of(MyApp.navigatorKey.currentContext!).pop();
+        await tester.pumpAndSettle();
+
+        // Tapping Open Shared Link extracts embedded link from full shared message
+        final extracted = DeepLinkService.extractUriFromText(
+          ShareService.buildProjectShareText({
+            'id': 'proj-dl-1',
+            'title': 'Deep Link Mobile App',
+            'company': 'Acme Labs',
+          }),
+        );
+        expect(extracted?.toString(), 'skillbridge://project/proj-dl-1');
+
+        await tester.tap(find.byTooltip('Open Shared Link'));
+        await tester.pumpAndSettle();
+        expect(find.text('Open Shared Link'), findsOneWidget);
+        await tester.enterText(
+          find.byType(TextField).last,
+          'Check out: skillbridge://project/proj-dl-1',
+        );
+        await tester.tap(find.text('Open in App'));
+        await tester.pumpAndSettle();
+        expect(find.byType(StudentProjectDetailsScreen), findsOneWidget);
+        Navigator.of(MyApp.navigatorKey.currentContext!).pop();
+        await tester.pumpAndSettle();
 
         // 4. MyApplicationsScreen has Share button
         await tester.pumpWidget(
