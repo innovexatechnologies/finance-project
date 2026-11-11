@@ -11,6 +11,7 @@ import 'package:link_vibe/feature/company/models/assignment_model.dart';
 import 'package:link_vibe/feature/company/models/company_dashboard_data.dart';
 import 'package:link_vibe/feature/company/models/company_profile_model.dart';
 import 'package:link_vibe/feature/company/models/project_model.dart';
+import 'package:link_vibe/feature/company/presentation/widgets/company_executive_app_bar.dart';
 import 'package:link_vibe/feature/company/services/company_applicant_service.dart';
 import 'package:link_vibe/feature/company/services/company_assignment_service.dart';
 import 'package:link_vibe/feature/company/services/company_profile_service.dart';
@@ -304,38 +305,9 @@ class _CompanyDashboardScreenState extends State<CompanyDashboardScreen> {
             child: Center(
               child: Tooltip(
                 message: 'Open Workspace Menu',
-                child: Material(
-                  color: _drawerOpen
-                      ? AppColors.lightAqua
-                      : AppColors.background,
-                  borderRadius: BorderRadius.circular(12),
-                  child: InkWell(
-                    borderRadius: BorderRadius.circular(12),
-                    onTap: widget.onOpenDrawer,
-                    child: Container(
-                      width: 42,
-                      height: 42,
-                      decoration: BoxDecoration(
-                        borderRadius: BorderRadius.circular(12),
-                        border: Border.all(
-                          color: _drawerOpen
-                              ? AppColors.primaryBlue.withValues(alpha: 0.45)
-                              : AppColors.borderLight,
-                        ),
-                      ),
-                      child: AnimatedSwitcher(
-                        duration: const Duration(milliseconds: 220),
-                        child: Icon(
-                          _drawerOpen
-                              ? Icons.close_rounded
-                              : Icons.menu_rounded,
-                          key: ValueKey<bool>(_drawerOpen),
-                          color: AppColors.deepNavy,
-                          size: 21,
-                        ),
-                      ),
-                    ),
-                  ),
+                child: CompanyDrawerMenuButton(
+                  onPressed: widget.onOpenDrawer,
+                  isDrawerOpen: _drawerOpen,
                 ),
               ),
             ),

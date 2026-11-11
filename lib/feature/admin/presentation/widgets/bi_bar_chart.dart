@@ -17,12 +17,12 @@ class BiBarDataGroup {
   });
 }
 
-/// Interactive Enterprise Grouped Bar Comparison Chart
+/// Interactive Enterprise Bar Chart (supports single-series & grouped comparison)
 class BiBarChart extends StatefulWidget {
   final List<BiBarDataGroup> dataGroups;
   final String series1Label;
   final Color series1Color;
-  final String series2Label;
+  final String? series2Label;
   final Color series2Color;
   final double height;
 
@@ -31,7 +31,7 @@ class BiBarChart extends StatefulWidget {
     required this.dataGroups,
     required this.series1Label,
     this.series1Color = const Color(0xFF6366F1),
-    required this.series2Label,
+    this.series2Label,
     this.series2Color = AppColors.success,
     this.height = 240,
   });
@@ -59,11 +59,28 @@ class _BiBarChartState extends State<BiBarChart> {
       );
     }
 
-    double maxVal = 10;
+    final bool hasSeries2 = widget.series2Label != null;
+
+    double maxVal = 4;
     for (final g in widget.dataGroups) {
-      maxVal = max(maxVal, max(g.value1, g.value2));
+      maxVal = max(maxVal, hasSeries2 ? max(g.value1, g.value2) : g.value1);
     }
-    final double yCeiling = (maxVal * 1.2).ceilToDouble();
+    final double yCeiling = (maxVal * 1.25).ceilToDouble();
+
+    void handlePointerX(double width, double localDx) {
+      const leftPad = 36.0;
+      final chartWidth = width - leftPad;
+      final localX = localDx - leftPad;
+      if (localX >= 0 && localX <= chartWidth && chartWidth > 0) {
+        final groupWidth = chartWidth / widget.dataGroups.length;
+        final idx = (localX / groupWidth)
+            .floor()
+            .clamp(0, widget.dataGroups.length - 1);
+        if (_hoveredGroupIndex != idx) {
+          setState(() => _hoveredGroupIndex = idx);
+        }
+      }
+    }
 
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
@@ -73,7 +90,8 @@ class _BiBarChartState extends State<BiBarChart> {
           runSpacing: 6,
           children: [
             _buildLegendPill(widget.series1Label, widget.series1Color),
-            _buildLegendPill(widget.series2Label, widget.series2Color),
+            if (hasSeries2)
+              _buildLegendPill(widget.series2Label!, widget.series2Color),
           ],
         ),
         const SizedBox(height: 16),
@@ -83,30 +101,25 @@ class _BiBarChartState extends State<BiBarChart> {
           child: LayoutBuilder(
             builder: (context, constraints) {
               final width = constraints.maxWidth;
-              return MouseRegion(
-                onHover: (event) {
-                  const leftPad = 40.0;
-                  final chartWidth = width - leftPad;
-                  final localX = event.localPosition.dx - leftPad;
-                  if (localX >= 0 && localX <= chartWidth && chartWidth > 0) {
-                    final groupWidth = chartWidth / widget.dataGroups.length;
-                    final idx = (localX / groupWidth)
-                        .floor()
-                        .clamp(0, widget.dataGroups.length - 1);
-                    if (_hoveredGroupIndex != idx) {
-                      setState(() => _hoveredGroupIndex = idx);
-                    }
-                  }
-                },
-                onExit: (_) => setState(() => _hoveredGroupIndex = null),
-                child: CustomPaint(
-                  size: Size(width, widget.height),
-                  painter: _BarChartPainter(
-                    groups: widget.dataGroups,
-                    yCeiling: yCeiling,
-                    series1Color: widget.series1Color,
-                    series2Color: widget.series2Color,
-                    hoveredIndex: _hoveredGroupIndex,
+              return GestureDetector(
+                behavior: HitTestBehavior.opaque,
+                onTapDown: (d) => handlePointerX(width, d.localPosition.dx),
+                onHorizontalDragUpdate: (d) =>
+                    handlePointerX(width, d.localPosition.dx),
+                child: MouseRegion(
+                  onHover: (event) =>
+                      handlePointerX(width, event.localPosition.dx),
+                  onExit: (_) => setState(() => _hoveredGroupIndex = null),
+                  child: CustomPaint(
+                    size: Size(width, widget.height),
+                    painter: _BarChartPainter(
+                      groups: widget.dataGroups,
+                      yCeiling: yCeiling,
+                      series1Color: widget.series1Color,
+                      series2Color: widget.series2Color,
+                      hasSeries2: hasSeries2,
+                      hoveredIndex: _hoveredGroupIndex,
+                    ),
                   ),
                 ),
               );
@@ -186,24 +199,25 @@ class _BiBarChartState extends State<BiBarChart> {
               ),
             ],
           ),
-          Row(
-            mainAxisSize: MainAxisSize.min,
-            children: [
-              Container(
-                width: 8,
-                height: 8,
-                decoration: BoxDecoration(
-                  color: widget.series2Color,
-                  shape: BoxShape.circle,
+          if (widget.series2Label != null)
+            Row(
+              mainAxisSize: MainAxisSize.min,
+              children: [
+                Container(
+                  width: 8,
+                  height: 8,
+                  decoration: BoxDecoration(
+                    color: widget.series2Color,
+                    shape: BoxShape.circle,
+                  ),
                 ),
-              ),
-              const SizedBox(width: 4),
-              Text(
-                '${widget.series2Label}: ${g.value2.toInt()}',
-                style: GoogleFonts.inter(color: Colors.white, fontSize: 11),
-              ),
-            ],
-          ),
+                const SizedBox(width: 4),
+                Text(
+                  '${widget.series2Label!}: ${g.value2.toInt()}',
+                  style: GoogleFonts.inter(color: Colors.white, fontSize: 11),
+                ),
+              ],
+            ),
         ],
       ),
     );
@@ -215,6 +229,7 @@ class _BarChartPainter extends CustomPainter {
   final double yCeiling;
   final Color series1Color;
   final Color series2Color;
+  final bool hasSeries2;
   final int? hoveredIndex;
 
   _BarChartPainter({
@@ -222,14 +237,15 @@ class _BarChartPainter extends CustomPainter {
     required this.yCeiling,
     required this.series1Color,
     required this.series2Color,
+    required this.hasSeries2,
     required this.hoveredIndex,
   });
 
   @override
   void paint(Canvas canvas, Size size) {
-    const leftPad = 40.0;
+    const leftPad = 36.0;
     const bottomPad = 26.0;
-    const topPad = 12.0;
+    const topPad = 14.0;
 
     final chartWidth = (size.width - leftPad).clamp(1.0, double.infinity);
     final chartHeight =
@@ -262,8 +278,12 @@ class _BarChartPainter extends CustomPainter {
     if (groups.isEmpty) return;
 
     final groupStep = chartWidth / groups.length;
-    final barWidth = (groupStep * 0.32).clamp(8.0, 28.0);
+    final double barWidth = hasSeries2
+        ? (groupStep * 0.34).clamp(4.0, 24.0)
+        : (groupStep * 0.54).clamp(6.0, 32.0);
     const barGap = 4.0;
+    final int labelStep =
+        groups.length <= 7 ? 1 : (groups.length / 6).ceil().clamp(1, 30);
 
     for (int i = 0; i < groups.length; i++) {
       final g = groups[i];
@@ -284,8 +304,11 @@ class _BarChartPainter extends CustomPainter {
         );
       }
 
-      final h1 = (g.value1 / (yCeiling <= 0 ? 1 : yCeiling)).clamp(0.0, 1.0) * chartHeight;
-      final bar1X = groupCenterX - barWidth - (barGap / 2);
+      final h1 = (g.value1 / (yCeiling <= 0 ? 1 : yCeiling)).clamp(0.0, 1.0) *
+          chartHeight;
+      final bar1X = hasSeries2
+          ? groupCenterX - barWidth - (barGap / 2)
+          : groupCenterX - (barWidth / 2);
       final bar1Y = topPad + chartHeight - h1;
       final bar1Rect = RRect.fromRectAndCorners(
         Rect.fromLTWH(bar1X, bar1Y, barWidth, h1),
@@ -296,31 +319,58 @@ class _BarChartPainter extends CustomPainter {
         ..color = isHovered ? series1Color : series1Color.withValues(alpha: 0.88);
       canvas.drawRRect(bar1Rect, paint1);
 
-      final h2 = (g.value2 / (yCeiling <= 0 ? 1 : yCeiling)).clamp(0.0, 1.0) * chartHeight;
-      final bar2X = groupCenterX + (barGap / 2);
-      final bar2Y = topPad + chartHeight - h2;
-      final bar2Rect = RRect.fromRectAndCorners(
-        Rect.fromLTWH(bar2X, bar2Y, barWidth, h2),
-        topLeft: const Radius.circular(4),
-        topRight: const Radius.circular(4),
-      );
-      final paint2 = Paint()
-        ..color = isHovered ? series2Color : series2Color.withValues(alpha: 0.88);
-      canvas.drawRRect(bar2Rect, paint2);
+      if (hasSeries2) {
+        final h2 = (g.value2 / (yCeiling <= 0 ? 1 : yCeiling)).clamp(0.0, 1.0) *
+            chartHeight;
+        final bar2X = groupCenterX + (barGap / 2);
+        final bar2Y = topPad + chartHeight - h2;
+        final bar2Rect = RRect.fromRectAndCorners(
+          Rect.fromLTWH(bar2X, bar2Y, barWidth, h2),
+          topLeft: const Radius.circular(4),
+          topRight: const Radius.circular(4),
+        );
+        final paint2 = Paint()
+          ..color =
+              isHovered ? series2Color : series2Color.withValues(alpha: 0.88);
+        canvas.drawRRect(bar2Rect, paint2);
+      }
 
-      textPainter.text = TextSpan(
-        text: g.label,
-        style: TextStyle(
-          color: isHovered ? AppColors.textPrimary : AppColors.textMuted,
-          fontSize: 10,
-          fontWeight: isHovered ? FontWeight.bold : FontWeight.normal,
-        ),
-      );
-      textPainter.layout();
-      textPainter.paint(
-        canvas,
-        Offset(groupCenterX - (textPainter.width / 2), size.height - 18),
-      );
+      if (!hasSeries2 && g.value1 > 0 && groups.length <= 14) {
+        textPainter.text = TextSpan(
+          text: '${g.value1.toInt()}',
+          style: TextStyle(
+            color: series1Color,
+            fontSize: 9.5,
+            fontWeight: FontWeight.bold,
+          ),
+        );
+        textPainter.layout();
+        textPainter.paint(
+          canvas,
+          Offset(
+            groupCenterX - (textPainter.width / 2),
+            (bar1Y - 13).clamp(0.0, chartHeight + topPad),
+          ),
+        );
+      }
+
+      final bool showLabel =
+          i == 0 || i == groups.length - 1 || i % labelStep == 0 || isHovered;
+      if (showLabel) {
+        textPainter.text = TextSpan(
+          text: g.label,
+          style: TextStyle(
+            color: isHovered ? AppColors.textPrimary : AppColors.textMuted,
+            fontSize: 10,
+            fontWeight: isHovered ? FontWeight.bold : FontWeight.normal,
+          ),
+        );
+        textPainter.layout();
+        textPainter.paint(
+          canvas,
+          Offset(groupCenterX - (textPainter.width / 2), size.height - 18),
+        );
+      }
     }
   }
 
@@ -328,6 +378,7 @@ class _BarChartPainter extends CustomPainter {
   bool shouldRepaint(covariant _BarChartPainter oldDelegate) {
     return oldDelegate.hoveredIndex != hoveredIndex ||
         oldDelegate.groups != groups ||
-        oldDelegate.yCeiling != yCeiling;
+        oldDelegate.yCeiling != yCeiling ||
+        oldDelegate.hasSeries2 != hasSeries2;
   }
 }

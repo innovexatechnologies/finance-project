@@ -247,10 +247,22 @@ class _CompanyMainNavState extends State<CompanyMainNav> {
         onOpenDrawer: _openDrawer,
         isDrawerOpen: _isDrawerOpen,
       ),
-      CompanyProjectsListScreen(onTabChange: _onTabChange),
+      CompanyProjectsListScreen(
+        onTabChange: _onTabChange,
+        onOpenDrawer: _openDrawer,
+        isDrawerOpen: _isDrawerOpen,
+      ),
       PostProjectScreen(onTabChange: _onTabChange),
-      ApplicantsScreen(onTabChange: _onTabChange),
-      AssignedProjectsScreen(onTabChange: _onTabChange),
+      ApplicantsScreen(
+        onTabChange: _onTabChange,
+        onOpenDrawer: _openDrawer,
+        isDrawerOpen: _isDrawerOpen,
+      ),
+      AssignedProjectsScreen(
+        onTabChange: _onTabChange,
+        onOpenDrawer: _openDrawer,
+        isDrawerOpen: _isDrawerOpen,
+      ),
     ];
 
     return PopScope(
@@ -322,7 +334,10 @@ class _CompanyMainNavState extends State<CompanyMainNav> {
       },
       child: Scaffold(
         key: _scaffoldKey,
-        endDrawerEnableOpenDragGesture: _currentIndex == 0,
+        endDrawerEnableOpenDragGesture: _currentIndex == 0 ||
+            _currentIndex == 1 ||
+            _currentIndex == 3 ||
+            _currentIndex == 4,
         onEndDrawerChanged: (isOpen) {
           if (mounted && _isDrawerOpen != isOpen) {
             setState(() => _isDrawerOpen = isOpen);

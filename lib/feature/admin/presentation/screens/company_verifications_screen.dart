@@ -88,7 +88,7 @@ class _CompanyVerificationsScreenState
   }
 
   void _onRouteSelected(String routeId) {
-    if (_scaffoldKey.currentState?.isDrawerOpen ?? false) {
+    if (_scaffoldKey.currentState?.isEndDrawerOpen ?? false) {
       Navigator.pop(context);
     }
     if (routeId == 'company_verifications') return;
@@ -789,9 +789,10 @@ class _CompanyVerificationsScreenState
         return Scaffold(
           key: _scaffoldKey,
           backgroundColor: AppColors.background,
-          drawer: isDesktop
+          endDrawer: isDesktop
               ? null
               : Drawer(
+                  backgroundColor: AppColors.darkNavy,
                   child: AdminSidebar(
                     activeRouteId: 'company_verifications',
                     onRouteSelected: _onRouteSelected,
@@ -818,7 +819,7 @@ class _CompanyVerificationsScreenState
                       pageTitle: 'Company Verifications',
                       breadcrumb: 'Governance',
                       onOpenDrawer: () =>
-                          _scaffoldKey.currentState?.openDrawer(),
+                          _scaffoldKey.currentState?.openEndDrawer(),
                       onSignOut: _handleSignOut,
                       onSearch: (q) => setState(() => _searchQuery = q),
                     ),

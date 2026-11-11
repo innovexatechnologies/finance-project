@@ -78,14 +78,44 @@ class AdminCompanyService {
         }
       } catch (_) {}
 
+      // Enrich with profiles rows (handles newly registered companies without an extended row yet)
+      final Map<String, Map<String, dynamic>> companyProfilesById = {};
+      try {
+        final profRows = await supabase
+            .from('profiles')
+            .select()
+            .ilike('user_type', 'company');
+        for (final raw in profRows) {
+          final p = Map<String, dynamic>.from(raw);
+          final id = p['id']?.toString() ?? '';
+          if (id.isNotEmpty) companyProfilesById[id] = p;
+        }
+      } catch (e) {
+        debugPrint('AdminCompanyService profiles lookup skipped: $e');
+      }
+
+      final Set<String> seenUserIds = {};
       final List<AdminCompanyModel> loaded = [];
       for (final raw in rows) {
         final row = Map<String, dynamic>.from(raw);
         final id = row['id']?.toString() ?? '';
         final userId = row['user_id']?.toString();
-        final name = (row['company_name']?.toString().trim().isNotEmpty == true)
-            ? row['company_name'].toString().trim()
-            : 'Corporate Partner';
+        if (userId != null && userId.isNotEmpty) seenUserIds.add(userId);
+        final prof = userId != null ? companyProfilesById[userId] : null;
+        final rawAcc = (row['account_status']?.toString().trim().toLowerCase() ??
+            prof?['account_status']?.toString().trim().toLowerCase() ??
+            'active');
+        final rawCompanyName = row['company_name']?.toString().trim() ?? '';
+        final profName = prof?['name']?.toString().trim() ?? '';
+        final name = rawCompanyName.isNotEmpty
+            ? rawCompanyName
+            : (profName.isNotEmpty ? profName : 'Corporate Partner');
+        if (rawAcc == 'deleted' || name.toLowerCase() == 'deleted account') {
+          continue;
+        }
+        final officialEmail = (row['email']?.toString().trim().isNotEmpty == true)
+            ? row['email'].toString().trim()
+            : (prof?['email']?.toString().trim() ?? '');
 
         final rawVerif =
             (row['verification_status']?.toString().toLowerCase() ?? 'not_submitted');
@@ -98,7 +128,6 @@ class AdminCompanyService {
           verifState = CompanyVerificationState.pending;
         }
 
-        final rawAcc = (row['account_status']?.toString().toLowerCase() ?? 'active');
         final accState = rawAcc == 'suspended'
             ? CompanyAccountState.suspended
             : CompanyAccountState.active;
@@ -138,8 +167,9 @@ class AdminCompanyService {
             logoInitial: (row['logo_initial']?.toString().trim().isNotEmpty == true)
                 ? row['logo_initial'].toString().trim()
                 : SupabaseHelper.initialsFor(name, fallback: 'CO'),
-            officialEmail: row['email']?.toString() ?? '',
-            isEmailVerified: row['is_email_verified'] == true,
+            officialEmail: officialEmail,
+            isEmailVerified:
+                row['is_email_verified'] == true || prof?['is_verified'] == true,
             industry: (row['industry']?.toString().trim().isNotEmpty == true)
                 ? row['industry'].toString().trim()
                 : 'General Technology',
@@ -166,6 +196,58 @@ class AdminCompanyService {
             evidenceUrl: row['evidence_url']?.toString(),
             postedProjectsCount: projCount,
             auditHistory: matchingLogs,
+          ),
+        );
+      }
+
+      // Include any registered company profiles that do not yet have a companies table row
+      for (final entry in companyProfilesById.entries) {
+        if (seenUserIds.contains(entry.key)) continue;
+        final p = entry.value;
+        final accRaw = p['account_status']?.toString().trim().toLowerCase() ?? '';
+        final rawName = p['name']?.toString().trim() ?? '';
+        if (accRaw == 'deleted' || rawName.toLowerCase() == 'deleted account') {
+          continue;
+        }
+        final companyName =
+            rawName.isNotEmpty ? rawName : 'Corporate Partner';
+        final createdDt =
+            SupabaseHelper.parseDate(p['created_at']) ?? DateTime.now();
+        final regDateStr =
+            '${createdDt.year}-${createdDt.month.toString().padLeft(2, '0')}-${createdDt.day.toString().padLeft(2, '0')}';
+        final industry = (p['university']?.toString().trim().isNotEmpty == true)
+            ? p['university'].toString().trim()
+            : 'General Technology';
+
+        loaded.add(
+          AdminCompanyModel(
+            id: entry.key,
+            userId: entry.key,
+            companyName: companyName,
+            logoInitial: SupabaseHelper.initialsFor(companyName, fallback: 'CO'),
+            officialEmail: p['email']?.toString() ?? '',
+            isEmailVerified: p['is_verified'] == true,
+            industry: industry,
+            city: '',
+            completeAddress: '',
+            contactPersonName: '',
+            phoneNumber: p['phone']?.toString() ?? '',
+            websiteUrl: '',
+            description: p['bio']?.toString() ?? '',
+            registrationNumber: '',
+            verificationStatus: p['is_verified'] == true
+                ? CompanyVerificationState.verified
+                : CompanyVerificationState.pending,
+            accountStatus: accRaw == 'suspended'
+                ? CompanyAccountState.suspended
+                : CompanyAccountState.active,
+            registrationDate: regDateStr,
+            registrationDateTime: createdDt,
+            evidenceFileName: '',
+            evidenceFileType: 'Not Uploaded',
+            evidenceFileSize: '',
+            postedProjectsCount: projectCountsByUser[entry.key] ?? 0,
+            auditHistory: const [],
           ),
         );
       }

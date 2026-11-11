@@ -2,16 +2,15 @@ import 'package:flutter/material.dart';
 import 'package:google_fonts/google_fonts.dart';
 import 'package:link_vibe/core/constants/app_colors.dart';
 import 'package:link_vibe/core/widgets/skillbridge_logo.dart';
-import 'package:link_vibe/feature/admin/models/admin_application_monitoring_model.dart';
-import 'package:link_vibe/feature/admin/models/admin_project_model.dart';
-import 'package:link_vibe/feature/admin/models/admin_student_model.dart';
-import 'package:link_vibe/feature/admin/services/admin_application_monitoring_service.dart';
+import 'package:link_vibe/feature/admin/presentation/screens/admin_dashboard_screen.dart';
+import 'package:link_vibe/feature/admin/presentation/screens/company_management_screen.dart';
+import 'package:link_vibe/feature/admin/presentation/screens/project_management_screen.dart';
+import 'package:link_vibe/feature/admin/presentation/screens/reports_analytics_screen.dart';
+import 'package:link_vibe/feature/admin/presentation/screens/student_management_screen.dart';
 import 'package:link_vibe/feature/admin/services/admin_auth_service.dart';
-import 'package:link_vibe/feature/admin/services/admin_certificate_service.dart';
+import 'package:link_vibe/feature/admin/services/admin_company_service.dart';
 import 'package:link_vibe/feature/admin/services/admin_project_service.dart';
 import 'package:link_vibe/feature/admin/services/admin_student_service.dart';
-import 'package:link_vibe/feature/admin/services/admin_verification_service.dart';
-import 'package:link_vibe/feature/company/models/company_verification_model.dart';
 
 /// Navigation item model for Admin Sidebar
 class AdminNavItem {
@@ -31,7 +30,7 @@ class AdminNavItem {
 }
 
 /// Enterprise Admin Sidebar Navigation Component
-/// Dynamically computes live badge counts from Supabase-backed services.
+/// Shows the 5 core Admin Console screens and dynamically computes live counts.
 class AdminSidebar extends StatelessWidget {
   final String activeRouteId;
   final ValueChanged<String> onRouteSelected;
@@ -48,90 +47,107 @@ class AdminSidebar extends StatelessWidget {
     this.onToggleCollapse,
   });
 
+  /// Normalizes legacy/alias route IDs onto the 5 active Admin drawer routes.
+  static String normalizeRouteId(String routeId) {
+    switch (routeId) {
+      case 'students':
+      case 'student_verifications':
+        return 'student_verifications';
+      case 'company':
+      case 'companies':
+      case 'company_management':
+      case 'company_verifications':
+        return 'company_management';
+      case 'projects':
+      case 'projects_audit':
+        return 'projects_audit';
+      case 'reports':
+      case 'analytics':
+        return 'analytics';
+      case 'dashboard':
+      default:
+        return 'dashboard';
+    }
+  }
+
+  /// Shared drawer/card route navigator across all 5 Admin screens.
+  static void navigateToRoute(
+    BuildContext context, {
+    required GlobalKey<ScaffoldState> scaffoldKey,
+    required String currentRouteId,
+    required String targetRouteId,
+  }) {
+    if (scaffoldKey.currentState?.isEndDrawerOpen ?? false) {
+      Navigator.pop(context);
+    }
+    final current = normalizeRouteId(currentRouteId);
+    final next = normalizeRouteId(targetRouteId);
+    if (current == next) return;
+
+    final Widget destination;
+    switch (next) {
+      case 'student_verifications':
+        destination = const StudentManagementScreen();
+        break;
+      case 'company_management':
+        destination = const CompanyManagementScreen();
+        break;
+      case 'projects_audit':
+        destination = const ProjectManagementScreen();
+        break;
+      case 'analytics':
+        destination = const ReportsAnalyticsScreen();
+        break;
+      case 'dashboard':
+      default:
+        destination = const AdminDashboardScreen();
+        break;
+    }
+
+    Navigator.pushReplacement(
+      context,
+      MaterialPageRoute(builder: (_) => destination),
+    );
+  }
+
   List<AdminNavItem> _buildLiveNavItems() {
-    final pendingCompanyVerifs = AdminVerificationService()
-        .allVerifications
-        .where((v) => v.status == VerificationStatus.pending)
-        .length;
-
-    final pendingStudents = AdminStudentService()
-        .allStudents
-        .where((s) => s.verificationStatus == StudentVerificationStatus.pending)
-        .length;
-
-    final activeProjects = AdminProjectService()
-        .allProjects
-        .where((p) =>
-            p.status == AdminProjectStatus.published ||
-            p.status == AdminProjectStatus.active)
-        .length;
-
-    final flaggedApps = AdminApplicationMonitoringService()
-        .allApplications
-        .where((a) =>
-            a.reportStatus == ApplicationReportStatus.reported ||
-            a.reportStatus == ApplicationReportStatus.underInvestigation)
-        .length;
-
-    final mintedCertificates =
-        AdminCertificateService().allCertificates.length;
+    final studentCount = AdminStudentService().totalCount;
+    final companyCount = AdminCompanyService().totalCount;
+    final projectCount = AdminProjectService().totalCount;
 
     return [
       const AdminNavItem(
         title: 'Platform Overview',
-        icon: Icons.dashboard_outlined,
+        icon: Icons.dashboard_rounded,
         routeId: 'dashboard',
       ),
       AdminNavItem(
-        title: 'Company Verifications',
-        icon: Icons.domain_verification_outlined,
-        routeId: 'company_verifications',
-        badgeText: pendingCompanyVerifs > 0
-            ? '$pendingCompanyVerifs Pending'
-            : null,
-        badgeColor: AppColors.warning,
-      ),
-      AdminNavItem(
-        title: 'Student Credentials',
-        icon: Icons.school_outlined,
+        title: 'Student',
+        icon: Icons.school_rounded,
         routeId: 'student_verifications',
-        badgeText: pendingStudents > 0 ? '$pendingStudents Pending' : null,
+        badgeText: studentCount > 0 ? '$studentCount' : null,
         badgeColor: AppColors.accentTeal,
       ),
       AdminNavItem(
-        title: 'Projects & Sprints',
-        icon: Icons.assignment_outlined,
-        routeId: 'projects_audit',
-        badgeText: activeProjects > 0 ? '$activeProjects Active' : null,
+        title: 'Company',
+        icon: Icons.domain_rounded,
+        routeId: 'company_management',
+        badgeText: companyCount > 0 ? '$companyCount' : null,
         badgeColor: AppColors.primary,
       ),
       AdminNavItem(
-        title: 'Application Monitoring',
-        icon: Icons.shield_outlined,
-        routeId: 'compliance',
-        badgeText: flaggedApps > 0
-            ? '$flaggedApps Flag${flaggedApps == 1 ? '' : 's'}'
-            : null,
-        badgeColor: AppColors.error,
-      ),
-      AdminNavItem(
-        title: 'Audit Logs & Vault',
-        icon: Icons.history_edu_outlined,
-        routeId: 'audit_logs',
-        badgeText:
-            mintedCertificates > 0 ? '$mintedCertificates Minted' : null,
+        title: 'Projects',
+        icon: Icons.assignment_rounded,
+        routeId: 'projects_audit',
+        badgeText: projectCount > 0 ? '$projectCount' : null,
+        badgeColor: const Color(0xFF6366F1),
       ),
       const AdminNavItem(
-        title: 'Reports & Analytics',
-        icon: Icons.insights_outlined,
+        title: 'Reports and Analytics',
+        icon: Icons.insights_rounded,
         routeId: 'analytics',
-        badgeText: 'Live BI',
+        badgeText: 'Live',
         badgeColor: AppColors.accentTeal,
-      ),
-      const AdminNavItem(
-        title: 'Platform Settings',
-        icon: Icons.settings_outlined,
-        routeId: 'settings',
       ),
     ];
   }
@@ -140,11 +156,9 @@ class AdminSidebar extends StatelessWidget {
   Widget build(BuildContext context) {
     final listenable = Listenable.merge([
       AdminAuthService().currentAdminNotifier,
-      AdminVerificationService().verificationsNotifier,
       AdminStudentService().studentsNotifier,
+      AdminCompanyService().companiesNotifier,
       AdminProjectService().projectsNotifier,
-      AdminApplicationMonitoringService().applicationsNotifier,
-      AdminCertificateService().certificatesNotifier,
     ]);
 
     return ListenableBuilder(
@@ -162,31 +176,37 @@ class AdminSidebar extends StatelessWidget {
               ),
             ),
           ),
-          child: Column(
-            children: [
-              _buildBrandHeader(),
-              const Divider(color: Colors.white12, height: 1),
-              Expanded(
-                child: ListView.builder(
-                  padding:
-                      const EdgeInsets.symmetric(vertical: 16, horizontal: 10),
-                  itemCount: items.length,
-                  itemBuilder: (context, index) {
-                    final item = items[index];
-                    final isSelected = item.routeId == activeRouteId;
-                    return _buildNavItemTile(item, isSelected);
-                  },
+          child: SafeArea(
+            left: false,
+            right: false,
+            child: Column(
+              children: [
+                _buildBrandHeader(context),
+                const Divider(color: Colors.white12, height: 1),
+                Expanded(
+                  child: ListView.builder(
+                    padding:
+                        const EdgeInsets.symmetric(vertical: 16, horizontal: 10),
+                    itemCount: items.length,
+                    itemBuilder: (context, index) {
+                      final item = items[index];
+                      final isSelected =
+                          normalizeRouteId(item.routeId) ==
+                          normalizeRouteId(activeRouteId);
+                      return _buildNavItemTile(item, isSelected);
+                    },
+                  ),
                 ),
-              ),
-              _buildFooterSection(),
-            ],
+                _buildFooterSection(),
+              ],
+            ),
           ),
         );
       },
     );
   }
 
-  Widget _buildBrandHeader() {
+  Widget _buildBrandHeader(BuildContext context) {
     return Container(
       height: 70,
       padding: EdgeInsets.symmetric(horizontal: isCollapsed ? 12 : 20),
@@ -267,6 +287,16 @@ class AdminSidebar extends StatelessWidget {
               ),
               onPressed: onToggleCollapse,
               tooltip: 'Collapse Sidebar',
+            )
+          else if (!isCollapsed)
+            IconButton(
+              icon: const Icon(
+                Icons.close_rounded,
+                color: Colors.white70,
+                size: 20,
+              ),
+              onPressed: () => Navigator.maybePop(context),
+              tooltip: 'Close Menu',
             ),
         ],
       ),

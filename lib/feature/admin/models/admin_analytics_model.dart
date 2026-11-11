@@ -213,3 +213,36 @@ class AnalyticsTableRow {
   });
 }
 
+/// Exact day-by-day record for daily graphs, comparisons, and full audit ledger
+class DailyPlatformRecord {
+  final DateTime date;
+  final String dateKey; // yyyy-MM-dd
+  final String shortLabel; // e.g. 11 Nov
+  final String fullDateLabel; // e.g. 11 Nov 2026
+  final int studentCount;
+  final int companyCount;
+  final int projectCount;
+  final int totalStudentsToDate;
+  final int totalCompaniesToDate;
+  final List<String> studentNames;
+  final List<String> companyNames;
+
+  const DailyPlatformRecord({
+    required this.date,
+    required this.dateKey,
+    required this.shortLabel,
+    required this.fullDateLabel,
+    required this.studentCount,
+    required this.companyCount,
+    required this.projectCount,
+    required this.totalStudentsToDate,
+    required this.totalCompaniesToDate,
+    this.studentNames = const [],
+    this.companyNames = const [],
+  });
+
+  bool get hasActivity =>
+      studentCount > 0 || companyCount > 0 || projectCount > 0;
+}
+
+

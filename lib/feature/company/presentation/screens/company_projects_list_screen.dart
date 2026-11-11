@@ -4,6 +4,7 @@ import 'package:link_vibe/core/constants/app_colors.dart';
 import 'package:link_vibe/core/widgets/app_empty_state.dart';
 import 'package:link_vibe/core/widgets/status_badge.dart';
 import 'package:link_vibe/feature/company/models/project_model.dart';
+import 'package:link_vibe/feature/company/presentation/widgets/company_executive_app_bar.dart';
 import 'package:link_vibe/feature/company/services/company_profile_service.dart';
 import 'package:link_vibe/feature/company/services/company_project_service.dart';
 
@@ -14,11 +15,15 @@ import 'post_project_screen.dart';
 class CompanyProjectsListScreen extends StatefulWidget {
   final String initialFilter;
   final Function(int)? onTabChange;
+  final VoidCallback? onOpenDrawer;
+  final bool isDrawerOpen;
 
   const CompanyProjectsListScreen({
     super.key,
     this.initialFilter = 'All',
     this.onTabChange,
+    this.onOpenDrawer,
+    this.isDrawerOpen = false,
   });
 
   @override
@@ -292,6 +297,18 @@ class _CompanyProjectsListScreenState extends State<CompanyProjectsListScreen> {
             ),
           ],
         ),
+        actions: [
+          if (widget.onOpenDrawer != null)
+            Padding(
+              padding: const EdgeInsets.only(right: 14),
+              child: Center(
+                child: CompanyDrawerMenuButton(
+                  onPressed: widget.onOpenDrawer,
+                  isDrawerOpen: widget.isDrawerOpen,
+                ),
+              ),
+            ),
+        ],
         bottom: PreferredSize(
           preferredSize: const Size.fromHeight(1),
           child: Container(

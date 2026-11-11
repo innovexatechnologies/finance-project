@@ -4,15 +4,7 @@ import 'package:google_fonts/google_fonts.dart';
 import 'package:link_vibe/core/constants/app_colors.dart';
 import 'package:link_vibe/core/widgets/app_empty_state.dart';
 import 'package:link_vibe/feature/admin/models/admin_student_model.dart';
-import 'package:link_vibe/feature/admin/presentation/screens/admin_dashboard_screen.dart';
 import 'package:link_vibe/feature/admin/presentation/screens/admin_login_screen.dart';
-import 'package:link_vibe/feature/admin/presentation/screens/admin_settings_screen.dart';
-import 'package:link_vibe/feature/admin/presentation/screens/application_monitoring_screen.dart';
-import 'package:link_vibe/feature/admin/presentation/screens/certificate_management_screen.dart';
-import 'package:link_vibe/feature/admin/presentation/screens/company_management_screen.dart';
-import 'package:link_vibe/feature/admin/presentation/screens/company_verifications_screen.dart';
-import 'package:link_vibe/feature/admin/presentation/screens/project_management_screen.dart';
-import 'package:link_vibe/feature/admin/presentation/screens/reports_analytics_screen.dart';
 import 'package:link_vibe/feature/admin/presentation/widgets/admin_sidebar.dart';
 import 'package:link_vibe/feature/admin/presentation/widgets/admin_top_navbar.dart';
 import 'package:link_vibe/feature/admin/services/admin_auth_service.dart';
@@ -41,7 +33,8 @@ class _StudentManagementScreenState extends State<StudentManagementScreen> {
   String _selectedDepartment = 'All Departments';
   String _selectedVerificationStatus = 'All'; // 'All', 'Verified', 'Pending', 'Rejected'
   String _selectedAccountStatus = 'All'; // 'All', 'Active', 'Suspended'
-  String _sortBy = 'Newest First'; // 'Newest First', 'Oldest First', 'Highest CGPA'
+  String _selectedEngagement = 'All'; // 'All', 'Engaged in Projects', 'Active Projects', 'Completed'
+  String _sortBy = 'Newest First'; // 'Newest First', 'Oldest First', 'Most Engaged', 'Highest CGPA'
 
   bool _isSidebarCollapsed = false;
   final Set<String> _selectedStudentIds = {};
@@ -52,7 +45,18 @@ class _StudentManagementScreenState extends State<StudentManagementScreen> {
 
   final List<String> _verificationFilters = ['All', 'Verified', 'Pending', 'Rejected'];
   final List<String> _accountFilters = ['All', 'Active', 'Suspended'];
-  final List<String> _sortOptions = ['Newest First', 'Oldest First', 'Highest CGPA'];
+  final List<String> _engagementFilters = [
+    'All',
+    'Engaged in Projects',
+    'Active Projects',
+    'Completed',
+  ];
+  final List<String> _sortOptions = [
+    'Newest First',
+    'Oldest First',
+    'Most Engaged',
+    'Highest CGPA',
+  ];
 
   List<String> _buildUniversityOptions(List<AdminStudentModel> students) {
     final set = <String>{'All Universities'};
@@ -169,36 +173,12 @@ class _StudentManagementScreenState extends State<StudentManagementScreen> {
   }
 
   void _onRouteSelected(String routeId) {
-    if (_scaffoldKey.currentState?.isDrawerOpen ?? false) {
-      Navigator.pop(context);
-    }
-    if (routeId == 'student_verifications') return;
-
-    Widget? target;
-    if (routeId == 'dashboard') {
-      target = const AdminDashboardScreen();
-    } else if (routeId == 'company_verifications') {
-      target = const CompanyVerificationsScreen();
-    } else if (routeId == 'company_management') {
-      target = const CompanyManagementScreen();
-    } else if (routeId == 'projects_audit' || routeId == 'projects') {
-      target = const ProjectManagementScreen();
-    } else if (routeId == 'compliance' || routeId == 'application_monitoring') {
-      target = const ApplicationMonitoringScreen();
-    } else if (routeId == 'audit_logs' || routeId == 'certificates') {
-      target = const CertificateManagementScreen();
-    } else if (routeId == 'analytics' || routeId == 'reports') {
-      target = const ReportsAnalyticsScreen();
-    } else if (routeId == 'settings') {
-      target = const AdminSettingsScreen();
-    }
-
-    if (target != null) {
-      Navigator.pushReplacement(
-        context,
-        MaterialPageRoute(builder: (_) => target!),
-      );
-    }
+    AdminSidebar.navigateToRoute(
+      context,
+      scaffoldKey: _scaffoldKey,
+      currentRouteId: 'student_verifications',
+      targetRouteId: routeId,
+    );
   }
 
   void _openStudentProfileDrawer(AdminStudentModel student) {
@@ -1147,9 +1127,10 @@ class _StudentManagementScreenState extends State<StudentManagementScreen> {
         return Scaffold(
           key: _scaffoldKey,
           backgroundColor: AppColors.background,
-          drawer: isDesktop
+          endDrawer: isDesktop
               ? null
               : Drawer(
+                  backgroundColor: AppColors.darkNavy,
                   child: AdminSidebar(
                     activeRouteId: 'student_verifications',
                     onRouteSelected: _onRouteSelected,
@@ -1173,9 +1154,9 @@ class _StudentManagementScreenState extends State<StudentManagementScreen> {
                 child: Column(
                   children: [
                     AdminTopNavbar(
-                      pageTitle: 'Student Credentials & Directory',
-                      breadcrumb: 'Governance',
-                      onOpenDrawer: () => _scaffoldKey.currentState?.openDrawer(),
+                      pageTitle: 'Student',
+                      breadcrumb: 'Platform Directory',
+                      onOpenDrawer: () => _scaffoldKey.currentState?.openEndDrawer(),
                       onSignOut: _handleSignOut,
                       onSearch: (q) => setState(() {
                         _searchQuery = q;
@@ -1231,6 +1212,18 @@ class _StudentManagementScreenState extends State<StudentManagementScreen> {
                                     StudentAccountStatus.suspended) {
                               return false;
                             }
+                            if (_selectedEngagement == 'Engaged in Projects' &&
+                                !s.isEngagedInProjects) {
+                              return false;
+                            }
+                            if (_selectedEngagement == 'Active Projects' &&
+                                s.activeProjectsCount <= 0) {
+                              return false;
+                            }
+                            if (_selectedEngagement == 'Completed' &&
+                                s.projectsCompletedCount <= 0) {
+                              return false;
+                            }
 
                             if (_searchQuery.isNotEmpty) {
                               final query = _searchQuery.toLowerCase();
@@ -1249,6 +1242,16 @@ class _StudentManagementScreenState extends State<StudentManagementScreen> {
                           } else if (_sortBy == 'Oldest First') {
                             filtered.sort((a, b) => a.registrationDateTime
                                 .compareTo(b.registrationDateTime));
+                          } else if (_sortBy == 'Most Engaged') {
+                            filtered.sort((a, b) {
+                              final scoreA = a.applicationsCount +
+                                  a.activeProjectsCount * 2 +
+                                  a.projectsCompletedCount * 3;
+                              final scoreB = b.applicationsCount +
+                                  b.activeProjectsCount * 2 +
+                                  b.projectsCompletedCount * 3;
+                              return scoreB.compareTo(scoreA);
+                            });
                           } else if (_sortBy == 'Highest CGPA') {
                             filtered.sort((a, b) => b.cgpa.compareTo(a.cgpa));
                           }
@@ -1323,42 +1326,42 @@ class _StudentManagementScreenState extends State<StudentManagementScreen> {
             _buildMetricTile(
               title: 'Total Students',
               value: '${_studentService.totalCount}',
-              subtitle: 'Registered university students',
+              subtitle: 'Registered on SkillBridge',
               icon: Icons.school_rounded,
               color: AppColors.primary,
               bgColor: AppColors.lightIceBlue,
             ),
             _buildMetricTile(
+              title: 'Engaged in Projects',
+              value: '${_studentService.engagedCount}',
+              subtitle: 'Students with project activity',
+              icon: Icons.work_history_rounded,
+              color: AppColors.accentTeal,
+              bgColor: const Color(0xFFCCFBF1),
+            ),
+            _buildMetricTile(
+              title: 'Active Accounts',
+              value: '${_studentService.activeAccountCount}',
+              subtitle: 'Currently active on platform',
+              icon: Icons.person_outline_rounded,
+              color: const Color(0xFF0284C7),
+              bgColor: const Color(0xFFE0F2FE),
+            ),
+            _buildMetricTile(
               title: 'Verified Students',
               value: '${_studentService.verifiedCount}',
-              subtitle: 'Degree authenticated',
+              subtitle: 'Credentials authenticated',
               icon: Icons.verified_rounded,
               color: AppColors.success,
               bgColor: AppColors.successBg,
             ),
             _buildMetricTile(
-              title: 'Pending Verification',
+              title: 'Pending Review',
               value: '${_studentService.pendingCount}',
-              subtitle: 'Awaiting credential review',
+              subtitle: 'Awaiting verification review',
               icon: Icons.hourglass_top_rounded,
               color: AppColors.warning,
               bgColor: AppColors.warningBg,
-            ),
-            _buildMetricTile(
-              title: 'Rejected Verification',
-              value: '${_studentService.rejectedCount}',
-              subtitle: 'Discrepancies found',
-              icon: Icons.cancel_outlined,
-              color: const Color(0xFF64748B),
-              bgColor: AppColors.background,
-            ),
-            _buildMetricTile(
-              title: 'Suspended Accounts',
-              value: '${_studentService.suspendedCount}',
-              subtitle: 'Platform access revoked',
-              icon: Icons.block_rounded,
-              color: AppColors.error,
-              bgColor: AppColors.errorBg,
             ),
           ],
         );
@@ -1473,7 +1476,7 @@ class _StudentManagementScreenState extends State<StudentManagementScreen> {
                       crossAxisAlignment: CrossAxisAlignment.start,
                       children: [
                         Text(
-                          'Student Roster & Verification Management',
+                          'Engaged Students Directory',
                           style: GoogleFonts.poppins(
                             fontSize: 16,
                             fontWeight: FontWeight.bold,
@@ -1482,7 +1485,7 @@ class _StudentManagementScreenState extends State<StudentManagementScreen> {
                         ),
                         const SizedBox(height: 2),
                         Text(
-                          'Search, filter, authenticate credentials, and regulate student account states',
+                          'All students enrolled & engaged in projects across SkillBridge',
                           style: GoogleFonts.inter(
                             fontSize: 12,
                             color: AppColors.textSecondary,
@@ -1723,6 +1726,45 @@ class _StudentManagementScreenState extends State<StudentManagementScreen> {
                   }),
                 ],
               ),
+              Wrap(
+                spacing: 6,
+                runSpacing: 6,
+                crossAxisAlignment: WrapCrossAlignment.center,
+                children: [
+                  Text(
+                    'Engagement:',
+                    style: GoogleFonts.inter(
+                      fontSize: 12,
+                      fontWeight: FontWeight.bold,
+                      color: AppColors.darkNavy,
+                    ),
+                  ),
+                  ..._engagementFilters.map((ef) {
+                    final isSel = _selectedEngagement == ef;
+                    return ChoiceChip(
+                      label: Text(ef),
+                      selected: isSel,
+                      selectedColor: AppColors.primary,
+                      backgroundColor: AppColors.background,
+                      labelStyle: TextStyle(
+                        fontSize: 11,
+                        color: isSel ? Colors.white : AppColors.textSecondary,
+                        fontWeight: isSel ? FontWeight.bold : FontWeight.normal,
+                      ),
+                      shape: RoundedRectangleBorder(
+                          borderRadius: BorderRadius.circular(6)),
+                      onSelected: (val) {
+                        if (val) {
+                          setState(() {
+                            _selectedEngagement = ef;
+                            _currentPage = 1;
+                          });
+                        }
+                      },
+                    );
+                  }),
+                ],
+              ),
             ],
           ),
         ],
@@ -1759,6 +1801,33 @@ class _StudentManagementScreenState extends State<StudentManagementScreen> {
               : isPending
                   ? const Color(0xFF92400E)
                   : const Color(0xFF991B1B),
+        ),
+      ),
+    );
+  }
+
+  Widget _buildEngagementBadge(AdminStudentModel student) {
+    final engaged = student.isEngagedInProjects;
+    final label = engaged
+        ? '${student.applicationsCount} Apps • ${student.activeProjectsCount} Active • ${student.projectsCompletedCount} Done'
+        : 'Joined ${student.registrationDate}';
+    return Container(
+      padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
+      decoration: BoxDecoration(
+        color: engaged ? const Color(0xFFCCFBF1) : AppColors.background,
+        borderRadius: BorderRadius.circular(6),
+        border: Border.all(
+          color: engaged
+              ? AppColors.accentTeal.withValues(alpha: 0.35)
+              : AppColors.border,
+        ),
+      ),
+      child: Text(
+        label,
+        style: TextStyle(
+          fontSize: 10.5,
+          fontWeight: FontWeight.w700,
+          color: engaged ? const Color(0xFF0F766E) : AppColors.textSecondary,
         ),
       ),
     );
@@ -1816,6 +1885,7 @@ class _StudentManagementScreenState extends State<StudentManagementScreen> {
                     _selectedDepartment = 'All Departments';
                     _selectedVerificationStatus = 'All';
                     _selectedAccountStatus = 'All';
+                    _selectedEngagement = 'All';
                     _currentPage = 1;
                   });
                 }
@@ -1922,18 +1992,19 @@ class _StudentManagementScreenState extends State<StudentManagementScreen> {
                           ),
                           const SizedBox(height: 8),
                           Text(
-                            '${student.university} • ${student.degree} (${student.semester})',
+                            '${student.university.isNotEmpty ? student.university : 'University'} • ${student.degree} (${student.semester})',
                             style: GoogleFonts.inter(
                               fontSize: 12,
                               color: AppColors.textSecondary,
                             ),
                           ),
-                          const SizedBox(height: 10),
+                          const SizedBox(height: 8),
                           Wrap(
                             spacing: 8,
                             runSpacing: 8,
                             crossAxisAlignment: WrapCrossAlignment.center,
                             children: [
+                              _buildEngagementBadge(student),
                               _buildVerificationBadge(student),
                               _buildAccountBadge(isSuspended),
                               ElevatedButton(
@@ -2043,6 +2114,8 @@ class _StudentManagementScreenState extends State<StudentManagementScreen> {
                             ],
                           ),
                         ),
+                        _buildEngagementBadge(student),
+                        const SizedBox(width: 10),
                         _buildVerificationBadge(student),
                         const SizedBox(width: 10),
                         _buildAccountBadge(isSuspended),

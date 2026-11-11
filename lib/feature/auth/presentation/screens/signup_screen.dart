@@ -4,6 +4,7 @@ import 'package:supabase_flutter/supabase_flutter.dart';
 import 'package:link_vibe/core/constants/app_colors.dart';
 import 'package:link_vibe/core/services/app_data_service.dart';
 import 'package:link_vibe/core/services/supabase_helper.dart';
+import 'package:link_vibe/feature/auth/presentation/widgets/auth_form_helpers.dart';
 import 'package:link_vibe/feature/company/presentation/screens/company_main_nav.dart';
 import 'package:link_vibe/feature/company/services/company_profile_service.dart';
 import 'package:link_vibe/feature/student/presentation/screens/student_main_nav.dart';
@@ -43,6 +44,24 @@ class _SignupScreenState extends State<SignupScreen> {
     _universityController.dispose();
     _passwordController.dispose();
     super.dispose();
+  }
+
+  void _handleRoleChange(String role) {
+    if (_selectedRole == role) return;
+    resetAuthRoleForm(
+      formKey: _formKey,
+      controllers: [
+        _nameController,
+        _emailController,
+        _universityController,
+        _passwordController,
+      ],
+    );
+    setState(() {
+      _selectedRole = role;
+      _obscurePassword = true;
+      _errorBanner = null;
+    });
   }
 
   Future<void> _handleRegister() async {
@@ -352,8 +371,7 @@ class _SignupScreenState extends State<SignupScreen> {
                                 borderRadius: BorderRadius.circular(12),
                                 onTap: _isLoading
                                     ? null
-                                    : () =>
-                                        setState(() => _selectedRole = role),
+                                    : () => _handleRoleChange(role),
                                 child: AnimatedContainer(
                                   duration: const Duration(milliseconds: 180),
                                   padding: const EdgeInsets.symmetric(
@@ -408,149 +426,158 @@ class _SignupScreenState extends State<SignupScreen> {
                       ),
                       const SizedBox(height: 16),
 
-                      Text(
-                        isCompany ? 'Company Name *' : 'Full Name *',
-                        style: GoogleFonts.inter(
-                          fontSize: 12.5,
-                          fontWeight: FontWeight.w600,
-                          color: AppColors.darkText,
-                        ),
-                      ),
-                      const SizedBox(height: 6),
-                      TextFormField(
-                        controller: _nameController,
-                        textInputAction: TextInputAction.next,
-                        enabled: !_isLoading,
-                        decoration: InputDecoration(
-                          hintText: isCompany
-                              ? 'Enter official company name'
-                              : 'Enter your full name',
-                          prefixIcon: Icon(
-                            isCompany
-                                ? Icons.business_rounded
-                                : Icons.person_outline_rounded,
-                            size: 20,
-                          ),
-                        ),
-                        validator: (val) {
-                          if (val == null || val.trim().isEmpty) {
-                            return isCompany
-                                ? 'Company name is required'
-                                : 'Full name is required';
-                          }
-                          return null;
-                        },
-                      ),
-                      const SizedBox(height: 14),
-
-                      Text(
-                        'Email Address *',
-                        style: GoogleFonts.inter(
-                          fontSize: 12.5,
-                          fontWeight: FontWeight.w600,
-                          color: AppColors.darkText,
-                        ),
-                      ),
-                      const SizedBox(height: 6),
-                      TextFormField(
-                        controller: _emailController,
-                        keyboardType: TextInputType.emailAddress,
-                        textInputAction: TextInputAction.next,
-                        enabled: !_isLoading,
-                        decoration: InputDecoration(
-                          hintText: isCompany
-                              ? 'hr@company.com'
-                              : 'student@university.edu',
-                          prefixIcon:
-                              const Icon(Icons.email_outlined, size: 20),
-                        ),
-                        validator: (val) {
-                          final v = val?.trim() ?? '';
-                          if (v.isEmpty || !v.contains('@')) {
-                            return 'Enter a valid email address';
-                          }
-                          return null;
-                        },
-                      ),
-                      const SizedBox(height: 14),
-
-                      Text(
-                        isCompany
-                            ? 'Industry / Sector *'
-                            : 'University / Institute *',
-                        style: GoogleFonts.inter(
-                          fontSize: 12.5,
-                          fontWeight: FontWeight.w600,
-                          color: AppColors.darkText,
-                        ),
-                      ),
-                      const SizedBox(height: 6),
-                      TextFormField(
-                        controller: _universityController,
-                        textInputAction: TextInputAction.next,
-                        enabled: !_isLoading,
-                        decoration: InputDecoration(
-                          hintText: isCompany
-                              ? 'e.g. Information Technology, FinTech'
-                              : 'e.g. NUST, FAST-NUCES, LUMS',
-                          prefixIcon: Icon(
-                            isCompany
-                                ? Icons.domain_rounded
-                                : Icons.school_outlined,
-                            size: 20,
-                          ),
-                        ),
-                        validator: (val) {
-                          if (val == null || val.trim().isEmpty) {
-                            return isCompany
-                                ? 'Please enter your industry sector'
-                                : 'Please enter your university or institute';
-                          }
-                          return null;
-                        },
-                      ),
-                      const SizedBox(height: 14),
-
-                      Text(
-                        'Password *',
-                        style: GoogleFonts.inter(
-                          fontSize: 12.5,
-                          fontWeight: FontWeight.w600,
-                          color: AppColors.darkText,
-                        ),
-                      ),
-                      const SizedBox(height: 6),
-                      TextFormField(
-                        controller: _passwordController,
-                        obscureText: _obscurePassword,
-                        textInputAction: TextInputAction.done,
-                        enabled: !_isLoading,
-                        onFieldSubmitted: (_) => _handleRegister(),
-                        decoration: InputDecoration(
-                          hintText: 'Enter password',
-                          prefixIcon: const Icon(
-                            Icons.lock_outline_rounded,
-                            size: 20,
-                          ),
-                          suffixIcon: IconButton(
-                            icon: Icon(
-                              _obscurePassword
-                                  ? Icons.visibility_off_outlined
-                                  : Icons.visibility_outlined,
-                              size: 20,
-                              color: AppColors.grayText,
+                      KeyedSubtree(
+                        key: ValueKey('signup_fields_$_selectedRole'),
+                        child: Column(
+                          crossAxisAlignment: CrossAxisAlignment.start,
+                          mainAxisSize: MainAxisSize.min,
+                          children: [
+                            Text(
+                              isCompany ? 'Company Name *' : 'Full Name *',
+                              style: GoogleFonts.inter(
+                                fontSize: 12.5,
+                                fontWeight: FontWeight.w600,
+                                color: AppColors.darkText,
+                              ),
                             ),
-                            onPressed: () => setState(
-                              () => _obscurePassword = !_obscurePassword,
+                            const SizedBox(height: 6),
+                            TextFormField(
+                              controller: _nameController,
+                              textInputAction: TextInputAction.next,
+                              enabled: !_isLoading,
+                              decoration: InputDecoration(
+                                hintText: isCompany
+                                    ? 'Enter official company name'
+                                    : 'Enter your full name',
+                                prefixIcon: Icon(
+                                  isCompany
+                                      ? Icons.business_rounded
+                                      : Icons.person_outline_rounded,
+                                  size: 20,
+                                ),
+                              ),
+                              validator: (val) {
+                                if (val == null || val.trim().isEmpty) {
+                                  return isCompany
+                                      ? 'Company name is required'
+                                      : 'Full name is required';
+                                }
+                                return null;
+                              },
                             ),
-                          ),
+                            const SizedBox(height: 14),
+
+                            Text(
+                              'Email Address *',
+                              style: GoogleFonts.inter(
+                                fontSize: 12.5,
+                                fontWeight: FontWeight.w600,
+                                color: AppColors.darkText,
+                              ),
+                            ),
+                            const SizedBox(height: 6),
+                            TextFormField(
+                              controller: _emailController,
+                              keyboardType: TextInputType.emailAddress,
+                              textInputAction: TextInputAction.next,
+                              enabled: !_isLoading,
+                              decoration: InputDecoration(
+                                hintText: isCompany
+                                    ? 'hr@company.com'
+                                    : 'student@university.edu',
+                                prefixIcon:
+                                    const Icon(Icons.email_outlined, size: 20),
+                              ),
+                              validator: (val) {
+                                final v = val?.trim() ?? '';
+                                if (v.isEmpty || !v.contains('@')) {
+                                  return 'Enter a valid email address';
+                                }
+                                return null;
+                              },
+                            ),
+                            const SizedBox(height: 14),
+
+                            Text(
+                              isCompany
+                                  ? 'Industry / Sector *'
+                                  : 'University / Institute *',
+                              style: GoogleFonts.inter(
+                                fontSize: 12.5,
+                                fontWeight: FontWeight.w600,
+                                color: AppColors.darkText,
+                              ),
+                            ),
+                            const SizedBox(height: 6),
+                            TextFormField(
+                              controller: _universityController,
+                              textInputAction: TextInputAction.next,
+                              enabled: !_isLoading,
+                              decoration: InputDecoration(
+                                hintText: isCompany
+                                    ? 'e.g. Information Technology, FinTech'
+                                    : 'e.g. NUST, FAST-NUCES, LUMS',
+                                prefixIcon: Icon(
+                                  isCompany
+                                      ? Icons.domain_rounded
+                                      : Icons.school_outlined,
+                                  size: 20,
+                                ),
+                              ),
+                              validator: (val) {
+                                if (val == null || val.trim().isEmpty) {
+                                  return isCompany
+                                      ? 'Please enter your industry sector'
+                                      : 'Please enter your university or institute';
+                                }
+                                return null;
+                              },
+                            ),
+                            const SizedBox(height: 14),
+
+                            Text(
+                              'Password *',
+                              style: GoogleFonts.inter(
+                                fontSize: 12.5,
+                                fontWeight: FontWeight.w600,
+                                color: AppColors.darkText,
+                              ),
+                            ),
+                            const SizedBox(height: 6),
+                            TextFormField(
+                              controller: _passwordController,
+                              obscureText: _obscurePassword,
+                              textInputAction: TextInputAction.done,
+                              enabled: !_isLoading,
+                              onFieldSubmitted: (_) => _handleRegister(),
+                              decoration: InputDecoration(
+                                hintText: 'Enter password',
+                                prefixIcon: const Icon(
+                                  Icons.lock_outline_rounded,
+                                  size: 20,
+                                ),
+                                suffixIcon: IconButton(
+                                  icon: Icon(
+                                    _obscurePassword
+                                        ? Icons.visibility_off_outlined
+                                        : Icons.visibility_outlined,
+                                    size: 20,
+                                    color: AppColors.grayText,
+                                  ),
+                                  onPressed: () => setState(
+                                    () => _obscurePassword = !_obscurePassword,
+                                  ),
+                                ),
+                              ),
+                              validator: (val) {
+                                if (val == null || val.trim().isEmpty) {
+                                  return 'Password is required';
+                                }
+                                return null;
+                              },
+                            ),
+                          ],
                         ),
-                        validator: (val) {
-                          if (val == null || val.trim().isEmpty) {
-                            return 'Password is required';
-                          }
-                          return null;
-                        },
                       ),
                       const SizedBox(height: 22),
 

@@ -4,15 +4,7 @@ import 'package:google_fonts/google_fonts.dart';
 import 'package:link_vibe/core/constants/app_colors.dart';
 import 'package:link_vibe/core/widgets/app_empty_state.dart';
 import 'package:link_vibe/feature/admin/models/admin_project_model.dart';
-import 'package:link_vibe/feature/admin/presentation/screens/admin_dashboard_screen.dart';
 import 'package:link_vibe/feature/admin/presentation/screens/admin_login_screen.dart';
-import 'package:link_vibe/feature/admin/presentation/screens/admin_settings_screen.dart';
-import 'package:link_vibe/feature/admin/presentation/screens/application_monitoring_screen.dart';
-import 'package:link_vibe/feature/admin/presentation/screens/certificate_management_screen.dart';
-import 'package:link_vibe/feature/admin/presentation/screens/company_management_screen.dart';
-import 'package:link_vibe/feature/admin/presentation/screens/company_verifications_screen.dart';
-import 'package:link_vibe/feature/admin/presentation/screens/reports_analytics_screen.dart';
-import 'package:link_vibe/feature/admin/presentation/screens/student_management_screen.dart';
 import 'package:link_vibe/feature/admin/presentation/widgets/admin_sidebar.dart';
 import 'package:link_vibe/feature/admin/presentation/widgets/admin_top_navbar.dart';
 import 'package:link_vibe/feature/admin/services/admin_auth_service.dart';
@@ -147,36 +139,12 @@ class _ProjectManagementScreenState extends State<ProjectManagementScreen> {
   }
 
   void _onRouteSelected(String routeId) {
-    if (_scaffoldKey.currentState?.isDrawerOpen ?? false) {
-      Navigator.pop(context);
-    }
-    if (routeId == 'projects_audit' || routeId == 'projects') return;
-
-    Widget? target;
-    if (routeId == 'dashboard') {
-      target = const AdminDashboardScreen();
-    } else if (routeId == 'student_verifications') {
-      target = const StudentManagementScreen();
-    } else if (routeId == 'company_verifications') {
-      target = const CompanyVerificationsScreen();
-    } else if (routeId == 'company_management') {
-      target = const CompanyManagementScreen();
-    } else if (routeId == 'compliance' || routeId == 'application_monitoring') {
-      target = const ApplicationMonitoringScreen();
-    } else if (routeId == 'audit_logs' || routeId == 'certificates') {
-      target = const CertificateManagementScreen();
-    } else if (routeId == 'analytics' || routeId == 'reports') {
-      target = const ReportsAnalyticsScreen();
-    } else if (routeId == 'settings') {
-      target = const AdminSettingsScreen();
-    }
-
-    if (target != null) {
-      Navigator.pushReplacement(
-        context,
-        MaterialPageRoute(builder: (_) => target!),
-      );
-    }
+    AdminSidebar.navigateToRoute(
+      context,
+      scaffoldKey: _scaffoldKey,
+      currentRouteId: 'projects_audit',
+      targetRouteId: routeId,
+    );
   }
 
   // Filter & Sort Logic
@@ -1249,9 +1217,10 @@ class _ProjectManagementScreenState extends State<ProjectManagementScreen> {
         return Scaffold(
           key: _scaffoldKey,
           backgroundColor: AppColors.background,
-          drawer: isDesktop
+          endDrawer: isDesktop
               ? null
               : Drawer(
+                  backgroundColor: AppColors.darkNavy,
                   child: AdminSidebar(
                     activeRouteId: 'projects_audit',
                     onRouteSelected: _onRouteSelected,
@@ -1279,8 +1248,9 @@ class _ProjectManagementScreenState extends State<ProjectManagementScreen> {
                   children: [
                     // Top Navigation Bar
                     AdminTopNavbar(
-                      pageTitle: 'Project Moderation & Sprints',
-                      onOpenDrawer: () => _scaffoldKey.currentState?.openDrawer(),
+                      pageTitle: 'Projects',
+                      breadcrumb: 'Platform Directory',
+                      onOpenDrawer: () => _scaffoldKey.currentState?.openEndDrawer(),
                       onSignOut: _handleSignOut,
                       onSearch: (query) {
                         setState(() {
@@ -1367,23 +1337,15 @@ class _ProjectManagementScreenState extends State<ProjectManagementScreen> {
           _buildMetricTile(
             title: 'Total Projects',
             value: '${_projectService.totalCount}',
-            subtitle: 'All created collaboration sprints',
+            subtitle: 'All created platform projects',
             icon: Icons.assignment_outlined,
             color: AppColors.primary,
             bgColor: AppColors.lightIceBlue,
           ),
           _buildMetricTile(
-            title: 'Pending Review',
-            value: '${_projectService.pendingReviewCount}',
-            subtitle: 'Moderation queue awaiting review',
-            icon: Icons.hourglass_top_rounded,
-            color: AppColors.warning,
-            bgColor: AppColors.warningBg,
-          ),
-          _buildMetricTile(
-            title: 'Published Projects',
+            title: 'Recent / Open',
             value: '${_projectService.publishedCount}',
-            subtitle: 'Open for student applications',
+            subtitle: 'Recently posted & open listings',
             icon: Icons.public_rounded,
             color: AppColors.accentTeal,
             bgColor: AppColors.accentTeal.withValues(alpha: 0.12),
@@ -1399,26 +1361,10 @@ class _ProjectManagementScreenState extends State<ProjectManagementScreen> {
           _buildMetricTile(
             title: 'Completed Projects',
             value: '${_projectService.completedCount}',
-            subtitle: 'Successfully delivered sprints',
+            subtitle: 'Successfully completed projects',
             icon: Icons.verified_rounded,
             color: AppColors.success,
             bgColor: AppColors.successBg,
-          ),
-          _buildMetricTile(
-            title: 'Closed Projects',
-            value: '${_projectService.closedCount}',
-            subtitle: 'Application windows concluded',
-            icon: Icons.lock_clock_outlined,
-            color: const Color(0xFF64748B),
-            bgColor: AppColors.background,
-          ),
-          _buildMetricTile(
-            title: 'Removed Projects',
-            value: '${_projectService.removedCount}',
-            subtitle: 'De-listed for policy non-compliance',
-            icon: Icons.delete_forever_outlined,
-            color: AppColors.error,
-            bgColor: AppColors.errorBg,
           ),
         ];
 
@@ -1543,7 +1489,7 @@ class _ProjectManagementScreenState extends State<ProjectManagementScreen> {
                       crossAxisAlignment: CrossAxisAlignment.start,
                       children: [
                         Text(
-                          'Project Moderation & Sprints Governance',
+                          'All Platform Projects',
                           style: GoogleFonts.poppins(
                             fontSize: 16,
                             fontWeight: FontWeight.bold,
@@ -1552,7 +1498,7 @@ class _ProjectManagementScreenState extends State<ProjectManagementScreen> {
                         ),
                         const SizedBox(height: 2),
                         Text(
-                          'Review newly submitted sprints, regulate publication status, and enforce academic compliance',
+                          'Complete list of recent, open, active, and completed projects across SkillBridge',
                           style: GoogleFonts.inter(
                             fontSize: 12,
                             color: AppColors.textSecondary,
@@ -1751,6 +1697,55 @@ class _ProjectManagementScreenState extends State<ProjectManagementScreen> {
                 ],
               );
             },
+          ),
+          const SizedBox(height: 14),
+          Wrap(
+            spacing: 8,
+            runSpacing: 8,
+            crossAxisAlignment: WrapCrossAlignment.center,
+            children: [
+              Text(
+                'Quick View:',
+                style: GoogleFonts.inter(
+                  fontSize: 12,
+                  fontWeight: FontWeight.bold,
+                  color: AppColors.darkNavy,
+                ),
+              ),
+              for (final chip in const [
+                ('All Statuses', 'All Projects'),
+                ('Published', 'Recent / Open'),
+                ('Active', 'In Progress'),
+                ('Completed', 'Completed'),
+                ('Closed', 'Closed'),
+              ])
+                ChoiceChip(
+                  label: Text(chip.$2),
+                  selected: _selectedProjectStatus == chip.$1,
+                  selectedColor: AppColors.primary,
+                  backgroundColor: AppColors.background,
+                  labelStyle: TextStyle(
+                    fontSize: 11.5,
+                    color: _selectedProjectStatus == chip.$1
+                        ? Colors.white
+                        : AppColors.textSecondary,
+                    fontWeight: _selectedProjectStatus == chip.$1
+                        ? FontWeight.bold
+                        : FontWeight.w500,
+                  ),
+                  shape: RoundedRectangleBorder(
+                    borderRadius: BorderRadius.circular(8),
+                  ),
+                  onSelected: (selected) {
+                    if (selected) {
+                      setState(() {
+                        _selectedProjectStatus = chip.$1;
+                        _currentPage = 1;
+                      });
+                    }
+                  },
+                ),
+            ],
           ),
         ],
       ),
@@ -2049,7 +2044,7 @@ class _ProjectManagementScreenState extends State<ProjectManagementScreen> {
                           ),
                           const SizedBox(height: 8),
                           Text(
-                            '${project.projectType} • ${project.duration} • Deadline: ${project.deadline}',
+                            '${project.projectType} • ${project.duration} • Created: ${project.createdAt} • ${project.applicantsCount} Applicants',
                             style: GoogleFonts.inter(
                               fontSize: 12,
                               color: AppColors.textSecondary,

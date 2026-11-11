@@ -27,6 +27,11 @@ class AdminStudentService {
   int get suspendedCount => studentsNotifier.value
       .where((s) => s.accountStatus == StudentAccountStatus.suspended)
       .length;
+  int get activeAccountCount => studentsNotifier.value
+      .where((s) => s.accountStatus == StudentAccountStatus.active)
+      .length;
+  int get engagedCount =>
+      studentsNotifier.value.where((s) => s.isEngagedInProjects).length;
 
   /// Fetches registered students, project participation counts, and audit history from Supabase.
   Future<void> loadFromSupabase() async {
@@ -55,23 +60,39 @@ class AdminStudentService {
         debugPrint('AdminStudentService profiles enrichment skipped: $e');
       }
 
-      // Compute active/completed project counts per student user_id from applications
-      final Map<String, int> activeByUser = {};
-      final Map<String, int> completedByUser = {};
+      // Compute total applications, active, and completed project counts per student
+      final Map<String, int> totalAppsByKey = {};
+      final Map<String, int> activeByKey = {};
+      final Map<String, int> completedByKey = {};
       try {
         final appRows = await supabase
             .from('applications')
-            .select('student_id, user_id, status');
+            .select('student_id, user_id, student_email, status');
         for (final raw in appRows) {
           final a = Map<String, dynamic>.from(raw);
           final uid =
               a['student_id']?.toString() ?? a['user_id']?.toString() ?? '';
-          if (uid.isEmpty) continue;
-          final st = (a['status']?.toString() ?? '').toLowerCase();
-          if (st == 'completed' || st == 'certified') {
-            completedByUser[uid] = (completedByUser[uid] ?? 0) + 1;
-          } else if (st == 'accepted' || st == 'approved' || st == 'shortlisted') {
-            activeByUser[uid] = (activeByUser[uid] ?? 0) + 1;
+          final appEmail =
+              a['student_email']?.toString().trim().toLowerCase() ?? '';
+          final st = (a['status']?.toString() ?? '').toLowerCase().trim();
+          final keys = <String>{
+            if (uid.isNotEmpty) uid,
+            if (uid.isEmpty && appEmail.isNotEmpty) 'email:$appEmail',
+          };
+          for (final k in keys) {
+            totalAppsByKey[k] = (totalAppsByKey[k] ?? 0) + 1;
+            if (st == 'completed' || st == 'certified') {
+              completedByKey[k] = (completedByKey[k] ?? 0) + 1;
+            } else if (st == 'accepted' ||
+                st == 'approved' ||
+                st == 'shortlisted' ||
+                st == 'submitted' ||
+                st == 'in progress' ||
+                st == 'in_progress' ||
+                st == 'ongoing' ||
+                st == 'active') {
+              activeByKey[k] = (activeByKey[k] ?? 0) + 1;
+            }
           }
         }
       } catch (e) {
@@ -100,9 +121,15 @@ class AdminStudentService {
         if (userId != null && userId.isNotEmpty) seenUserIds.add(userId);
         final profile = userId != null ? profilesById[userId] : null;
 
+        final rowAccRaw = (row['account_status']?.toString().trim().toLowerCase() ??
+            profile?['account_status']?.toString().trim().toLowerCase() ??
+            'active');
         final name = (row['full_name']?.toString().trim().isNotEmpty == true)
             ? row['full_name'].toString().trim()
             : (profile?['name']?.toString().trim() ?? 'Student Member');
+        if (rowAccRaw == 'deleted' || name.toLowerCase() == 'deleted account') {
+          continue;
+        }
         final email = (row['email']?.toString().trim().isNotEmpty == true)
             ? row['email'].toString().trim()
             : (profile?['email']?.toString().trim() ?? '');
@@ -120,10 +147,7 @@ class AdminStudentService {
               : StudentVerificationStatus.pending;
         }
 
-        final rawAcc = (row['account_status']?.toString().toLowerCase() ??
-            profile?['account_status']?.toString().toLowerCase() ??
-            'active');
-        final accStatus = rawAcc == 'suspended'
+        final accStatus = rowAccRaw == 'suspended'
             ? StudentAccountStatus.suspended
             : StudentAccountStatus.active;
 
@@ -203,10 +227,17 @@ class AdminStudentService {
             bio: (row['bio']?.toString().trim().isNotEmpty == true)
                 ? row['bio'].toString().trim()
                 : (profile?['bio']?.toString().trim() ?? ''),
+            applicationsCount: (userId != null ? totalAppsByKey[userId] : null) ??
+                totalAppsByKey['email:${email.toLowerCase()}'] ??
+                0,
             projectsCompletedCount:
-                userId != null ? (completedByUser[userId] ?? 0) : 0,
+                (userId != null ? completedByKey[userId] : null) ??
+                    completedByKey['email:${email.toLowerCase()}'] ??
+                    0,
             activeProjectsCount:
-                userId != null ? (activeByUser[userId] ?? 0) : 0,
+                (userId != null ? activeByKey[userId] : null) ??
+                    activeByKey['email:${email.toLowerCase()}'] ??
+                    0,
             auditHistory: matchingLogs,
           ),
         );
@@ -216,9 +247,15 @@ class AdminStudentService {
       for (final entry in profilesById.entries) {
         if (seenUserIds.contains(entry.key)) continue;
         final p = entry.value;
-        final name = (p['name']?.toString().trim().isNotEmpty == true)
-            ? p['name'].toString().trim()
-            : 'Student Member';
+        final accStatusRaw =
+            p['account_status']?.toString().trim().toLowerCase() ?? '';
+        final rawProfileName = p['name']?.toString().trim() ?? '';
+        if (accStatusRaw == 'deleted' ||
+            rawProfileName.toLowerCase() == 'deleted account') {
+          continue;
+        }
+        final name =
+            rawProfileName.isNotEmpty ? rawProfileName : 'Student Member';
         final createdDt =
             SupabaseHelper.parseDate(p['created_at']) ?? DateTime.now();
         final regDate =
@@ -252,8 +289,15 @@ class AdminStudentService {
             portfolioUrl: '',
             githubUrl: '',
             bio: p['bio']?.toString() ?? '',
-            projectsCompletedCount: completedByUser[entry.key] ?? 0,
-            activeProjectsCount: activeByUser[entry.key] ?? 0,
+            applicationsCount: totalAppsByKey[entry.key] ??
+                totalAppsByKey['email:${(p['email']?.toString() ?? '').trim().toLowerCase()}'] ??
+                0,
+            projectsCompletedCount: completedByKey[entry.key] ??
+                completedByKey['email:${(p['email']?.toString() ?? '').trim().toLowerCase()}'] ??
+                0,
+            activeProjectsCount: activeByKey[entry.key] ??
+                activeByKey['email:${(p['email']?.toString() ?? '').trim().toLowerCase()}'] ??
+                0,
             auditHistory: const [],
           ),
         );

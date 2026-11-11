@@ -97,10 +97,10 @@ class SupabaseHelper {
 
   static DateTime? parseDate(dynamic raw) {
     if (raw == null) return null;
-    if (raw is DateTime) return raw;
+    if (raw is DateTime) return raw.toLocal();
     final str = raw.toString().trim();
     if (str.isEmpty) return null;
-    return DateTime.tryParse(str);
+    return DateTime.tryParse(str)?.toLocal();
   }
 
   static String formatRelativeTime(dynamic raw) {

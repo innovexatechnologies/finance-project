@@ -5,15 +5,7 @@ import 'package:link_vibe/core/constants/app_colors.dart';
 import 'package:link_vibe/core/widgets/app_empty_state.dart';
 import 'package:link_vibe/feature/admin/models/admin_company_model.dart';
 import 'package:link_vibe/feature/admin/models/admin_project_model.dart';
-import 'package:link_vibe/feature/admin/presentation/screens/admin_dashboard_screen.dart';
 import 'package:link_vibe/feature/admin/presentation/screens/admin_login_screen.dart';
-import 'package:link_vibe/feature/admin/presentation/screens/admin_settings_screen.dart';
-import 'package:link_vibe/feature/admin/presentation/screens/application_monitoring_screen.dart';
-import 'package:link_vibe/feature/admin/presentation/screens/certificate_management_screen.dart';
-import 'package:link_vibe/feature/admin/presentation/screens/company_verifications_screen.dart';
-import 'package:link_vibe/feature/admin/presentation/screens/project_management_screen.dart';
-import 'package:link_vibe/feature/admin/presentation/screens/reports_analytics_screen.dart';
-import 'package:link_vibe/feature/admin/presentation/screens/student_management_screen.dart';
 import 'package:link_vibe/feature/admin/presentation/widgets/admin_sidebar.dart';
 import 'package:link_vibe/feature/admin/presentation/widgets/admin_top_navbar.dart';
 import 'package:link_vibe/feature/admin/services/admin_auth_service.dart';
@@ -181,36 +173,12 @@ class _CompanyManagementScreenState extends State<CompanyManagementScreen> {
   }
 
   void _onRouteSelected(String routeId) {
-    if (_scaffoldKey.currentState?.isDrawerOpen ?? false) {
-      Navigator.pop(context);
-    }
-    if (routeId == 'company_management') return;
-
-    Widget? target;
-    if (routeId == 'dashboard') {
-      target = const AdminDashboardScreen();
-    } else if (routeId == 'company_verifications') {
-      target = const CompanyVerificationsScreen();
-    } else if (routeId == 'student_verifications') {
-      target = const StudentManagementScreen();
-    } else if (routeId == 'projects_audit' || routeId == 'projects') {
-      target = const ProjectManagementScreen();
-    } else if (routeId == 'compliance' || routeId == 'application_monitoring') {
-      target = const ApplicationMonitoringScreen();
-    } else if (routeId == 'audit_logs' || routeId == 'certificates') {
-      target = const CertificateManagementScreen();
-    } else if (routeId == 'analytics' || routeId == 'reports') {
-      target = const ReportsAnalyticsScreen();
-    } else if (routeId == 'settings') {
-      target = const AdminSettingsScreen();
-    }
-
-    if (target != null) {
-      Navigator.pushReplacement(
-        context,
-        MaterialPageRoute(builder: (_) => target!),
-      );
-    }
+    AdminSidebar.navigateToRoute(
+      context,
+      scaffoldKey: _scaffoldKey,
+      currentRouteId: 'company_management',
+      targetRouteId: routeId,
+    );
   }
 
   // Filter & Sort Logic
@@ -1585,11 +1553,12 @@ class _CompanyManagementScreenState extends State<CompanyManagementScreen> {
         return Scaffold(
           key: _scaffoldKey,
           backgroundColor: AppColors.background,
-          drawer: isDesktop
+          endDrawer: isDesktop
               ? null
               : Drawer(
+                  backgroundColor: AppColors.darkNavy,
                   child: AdminSidebar(
-                    activeRouteId: 'company_verifications',
+                    activeRouteId: 'company_management',
                     onRouteSelected: _onRouteSelected,
                     onSignOut: _handleSignOut,
                     isCollapsed: false,
@@ -1600,7 +1569,7 @@ class _CompanyManagementScreenState extends State<CompanyManagementScreen> {
               // Persistent Sidebar on Desktop
               if (isDesktop)
                 AdminSidebar(
-                  activeRouteId: 'company_verifications',
+                  activeRouteId: 'company_management',
                   onRouteSelected: _onRouteSelected,
                   onSignOut: _handleSignOut,
                   isCollapsed: _isSidebarCollapsed,
@@ -1615,9 +1584,10 @@ class _CompanyManagementScreenState extends State<CompanyManagementScreen> {
                   children: [
                     // Top Navigation Bar
                     AdminTopNavbar(
-                      pageTitle: 'Company Management & Verification',
+                      pageTitle: 'Company',
+                      breadcrumb: 'Platform Directory',
                       onOpenDrawer: () =>
-                          _scaffoldKey.currentState?.openDrawer(),
+                          _scaffoldKey.currentState?.openEndDrawer(),
                       onSignOut: _handleSignOut,
                       onSearch: (query) {
                         setState(() {
@@ -1877,7 +1847,7 @@ class _CompanyManagementScreenState extends State<CompanyManagementScreen> {
                       crossAxisAlignment: CrossAxisAlignment.start,
                       children: [
                         Text(
-                          'Corporate Registry & Verification Directory',
+                          'Registered Companies on Platform',
                           style: GoogleFonts.poppins(
                             fontSize: 16,
                             fontWeight: FontWeight.bold,
@@ -1886,7 +1856,7 @@ class _CompanyManagementScreenState extends State<CompanyManagementScreen> {
                         ),
                         const SizedBox(height: 2),
                         Text(
-                          'Search, filter, inspect registration credentials, and regulate company account status',
+                          'Complete list of all companies registered on SkillBridge',
                           style: GoogleFonts.inter(
                             fontSize: 12,
                             color: AppColors.textSecondary,
@@ -1907,16 +1877,6 @@ class _CompanyManagementScreenState extends State<CompanyManagementScreen> {
                         icon: const Icon(Icons.refresh_rounded, size: 16),
                         label: const Text('Refresh'),
                         onPressed: _refreshCompanies,
-                      ),
-                      OutlinedButton.icon(
-                        style: OutlinedButton.styleFrom(
-                          foregroundColor: AppColors.darkNavy,
-                          side: const BorderSide(color: AppColors.border),
-                        ),
-                        icon: const Icon(Icons.fact_check_outlined, size: 16),
-                        label: const Text('Verification Queue'),
-                        onPressed: () =>
-                            _onRouteSelected('company_verifications'),
                       ),
                       OutlinedButton.icon(
                         style: OutlinedButton.styleFrom(
@@ -2476,7 +2436,9 @@ class _CompanyManagementScreenState extends State<CompanyManagementScreen> {
                                       ],
                                     ),
                                     Text(
-                                      '${company.officialEmail} • Reg: ${company.registrationNumber}',
+                                      company.registrationNumber.isNotEmpty
+                                          ? '${company.officialEmail} • Reg: ${company.registrationNumber}'
+                                          : company.officialEmail,
                                       style: GoogleFonts.inter(
                                         fontSize: 11.5,
                                         color: AppColors.textSecondary,
@@ -2495,7 +2457,7 @@ class _CompanyManagementScreenState extends State<CompanyManagementScreen> {
                           ),
                           const SizedBox(height: 10),
                           Text(
-                            '${company.industry} • ${company.city} • ${company.registrationDate}',
+                            '${company.industry}${company.city.isNotEmpty ? ' • ${company.city}' : ''} • Registered ${company.registrationDate} • ${company.postedProjectsCount} Projects',
                             style: GoogleFonts.inter(
                               fontSize: 12,
                               color: AppColors.textSecondary,
@@ -2592,7 +2554,9 @@ class _CompanyManagementScreenState extends State<CompanyManagementScreen> {
                               ),
                               const SizedBox(height: 2),
                               Text(
-                                '${company.officialEmail} • Reg: ${company.registrationNumber}',
+                                company.registrationNumber.isNotEmpty
+                                    ? '${company.officialEmail} • Reg: ${company.registrationNumber}'
+                                    : company.officialEmail,
                                 style: GoogleFonts.inter(
                                   fontSize: 11.5,
                                   color: AppColors.textSecondary,
@@ -2617,7 +2581,7 @@ class _CompanyManagementScreenState extends State<CompanyManagementScreen> {
                                 overflow: TextOverflow.ellipsis,
                               ),
                               Text(
-                                company.city,
+                                '${company.city.isNotEmpty ? '${company.city} • ' : ''}${company.postedProjectsCount} Projects',
                                 style: GoogleFonts.inter(
                                   fontSize: 11,
                                   color: AppColors.textMuted,
