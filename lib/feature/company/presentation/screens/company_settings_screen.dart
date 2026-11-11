@@ -6,12 +6,11 @@ import 'package:link_vibe/core/widgets/status_badge.dart';
 import 'package:link_vibe/feature/auth/presentation/screens/login_screen.dart';
 import 'package:link_vibe/feature/company/models/company_profile_model.dart';
 import 'package:link_vibe/feature/company/models/company_settings_model.dart';
-import 'package:link_vibe/feature/company/models/company_verification_model.dart';
 import 'package:link_vibe/feature/company/presentation/screens/company_profile_screen.dart';
 import 'package:link_vibe/feature/company/presentation/screens/company_verification_screen.dart';
+import 'package:link_vibe/feature/company/presentation/widgets/company_executive_app_bar.dart';
 import 'package:link_vibe/feature/company/services/company_profile_service.dart';
 import 'package:link_vibe/feature/company/services/company_settings_service.dart';
-import 'package:link_vibe/feature/company/services/company_verification_service.dart';
 
 class CompanySettingsScreen extends StatefulWidget {
   const CompanySettingsScreen({super.key});
@@ -22,7 +21,6 @@ class CompanySettingsScreen extends StatefulWidget {
 
 class _CompanySettingsScreenState extends State<CompanySettingsScreen> {
   final _profileService = CompanyProfileService();
-  final _verificationService = CompanyVerificationService();
   final _settingsService = CompanySettingsService();
 
   void _navigateToEditProfile() {
@@ -293,14 +291,13 @@ class _CompanySettingsScreenState extends State<CompanySettingsScreen> {
   void _openHelpAndSupportModal() {
     final subjectCtrl = TextEditingController();
     final messageCtrl = TextEditingController();
-    String selectedCategory = 'Verification & Compliance';
+    String selectedCategory = 'Project Recruitment';
     bool isSubmitting = false;
 
     const categories = [
-      'Verification & Compliance',
       'Project Recruitment',
       'Student Deliverables & Certificates',
-      'Account & Billing',
+      'Account & Security',
       'Technical Issue',
     ];
 
@@ -392,7 +389,7 @@ class _CompanySettingsScreenState extends State<CompanySettingsScreen> {
                       maxLines: 3,
                       decoration: const InputDecoration(
                         labelText: 'Details *',
-                        hintText: 'Provide relevant project or verification details...',
+                        hintText: 'Provide relevant project or account details...',
                       ),
                     ),
                     const SizedBox(height: 14),
@@ -430,7 +427,7 @@ class _CompanySettingsScreenState extends State<CompanySettingsScreen> {
                                 ScaffoldMessenger.of(context).showSnackBar(
                                   const SnackBar(
                                     content: Text(
-                                      'Support ticket submitted to Governance Admin.',
+                                      'Support ticket submitted to SkillBridge Governance Admin.',
                                     ),
                                     backgroundColor: AppColors.statusOpen,
                                     behavior: SnackBarBehavior.floating,
@@ -559,295 +556,273 @@ class _CompanySettingsScreenState extends State<CompanySettingsScreen> {
     }
   }
 
-  String _verificationBadgeText(VerificationStatus status) {
-    switch (status) {
-      case VerificationStatus.verified:
-        return 'Verified';
-      case VerificationStatus.pending:
-        return 'Pending Review';
-      case VerificationStatus.rejected:
-        return 'Rejected';
-      case VerificationStatus.notSubmitted:
-        return 'Not Submitted';
+  Future<void> _confirmDeleteAccount() async {
+    final confirmed = await showDialog<bool>(
+      context: context,
+      builder: (ctx) => AlertDialog(
+        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(18)),
+        title: Row(
+          children: [
+            const Icon(
+              Icons.warning_amber_rounded,
+              color: AppColors.statusClosed,
+              size: 24,
+            ),
+            const SizedBox(width: 8),
+            Expanded(
+              child: Text(
+                'Delete Account?',
+                style: GoogleFonts.poppins(
+                  fontSize: 17,
+                  fontWeight: FontWeight.w700,
+                  color: AppColors.deepNavy,
+                ),
+              ),
+            ),
+          ],
+        ),
+        content: Text(
+          'This will permanently delete your company profile, posted projects, and messages from this workspace. This action cannot be undone.',
+          style: GoogleFonts.inter(
+            fontSize: 13.5,
+            height: 1.45,
+            color: AppColors.darkText,
+          ),
+        ),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.pop(ctx, false),
+            child: const Text('Cancel'),
+          ),
+          ElevatedButton(
+            style: ElevatedButton.styleFrom(
+              backgroundColor: AppColors.statusClosed,
+              foregroundColor: Colors.white,
+            ),
+            onPressed: () => Navigator.pop(ctx, true),
+            child: const Text('Delete Account'),
+          ),
+        ],
+      ),
+    );
+
+    if (confirmed != true || !mounted) return;
+
+    final ok = await _settingsService.deleteAccount();
+    if (!mounted) return;
+
+    if (!ok) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(
+          content: Text(
+            _settingsService.lastError ?? 'Could not delete account right now.',
+          ),
+          backgroundColor: AppColors.statusClosed,
+        ),
+      );
+      return;
     }
+
+    Navigator.pushAndRemoveUntil(
+      context,
+      MaterialPageRoute(
+        builder: (_) => const LoginScreen(initialRole: 'Company'),
+      ),
+      (route) => false,
+    );
   }
 
   @override
   Widget build(BuildContext context) {
     return Scaffold(
       backgroundColor: AppColors.background,
-      appBar: AppBar(
-        backgroundColor: AppColors.deepNavy,
-        foregroundColor: Colors.white,
-        elevation: 0,
-        leading: IconButton(
-          icon: const Icon(Icons.arrow_back_ios_new_rounded, size: 18),
-          onPressed: () => Navigator.pop(context),
-        ),
-        title: Text(
-          'Organization Settings',
-          style: GoogleFonts.poppins(
-            fontSize: 17,
-            fontWeight: FontWeight.w700,
-            color: Colors.white,
-          ),
-        ),
+      appBar: const CompanyExecutiveAppBar(
+        title: 'Organization Settings',
+        subtitle: 'Account, verification & privacy',
       ),
       body: ValueListenableBuilder<CompanyProfileModel>(
         valueListenable: _profileService.currentProfileNotifier,
         builder: (context, profile, _) {
-          return ValueListenableBuilder<CompanyVerificationModel>(
-            valueListenable: _verificationService.verificationNotifier,
-            builder: (context, verification, _) {
-              return ValueListenableBuilder<CompanySettingsModel>(
-                valueListenable: _settingsService.settingsNotifier,
-                builder: (context, settings, _) {
-                  final orgName = profile.companyName.trim().isNotEmpty
-                      ? profile.companyName.trim()
-                      : 'Corporate Partner';
+          return ValueListenableBuilder<CompanySettingsModel>(
+            valueListenable: _settingsService.settingsNotifier,
+            builder: (context, settings, _) {
+              final orgName = profile.companyName.trim().isNotEmpty
+                  ? profile.companyName.trim()
+                  : 'Corporate Partner';
 
-                  return SingleChildScrollView(
-                    padding: const EdgeInsets.fromLTRB(16, 16, 16, 36),
-                    child: Center(
-                      child: ConstrainedBox(
-                        constraints: const BoxConstraints(maxWidth: 820),
-                        child: Column(
+              return SingleChildScrollView(
+                padding: const EdgeInsets.fromLTRB(16, 16, 16, 36),
+                child: Center(
+                  child: ConstrainedBox(
+                    constraints: const BoxConstraints(maxWidth: 820),
+                    child: Column(
                       crossAxisAlignment: CrossAxisAlignment.start,
                       children: [
-                        Container(
-                          padding: const EdgeInsets.all(18),
-                          decoration: BoxDecoration(
-                            gradient: AppColors.brandGradient,
-                            borderRadius: BorderRadius.circular(20),
-                            boxShadow: AppColors.softShadow,
-                          ),
-                          child: Row(
-                            children: [
-                              CircleAvatar(
-                                radius: 26,
-                                backgroundColor: Colors.white.withValues(
-                                  alpha: 0.18,
-                                ),
-                                child: Text(
-                                  profile.logoInitial,
-                                  style: GoogleFonts.poppins(
+                        CompanyHeroBanner(
+                          initial: profile.logoInitial,
+                          title: orgName,
+                          subtitle: profile.industry.isNotEmpty
+                              ? profile.industry
+                              : 'Corporate Partner',
+                          secondaryLine: profile.officialEmail.isNotEmpty
+                              ? profile.officialEmail
+                              : null,
+                          trailingAction: Tooltip(
+                            message: 'Edit Company Profile',
+                            child: Material(
+                              color: Colors.white.withValues(alpha: 0.16),
+                              borderRadius: BorderRadius.circular(12),
+                              child: InkWell(
+                                borderRadius: BorderRadius.circular(12),
+                                onTap: _navigateToEditProfile,
+                                child: Container(
+                                  width: 40,
+                                  height: 40,
+                                  decoration: BoxDecoration(
+                                    borderRadius: BorderRadius.circular(12),
+                                    border: Border.all(
+                                      color:
+                                          Colors.white.withValues(alpha: 0.26),
+                                    ),
+                                  ),
+                                  child: const Icon(
+                                    Icons.edit_outlined,
+                                    size: 18,
                                     color: Colors.white,
-                                    fontWeight: FontWeight.w700,
-                                    fontSize: 18,
                                   ),
                                 ),
                               ),
-                              const SizedBox(width: 14),
-                              Expanded(
-                                child: Column(
-                                  crossAxisAlignment: CrossAxisAlignment.start,
-                                  children: [
-                                    Text(
-                                      orgName,
-                                      style: GoogleFonts.poppins(
-                                        fontSize: 16,
-                                        fontWeight: FontWeight.w700,
-                                        color: Colors.white,
-                                      ),
+                            ),
+                          ),
+                        ),
+                        const SizedBox(height: 18),
+                        CompanySectionCard(
+                          title: 'Account & Verification',
+                          icon: Icons.manage_accounts_outlined,
+                          padding: const EdgeInsets.fromLTRB(18, 18, 18, 8),
+                          child: Column(
+                            children: [
+                              _buildActionTile(
+                                icon: Icons.business_outlined,
+                                title: 'Edit Organization Profile',
+                                subtitle:
+                                    'Update company info, domain website, and primary contact',
+                                onTap: _navigateToEditProfile,
+                              ),
+                              _buildRowDivider(),
+                              _buildActionTile(
+                                icon: Icons.verified_user_outlined,
+                                title: 'Company Verification Status',
+                                subtitle:
+                                    'Review institutional verification & SECP documents',
+                                onTap: () {
+                                  Navigator.push(
+                                    context,
+                                    MaterialPageRoute(
+                                      builder: (_) =>
+                                          const CompanyVerificationScreen(),
                                     ),
-                                    if (profile.officialEmail.isNotEmpty)
-                                      Text(
-                                        profile.officialEmail,
-                                        style: GoogleFonts.inter(
-                                          fontSize: 12,
-                                          color: AppColors.lightAqua,
-                                        ),
-                                      ),
-                                  ],
+                                  );
+                                },
+                              ),
+                              _buildRowDivider(),
+                              _buildActionTile(
+                                icon: Icons.lock_outline_rounded,
+                                title: 'Change Password',
+                                subtitle:
+                                    'Update your sign-in password and account security',
+                                onTap: _openChangePasswordModal,
+                              ),
+                            ],
+                          ),
+                        ),
+                        const SizedBox(height: 16),
+                        CompanySectionCard(
+                          title: 'Privacy & Directory Visibility',
+                          icon: Icons.visibility_outlined,
+                          padding: const EdgeInsets.fromLTRB(18, 18, 18, 8),
+                          child: Column(
+                            children: [
+                              _buildToggleTile(
+                                icon: Icons.public_rounded,
+                                title: 'Visible in Student Explore',
+                                subtitle:
+                                    'Allow university students to discover your organization',
+                                value: settings.privacyDirectoryVisible,
+                                onChanged: (v) => _settingsService.updateSettings(
+                                  settings.copyWith(privacyDirectoryVisible: v),
                                 ),
                               ),
-                              StatusBadge(
-                                label: _verificationBadgeText(
-                                  verification.status,
+                              _buildRowDivider(),
+                              _buildToggleTile(
+                                icon: Icons.badge_outlined,
+                                title: 'Display Primary Mentor Name',
+                                subtitle:
+                                    'Show lead mentor details on public project listings',
+                                value: settings.privacyShowContactPerson,
+                                onChanged: (v) => _settingsService.updateSettings(
+                                  settings.copyWith(
+                                    privacyShowContactPerson: v,
+                                  ),
+                                ),
+                              ),
+                              _buildRowDivider(),
+                              _buildToggleTile(
+                                icon: Icons.analytics_outlined,
+                                title: 'Share Anonymous Impact Metrics',
+                                subtitle:
+                                    'Contribute anonymized metrics to platform insights',
+                                value: settings.privacyShareAnalytics,
+                                onChanged: (v) => _settingsService.updateSettings(
+                                  settings.copyWith(privacyShareAnalytics: v),
                                 ),
                               ),
                             ],
                           ),
                         ),
-                        const SizedBox(height: 18),
-                        _buildSectionCard(
-                          title: 'Account & Verification',
-                          children: [
-                            ListTile(
-                              contentPadding: EdgeInsets.zero,
-                              leading: const Icon(
-                                Icons.business_outlined,
-                                color: AppColors.primaryBlue,
-                              ),
-                              title: Text(
-                                'Edit Organization Profile',
-                                style: GoogleFonts.inter(
-                                  fontWeight: FontWeight.w600,
-                                  fontSize: 14,
-                                ),
-                              ),
-                              subtitle: Text(
-                                'Update company info, domain website, and primary contact',
-                                style: GoogleFonts.inter(
-                                  fontSize: 12,
-                                  color: AppColors.grayText,
-                                ),
-                              ),
-                              trailing: const Icon(Icons.chevron_right_rounded),
-                              onTap: _navigateToEditProfile,
-                            ),
-                            const Divider(height: 1),
-                            ListTile(
-                              contentPadding: EdgeInsets.zero,
-                              leading: const Icon(
-                                Icons.verified_user_outlined,
-                                color: AppColors.primaryBlue,
-                              ),
-                              title: Text(
-                                'Company Verification Status',
-                                style: GoogleFonts.inter(
-                                  fontWeight: FontWeight.w600,
-                                  fontSize: 14,
-                                ),
-                              ),
-                              subtitle: Padding(
-                                padding: const EdgeInsets.only(top: 4),
-                                child: Align(
-                                  alignment: Alignment.centerLeft,
-                                  child: StatusBadge(
-                                    label: _verificationBadgeText(
-                                      verification.status,
-                                    ),
-                                  ),
-                                ),
-                              ),
-                              trailing: const Icon(Icons.chevron_right_rounded),
-                              onTap: () {
-                                Navigator.push(
-                                  context,
-                                  MaterialPageRoute(
-                                    builder: (_) =>
-                                        const CompanyVerificationScreen(),
-                                  ),
-                                );
-                              },
-                            ),
-                            const Divider(height: 1),
-                            ListTile(
-                              contentPadding: EdgeInsets.zero,
-                              leading: const Icon(
-                                Icons.lock_outline_rounded,
-                                color: AppColors.primaryBlue,
-                              ),
-                              title: Text(
-                                'Change Password',
-                                style: GoogleFonts.inter(
-                                  fontWeight: FontWeight.w600,
-                                  fontSize: 14,
-                                ),
-                              ),
-                              subtitle: Text(
-                                'Update your Supabase authentication credentials',
-                                style: GoogleFonts.inter(
-                                  fontSize: 12,
-                                  color: AppColors.grayText,
-                                ),
-                              ),
-                              trailing: const Icon(Icons.chevron_right_rounded),
-                              onTap: _openChangePasswordModal,
-                            ),
-                          ],
-                        ),
                         const SizedBox(height: 16),
-                        _buildSectionCard(
-                          title: 'Privacy & Directory Visibility',
-                          children: [
-                            SwitchListTile(
-                              contentPadding: EdgeInsets.zero,
-                              activeThumbColor: AppColors.primaryBlue,
-                              title: const Text('Visible in Student Explore'),
-                              subtitle: const Text(
-                                'Allow verified students to discover your organization',
-                              ),
-                              value: settings.privacyDirectoryVisible,
-                              onChanged: (v) => _settingsService.updateSettings(
-                                settings.copyWith(privacyDirectoryVisible: v),
-                              ),
-                            ),
-                            SwitchListTile(
-                              contentPadding: EdgeInsets.zero,
-                              activeThumbColor: AppColors.primaryBlue,
-                              title: const Text('Display Primary Mentor Name'),
-                              value: settings.privacyShowContactPerson,
-                              onChanged: (v) => _settingsService.updateSettings(
-                                settings.copyWith(privacyShowContactPerson: v),
-                              ),
-                            ),
-                            SwitchListTile(
-                              contentPadding: EdgeInsets.zero,
-                              activeThumbColor: AppColors.primaryBlue,
-                              title: const Text(
-                                'Share Anonymous Impact Metrics',
-                              ),
-                              value: settings.privacyShareAnalytics,
-                              onChanged: (v) => _settingsService.updateSettings(
-                                settings.copyWith(privacyShareAnalytics: v),
-                              ),
-                            ),
-                          ],
-                        ),
-                        const SizedBox(height: 16),
-                        _buildSectionCard(
+                        CompanySectionCard(
                           title: 'Support & Session',
-                          children: [
-                            ListTile(
-                              contentPadding: EdgeInsets.zero,
-                              leading: const Icon(
-                                Icons.support_agent_rounded,
-                                color: AppColors.primaryBlue,
+                          icon: Icons.support_agent_rounded,
+                          padding: const EdgeInsets.fromLTRB(18, 18, 18, 8),
+                          child: Column(
+                            children: [
+                              _buildActionTile(
+                                icon: Icons.support_agent_rounded,
+                                title: 'Partner Support & Tickets',
+                                subtitle:
+                                    'Reach support desk or track submitted inquiries',
+                                onTap: _openHelpAndSupportModal,
                               ),
-                              title: Text(
-                                'Partner Support & Tickets',
-                                style: GoogleFonts.inter(
-                                  fontWeight: FontWeight.w600,
-                                  fontSize: 14,
-                                ),
+                              _buildRowDivider(),
+                              _buildActionTile(
+                                icon: Icons.logout_rounded,
+                                iconColor: AppColors.deepNavy,
+                                titleColor: AppColors.deepNavy,
+                                showChevron: false,
+                                title: 'Sign Out',
+                                subtitle:
+                                    'End your current session on this device',
+                                onTap: _confirmLogout,
                               ),
-                              subtitle: Text(
-                                'Contact Governance Admin or track submitted inquiries',
-                                style: GoogleFonts.inter(
-                                  fontSize: 12,
-                                  color: AppColors.grayText,
-                                ),
+                              _buildRowDivider(),
+                              _buildActionTile(
+                                icon: Icons.delete_forever_rounded,
+                                iconColor: AppColors.statusClosed,
+                                titleColor: AppColors.statusClosed,
+                                showChevron: false,
+                                title: 'Delete Account',
+                                subtitle:
+                                    'Permanently remove your company account and workspace data',
+                                onTap: _confirmDeleteAccount,
                               ),
-                              trailing: const Icon(Icons.chevron_right_rounded),
-                              onTap: _openHelpAndSupportModal,
-                            ),
-                            const Divider(height: 1),
-                            ListTile(
-                              contentPadding: EdgeInsets.zero,
-                              leading: const Icon(
-                                Icons.logout_rounded,
-                                color: AppColors.statusClosed,
-                              ),
-                              title: Text(
-                                'Sign Out',
-                                style: GoogleFonts.inter(
-                                  fontWeight: FontWeight.w700,
-                                  fontSize: 14,
-                                  color: AppColors.statusClosed,
-                                ),
-                              ),
-                              onTap: _confirmLogout,
-                            ),
-                          ],
+                            ],
+                          ),
                         ),
                       ],
-                        ),
-                      ),
                     ),
-                  );
-                },
+                  ),
+                ),
               );
             },
           );
@@ -856,38 +831,115 @@ class _CompanySettingsScreenState extends State<CompanySettingsScreen> {
     );
   }
 
-  Widget _buildSectionCard({
+  Widget _buildRowDivider() {
+    return const Divider(
+      height: 1,
+      indent: 50,
+      color: AppColors.borderLight,
+    );
+  }
+
+  Widget _buildActionTile({
+    required IconData icon,
     required String title,
-    required List<Widget> children,
+    required String subtitle,
+    required VoidCallback onTap,
+    Color iconColor = AppColors.primaryBlue,
+    Color? titleColor,
+    bool showChevron = true,
   }) {
-    return Container(
-      width: double.infinity,
-      decoration: BoxDecoration(
-        borderRadius: BorderRadius.circular(18),
-        border: Border.all(color: AppColors.lightGray),
-        boxShadow: AppColors.softShadow,
+    return _buildSettingRow(
+      icon: icon,
+      iconColor: iconColor,
+      title: title,
+      titleColor: titleColor,
+      subtitle: subtitle,
+      onTap: onTap,
+      trailing: showChevron
+          ? const Icon(
+              Icons.chevron_right_rounded,
+              color: AppColors.textMuted,
+              size: 20,
+            )
+          : const SizedBox.shrink(),
+    );
+  }
+
+  Widget _buildToggleTile({
+    required IconData icon,
+    required String title,
+    required String subtitle,
+    required bool value,
+    required ValueChanged<bool> onChanged,
+  }) {
+    return _buildSettingRow(
+      icon: icon,
+      iconColor: AppColors.primaryBlue,
+      title: title,
+      subtitle: subtitle,
+      onTap: () => onChanged(!value),
+      trailing: Switch.adaptive(
+        value: value,
+        activeTrackColor: AppColors.primaryBlue,
+        activeThumbColor: Colors.white,
+        onChanged: onChanged,
       ),
-      child: Material(
-        color: AppColors.cardWhite,
-        borderRadius: BorderRadius.circular(17),
-        clipBehavior: Clip.antiAlias,
-        child: Padding(
-          padding: const EdgeInsets.fromLTRB(18, 16, 18, 10),
-          child: Column(
-            crossAxisAlignment: CrossAxisAlignment.start,
-            children: [
-              Text(
-                title,
-                style: GoogleFonts.poppins(
-                  fontSize: 15,
-                  fontWeight: FontWeight.w700,
-                  color: AppColors.deepNavy,
-                ),
+    );
+  }
+
+  Widget _buildSettingRow({
+    required IconData icon,
+    required Color iconColor,
+    required String title,
+    required String subtitle,
+    required Widget trailing,
+    required VoidCallback onTap,
+    Color? titleColor,
+  }) {
+    return InkWell(
+      borderRadius: BorderRadius.circular(12),
+      onTap: onTap,
+      child: Padding(
+        padding: const EdgeInsets.symmetric(vertical: 11),
+        child: Row(
+          children: [
+            Container(
+              width: 38,
+              height: 38,
+              decoration: BoxDecoration(
+                color: iconColor.withValues(alpha: 0.1),
+                borderRadius: BorderRadius.circular(11),
               ),
-              const SizedBox(height: 8),
-              ...children,
-            ],
-          ),
+              child: Icon(icon, size: 19, color: iconColor),
+            ),
+            const SizedBox(width: 12),
+            Expanded(
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  Text(
+                    title,
+                    style: GoogleFonts.inter(
+                      fontSize: 13.5,
+                      fontWeight: FontWeight.w600,
+                      color: titleColor ?? AppColors.deepNavy,
+                    ),
+                  ),
+                  const SizedBox(height: 2),
+                  Text(
+                    subtitle,
+                    style: GoogleFonts.inter(
+                      fontSize: 11.5,
+                      height: 1.35,
+                      color: AppColors.grayText,
+                    ),
+                  ),
+                ],
+              ),
+            ),
+            const SizedBox(width: 10),
+            trailing,
+          ],
         ),
       ),
     );

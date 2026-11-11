@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:google_fonts/google_fonts.dart';
 import 'package:link_vibe/core/constants/app_colors.dart';
+import 'package:link_vibe/core/widgets/rubik_cube_transition.dart';
 import 'package:link_vibe/feature/student/home/presentation/screens/student_home_screen.dart';
 import 'package:link_vibe/feature/student/explore/presentation/screens/explore_projects_screen.dart';
 import 'package:link_vibe/feature/student/my_projects/presentation/screens/my_projects_screen.dart';
@@ -110,7 +111,10 @@ class _StudentMainNavState extends State<StudentMainNav> {
         SystemNavigator.pop();
       },
       child: Scaffold(
-        body: IndexedStack(index: _currentIndex, children: screens),
+        body: RubikCubeTabView(
+          currentIndex: _currentIndex,
+          children: screens,
+        ),
         bottomNavigationBar: Container(
           decoration: BoxDecoration(
             color: Colors.white,

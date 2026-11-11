@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:google_fonts/google_fonts.dart';
 import 'package:link_vibe/core/constants/app_colors.dart';
+import 'package:link_vibe/core/services/app_data_service.dart';
 import 'package:link_vibe/core/services/supabase_helper.dart';
 import 'package:link_vibe/core/widgets/app_empty_state.dart';
 import 'package:link_vibe/core/widgets/section_header.dart';
@@ -10,27 +11,29 @@ import 'package:link_vibe/feature/company/models/applicant_model.dart';
 import 'package:link_vibe/feature/company/models/assignment_model.dart';
 import 'package:link_vibe/feature/company/models/company_dashboard_data.dart';
 import 'package:link_vibe/feature/company/models/company_profile_model.dart';
-import 'package:link_vibe/feature/company/models/company_verification_model.dart';
 import 'package:link_vibe/feature/company/models/project_model.dart';
 import 'package:link_vibe/feature/company/services/company_applicant_service.dart';
 import 'package:link_vibe/feature/company/services/company_assignment_service.dart';
 import 'package:link_vibe/feature/company/services/company_profile_service.dart';
 import 'package:link_vibe/feature/company/services/company_project_service.dart';
-import 'package:link_vibe/feature/company/services/company_verification_service.dart';
-import 'package:link_vibe/feature/student/chat/presentation/screens/chat_list_screen.dart';
 import 'applicants_screen.dart';
 import 'assigned_projects_screen.dart';
 import 'company_profile_screen.dart';
 import 'company_project_detail_screen.dart';
 import 'company_projects_list_screen.dart';
-import 'company_settings_screen.dart';
-import 'company_verification_screen.dart';
 import 'post_project_screen.dart';
 
 class CompanyDashboardScreen extends StatefulWidget {
   final Function(int)? onTabChange;
+  final VoidCallback? onOpenDrawer;
+  final bool isDrawerOpen;
 
-  const CompanyDashboardScreen({super.key, this.onTabChange});
+  const CompanyDashboardScreen({
+    super.key,
+    this.onTabChange,
+    this.onOpenDrawer,
+    this.isDrawerOpen = false,
+  });
 
   @override
   State<CompanyDashboardScreen> createState() => _CompanyDashboardScreenState();
@@ -41,11 +44,11 @@ class _CompanyDashboardScreenState extends State<CompanyDashboardScreen> {
   final _projectService = CompanyProjectService();
   final _applicantService = CompanyApplicantService();
   final _assignmentService = CompanyAssignmentService();
-  final _verificationService = CompanyVerificationService();
 
-  final _scaffoldKey = GlobalKey<ScaffoldState>();
   bool _isLoading = true;
   String? _errorMessage;
+
+  bool get _drawerOpen => widget.isDrawerOpen;
 
   @override
   void initState() {
@@ -183,24 +186,6 @@ class _CompanyDashboardScreenState extends State<CompanyDashboardScreen> {
     );
   }
 
-  Future<void> _navigateToSettings() async {
-    await Navigator.push(
-      context,
-      MaterialPageRoute(
-        builder: (context) => const CompanySettingsScreen(),
-      ),
-    );
-  }
-
-  void _navigateToVerification() {
-    Navigator.push(
-      context,
-      MaterialPageRoute(
-        builder: (context) => const CompanyVerificationScreen(),
-      ),
-    );
-  }
-
   void _navigateToApplicants() {
     if (widget.onTabChange != null) {
       widget.onTabChange!(3);
@@ -223,15 +208,6 @@ class _CompanyDashboardScreenState extends State<CompanyDashboardScreen> {
       context,
       MaterialPageRoute(
         builder: (context) => const AssignedProjectsScreen(),
-      ),
-    );
-  }
-
-  void _navigateToMessages() {
-    Navigator.push(
-      context,
-      MaterialPageRoute(
-        builder: (context) => const ChatListScreen(),
       ),
     );
   }
@@ -262,45 +238,14 @@ class _CompanyDashboardScreenState extends State<CompanyDashboardScreen> {
     );
   }
 
-  ({String text, Color color, IconData icon}) _resolveVerificationBadge(
-    CompanyProfileModel profile,
-    CompanyVerificationModel verification,
-  ) {
-    if (profile.isVerified ||
-        verification.status == VerificationStatus.verified) {
-      return (
-        text: 'Verified Corporate Partner',
-        color: const Color(0xFF4ADE80),
-        icon: Icons.verified_rounded,
-      );
-    }
-    if (verification.status == VerificationStatus.pending) {
-      return (
-        text: 'Verification Pending Review',
-        color: const Color(0xFFFBBF24),
-        icon: Icons.hourglass_top_rounded,
-      );
-    }
-    if (verification.status == VerificationStatus.rejected) {
-      return (
-        text: 'Verification Rejected • Action Needed',
-        color: const Color(0xFFF87171),
-        icon: Icons.error_outline_rounded,
-      );
-    }
-    return (
-      text: 'Verify Organization',
-      color: AppColors.lightAqua,
-      icon: Icons.shield_outlined,
-    );
-  }
-
   @override
   Widget build(BuildContext context) {
+    return _buildHomeScaffold();
+  }
+
+  Widget _buildHomeScaffold() {
     return Scaffold(
-      key: _scaffoldKey,
       backgroundColor: AppColors.background,
-      endDrawer: _buildCorporateDrawer(),
       appBar: AppBar(
         automaticallyImplyLeading: false,
         backgroundColor: Colors.white,
@@ -359,31 +304,89 @@ class _CompanyDashboardScreenState extends State<CompanyDashboardScreen> {
           Padding(
             padding: const EdgeInsets.only(right: 14),
             child: Center(
-              child: Tooltip(
-                message: 'Open Workspace Menu',
-                child: Material(
-                  color: Colors.transparent,
-                  child: InkWell(
-                    borderRadius: BorderRadius.circular(12),
-                    onTap: () => _scaffoldKey.currentState?.openEndDrawer(),
-                    child: Ink(
-                      width: 40,
-                      height: 40,
-                      decoration: BoxDecoration(
-                        color: AppColors.background,
-                        borderRadius: BorderRadius.circular(12),
-                        border: Border.all(
-                          color: AppColors.borderLight,
+              child: ListenableBuilder(
+                listenable: AppDataService.instance,
+                builder: (context, _) {
+                  final totalUnread = AppDataService.instance
+                      .getConversations()
+                      .fold<int>(
+                        0,
+                        (sum, c) => sum + ((c['unread'] as int?) ?? 0),
+                      );
+
+                  return Stack(
+                    clipBehavior: Clip.none,
+                    children: [
+                      Tooltip(
+                        message: 'Open Workspace Menu',
+                        child: Material(
+                          color: _drawerOpen
+                              ? AppColors.lightAqua
+                              : AppColors.background,
+                          borderRadius: BorderRadius.circular(12),
+                          child: InkWell(
+                            borderRadius: BorderRadius.circular(12),
+                            onTap: widget.onOpenDrawer,
+                            child: Container(
+                              width: 42,
+                              height: 42,
+                              decoration: BoxDecoration(
+                                borderRadius: BorderRadius.circular(12),
+                                border: Border.all(
+                                  color: _drawerOpen
+                                      ? AppColors.primaryBlue.withValues(
+                                          alpha: 0.45,
+                                        )
+                                      : AppColors.borderLight,
+                                ),
+                              ),
+                              child: AnimatedSwitcher(
+                                duration: const Duration(milliseconds: 220),
+                                child: Icon(
+                                  _drawerOpen
+                                      ? Icons.close_rounded
+                                      : Icons.menu_rounded,
+                                  key: ValueKey<bool>(_drawerOpen),
+                                  color: AppColors.deepNavy,
+                                  size: 21,
+                                ),
+                              ),
+                            ),
+                          ),
                         ),
                       ),
-                      child: const Icon(
-                        Icons.menu_rounded,
-                        color: AppColors.deepNavy,
-                        size: 21,
-                      ),
-                    ),
-                  ),
-                ),
+                      if (totalUnread > 0 && !_drawerOpen)
+                        Positioned(
+                          top: -3,
+                          right: -3,
+                          child: IgnorePointer(
+                            child: Container(
+                              padding: const EdgeInsets.symmetric(
+                                horizontal: 5,
+                                vertical: 1.5,
+                              ),
+                              decoration: BoxDecoration(
+                                color: AppColors.statusClosed,
+                                borderRadius: BorderRadius.circular(999),
+                                border: Border.all(
+                                  color: Colors.white,
+                                  width: 1.8,
+                                ),
+                              ),
+                              child: Text(
+                                totalUnread > 9 ? '9+' : '$totalUnread',
+                                style: GoogleFonts.inter(
+                                  color: Colors.white,
+                                  fontSize: 9.5,
+                                  fontWeight: FontWeight.w800,
+                                ),
+                              ),
+                            ),
+                          ),
+                        ),
+                    ],
+                  );
+                },
               ),
             ),
           ),
@@ -397,456 +400,6 @@ class _CompanyDashboardScreenState extends State<CompanyDashboardScreen> {
         ),
       ),
       body: _buildBody(),
-    );
-  }
-
-  Widget _buildCorporateDrawer() {
-    final screenWidth = MediaQuery.of(context).size.width;
-    final drawerWidth = (screenWidth * 0.86).clamp(240.0, 340.0).toDouble();
-
-    return Drawer(
-      width: drawerWidth,
-      backgroundColor: Colors.white,
-      surfaceTintColor: Colors.transparent,
-      shape: const RoundedRectangleBorder(
-        borderRadius: BorderRadius.horizontal(left: Radius.circular(24)),
-      ),
-      child: ValueListenableBuilder<CompanyProfileModel>(
-        valueListenable: _profileService.currentProfileNotifier,
-        builder: (drawerContext, profile, _) {
-          return ValueListenableBuilder<CompanyVerificationModel>(
-            valueListenable: _verificationService.verificationNotifier,
-            builder: (_, verification, _) {
-              final displayName = profile.companyName.trim().isNotEmpty
-                  ? profile.companyName.trim()
-                  : 'Set Up Company Profile';
-              final initial = profile.logoInitial.trim().isNotEmpty
-                  ? profile.logoInitial.trim()
-                  : SupabaseHelper.initialsFor(displayName, fallback: 'CO');
-              final badge = _resolveVerificationBadge(profile, verification);
-
-              return Column(
-                crossAxisAlignment: CrossAxisAlignment.stretch,
-                children: [
-                  Container(
-                    decoration: BoxDecoration(
-                      gradient: AppColors.brandGradient,
-                    ),
-                    child: ClipRect(
-                      child: Stack(
-                        children: [
-                          Positioned(
-                            right: -28,
-                            top: -28,
-                            child: Container(
-                              width: 112,
-                              height: 112,
-                              decoration: BoxDecoration(
-                                shape: BoxShape.circle,
-                                color: Colors.white.withValues(alpha: 0.08),
-                              ),
-                            ),
-                          ),
-                          Positioned(
-                            left: -24,
-                            bottom: -36,
-                            child: Container(
-                              width: 88,
-                              height: 88,
-                              decoration: BoxDecoration(
-                                shape: BoxShape.circle,
-                                color: Colors.white.withValues(alpha: 0.06),
-                              ),
-                            ),
-                          ),
-                          SafeArea(
-                            bottom: false,
-                            child: Padding(
-                              padding: const EdgeInsets.fromLTRB(
-                                18,
-                                14,
-                                14,
-                                18,
-                              ),
-                              child: Column(
-                                crossAxisAlignment: CrossAxisAlignment.start,
-                                children: [
-                                  Row(
-                                    mainAxisAlignment:
-                                        MainAxisAlignment.spaceBetween,
-                                    children: [
-                                      Container(
-                                        padding: const EdgeInsets.symmetric(
-                                          horizontal: 10,
-                                          vertical: 4,
-                                        ),
-                                        decoration: BoxDecoration(
-                                          color: Colors.white.withValues(
-                                            alpha: 0.14,
-                                          ),
-                                          borderRadius: BorderRadius.circular(
-                                            999,
-                                          ),
-                                        ),
-                                        child: Row(
-                                          mainAxisSize: MainAxisSize.min,
-                                          children: [
-                                            const Icon(
-                                              Icons.business_center_rounded,
-                                              size: 13,
-                                              color: Colors.white,
-                                            ),
-                                            const SizedBox(width: 6),
-                                            Text(
-                                              'Corporate Menu',
-                                              style: GoogleFonts.inter(
-                                                fontSize: 11,
-                                                fontWeight: FontWeight.w600,
-                                                color: Colors.white,
-                                              ),
-                                            ),
-                                          ],
-                                        ),
-                                      ),
-                                      Material(
-                                        color: Colors.transparent,
-                                        child: InkWell(
-                                          borderRadius: BorderRadius.circular(
-                                            999,
-                                          ),
-                                          onTap: () =>
-                                              Navigator.pop(drawerContext),
-                                          child: Container(
-                                            width: 32,
-                                            height: 32,
-                                            decoration: BoxDecoration(
-                                              shape: BoxShape.circle,
-                                              color: Colors.white.withValues(
-                                                alpha: 0.14,
-                                              ),
-                                            ),
-                                            child: const Icon(
-                                              Icons.close_rounded,
-                                              size: 18,
-                                              color: Colors.white,
-                                            ),
-                                          ),
-                                        ),
-                                      ),
-                                    ],
-                                  ),
-                                  const SizedBox(height: 16),
-                                  Row(
-                                    children: [
-                                      Container(
-                                        width: 48,
-                                        height: 48,
-                                        decoration: BoxDecoration(
-                                          color: Colors.white,
-                                          borderRadius: BorderRadius.circular(
-                                            13,
-                                          ),
-                                        ),
-                                        child: Center(
-                                          child: Text(
-                                            initial,
-                                            style: GoogleFonts.poppins(
-                                              color: AppColors.deepNavy,
-                                              fontSize: 17,
-                                              fontWeight: FontWeight.w800,
-                                            ),
-                                          ),
-                                        ),
-                                      ),
-                                      const SizedBox(width: 12),
-                                      Expanded(
-                                        child: Column(
-                                          crossAxisAlignment:
-                                              CrossAxisAlignment.start,
-                                          children: [
-                                            Text(
-                                              displayName,
-                                              maxLines: 1,
-                                              overflow: TextOverflow.ellipsis,
-                                              style: GoogleFonts.poppins(
-                                                color: Colors.white,
-                                                fontSize: 15.5,
-                                                fontWeight: FontWeight.w700,
-                                              ),
-                                            ),
-                                            const SizedBox(height: 2),
-                                            Text(
-                                              profile.industry.isNotEmpty
-                                                  ? profile.industry
-                                                  : 'Corporate Workspace',
-                                              maxLines: 1,
-                                              overflow: TextOverflow.ellipsis,
-                                              style: GoogleFonts.inter(
-                                                color: Colors.white70,
-                                                fontSize: 12,
-                                              ),
-                                            ),
-                                          ],
-                                        ),
-                                      ),
-                                    ],
-                                  ),
-                                  const SizedBox(height: 12),
-                                  InkWell(
-                                    borderRadius: BorderRadius.circular(20),
-                                    onTap: () {
-                                      Navigator.pop(drawerContext);
-                                      _navigateToVerification();
-                                    },
-                                    child: Container(
-                                      padding: const EdgeInsets.symmetric(
-                                        horizontal: 10,
-                                        vertical: 5,
-                                      ),
-                                      decoration: BoxDecoration(
-                                        color: Colors.white.withValues(
-                                          alpha: 0.14,
-                                        ),
-                                        borderRadius: BorderRadius.circular(20),
-                                        border: Border.all(
-                                          color: badge.color.withValues(
-                                            alpha: 0.55,
-                                          ),
-                                        ),
-                                      ),
-                                      child: Row(
-                                        mainAxisSize: MainAxisSize.min,
-                                        children: [
-                                          Icon(
-                                            badge.icon,
-                                            color: badge.color,
-                                            size: 13.5,
-                                          ),
-                                          const SizedBox(width: 6),
-                                          Flexible(
-                                            child: Text(
-                                              badge.text,
-                                              maxLines: 1,
-                                              overflow: TextOverflow.ellipsis,
-                                              style: GoogleFonts.inter(
-                                                color: Colors.white,
-                                                fontSize: 11.5,
-                                                fontWeight: FontWeight.w600,
-                                              ),
-                                            ),
-                                          ),
-                                        ],
-                                      ),
-                                    ),
-                                  ),
-                                ],
-                              ),
-                            ),
-                          ),
-                        ],
-                      ),
-                    ),
-                  ),
-                  Expanded(
-                    child: ListView(
-                      padding: const EdgeInsets.fromLTRB(14, 18, 14, 16),
-                      children: [
-                        _buildDrawerSectionTitle('COMMUNICATION'),
-                        const SizedBox(height: 8),
-                        _buildDrawerTile(
-                          icon: Icons.chat_bubble_outline_rounded,
-                          iconColor: AppColors.teal,
-                          iconBg: const Color(0xFFCFFAFE),
-                          title: 'Messages',
-                          subtitle: 'Student conversations & threads',
-                          onTap: () {
-                            Navigator.pop(drawerContext);
-                            _navigateToMessages();
-                          },
-                        ),
-                        const SizedBox(height: 16),
-                        const Divider(height: 1, color: AppColors.surfaceAlt),
-                        const SizedBox(height: 16),
-                        _buildDrawerSectionTitle('ORGANIZATION & ACCOUNT'),
-                        const SizedBox(height: 8),
-                        _buildDrawerTile(
-                          icon: Icons.account_circle_outlined,
-                          iconColor: AppColors.primaryBlue,
-                          iconBg: AppColors.lightAqua,
-                          title: 'Company Profile',
-                          subtitle: 'Edit details & public bio',
-                          onTap: () {
-                            Navigator.pop(drawerContext);
-                            _navigateToCompanyProfile();
-                          },
-                        ),
-                        const SizedBox(height: 6),
-                        _buildDrawerTile(
-                          icon: Icons.verified_user_outlined,
-                          iconColor: AppColors.statusOpen,
-                          iconBg: AppColors.successBg,
-                          title: 'Verification Center',
-                          subtitle: badge.text,
-                          onTap: () {
-                            Navigator.pop(drawerContext);
-                            _navigateToVerification();
-                          },
-                        ),
-                        const SizedBox(height: 6),
-                        _buildDrawerTile(
-                          icon: Icons.settings_outlined,
-                          iconColor: AppColors.deepNavy,
-                          iconBg: AppColors.surfaceAlt,
-                          title: 'Settings',
-                          subtitle: 'Security, support & preferences',
-                          onTap: () {
-                            Navigator.pop(drawerContext);
-                            _navigateToSettings();
-                          },
-                        ),
-                      ],
-                    ),
-                  ),
-                  Container(
-                    decoration: const BoxDecoration(
-                      color: AppColors.background,
-                      border: Border(
-                        top: BorderSide(color: AppColors.lightGray),
-                      ),
-                    ),
-                    padding: const EdgeInsets.symmetric(
-                      horizontal: 14,
-                      vertical: 12,
-                    ),
-                    child: SafeArea(
-                      top: false,
-                      child: SizedBox(
-                        width: double.infinity,
-                        child: OutlinedButton.icon(
-                          style: OutlinedButton.styleFrom(
-                            foregroundColor: AppColors.deepNavy,
-                            backgroundColor: Colors.white,
-                            side: const BorderSide(
-                              color: AppColors.borderLight,
-                            ),
-                            padding: const EdgeInsets.symmetric(vertical: 11),
-                            shape: RoundedRectangleBorder(
-                              borderRadius: BorderRadius.circular(12),
-                            ),
-                          ),
-                          onPressed: () {
-                            Navigator.pop(drawerContext);
-                            _loadDashboardData();
-                          },
-                          icon: const Icon(
-                            Icons.refresh_rounded,
-                            size: 17,
-                            color: AppColors.primaryBlue,
-                          ),
-                          label: Text(
-                            'Sync Workspace',
-                            style: GoogleFonts.poppins(
-                              fontSize: 13,
-                              fontWeight: FontWeight.w600,
-                            ),
-                          ),
-                        ),
-                      ),
-                    ),
-                  ),
-                ],
-              );
-            },
-          );
-        },
-      ),
-    );
-  }
-
-  Widget _buildDrawerSectionTitle(String label) {
-    return Padding(
-      padding: const EdgeInsets.symmetric(horizontal: 6),
-      child: Text(
-        label,
-        style: GoogleFonts.inter(
-          fontSize: 10.5,
-          fontWeight: FontWeight.w700,
-          letterSpacing: 0.9,
-          color: AppColors.textMuted,
-        ),
-      ),
-    );
-  }
-
-  Widget _buildDrawerTile({
-    required IconData icon,
-    required Color iconColor,
-    required Color iconBg,
-    required String title,
-    required String subtitle,
-    Widget? trailing,
-    required VoidCallback onTap,
-  }) {
-    return Material(
-      color: Colors.transparent,
-      child: InkWell(
-        borderRadius: BorderRadius.circular(14),
-        onTap: onTap,
-        child: Container(
-          padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 10),
-          decoration: BoxDecoration(
-            borderRadius: BorderRadius.circular(14),
-            border: Border.all(color: Colors.transparent),
-          ),
-          child: Row(
-            children: [
-              Container(
-                width: 40,
-                height: 40,
-                decoration: BoxDecoration(
-                  color: iconBg,
-                  borderRadius: BorderRadius.circular(11),
-                ),
-                child: Icon(icon, color: iconColor, size: 20),
-              ),
-              const SizedBox(width: 12),
-              Expanded(
-                child: Column(
-                  crossAxisAlignment: CrossAxisAlignment.start,
-                  children: [
-                    Text(
-                      title,
-                      maxLines: 1,
-                      overflow: TextOverflow.ellipsis,
-                      style: GoogleFonts.poppins(
-                        fontSize: 13.5,
-                        fontWeight: FontWeight.w600,
-                        color: AppColors.deepNavy,
-                      ),
-                    ),
-                    Text(
-                      subtitle,
-                      maxLines: 1,
-                      overflow: TextOverflow.ellipsis,
-                      style: GoogleFonts.inter(
-                        fontSize: 11.5,
-                        color: AppColors.grayText,
-                      ),
-                    ),
-                  ],
-                ),
-              ),
-              const SizedBox(width: 8),
-              trailing ??
-                  const Icon(
-                    Icons.chevron_right_rounded,
-                    size: 18,
-                    color: AppColors.textMuted,
-                  ),
-            ],
-          ),
-        ),
-      ),
     );
   }
 
@@ -897,18 +450,15 @@ class _CompanyDashboardScreenState extends State<CompanyDashboardScreen> {
     return ValueListenableBuilder<CompanyProfileModel>(
       valueListenable: _profileService.currentProfileNotifier,
       builder: (context, profile, _) {
-        return ValueListenableBuilder<CompanyVerificationModel>(
-          valueListenable: _verificationService.verificationNotifier,
-          builder: (context, verification, _) {
-            return ValueListenableBuilder<List<ProjectModel>>(
-              valueListenable: _projectService.projectsNotifier,
-              builder: (context, projects, _) {
-                return ValueListenableBuilder<List<ApplicantModel>>(
-                  valueListenable: _applicantService.applicantsNotifier,
-                  builder: (context, applicants, _) {
-                    return ValueListenableBuilder<List<AssignmentModel>>(
-                      valueListenable: _assignmentService.assignmentsNotifier,
-                      builder: (context, assignments, _) {
+        return ValueListenableBuilder<List<ProjectModel>>(
+          valueListenable: _projectService.projectsNotifier,
+          builder: (context, projects, _) {
+            return ValueListenableBuilder<List<ApplicantModel>>(
+              valueListenable: _applicantService.applicantsNotifier,
+              builder: (context, applicants, _) {
+                return ValueListenableBuilder<List<AssignmentModel>>(
+                  valueListenable: _assignmentService.assignmentsNotifier,
+                  builder: (context, assignments, _) {
                         final stats = CompanyDashboardStats(
                           totalPostedProjects: projects.length,
                           activeProjects: projects
@@ -971,7 +521,6 @@ class _CompanyDashboardScreenState extends State<CompanyDashboardScreen> {
                                           ],
                                           _buildWelcomeCard(
                                             profile: profile,
-                                            verification: verification,
                                             stats: stats,
                                             totalApplicants: applicants.length,
                                             showWideEditLabel:
@@ -1036,8 +585,6 @@ class _CompanyDashboardScreenState extends State<CompanyDashboardScreen> {
                 );
               },
             );
-          },
-        );
       },
     );
   }
@@ -1089,7 +636,6 @@ class _CompanyDashboardScreenState extends State<CompanyDashboardScreen> {
 
   Widget _buildWelcomeCard({
     required CompanyProfileModel profile,
-    required CompanyVerificationModel verification,
     required CompanyDashboardStats stats,
     required int totalApplicants,
     required bool showWideEditLabel,
@@ -1100,7 +646,6 @@ class _CompanyDashboardScreenState extends State<CompanyDashboardScreen> {
     final initial = profile.logoInitial.trim().isNotEmpty
         ? profile.logoInitial.trim()
         : SupabaseHelper.initialsFor(displayName, fallback: 'CO');
-    final badge = _resolveVerificationBadge(profile, verification);
 
     return Container(
       decoration: BoxDecoration(
@@ -1209,56 +754,35 @@ class _CompanyDashboardScreenState extends State<CompanyDashboardScreen> {
                                     letterSpacing: -0.2,
                                   ),
                                 ),
-                                const SizedBox(height: 10),
-                                InkWell(
-                                  onTap: _navigateToVerification,
-                                  borderRadius: BorderRadius.circular(20),
-                                  child: Container(
-                                    padding: const EdgeInsets.symmetric(
-                                      horizontal: 10,
-                                      vertical: 5,
-                                    ),
-                                    decoration: BoxDecoration(
-                                      color: Colors.white.withValues(
-                                        alpha: 0.14,
+                                if (profile.officialEmail
+                                    .trim()
+                                    .isNotEmpty) ...[
+                                  const SizedBox(height: 6),
+                                  Row(
+                                    children: [
+                                      const Icon(
+                                        Icons.mail_outline_rounded,
+                                        color: Colors.white70,
+                                        size: 13.5,
                                       ),
-                                      borderRadius: BorderRadius.circular(20),
-                                      border: Border.all(
-                                        color: badge.color.withValues(
-                                          alpha: 0.55,
-                                        ),
-                                      ),
-                                    ),
-                                    child: Row(
-                                      mainAxisSize: MainAxisSize.min,
-                                      children: [
-                                        Icon(
-                                          badge.icon,
-                                          color: badge.color,
-                                          size: 14,
-                                        ),
-                                        const SizedBox(width: 6),
-                                        Flexible(
-                                          child: Text(
-                                            badge.text,
-                                            overflow: TextOverflow.ellipsis,
-                                            style: GoogleFonts.inter(
-                                              color: Colors.white,
-                                              fontSize: 11.5,
-                                              fontWeight: FontWeight.w600,
+                                      const SizedBox(width: 6),
+                                      Expanded(
+                                        child: Text(
+                                          profile.officialEmail,
+                                          maxLines: 2,
+                                          overflow: TextOverflow.ellipsis,
+                                          style: GoogleFonts.inter(
+                                            color: Colors.white.withValues(
+                                              alpha: 0.86,
                                             ),
+                                            fontSize: 12,
+                                            fontWeight: FontWeight.w500,
                                           ),
                                         ),
-                                        const SizedBox(width: 4),
-                                        const Icon(
-                                          Icons.chevron_right_rounded,
-                                          color: Colors.white70,
-                                          size: 14,
-                                        ),
-                                      ],
-                                    ),
+                                      ),
+                                    ],
                                   ),
-                                ),
+                                ],
                               ],
                             ),
                           ),
@@ -1514,9 +1038,8 @@ class _CompanyDashboardScreenState extends State<CompanyDashboardScreen> {
                 Padding(
                   padding: const EdgeInsets.all(15),
                   child: Column(
-                    mainAxisSize: MainAxisSize.min,
                     crossAxisAlignment: CrossAxisAlignment.start,
-                    mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                    mainAxisSize: MainAxisSize.min,
                     children: [
                       Row(
                         mainAxisAlignment: MainAxisAlignment.spaceBetween,
