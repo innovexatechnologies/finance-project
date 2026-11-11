@@ -2,7 +2,6 @@ import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:google_fonts/google_fonts.dart';
 import 'package:link_vibe/core/constants/app_colors.dart';
-import 'package:link_vibe/core/services/app_data_service.dart';
 import 'package:link_vibe/core/services/supabase_helper.dart';
 import 'package:link_vibe/core/widgets/rubik_cube_transition.dart';
 import 'package:link_vibe/feature/auth/presentation/screens/login_screen.dart';
@@ -16,8 +15,6 @@ import 'package:link_vibe/feature/company/services/company_settings_service.dart
 import 'applicants_screen.dart';
 import 'assigned_projects_screen.dart';
 import 'company_dashboard.dart';
-import 'company_messages_screen.dart';
-import 'company_notifications_screen.dart';
 import 'company_profile_screen.dart';
 import 'company_projects_list_screen.dart';
 import 'company_settings_screen.dart';
@@ -184,7 +181,7 @@ class _CompanyMainNavState extends State<CompanyMainNav> {
           ],
         ),
         content: Text(
-          'This permanently removes your company profile, posted projects, messages, and notifications from this workspace. This action cannot be undone.',
+          'This permanently removes your company profile, posted projects, and workspace data. This action cannot be undone.',
           style: GoogleFonts.inter(
             fontSize: 13.5,
             height: 1.45,
@@ -469,35 +466,23 @@ class _CompanyMainNavState extends State<CompanyMainNav> {
         child: ValueListenableBuilder<CompanyProfileModel>(
                 valueListenable: _profileService.currentProfileNotifier,
                 builder: (_, profile, _) {
-                  return ListenableBuilder(
-                    listenable: AppDataService.instance,
-                    builder: (_, _) {
-                      final displayName =
-                          profile.companyName.trim().isNotEmpty
-                              ? profile.companyName.trim()
-                              : 'Set Up Company Profile';
-                      final initial = profile.logoInitial.trim().isNotEmpty
-                          ? profile.logoInitial.trim()
-                          : SupabaseHelper.initialsFor(
-                              displayName,
-                              fallback: 'CO',
-                            );
-                      final subtitle = profile.industry.trim().isNotEmpty
-                          ? profile.industry.trim()
-                          : (profile.officialEmail.trim().isNotEmpty
-                              ? profile.officialEmail.trim()
-                              : 'Corporate Workspace');
+                  final displayName =
+                      profile.companyName.trim().isNotEmpty
+                          ? profile.companyName.trim()
+                          : 'Set Up Company Profile';
+                  final initial = profile.logoInitial.trim().isNotEmpty
+                      ? profile.logoInitial.trim()
+                      : SupabaseHelper.initialsFor(
+                          displayName,
+                          fallback: 'CO',
+                        );
+                  final subtitle = profile.industry.trim().isNotEmpty
+                      ? profile.industry.trim()
+                      : (profile.officialEmail.trim().isNotEmpty
+                          ? profile.officialEmail.trim()
+                          : 'Corporate Workspace');
 
-                      final unreadNotifs =
-                          AppDataService.instance.unreadNotificationsCount;
-                      final unreadChats = AppDataService.instance
-                          .getConversations()
-                          .fold<int>(
-                            0,
-                            (sum, c) => sum + ((c['unread'] as int?) ?? 0),
-                          );
-
-                      return Column(
+                  return Column(
                         crossAxisAlignment: CrossAxisAlignment.stretch,
                         children: [
                           Padding(
@@ -594,26 +579,6 @@ class _CompanyMainNavState extends State<CompanyMainNav> {
                                     title: 'Home',
                                     isSelected: _currentIndex == 0,
                                     onTap: () => _onTabChange(0),
-                                  ),
-                                  const SizedBox(height: 4),
-                                  _buildDrawerMenuRow(
-                                    icon: Icons.notifications_outlined,
-                                    accentColor: AppColors.primaryBlue,
-                                    title: 'Notifications',
-                                    badgeCount: unreadNotifs,
-                                    onTap: () => _openDrawerScreen(
-                                      const CompanyNotificationsScreen(),
-                                    ),
-                                  ),
-                                  const SizedBox(height: 4),
-                                  _buildDrawerMenuRow(
-                                    icon: Icons.chat_bubble_outline_rounded,
-                                    accentColor: AppColors.teal,
-                                    title: 'Messages',
-                                    badgeCount: unreadChats,
-                                    onTap: () => _openDrawerScreen(
-                                      const CompanyMessagesScreen(),
-                                    ),
                                   ),
                                   const SizedBox(height: 4),
                                   _buildDrawerMenuRow(
@@ -757,18 +722,15 @@ class _CompanyMainNavState extends State<CompanyMainNav> {
                         ],
                       );
                     },
-                  );
-                },
-              ),
-            ),
-          );
+                  ),
+                ),
+              );
   }
 
   Widget _buildDrawerMenuRow({
     required IconData icon,
     required Color accentColor,
     required String title,
-    int badgeCount = 0,
     bool isSelected = false,
     required VoidCallback onTap,
   }) {
@@ -808,27 +770,6 @@ class _CompanyMainNavState extends State<CompanyMainNav> {
                   ),
                 ),
               ),
-              if (badgeCount > 0) ...[
-                Container(
-                  padding: const EdgeInsets.symmetric(
-                    horizontal: 7,
-                    vertical: 2,
-                  ),
-                  decoration: BoxDecoration(
-                    color: accentColor,
-                    borderRadius: BorderRadius.circular(999),
-                  ),
-                  child: Text(
-                    badgeCount > 99 ? '99+' : '$badgeCount',
-                    style: GoogleFonts.inter(
-                      color: Colors.white,
-                      fontSize: 10.5,
-                      fontWeight: FontWeight.w700,
-                    ),
-                  ),
-                ),
-                const SizedBox(width: 6),
-              ],
               Icon(
                 Icons.chevron_right_rounded,
                 size: 18,

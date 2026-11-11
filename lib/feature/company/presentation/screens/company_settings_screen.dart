@@ -556,7 +556,7 @@ class _CompanySettingsScreenState extends State<CompanySettingsScreen> {
           ],
         ),
         content: Text(
-          'This will permanently delete your company profile, posted projects, messages, and notifications from this workspace. This action cannot be undone.',
+          'This will permanently delete your company profile, posted projects, and workspace data. This action cannot be undone.',
           style: GoogleFonts.inter(
             fontSize: 13.5,
             height: 1.45,
@@ -610,7 +610,7 @@ class _CompanySettingsScreenState extends State<CompanySettingsScreen> {
       backgroundColor: AppColors.background,
       appBar: const CompanyExecutiveAppBar(
         title: 'Organization Settings',
-        subtitle: 'Account, notifications & privacy',
+        subtitle: 'Account, privacy & support',
       ),
       body: ValueListenableBuilder<CompanyProfileModel>(
         valueListenable: _profileService.currentProfileNotifier,
@@ -688,61 +688,6 @@ class _CompanySettingsScreenState extends State<CompanySettingsScreen> {
                                 subtitle:
                                     'Update your sign-in password and account security',
                                 onTap: _openChangePasswordModal,
-                              ),
-                            ],
-                          ),
-                        ),
-                        const SizedBox(height: 16),
-                        CompanySectionCard(
-                          title: 'Notifications',
-                          icon: Icons.notifications_none_rounded,
-                          padding: const EdgeInsets.fromLTRB(18, 18, 18, 8),
-                          child: Column(
-                            children: [
-                              _buildToggleTile(
-                                icon: Icons.assignment_ind_outlined,
-                                title: 'New Student Applications',
-                                subtitle:
-                                    'Alert when a student applies to an active project',
-                                value: settings.notifyNewApplications,
-                                onChanged: (v) => _settingsService.updateSettings(
-                                  settings.copyWith(notifyNewApplications: v),
-                                ),
-                              ),
-                              _buildRowDivider(),
-                              _buildToggleTile(
-                                icon: Icons.task_alt_rounded,
-                                title: 'Deliverable Submissions',
-                                subtitle:
-                                    'Notify when assigned students submit work',
-                                value: settings.notifyMilestoneSubmissions,
-                                onChanged: (v) => _settingsService.updateSettings(
-                                  settings.copyWith(
-                                    notifyMilestoneSubmissions: v,
-                                  ),
-                                ),
-                              ),
-                              _buildRowDivider(),
-                              _buildToggleTile(
-                                icon: Icons.campaign_outlined,
-                                title: 'Workspace & Account Updates',
-                                subtitle:
-                                    'Updates on organization workspace activity',
-                                value: settings.notifyStatusChanges,
-                                onChanged: (v) => _settingsService.updateSettings(
-                                  settings.copyWith(notifyStatusChanges: v),
-                                ),
-                              ),
-                              _buildRowDivider(),
-                              _buildToggleTile(
-                                icon: Icons.insights_outlined,
-                                title: 'Weekly Recruitment Summary',
-                                subtitle:
-                                    'Weekly overview of applications and project pipeline',
-                                value: settings.notifyWeeklyDigest,
-                                onChanged: (v) => _settingsService.updateSettings(
-                                  settings.copyWith(notifyWeeklyDigest: v),
-                                ),
                               ),
                             ],
                           ),
