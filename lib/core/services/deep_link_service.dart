@@ -34,8 +34,7 @@ class ParsedAppLink {
 /// the corresponding screen directly inside the app.
 class DeepLinkService {
   DeepLinkService._internal() {
-    ShareService.deepLinkOpener = (raw, {context}) =>
-        openUriString(raw, context: context);
+    _registerShareCallbacks();
   }
 
   static final DeepLinkService instance = DeepLinkService._internal();
@@ -51,10 +50,43 @@ class DeepLinkService {
   bool get hasPendingLink => _pendingUri != null;
   Uri? get pendingUri => _pendingUri;
 
-  void attachNavigatorKey(GlobalKey<NavigatorState> key) {
-    _navigatorKey = key;
+  void _registerShareCallbacks() {
     ShareService.deepLinkOpener = (raw, {context}) =>
         openUriString(raw, context: context);
+    ShareService.deepLinkTextOpener = (raw, {context}) =>
+        openTextOrUri(raw, context: context);
+  }
+
+  void attachNavigatorKey(GlobalKey<NavigatorState> key) {
+    _navigatorKey = key;
+    _registerShareCallbacks();
+  }
+
+  static final RegExp _embeddedUriPattern = RegExp(
+    r'(?:skillbridge|https?)://[^\s<>"]+',
+    caseSensitive: false,
+  );
+
+  /// Extracts the first valid SkillBridge deep-link URI from a full shared
+  /// message or raw link string.
+  static Uri? extractUriFromText(String raw) {
+    final trimmed = raw.trim();
+    if (trimmed.isEmpty) return null;
+
+    final direct = Uri.tryParse(trimmed);
+    if (direct != null && parseUri(direct) != null) {
+      return direct;
+    }
+
+    for (final match in _embeddedUriPattern.allMatches(trimmed)) {
+      var token = match.group(0) ?? '';
+      token = token.replaceAll(RegExp(r'''[.,);!\]"']+$'''), '').trim();
+      final candidate = Uri.tryParse(token);
+      if (candidate != null && parseUri(candidate) != null) {
+        return candidate;
+      }
+    }
+    return null;
   }
 
   static String _slugify(String raw) {
@@ -156,11 +188,11 @@ class DeepLinkService {
 
   /// Initializes cold-start & warm-stream listeners for incoming app links.
   Future<void> init({GlobalKey<NavigatorState>? navigatorKey}) async {
+    _navigatorKey ??= navigatorKey;
     if (navigatorKey != null) {
       attachNavigatorKey(navigatorKey);
     } else {
-      ShareService.deepLinkOpener = (raw, {context}) =>
-          openUriString(raw, context: context);
+      _registerShareCallbacks();
     }
 
     if (_initialized) return;
@@ -219,11 +251,19 @@ class DeepLinkService {
     if (nav == null || !nav.mounted) return;
 
     _pendingUri = null;
+    _lastHandledKey = uri.toString();
+    _lastHandledAt = DateTime.now();
     await openUri(uri);
   }
 
   Future<bool> openUriString(String raw, {BuildContext? context}) async {
     final uri = Uri.tryParse(raw.trim());
+    if (uri == null) return false;
+    return openUri(uri, context: context);
+  }
+
+  Future<bool> openTextOrUri(String raw, {BuildContext? context}) async {
+    final uri = extractUriFromText(raw);
     if (uri == null) return false;
     return openUri(uri, context: context);
   }

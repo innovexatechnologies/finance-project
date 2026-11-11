@@ -4,6 +4,7 @@ import 'package:google_fonts/google_fonts.dart';
 import 'package:link_vibe/core/constants/app_colors.dart';
 import 'package:link_vibe/core/services/app_data_service.dart';
 import 'package:link_vibe/core/services/deep_link_service.dart';
+import 'package:link_vibe/core/services/share_service.dart';
 import 'package:link_vibe/core/widgets/student_avatar.dart';
 import 'package:link_vibe/feature/admin/services/admin_auth_service.dart';
 import 'package:link_vibe/feature/auth/presentation/screens/login_screen.dart';
@@ -439,6 +440,22 @@ class _StudentMainNavState extends State<StudentMainNav> {
                           badgeCount: certCount,
                           onTap: () =>
                               _openDrawerScreen(const CertificatesScreen()),
+                        ),
+                        const SizedBox(height: 4),
+                        _buildDrawerMenuRow(
+                          icon: Icons.link_rounded,
+                          accentColor: AppColors.teal,
+                          title: 'Open Shared Link',
+                          onTap: () {
+                            _closeDrawer();
+                            Future.delayed(
+                              const Duration(milliseconds: 140),
+                              () {
+                                if (!mounted) return;
+                                ShareService.showOpenSharedLinkDialog(context);
+                              },
+                            );
+                          },
                         ),
                         const SizedBox(height: 4),
                         _buildDrawerMenuRow(
