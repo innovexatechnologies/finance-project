@@ -2,6 +2,7 @@ import 'dart:typed_data';
 import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:shared_preferences/shared_preferences.dart';
+import 'package:supabase_flutter/supabase_flutter.dart';
 import 'package:link_vibe/core/services/app_data_service.dart';
 import 'package:link_vibe/core/services/supabase_helper.dart';
 import 'package:link_vibe/core/widgets/student_avatar.dart';
@@ -219,6 +220,37 @@ void main() {
       expect(SupabaseHelper.shouldIgnoreSignedInEvent, isTrue);
       SupabaseHelper.clearAuthFlags();
       expect(SupabaseHelper.shouldIgnoreSignedInEvent, isFalse);
+
+      const rateLimitErr = AuthApiException(
+        'email rate limit exceeded',
+        statusCode: '429',
+        code: 'over_email_send_rate_limit',
+      );
+      expect(SupabaseHelper.isEmailRateLimitError(rateLimitErr), isTrue);
+      expect(
+        SupabaseHelper.friendlyError(rateLimitErr),
+        contains('2 emails per hour'),
+      );
+      const cooldownErr = AuthApiException(
+        'For security purposes, you can only request this after 45 seconds.',
+        statusCode: '429',
+        code: 'over_request_rate_limit',
+      );
+      expect(SupabaseHelper.isEmailRateLimitError(cooldownErr), isFalse);
+      expect(
+        SupabaseHelper.friendlyError(cooldownErr),
+        contains('wait 60 seconds'),
+      );
+
+      final cooldown = ResendCooldown();
+      int ticks = 0;
+      cooldown.start(() => ticks++, seconds: 5);
+      expect(cooldown.isActive, isTrue);
+      expect(cooldown.remainingSeconds, 5);
+      expect(ticks, 1);
+      cooldown.dispose();
+      expect(cooldown.isActive, isFalse);
+      expect(cooldown.remainingSeconds, 0);
     });
 
     testWidgets(

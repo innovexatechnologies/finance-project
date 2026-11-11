@@ -31,6 +31,7 @@ class _LoginScreenState extends State<LoginScreen> {
   bool _obscurePassword = true;
   bool _needsEmailConfirmation = false;
   bool _isResendingConfirmation = false;
+  final ResendCooldown _resendCooldown = ResendCooldown();
   String? _errorBanner;
 
   @override
@@ -41,6 +42,7 @@ class _LoginScreenState extends State<LoginScreen> {
 
   @override
   void dispose() {
+    _resendCooldown.dispose();
     _emailController.dispose();
     _passwordController.dispose();
     super.dispose();
@@ -48,7 +50,11 @@ class _LoginScreenState extends State<LoginScreen> {
 
   Future<void> _resendVerificationEmail() async {
     final email = _emailController.text.trim();
-    if (email.isEmpty || _isResendingConfirmation) return;
+    if (email.isEmpty ||
+        _isResendingConfirmation ||
+        _resendCooldown.isActive) {
+      return;
+    }
     final supabase = SupabaseHelper.clientOrNull;
     if (supabase == null) return;
 
@@ -60,6 +66,9 @@ class _LoginScreenState extends State<LoginScreen> {
         emailRedirectTo: SupabaseHelper.emailRedirectUrl,
       );
       if (!mounted) return;
+      _resendCooldown.start(() {
+        if (mounted) setState(() {});
+      });
       ScaffoldMessenger.of(context).showSnackBar(
         SnackBar(
           content: Text('Verification link resent to $email. Please check your inbox.'),
@@ -68,6 +77,11 @@ class _LoginScreenState extends State<LoginScreen> {
       );
     } catch (e) {
       if (!mounted) return;
+      if (SupabaseHelper.isEmailRateLimitError(e)) {
+        _resendCooldown.start(() {
+          if (mounted) setState(() {});
+        });
+      }
       setState(() => _errorBanner = SupabaseHelper.friendlyError(e));
     } finally {
       if (mounted) {
@@ -623,14 +637,17 @@ class _LoginScreenState extends State<LoginScreen> {
                                                       MaterialTapTargetSize
                                                           .shrinkWrap,
                                                 ),
-                                                onPressed:
-                                                    _isResendingConfirmation
-                                                        ? null
-                                                        : _resendVerificationEmail,
+                                                onPressed: (_isResendingConfirmation ||
+                                                        _resendCooldown
+                                                            .isActive)
+                                                    ? null
+                                                    : _resendVerificationEmail,
                                                 child: Text(
                                                   _isResendingConfirmation
                                                       ? 'Sending...'
-                                                      : 'Resend verification email',
+                                                      : _resendCooldown.isActive
+                                                          ? 'Resend in ${_resendCooldown.remainingSeconds}s'
+                                                          : 'Resend verification email',
                                                   style: GoogleFonts.inter(
                                                     fontSize: 12,
                                                     fontWeight: FontWeight.w700,

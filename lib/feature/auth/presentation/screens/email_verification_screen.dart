@@ -34,6 +34,7 @@ class _EmailVerificationScreenState extends State<EmailVerificationScreen> {
   final _codeCtrl = TextEditingController();
   bool _isWorking = false;
   bool _isResending = false;
+  final ResendCooldown _resendCooldown = ResendCooldown();
   late bool _verified;
   String? _errorBanner;
   String? _infoBanner;
@@ -47,12 +48,17 @@ class _EmailVerificationScreenState extends State<EmailVerificationScreen> {
 
   @override
   void dispose() {
+    _resendCooldown.dispose();
     _codeCtrl.dispose();
     super.dispose();
   }
 
   Future<void> _resendEmail() async {
-    if (widget.email.trim().isEmpty || _isResending) return;
+    if (widget.email.trim().isEmpty ||
+        _isResending ||
+        _resendCooldown.isActive) {
+      return;
+    }
     final supabase = SupabaseHelper.clientOrNull;
     if (supabase == null) return;
 
@@ -69,12 +75,20 @@ class _EmailVerificationScreenState extends State<EmailVerificationScreen> {
         emailRedirectTo: SupabaseHelper.emailRedirectUrl,
       );
       if (!mounted) return;
+      _resendCooldown.start(() {
+        if (mounted) setState(() {});
+      });
       setState(() {
         _infoBanner =
             'Verification email resent to ${widget.email.trim()}. Check your inbox or spam folder.';
       });
     } catch (e) {
       if (!mounted) return;
+      if (SupabaseHelper.isEmailRateLimitError(e)) {
+        _resendCooldown.start(() {
+          if (mounted) setState(() {});
+        });
+      }
       setState(() => _errorBanner = SupabaseHelper.friendlyError(e));
     } finally {
       if (mounted) setState(() => _isResending = false);
@@ -443,9 +457,16 @@ class _EmailVerificationScreenState extends State<EmailVerificationScreen> {
                         runSpacing: 6,
                         children: [
                           TextButton(
-                            onPressed: _isResending ? null : _resendEmail,
+                            onPressed:
+                                (_isResending || _resendCooldown.isActive)
+                                    ? null
+                                    : _resendEmail,
                             child: Text(
-                              _isResending ? 'Sending...' : 'Resend Email',
+                              _isResending
+                                  ? 'Sending...'
+                                  : _resendCooldown.isActive
+                                      ? 'Resend in ${_resendCooldown.remainingSeconds}s'
+                                      : 'Resend Email',
                             ),
                           ),
                           TextButton(

@@ -31,6 +31,7 @@ class _ResetPasswordScreenState extends State<ResetPasswordScreen> {
 
   bool _isSaving = false;
   bool _isResending = false;
+  final ResendCooldown _resendCooldown = ResendCooldown();
   bool _obscureNew = true;
   bool _obscureConfirm = true;
   bool _isUpdated = false;
@@ -46,6 +47,7 @@ class _ResetPasswordScreenState extends State<ResetPasswordScreen> {
 
   @override
   void dispose() {
+    _resendCooldown.dispose();
     _emailCtrl.dispose();
     _codeCtrl.dispose();
     _newPassCtrl.dispose();
@@ -57,6 +59,7 @@ class _ResetPasswordScreenState extends State<ResetPasswordScreen> {
       widget.hasRecoverySession || SupabaseHelper.currentUser != null;
 
   Future<void> _handleResend() async {
+    if (_isResending || _resendCooldown.isActive) return;
     final email = _emailCtrl.text.trim();
     if (email.isEmpty || !email.contains('@')) {
       setState(() => _errorBanner = 'Enter your registered email address first.');
@@ -80,12 +83,20 @@ class _ResetPasswordScreenState extends State<ResetPasswordScreen> {
         redirectTo: SupabaseHelper.emailRedirectUrl,
       );
       if (!mounted) return;
+      _resendCooldown.start(() {
+        if (mounted) setState(() {});
+      });
       setState(() {
         _infoBanner =
             'A fresh password reset email has been sent to $email. Open the link or enter the 6-digit recovery code below.';
       });
     } catch (e) {
       if (!mounted) return;
+      if (SupabaseHelper.isEmailRateLimitError(e)) {
+        _resendCooldown.start(() {
+          if (mounted) setState(() {});
+        });
+      }
       setState(() => _errorBanner = SupabaseHelper.friendlyError(e));
     } finally {
       if (mounted) setState(() => _isResending = false);
@@ -498,11 +509,15 @@ class _ResetPasswordScreenState extends State<ResetPasswordScreen> {
             const SizedBox(height: 12),
             Center(
               child: TextButton(
-                onPressed: _isResending ? null : _handleResend,
+                onPressed: (_isResending || _resendCooldown.isActive)
+                    ? null
+                    : _handleResend,
                 child: Text(
                   _isResending
                       ? 'Resending Reset Email...'
-                      : 'Resend Reset Email',
+                      : _resendCooldown.isActive
+                          ? 'Resend in ${_resendCooldown.remainingSeconds}s'
+                          : 'Resend Reset Email',
                   style: GoogleFonts.inter(
                     fontSize: 13,
                     fontWeight: FontWeight.w600,

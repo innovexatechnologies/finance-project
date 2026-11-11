@@ -1,5 +1,6 @@
+import 'dart:async';
 import 'dart:math';
-import 'package:flutter/foundation.dart' show kIsWeb;
+import 'package:flutter/foundation.dart' show VoidCallback, kIsWeb;
 import 'package:supabase_flutter/supabase_flutter.dart';
 
 /// Safe wrapper & utilities for Supabase client access across runtime & tests.
@@ -214,10 +215,20 @@ class SupabaseHelper {
     return 'Student';
   }
 
+  static bool isEmailRateLimitError(Object error) {
+    final msg = error is AuthException ? error.message : error.toString();
+    final lower = msg.toLowerCase();
+    final code = error is AuthException ? (error.code?.toLowerCase() ?? '') : '';
+    return code == 'over_email_send_rate_limit' ||
+        lower.contains('over_email_send_rate_limit') ||
+        lower.contains('email rate limit exceeded');
+  }
+
   /// Converts raw network/auth/platform exceptions into readable UI messages.
   static String friendlyError(Object error) {
     final msg = error is AuthException ? error.message : error.toString();
     final lower = msg.toLowerCase();
+    final code = error is AuthException ? (error.code?.toLowerCase() ?? '') : '';
 
     if (lower.contains('failed host lookup') ||
         lower.contains('socketexception') ||
@@ -228,6 +239,14 @@ class SupabaseHelper {
         lower.contains('connection reset') ||
         lower.contains('timed out')) {
       return 'Unable to reach the server. Please check your internet connection (Wi-Fi / Mobile Data) and try again.';
+    }
+    if (isEmailRateLimitError(error)) {
+      return 'Email sending limit reached (Supabase free SMTP allows only 2 emails per hour). Please wait before requesting another email, use your 6-digit code in "Verify via code", or sign in with a verified account (or disable Confirm Email / configure Custom SMTP in Supabase Dashboard).';
+    }
+    if (code == 'over_request_rate_limit' ||
+        lower.contains('over_request_rate_limit') ||
+        lower.contains('for security purposes, you can only request this')) {
+      return 'Too many requests in a short time. Please wait 60 seconds and try again.';
     }
     if (lower.contains('invalid login credentials')) {
       return 'Incorrect email or password. Please verify and try again.';
@@ -249,5 +268,38 @@ class SupabaseHelper {
       cleaned = cleaned.substring('Exception: '.length).trim();
     }
     return cleaned.isEmpty ? 'Something went wrong. Please try again.' : cleaned;
+  }
+}
+
+/// Shared countdown timer preventing repeated email sends that exhaust
+/// Supabase's strict built-in SMTP hourly quota.
+class ResendCooldown {
+  Timer? _timer;
+  int _remainingSeconds = 0;
+
+  int get remainingSeconds => _remainingSeconds;
+  bool get isActive => _remainingSeconds > 0;
+
+  void start(VoidCallback onTick, {int seconds = 60}) {
+    _timer?.cancel();
+    _remainingSeconds = seconds;
+    onTick();
+    if (seconds <= 0) return;
+    _timer = Timer.periodic(const Duration(seconds: 1), (timer) {
+      if (_remainingSeconds <= 1) {
+        _remainingSeconds = 0;
+        timer.cancel();
+        _timer = null;
+      } else {
+        _remainingSeconds--;
+      }
+      onTick();
+    });
+  }
+
+  void dispose() {
+    _timer?.cancel();
+    _timer = null;
+    _remainingSeconds = 0;
   }
 }
