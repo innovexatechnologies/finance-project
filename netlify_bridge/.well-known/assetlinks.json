@@ -1,0 +1,12 @@
+[
+  {
+    "relation": ["delegate_permission/common.handle_all_urls"],
+    "target": {
+      "namespace": "android_app",
+      "package_name": "com.example.link_vibe",
+      "sha256_cert_fingerprints": [
+        "CC:2A:7D:5F:FC:F9:43:25:1F:88:3C:E4:93:41:02:D0:15:26:C0:32:C1:02:50:EB:C5:E2:EA:17:B5:89:1C:87"
+      ]
+    }
+  }
+]
