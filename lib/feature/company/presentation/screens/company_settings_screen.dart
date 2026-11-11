@@ -582,7 +582,7 @@ class _CompanySettingsScreenState extends State<CompanySettingsScreen> {
           ],
         ),
         content: Text(
-          'This will permanently delete your company profile, posted projects, and messages from this workspace. This action cannot be undone.',
+          'This will permanently delete your company profile, posted projects, and workspace data. This action cannot be undone.',
           style: GoogleFonts.inter(
             fontSize: 13.5,
             height: 1.45,
@@ -638,7 +638,7 @@ class _CompanySettingsScreenState extends State<CompanySettingsScreen> {
       backgroundColor: AppColors.background,
       appBar: const CompanyExecutiveAppBar(
         title: 'Organization Settings',
-        subtitle: 'Account, verification & privacy',
+        subtitle: 'Account, privacy & support',
       ),
       body: ValueListenableBuilder<CompanyProfileModel>(
         valueListenable: _profileService.currentProfileNotifier,

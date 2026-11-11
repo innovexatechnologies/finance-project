@@ -1,7 +1,6 @@
 import 'package:flutter/material.dart';
 import 'package:google_fonts/google_fonts.dart';
 import 'package:link_vibe/core/constants/app_colors.dart';
-import 'package:link_vibe/core/services/app_data_service.dart';
 import 'package:link_vibe/core/services/supabase_helper.dart';
 import 'package:link_vibe/core/widgets/app_empty_state.dart';
 import 'package:link_vibe/core/widgets/section_header.dart';
@@ -303,89 +302,41 @@ class _CompanyDashboardScreenState extends State<CompanyDashboardScreen> {
           Padding(
             padding: const EdgeInsets.only(right: 14),
             child: Center(
-              child: ListenableBuilder(
-                listenable: AppDataService.instance,
-                builder: (context, _) {
-                  final totalUnread = AppDataService.instance
-                      .getConversations()
-                      .fold<int>(
-                        0,
-                        (sum, c) => sum + ((c['unread'] as int?) ?? 0),
-                      );
-
-                  return Stack(
-                    clipBehavior: Clip.none,
-                    children: [
-                      Tooltip(
-                        message: 'Open Workspace Menu',
-                        child: Material(
+              child: Tooltip(
+                message: 'Open Workspace Menu',
+                child: Material(
+                  color: _drawerOpen
+                      ? AppColors.lightAqua
+                      : AppColors.background,
+                  borderRadius: BorderRadius.circular(12),
+                  child: InkWell(
+                    borderRadius: BorderRadius.circular(12),
+                    onTap: widget.onOpenDrawer,
+                    child: Container(
+                      width: 42,
+                      height: 42,
+                      decoration: BoxDecoration(
+                        borderRadius: BorderRadius.circular(12),
+                        border: Border.all(
                           color: _drawerOpen
-                              ? AppColors.lightAqua
-                              : AppColors.background,
-                          borderRadius: BorderRadius.circular(12),
-                          child: InkWell(
-                            borderRadius: BorderRadius.circular(12),
-                            onTap: widget.onOpenDrawer,
-                            child: Container(
-                              width: 42,
-                              height: 42,
-                              decoration: BoxDecoration(
-                                borderRadius: BorderRadius.circular(12),
-                                border: Border.all(
-                                  color: _drawerOpen
-                                      ? AppColors.primaryBlue.withValues(
-                                          alpha: 0.45,
-                                        )
-                                      : AppColors.borderLight,
-                                ),
-                              ),
-                              child: AnimatedSwitcher(
-                                duration: const Duration(milliseconds: 220),
-                                child: Icon(
-                                  _drawerOpen
-                                      ? Icons.close_rounded
-                                      : Icons.menu_rounded,
-                                  key: ValueKey<bool>(_drawerOpen),
-                                  color: AppColors.deepNavy,
-                                  size: 21,
-                                ),
-                              ),
-                            ),
-                          ),
+                              ? AppColors.primaryBlue.withValues(alpha: 0.45)
+                              : AppColors.borderLight,
                         ),
                       ),
-                      if (totalUnread > 0 && !_drawerOpen)
-                        Positioned(
-                          top: -3,
-                          right: -3,
-                          child: IgnorePointer(
-                            child: Container(
-                              padding: const EdgeInsets.symmetric(
-                                horizontal: 5,
-                                vertical: 1.5,
-                              ),
-                              decoration: BoxDecoration(
-                                color: AppColors.statusClosed,
-                                borderRadius: BorderRadius.circular(999),
-                                border: Border.all(
-                                  color: Colors.white,
-                                  width: 1.8,
-                                ),
-                              ),
-                              child: Text(
-                                totalUnread > 9 ? '9+' : '$totalUnread',
-                                style: GoogleFonts.inter(
-                                  color: Colors.white,
-                                  fontSize: 9.5,
-                                  fontWeight: FontWeight.w800,
-                                ),
-                              ),
-                            ),
-                          ),
+                      child: AnimatedSwitcher(
+                        duration: const Duration(milliseconds: 220),
+                        child: Icon(
+                          _drawerOpen
+                              ? Icons.close_rounded
+                              : Icons.menu_rounded,
+                          key: ValueKey<bool>(_drawerOpen),
+                          color: AppColors.deepNavy,
+                          size: 21,
                         ),
-                    ],
-                  );
-                },
+                      ),
+                    ),
+                  ),
+                ),
               ),
             ),
           ),

@@ -1,7 +1,6 @@
 import 'package:flutter/material.dart';
 import 'package:google_fonts/google_fonts.dart';
 import 'package:link_vibe/core/constants/app_colors.dart';
-import 'package:link_vibe/core/services/app_data_service.dart';
 import 'package:link_vibe/core/widgets/app_empty_state.dart';
 import 'package:link_vibe/core/widgets/status_badge.dart';
 import 'package:link_vibe/feature/company/models/assignment_model.dart';
@@ -9,7 +8,6 @@ import 'package:link_vibe/feature/company/models/project_model.dart';
 import 'package:link_vibe/feature/company/services/company_assignment_service.dart';
 import 'package:link_vibe/feature/company/services/company_profile_service.dart';
 import 'package:link_vibe/feature/company/services/company_project_service.dart';
-import 'package:link_vibe/feature/student/chat/presentation/screens/chat_list_screen.dart';
 import 'applicant_detail_screen.dart';
 import 'company_project_detail_screen.dart';
 import 'submission_review_screen.dart';
@@ -80,20 +78,6 @@ class _AssignedProjectsScreenState extends State<AssignedProjectsScreen> {
           projectId: assignment.projectId,
         ),
       ),
-    );
-  }
-
-  Future<void> _messageStudent(AssignmentModel assignment) async {
-    await AppDataService.instance.openOrCreateConversation(
-      companyName: assignment.studentName,
-      peerUserId: assignment.studentId,
-      supervisorName: assignment.studentUniversity,
-      projectTitle: assignment.projectTitle,
-    );
-    if (!mounted) return;
-    Navigator.push(
-      context,
-      MaterialPageRoute(builder: (_) => const ChatListScreen()),
     );
   }
 
@@ -1224,33 +1208,6 @@ class _AssignedProjectsScreenState extends State<AssignedProjectsScreen> {
                               ),
                             ),
                             const SizedBox(width: 6),
-                            Tooltip(
-                              message: 'Message Student',
-                              child: Material(
-                                color: Colors.transparent,
-                                child: InkWell(
-                                  borderRadius: BorderRadius.circular(10),
-                                  onTap: () => _messageStudent(assignment),
-                                  child: Ink(
-                                    width: 36,
-                                    height: 36,
-                                    decoration: BoxDecoration(
-                                      color: Colors.white,
-                                      borderRadius: BorderRadius.circular(10),
-                                      border: Border.all(
-                                        color: AppColors.borderLight,
-                                      ),
-                                    ),
-                                    child: const Icon(
-                                      Icons.chat_bubble_outline_rounded,
-                                      size: 17,
-                                      color: AppColors.primaryBlue,
-                                    ),
-                                  ),
-                                ),
-                              ),
-                            ),
-                            const SizedBox(width: 4),
                             const Icon(
                               Icons.chevron_right_rounded,
                               size: 18,

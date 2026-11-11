@@ -2,14 +2,12 @@ import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:google_fonts/google_fonts.dart';
 import 'package:link_vibe/core/constants/app_colors.dart';
-import 'package:link_vibe/core/services/app_data_service.dart';
 import 'package:link_vibe/core/widgets/app_empty_state.dart';
 import 'package:link_vibe/core/widgets/status_badge.dart';
 import 'package:link_vibe/feature/company/models/applicant_model.dart';
 import 'package:link_vibe/feature/company/models/project_model.dart';
 import 'package:link_vibe/feature/company/services/company_applicant_service.dart';
 import 'package:link_vibe/feature/company/services/company_project_service.dart';
-import 'package:link_vibe/feature/student/chat/presentation/screens/chat_list_screen.dart';
 import 'package:url_launcher/url_launcher.dart';
 
 class ApplicantDetailScreen extends StatefulWidget {
@@ -68,22 +66,6 @@ class _ApplicantDetailScreenState extends State<ApplicantDetailScreen> {
         content: Text('$label link copied to clipboard.'),
         behavior: SnackBarBehavior.floating,
       ),
-    );
-  }
-
-  Future<void> _openChatWithStudent(ApplicantModel applicant) async {
-    setState(() => _isProcessingAction = true);
-    await AppDataService.instance.openOrCreateConversation(
-      companyName: applicant.name,
-      peerUserId: applicant.studentId,
-      supervisorName: applicant.university,
-      projectTitle: applicant.projectTitle,
-    );
-    if (!mounted) return;
-    setState(() => _isProcessingAction = false);
-    Navigator.push(
-      context,
-      MaterialPageRoute(builder: (_) => const ChatListScreen()),
     );
   }
 
@@ -314,14 +296,6 @@ class _ApplicantDetailScreenState extends State<ApplicantDetailScreen> {
                 fontWeight: FontWeight.w700,
               ),
             ),
-            actions: [
-              IconButton(
-                icon: const Icon(Icons.chat_bubble_outline_rounded),
-                tooltip: 'Message Student',
-                onPressed:
-                    _isProcessingAction ? null : () => _openChatWithStudent(applicant),
-              ),
-            ],
           ),
           body: SingleChildScrollView(
             padding: const EdgeInsets.fromLTRB(16, 16, 16, 32),
@@ -814,17 +788,6 @@ class _ApplicantDetailScreenState extends State<ApplicantDetailScreen> {
             ),
           ],
         ),
-        const SizedBox(height: 10),
-        SizedBox(
-          width: double.infinity,
-          child: OutlinedButton.icon(
-            onPressed: _isProcessingAction
-                ? null
-                : () => _openChatWithStudent(applicant),
-            icon: const Icon(Icons.chat_bubble_outline_rounded, size: 18),
-            label: Text('Message ${applicant.name}'),
-          ),
-        ),
       ],
     );
   }
@@ -856,10 +819,6 @@ class _ApplicantDetailScreenState extends State<ApplicantDetailScreen> {
                 color: AppColors.deepNavy,
               ),
             ),
-          ),
-          TextButton(
-            onPressed: () => _openChatWithStudent(applicant),
-            child: const Text('Message'),
           ),
         ],
       ),
