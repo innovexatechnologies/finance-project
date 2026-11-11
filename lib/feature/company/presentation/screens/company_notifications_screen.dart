@@ -2,7 +2,7 @@ import 'package:flutter/material.dart';
 import 'package:google_fonts/google_fonts.dart';
 import 'package:link_vibe/core/constants/app_colors.dart';
 import 'package:link_vibe/core/services/app_data_service.dart';
-import 'package:link_vibe/core/widgets/app_empty_state.dart';
+import 'package:link_vibe/feature/company/presentation/widgets/company_executive_app_bar.dart';
 
 class CompanyNotificationsScreen extends StatefulWidget {
   const CompanyNotificationsScreen({super.key});
@@ -163,117 +163,88 @@ class _CompanyNotificationsScreenState
 
         return Scaffold(
           backgroundColor: AppColors.background,
-          appBar: AppBar(
-            backgroundColor: AppColors.deepNavy,
-            foregroundColor: Colors.white,
-            elevation: 0,
-            leading: _isSelectionMode
-                ? IconButton(
-                    icon: const Icon(Icons.close_rounded, size: 22),
-                    onPressed: () {
-                      setState(() {
-                        _isSelectionMode = false;
-                        _selectedIds.clear();
-                      });
-                    },
-                  )
-                : IconButton(
-                    icon: const Icon(
-                      Icons.arrow_back_ios_new_rounded,
-                      size: 18,
-                    ),
-                    onPressed: () => Navigator.pop(context),
-                  ),
-            title: Column(
-              crossAxisAlignment: CrossAxisAlignment.start,
-              children: [
-                Text(
-                  _isSelectionMode
-                      ? '${_selectedIds.length} Selected'
-                      : 'Corporate Notifications',
-                  style: GoogleFonts.poppins(
-                    fontSize: 16.5,
-                    fontWeight: FontWeight.w700,
-                    color: Colors.white,
-                  ),
-                ),
-                if (!_isSelectionMode)
-                  Text(
-                    unreadTotal > 0
-                        ? '$unreadTotal unread alert${unreadTotal == 1 ? '' : 's'}'
-                        : 'All updates reviewed',
-                    style: GoogleFonts.inter(
-                      fontSize: 11.5,
-                      color: AppColors.lightAqua,
-                    ),
-                  ),
-              ],
-            ),
+          appBar: CompanyExecutiveAppBar(
+            title: _isSelectionMode
+                ? '${_selectedIds.length} Selected'
+                : 'Notifications',
+            subtitle: _isSelectionMode
+                ? 'Tap alerts to include or exclude'
+                : (unreadTotal > 0
+                    ? '$unreadTotal unread alert${unreadTotal == 1 ? '' : 's'}'
+                    : 'All updates reviewed'),
+            leadingIcon: _isSelectionMode
+                ? Icons.close_rounded
+                : Icons.arrow_back_ios_new_rounded,
+            onLeadingPressed: _isSelectionMode
+                ? () {
+                    setState(() {
+                      _isSelectionMode = false;
+                      _selectedIds.clear();
+                    });
+                  }
+                : null,
             actions: [
               if (!_isSelectionMode) ...[
-                IconButton(
-                  tooltip: 'Sync Alerts',
-                  icon: const Icon(Icons.refresh_rounded, size: 21),
+                CompanyHeaderIconButton(
+                  icon: Icons.refresh_rounded,
+                  tooltip: 'Refresh Notifications',
                   onPressed: () => AppDataService.instance
                       .syncFromSupabase(forceRefresh: true),
                 ),
-                if (allNotifs.isNotEmpty)
-                  IconButton(
-                    tooltip: 'Select & Remove',
-                    icon: const Icon(Icons.checklist_rounded, size: 21),
+                if (allNotifs.isNotEmpty) ...[
+                  const SizedBox(width: 8),
+                  CompanyHeaderIconButton(
+                    icon: Icons.checklist_rounded,
+                    tooltip: 'Select Alerts',
                     onPressed: () => setState(() => _isSelectionMode = true),
                   ),
-                if (unreadTotal > 0)
-                  Padding(
-                    padding: const EdgeInsets.only(right: 8),
-                    child: TextButton(
-                      onPressed: () async {
-                        await AppDataService.instance.markNotificationsRead();
-                        if (!context.mounted) return;
-                        ScaffoldMessenger.of(context).showSnackBar(
-                          const SnackBar(
-                            content: Text('All alerts marked as read.'),
-                            backgroundColor: AppColors.statusOpen,
-                            behavior: SnackBarBehavior.floating,
-                          ),
-                        );
-                      },
-                      child: Text(
-                        'Mark Read',
-                        style: GoogleFonts.inter(
-                          fontSize: 12.5,
-                          fontWeight: FontWeight.w700,
-                          color: AppColors.lightAqua,
+                ],
+                if (unreadTotal > 0) ...[
+                  const SizedBox(width: 8),
+                  CompanyHeaderPillButton(
+                    label: 'Mark Read',
+                    icon: Icons.done_all_rounded,
+                    filled: true,
+                    onPressed: () async {
+                      await AppDataService.instance.markNotificationsRead();
+                      if (!context.mounted) return;
+                      ScaffoldMessenger.of(context).showSnackBar(
+                        const SnackBar(
+                          content: Text('All notifications marked as read.'),
+                          backgroundColor: AppColors.statusOpen,
+                          behavior: SnackBarBehavior.floating,
                         ),
-                      ),
-                    ),
+                      );
+                    },
                   ),
+                ],
               ] else ...[
-                IconButton(
-                  tooltip:
-                      _selectedIds.length == filtered.length &&
-                              filtered.isNotEmpty
-                          ? 'Deselect All'
-                          : 'Select All',
-                  icon: Icon(
-                    _selectedIds.length == filtered.length &&
-                            filtered.isNotEmpty
-                        ? Icons.deselect_rounded
-                        : Icons.select_all_rounded,
-                    size: 22,
-                  ),
+                CompanyHeaderIconButton(
+                  icon: _selectedIds.length == filtered.length &&
+                          filtered.isNotEmpty
+                      ? Icons.deselect_rounded
+                      : Icons.select_all_rounded,
+                  tooltip: _selectedIds.length == filtered.length &&
+                          filtered.isNotEmpty
+                      ? 'Deselect All'
+                      : 'Select All',
                   onPressed: () => _selectAll(filtered),
                 ),
-                IconButton(
+                const SizedBox(width: 8),
+                CompanyHeaderIconButton(
+                  icon: Icons.delete_outline_rounded,
                   tooltip: 'Delete Selected',
-                  icon: const Icon(
-                    Icons.delete_outline_rounded,
-                    color: Color(0xFFFCA5A5),
-                    size: 22,
-                  ),
+                  iconColor: _selectedIds.isEmpty
+                      ? AppColors.textMuted
+                      : AppColors.statusClosed,
+                  backgroundColor: _selectedIds.isEmpty
+                      ? AppColors.background
+                      : AppColors.errorBg,
+                  borderColor: _selectedIds.isEmpty
+                      ? AppColors.borderLight
+                      : AppColors.statusClosed.withValues(alpha: 0.25),
                   onPressed: _selectedIds.isEmpty ? null : _deleteSelected,
                 ),
-                const SizedBox(width: 4),
               ],
             ],
           ),
@@ -284,8 +255,13 @@ class _CompanyNotificationsScreenState
                 children: [
                   Container(
                     width: double.infinity,
-                    color: Colors.white,
-                    padding: const EdgeInsets.fromLTRB(16, 12, 16, 12),
+                    decoration: const BoxDecoration(
+                      color: Colors.white,
+                      border: Border(
+                        bottom: BorderSide(color: AppColors.borderLight),
+                      ),
+                    ),
+                    padding: const EdgeInsets.fromLTRB(16, 10, 16, 12),
                     child: SingleChildScrollView(
                       scrollDirection: Axis.horizontal,
                       child: Row(
@@ -296,79 +272,213 @@ class _CompanyNotificationsScreenState
                           final isSelected = _activeFilter == filter;
                           return Padding(
                             padding: const EdgeInsets.only(right: 8),
-                            child: ChoiceChip(
-                              selected: isSelected,
-                              showCheckmark: false,
-                              label: Text(
-                                '$filter ($count)',
-                                style: GoogleFonts.inter(
-                                  fontSize: 12.5,
-                                  fontWeight: isSelected
-                                      ? FontWeight.w700
-                                      : FontWeight.w500,
-                                  color: isSelected
-                                      ? Colors.white
-                                      : AppColors.deepNavy,
-                                ),
-                              ),
-                              selectedColor: AppColors.deepNavy,
-                              backgroundColor: AppColors.surfaceAlt,
-                              side: BorderSide(
-                                color: isSelected
-                                    ? AppColors.deepNavy
-                                    : AppColors.lightGray,
-                              ),
-                              shape: RoundedRectangleBorder(
-                                borderRadius: BorderRadius.circular(999),
-                              ),
-                              onSelected: (_) {
+                            child: InkWell(
+                              borderRadius: BorderRadius.circular(999),
+                              onTap: () {
                                 setState(() {
                                   _activeFilter = filter;
                                   _selectedIds.clear();
                                   _isSelectionMode = false;
                                 });
                               },
+                              child: AnimatedContainer(
+                                duration: const Duration(milliseconds: 200),
+                                padding: const EdgeInsets.symmetric(
+                                  horizontal: 13,
+                                  vertical: 7,
+                                ),
+                                decoration: BoxDecoration(
+                                  color: isSelected
+                                      ? AppColors.deepNavy
+                                      : AppColors.background,
+                                  borderRadius: BorderRadius.circular(999),
+                                  border: Border.all(
+                                    color: isSelected
+                                        ? AppColors.deepNavy
+                                        : AppColors.borderLight,
+                                  ),
+                                ),
+                                child: Row(
+                                  mainAxisSize: MainAxisSize.min,
+                                  children: [
+                                    Text(
+                                      filter,
+                                      style: GoogleFonts.poppins(
+                                        fontSize: 12,
+                                        fontWeight: isSelected
+                                            ? FontWeight.w600
+                                            : FontWeight.w500,
+                                        color: isSelected
+                                            ? Colors.white
+                                            : AppColors.deepNavy,
+                                      ),
+                                    ),
+                                    if (count > 0) ...[
+                                      const SizedBox(width: 6),
+                                      Container(
+                                        padding: const EdgeInsets.symmetric(
+                                          horizontal: 6,
+                                          vertical: 1.5,
+                                        ),
+                                        decoration: BoxDecoration(
+                                          color: isSelected
+                                              ? Colors.white.withValues(
+                                                  alpha: 0.2,
+                                                )
+                                              : AppColors.primaryBlue.withValues(
+                                                  alpha: 0.1,
+                                                ),
+                                          borderRadius:
+                                              BorderRadius.circular(999),
+                                        ),
+                                        child: Text(
+                                          count > 99 ? '99+' : '$count',
+                                          style: GoogleFonts.inter(
+                                            fontSize: 10.5,
+                                            fontWeight: FontWeight.w700,
+                                            color: isSelected
+                                                ? Colors.white
+                                                : AppColors.primaryBlue,
+                                          ),
+                                        ),
+                                      ),
+                                    ],
+                                  ],
+                                ),
+                              ),
                             ),
                           );
                         }).toList(),
                       ),
                     ),
                   ),
-                  const Divider(height: 1, color: AppColors.lightGray),
                   Expanded(
                     child: RefreshIndicator(
                       color: AppColors.primaryBlue,
+                      backgroundColor: Colors.white,
                       onRefresh: () => AppDataService.instance
                           .syncFromSupabase(forceRefresh: true),
                       child: filtered.isEmpty
                           ? ListView(
                               physics: const AlwaysScrollableScrollPhysics(),
-                              padding: const EdgeInsets.all(24),
+                              padding: const EdgeInsets.fromLTRB(
+                                16,
+                                28,
+                                16,
+                                28,
+                              ),
                               children: [
-                                const SizedBox(height: 40),
-                                AppEmptyState(
-                                  icon: Icons.notifications_off_outlined,
-                                  title: allNotifs.isEmpty
-                                      ? 'No Notifications Yet'
-                                      : 'No $_activeFilter Alerts',
-                                  subtitle: allNotifs.isEmpty
-                                      ? 'Student applications, milestone submissions, and direct message alerts will appear here in real time.'
-                                      : 'Switch filters or pull down to refresh corporate workspace alerts.',
-                                  actionLabel: allNotifs.isNotEmpty
-                                      ? 'Show All Alerts'
-                                      : 'Sync Workspace',
-                                  actionIcon: allNotifs.isNotEmpty
-                                      ? Icons.filter_alt_off_rounded
-                                      : Icons.refresh_rounded,
-                                  onAction: () {
-                                    if (allNotifs.isNotEmpty) {
-                                      setState(() => _activeFilter = 'All');
-                                    } else {
-                                      AppDataService.instance.syncFromSupabase(
-                                        forceRefresh: true,
-                                      );
-                                    }
-                                  },
+                                Container(
+                                  padding: const EdgeInsets.symmetric(
+                                    horizontal: 24,
+                                    vertical: 34,
+                                  ),
+                                  decoration: BoxDecoration(
+                                    color: Colors.white,
+                                    borderRadius: BorderRadius.circular(22),
+                                    border: Border.all(
+                                      color: AppColors.borderLight,
+                                    ),
+                                    boxShadow: AppColors.softShadow,
+                                  ),
+                                  child: Column(
+                                    children: [
+                                      Container(
+                                        width: 74,
+                                        height: 74,
+                                        decoration: BoxDecoration(
+                                          shape: BoxShape.circle,
+                                          color: AppColors.primaryBlue
+                                              .withValues(alpha: 0.08),
+                                          border: Border.all(
+                                            color: AppColors.primaryBlue
+                                                .withValues(alpha: 0.18),
+                                            width: 6,
+                                          ),
+                                        ),
+                                        child: const Icon(
+                                          Icons.notifications_none_rounded,
+                                          size: 32,
+                                          color: AppColors.primaryBlue,
+                                        ),
+                                      ),
+                                      const SizedBox(height: 18),
+                                      Text(
+                                        allNotifs.isEmpty
+                                            ? 'You Are All Caught Up'
+                                            : 'No $_activeFilter Alerts',
+                                        textAlign: TextAlign.center,
+                                        style: GoogleFonts.poppins(
+                                          fontSize: 18,
+                                          fontWeight: FontWeight.w700,
+                                          color: AppColors.deepNavy,
+                                        ),
+                                      ),
+                                      const SizedBox(height: 8),
+                                      ConstrainedBox(
+                                        constraints: const BoxConstraints(
+                                          maxWidth: 360,
+                                        ),
+                                        child: Text(
+                                          allNotifs.isEmpty
+                                              ? 'Real-time updates for new student applications, deliverable submissions, and direct replies appear here.'
+                                              : 'Switch filter tabs or refresh to check for new workspace activity.',
+                                          textAlign: TextAlign.center,
+                                          style: GoogleFonts.inter(
+                                            fontSize: 13,
+                                            height: 1.5,
+                                            color: AppColors.grayText,
+                                          ),
+                                        ),
+                                      ),
+                                      const SizedBox(height: 20),
+                                      OutlinedButton.icon(
+                                        style: OutlinedButton.styleFrom(
+                                          foregroundColor: AppColors.deepNavy,
+                                          backgroundColor: AppColors.background,
+                                          side: const BorderSide(
+                                            color: AppColors.borderLight,
+                                          ),
+                                          shape: RoundedRectangleBorder(
+                                            borderRadius:
+                                                BorderRadius.circular(12),
+                                          ),
+                                          padding: const EdgeInsets.symmetric(
+                                            horizontal: 18,
+                                            vertical: 11,
+                                          ),
+                                        ),
+                                        onPressed: () {
+                                          if (allNotifs.isNotEmpty) {
+                                            setState(
+                                              () => _activeFilter = 'All',
+                                            );
+                                          } else {
+                                            AppDataService.instance
+                                                .syncFromSupabase(
+                                              forceRefresh: true,
+                                            );
+                                          }
+                                        },
+                                        icon: Icon(
+                                          allNotifs.isNotEmpty
+                                              ? Icons.filter_alt_off_rounded
+                                              : Icons.refresh_rounded,
+                                          size: 17,
+                                          color: AppColors.primaryBlue,
+                                        ),
+                                        label: Text(
+                                          allNotifs.isNotEmpty
+                                              ? 'Show All Alerts'
+                                              : 'Refresh Notifications',
+                                          style: GoogleFonts.poppins(
+                                            fontSize: 13,
+                                            fontWeight: FontWeight.w600,
+                                          ),
+                                        ),
+                                      ),
+                                    ],
+                                  ),
                                 ),
                               ],
                             )

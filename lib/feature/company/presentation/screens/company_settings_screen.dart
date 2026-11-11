@@ -7,6 +7,7 @@ import 'package:link_vibe/feature/auth/presentation/screens/login_screen.dart';
 import 'package:link_vibe/feature/company/models/company_profile_model.dart';
 import 'package:link_vibe/feature/company/models/company_settings_model.dart';
 import 'package:link_vibe/feature/company/presentation/screens/company_profile_screen.dart';
+import 'package:link_vibe/feature/company/presentation/widgets/company_executive_app_bar.dart';
 import 'package:link_vibe/feature/company/services/company_profile_service.dart';
 import 'package:link_vibe/feature/company/services/company_settings_service.dart';
 
@@ -334,7 +335,7 @@ class _CompanySettingsScreenState extends State<CompanySettingsScreen> {
                     ),
                     const SizedBox(height: 8),
                     Text(
-                      'Submit a support ticket directly to the CampusConnect Governance team.',
+                      'Submit an inquiry directly to the CampusConnect partner support team.',
                       style: GoogleFonts.inter(
                         fontSize: 12.5,
                         color: AppColors.grayText,
@@ -403,7 +404,7 @@ class _CompanySettingsScreenState extends State<CompanySettingsScreen> {
                                 ScaffoldMessenger.of(context).showSnackBar(
                                   const SnackBar(
                                     content: Text(
-                                        'Support ticket submitted to Governance Admin.'),
+                                        'Support ticket submitted to the CampusConnect team.'),
                                     backgroundColor: AppColors.statusOpen,
                                     behavior: SnackBarBehavior.floating,
                                   ),
@@ -607,22 +608,9 @@ class _CompanySettingsScreenState extends State<CompanySettingsScreen> {
   Widget build(BuildContext context) {
     return Scaffold(
       backgroundColor: AppColors.background,
-      appBar: AppBar(
-        backgroundColor: AppColors.deepNavy,
-        foregroundColor: Colors.white,
-        elevation: 0,
-        leading: IconButton(
-          icon: const Icon(Icons.arrow_back_ios_new_rounded, size: 18),
-          onPressed: () => Navigator.pop(context),
-        ),
-        title: Text(
-          'Organization Settings',
-          style: GoogleFonts.poppins(
-            fontSize: 17,
-            fontWeight: FontWeight.w700,
-            color: Colors.white,
-          ),
-        ),
+      appBar: const CompanyExecutiveAppBar(
+        title: 'Organization Settings',
+        subtitle: 'Account, notifications & privacy',
       ),
       body: ValueListenableBuilder<CompanyProfileModel>(
         valueListenable: _profileService.currentProfileNotifier,
@@ -642,241 +630,205 @@ class _CompanySettingsScreenState extends State<CompanySettingsScreen> {
                     child: Column(
                       crossAxisAlignment: CrossAxisAlignment.start,
                       children: [
-                        Container(
-                          padding: const EdgeInsets.all(18),
-                          decoration: BoxDecoration(
-                            gradient: AppColors.brandGradient,
-                            borderRadius: BorderRadius.circular(20),
-                            boxShadow: AppColors.softShadow,
-                          ),
-                          child: Row(
-                            children: [
-                              CircleAvatar(
-                                radius: 26,
-                                backgroundColor:
-                                    Colors.white.withValues(alpha: 0.18),
-                                child: Text(
-                                  profile.logoInitial,
-                                  style: GoogleFonts.poppins(
+                        CompanyHeroBanner(
+                          initial: profile.logoInitial,
+                          title: orgName,
+                          subtitle: profile.industry.isNotEmpty
+                              ? profile.industry
+                              : 'Corporate Partner',
+                          secondaryLine: profile.officialEmail.isNotEmpty
+                              ? profile.officialEmail
+                              : null,
+                          trailingAction: Tooltip(
+                            message: 'Edit Company Profile',
+                            child: Material(
+                              color: Colors.white.withValues(alpha: 0.16),
+                              borderRadius: BorderRadius.circular(12),
+                              child: InkWell(
+                                borderRadius: BorderRadius.circular(12),
+                                onTap: _navigateToEditProfile,
+                                child: Container(
+                                  width: 40,
+                                  height: 40,
+                                  decoration: BoxDecoration(
+                                    borderRadius: BorderRadius.circular(12),
+                                    border: Border.all(
+                                      color:
+                                          Colors.white.withValues(alpha: 0.26),
+                                    ),
+                                  ),
+                                  child: const Icon(
+                                    Icons.edit_outlined,
+                                    size: 18,
                                     color: Colors.white,
-                                    fontWeight: FontWeight.w700,
-                                    fontSize: 18,
                                   ),
                                 ),
                               ),
-                              const SizedBox(width: 14),
-                              Expanded(
-                                child: Column(
-                                  crossAxisAlignment: CrossAxisAlignment.start,
-                                  children: [
-                                    Text(
-                                      orgName,
-                                      style: GoogleFonts.poppins(
-                                        fontSize: 16,
-                                        fontWeight: FontWeight.w700,
-                                        color: Colors.white,
-                                      ),
-                                    ),
-                                    if (profile.officialEmail.isNotEmpty)
-                                      Text(
-                                        profile.officialEmail,
-                                        style: GoogleFonts.inter(
-                                          fontSize: 12,
-                                          color: AppColors.lightAqua,
-                                        ),
-                                      ),
-                                  ],
+                            ),
+                          ),
+                        ),
+                        const SizedBox(height: 18),
+                        CompanySectionCard(
+                          title: 'Account & Security',
+                          icon: Icons.manage_accounts_outlined,
+                          padding: const EdgeInsets.fromLTRB(18, 18, 18, 8),
+                          child: Column(
+                            children: [
+                              _buildActionTile(
+                                icon: Icons.business_outlined,
+                                title: 'Edit Organization Profile',
+                                subtitle:
+                                    'Update company info, domain website, and primary contact',
+                                onTap: _navigateToEditProfile,
+                              ),
+                              _buildRowDivider(),
+                              _buildActionTile(
+                                icon: Icons.lock_outline_rounded,
+                                title: 'Change Password',
+                                subtitle:
+                                    'Update your sign-in password and account security',
+                                onTap: _openChangePasswordModal,
+                              ),
+                            ],
+                          ),
+                        ),
+                        const SizedBox(height: 16),
+                        CompanySectionCard(
+                          title: 'Notifications',
+                          icon: Icons.notifications_none_rounded,
+                          padding: const EdgeInsets.fromLTRB(18, 18, 18, 8),
+                          child: Column(
+                            children: [
+                              _buildToggleTile(
+                                icon: Icons.assignment_ind_outlined,
+                                title: 'New Student Applications',
+                                subtitle:
+                                    'Alert when a student applies to an active project',
+                                value: settings.notifyNewApplications,
+                                onChanged: (v) => _settingsService.updateSettings(
+                                  settings.copyWith(notifyNewApplications: v),
+                                ),
+                              ),
+                              _buildRowDivider(),
+                              _buildToggleTile(
+                                icon: Icons.task_alt_rounded,
+                                title: 'Deliverable Submissions',
+                                subtitle:
+                                    'Notify when assigned students submit work',
+                                value: settings.notifyMilestoneSubmissions,
+                                onChanged: (v) => _settingsService.updateSettings(
+                                  settings.copyWith(
+                                    notifyMilestoneSubmissions: v,
+                                  ),
+                                ),
+                              ),
+                              _buildRowDivider(),
+                              _buildToggleTile(
+                                icon: Icons.campaign_outlined,
+                                title: 'Workspace & Account Updates',
+                                subtitle:
+                                    'Updates on organization workspace activity',
+                                value: settings.notifyStatusChanges,
+                                onChanged: (v) => _settingsService.updateSettings(
+                                  settings.copyWith(notifyStatusChanges: v),
+                                ),
+                              ),
+                              _buildRowDivider(),
+                              _buildToggleTile(
+                                icon: Icons.insights_outlined,
+                                title: 'Weekly Recruitment Summary',
+                                subtitle:
+                                    'Weekly overview of applications and project pipeline',
+                                value: settings.notifyWeeklyDigest,
+                                onChanged: (v) => _settingsService.updateSettings(
+                                  settings.copyWith(notifyWeeklyDigest: v),
                                 ),
                               ),
                             ],
                           ),
                         ),
-                        const SizedBox(height: 18),
-                        _buildSectionCard(
-                          title: 'Account & Security',
-                          children: [
-                            ListTile(
-                              contentPadding: EdgeInsets.zero,
-                              leading: const Icon(Icons.business_outlined,
-                                  color: AppColors.primaryBlue),
-                              title: Text(
-                                'Edit Organization Profile',
-                                style: GoogleFonts.inter(
-                                    fontWeight: FontWeight.w600, fontSize: 14),
-                              ),
-                              subtitle: Text(
-                                'Update company info, domain website, and primary contact',
-                                style: GoogleFonts.inter(
-                                    fontSize: 12, color: AppColors.grayText),
-                              ),
-                              trailing: const Icon(Icons.chevron_right_rounded),
-                              onTap: _navigateToEditProfile,
-                            ),
-                            const Divider(height: 1),
-                            ListTile(
-                              contentPadding: EdgeInsets.zero,
-                              leading: const Icon(Icons.lock_outline_rounded,
-                                  color: AppColors.primaryBlue),
-                              title: Text(
-                                'Change Password',
-                                style: GoogleFonts.inter(
-                                    fontWeight: FontWeight.w600, fontSize: 14),
-                              ),
-                              subtitle: Text(
-                                'Update your Supabase authentication credentials',
-                                style: GoogleFonts.inter(
-                                    fontSize: 12, color: AppColors.grayText),
-                              ),
-                              trailing: const Icon(Icons.chevron_right_rounded),
-                              onTap: _openChangePasswordModal,
-                            ),
-                          ],
-                        ),
                         const SizedBox(height: 16),
-                        _buildSectionCard(
-                          title: 'Notifications',
-                          children: [
-                            SwitchListTile(
-                              contentPadding: EdgeInsets.zero,
-                              activeThumbColor: AppColors.primaryBlue,
-                              title: const Text('New Student Applications'),
-                              subtitle: const Text(
-                                  'Alert when a student applies to an active project'),
-                              value: settings.notifyNewApplications,
-                              onChanged: (v) => _settingsService.updateSettings(
-                                settings.copyWith(notifyNewApplications: v),
-                              ),
-                            ),
-                            SwitchListTile(
-                              contentPadding: EdgeInsets.zero,
-                              activeThumbColor: AppColors.primaryBlue,
-                              title: const Text('Deliverable Submissions'),
-                              subtitle: const Text(
-                                  'Notify when assigned students submit work'),
-                              value: settings.notifyMilestoneSubmissions,
-                              onChanged: (v) => _settingsService.updateSettings(
-                                settings.copyWith(notifyMilestoneSubmissions: v),
-                              ),
-                            ),
-                            SwitchListTile(
-                              contentPadding: EdgeInsets.zero,
-                              activeThumbColor: AppColors.primaryBlue,
-                              title: const Text('Workspace & Account Updates'),
-                              subtitle: const Text(
-                                  'Updates on organization workspace activity'),
-                              value: settings.notifyStatusChanges,
-                              onChanged: (v) => _settingsService.updateSettings(
-                                settings.copyWith(notifyStatusChanges: v),
-                              ),
-                            ),
-                            SwitchListTile(
-                              contentPadding: EdgeInsets.zero,
-                              activeThumbColor: AppColors.primaryBlue,
-                              title: const Text('Weekly Recruitment Summary'),
-                              value: settings.notifyWeeklyDigest,
-                              onChanged: (v) => _settingsService.updateSettings(
-                                settings.copyWith(notifyWeeklyDigest: v),
-                              ),
-                            ),
-                          ],
-                        ),
-                        const SizedBox(height: 16),
-                        _buildSectionCard(
+                        CompanySectionCard(
                           title: 'Privacy & Directory Visibility',
-                          children: [
-                            SwitchListTile(
-                              contentPadding: EdgeInsets.zero,
-                              activeThumbColor: AppColors.primaryBlue,
-                              title: const Text('Visible in Student Explore'),
-                              subtitle: const Text(
-                                  'Allow verified students to discover your organization'),
-                              value: settings.privacyDirectoryVisible,
-                              onChanged: (v) => _settingsService.updateSettings(
-                                settings.copyWith(privacyDirectoryVisible: v),
+                          icon: Icons.visibility_outlined,
+                          padding: const EdgeInsets.fromLTRB(18, 18, 18, 8),
+                          child: Column(
+                            children: [
+                              _buildToggleTile(
+                                icon: Icons.public_rounded,
+                                title: 'Visible in Student Explore',
+                                subtitle:
+                                    'Allow university students to discover your organization',
+                                value: settings.privacyDirectoryVisible,
+                                onChanged: (v) => _settingsService.updateSettings(
+                                  settings.copyWith(privacyDirectoryVisible: v),
+                                ),
                               ),
-                            ),
-                            SwitchListTile(
-                              contentPadding: EdgeInsets.zero,
-                              activeThumbColor: AppColors.primaryBlue,
-                              title: const Text('Display Primary Mentor Name'),
-                              value: settings.privacyShowContactPerson,
-                              onChanged: (v) => _settingsService.updateSettings(
-                                settings.copyWith(privacyShowContactPerson: v),
+                              _buildRowDivider(),
+                              _buildToggleTile(
+                                icon: Icons.badge_outlined,
+                                title: 'Display Primary Mentor Name',
+                                subtitle:
+                                    'Show lead mentor details on public project listings',
+                                value: settings.privacyShowContactPerson,
+                                onChanged: (v) => _settingsService.updateSettings(
+                                  settings.copyWith(
+                                    privacyShowContactPerson: v,
+                                  ),
+                                ),
                               ),
-                            ),
-                            SwitchListTile(
-                              contentPadding: EdgeInsets.zero,
-                              activeThumbColor: AppColors.primaryBlue,
-                              title: const Text('Share Anonymous Impact Metrics'),
-                              value: settings.privacyShareAnalytics,
-                              onChanged: (v) => _settingsService.updateSettings(
-                                settings.copyWith(privacyShareAnalytics: v),
+                              _buildRowDivider(),
+                              _buildToggleTile(
+                                icon: Icons.analytics_outlined,
+                                title: 'Share Anonymous Impact Metrics',
+                                subtitle:
+                                    'Contribute anonymized metrics to platform insights',
+                                value: settings.privacyShareAnalytics,
+                                onChanged: (v) => _settingsService.updateSettings(
+                                  settings.copyWith(privacyShareAnalytics: v),
+                                ),
                               ),
-                            ),
-                          ],
+                            ],
+                          ),
                         ),
                         const SizedBox(height: 16),
-                        _buildSectionCard(
+                        CompanySectionCard(
                           title: 'Support & Session',
-                          children: [
-                            ListTile(
-                              contentPadding: EdgeInsets.zero,
-                              leading: const Icon(Icons.support_agent_rounded,
-                                  color: AppColors.primaryBlue),
-                              title: Text(
-                                'Partner Support & Tickets',
-                                style: GoogleFonts.inter(
-                                    fontWeight: FontWeight.w600, fontSize: 14),
+                          icon: Icons.support_agent_rounded,
+                          padding: const EdgeInsets.fromLTRB(18, 18, 18, 8),
+                          child: Column(
+                            children: [
+                              _buildActionTile(
+                                icon: Icons.support_agent_rounded,
+                                title: 'Partner Support & Tickets',
+                                subtitle:
+                                    'Reach support desk or track submitted inquiries',
+                                onTap: _openHelpAndSupportModal,
                               ),
-                              subtitle: Text(
-                                'Contact Governance Admin or track submitted inquiries',
-                                style: GoogleFonts.inter(
-                                    fontSize: 12, color: AppColors.grayText),
+                              _buildRowDivider(),
+                              _buildActionTile(
+                                icon: Icons.logout_rounded,
+                                iconColor: AppColors.deepNavy,
+                                titleColor: AppColors.deepNavy,
+                                showChevron: false,
+                                title: 'Sign Out',
+                                subtitle:
+                                    'End your current session on this device',
+                                onTap: _confirmLogout,
                               ),
-                              trailing: const Icon(Icons.chevron_right_rounded),
-                              onTap: _openHelpAndSupportModal,
-                            ),
-                            const Divider(height: 1),
-                            ListTile(
-                              contentPadding: EdgeInsets.zero,
-                              leading: const Icon(Icons.logout_rounded,
-                                  color: AppColors.deepNavy),
-                              title: Text(
-                                'Sign Out',
-                                style: GoogleFonts.inter(
-                                  fontWeight: FontWeight.w700,
-                                  fontSize: 14,
-                                  color: AppColors.deepNavy,
-                                ),
+                              _buildRowDivider(),
+                              _buildActionTile(
+                                icon: Icons.delete_forever_rounded,
+                                iconColor: AppColors.statusClosed,
+                                titleColor: AppColors.statusClosed,
+                                showChevron: false,
+                                title: 'Delete Account',
+                                subtitle:
+                                    'Permanently remove your company account and workspace data',
+                                onTap: _confirmDeleteAccount,
                               ),
-                              subtitle: Text(
-                                'End your current session on this device',
-                                style: GoogleFonts.inter(
-                                    fontSize: 12, color: AppColors.grayText),
-                              ),
-                              onTap: _confirmLogout,
-                            ),
-                            const Divider(height: 1),
-                            ListTile(
-                              contentPadding: EdgeInsets.zero,
-                              leading: const Icon(Icons.delete_forever_rounded,
-                                  color: AppColors.statusClosed),
-                              title: Text(
-                                'Delete Account',
-                                style: GoogleFonts.inter(
-                                  fontWeight: FontWeight.w700,
-                                  fontSize: 14,
-                                  color: AppColors.statusClosed,
-                                ),
-                              ),
-                              subtitle: Text(
-                                'Permanently remove your company account and workspace data',
-                                style: GoogleFonts.inter(
-                                    fontSize: 12, color: AppColors.grayText),
-                              ),
-                              onTap: _confirmDeleteAccount,
-                            ),
-                          ],
+                            ],
+                          ),
                         ),
                       ],
                     ),
@@ -890,33 +842,116 @@ class _CompanySettingsScreenState extends State<CompanySettingsScreen> {
     );
   }
 
-  Widget _buildSectionCard({
+  Widget _buildRowDivider() {
+    return const Divider(
+      height: 1,
+      indent: 50,
+      color: AppColors.borderLight,
+    );
+  }
+
+  Widget _buildActionTile({
+    required IconData icon,
     required String title,
-    required List<Widget> children,
+    required String subtitle,
+    required VoidCallback onTap,
+    Color iconColor = AppColors.primaryBlue,
+    Color? titleColor,
+    bool showChevron = true,
   }) {
-    return Container(
-      width: double.infinity,
-      padding: const EdgeInsets.fromLTRB(18, 16, 18, 10),
-      decoration: BoxDecoration(
-        color: AppColors.cardWhite,
-        borderRadius: BorderRadius.circular(18),
-        border: Border.all(color: AppColors.lightGray),
-        boxShadow: AppColors.softShadow,
+    return _buildSettingRow(
+      icon: icon,
+      iconColor: iconColor,
+      title: title,
+      titleColor: titleColor,
+      subtitle: subtitle,
+      onTap: onTap,
+      trailing: showChevron
+          ? const Icon(
+              Icons.chevron_right_rounded,
+              color: AppColors.textMuted,
+              size: 20,
+            )
+          : const SizedBox.shrink(),
+    );
+  }
+
+  Widget _buildToggleTile({
+    required IconData icon,
+    required String title,
+    required String subtitle,
+    required bool value,
+    required ValueChanged<bool> onChanged,
+  }) {
+    return _buildSettingRow(
+      icon: icon,
+      iconColor: AppColors.primaryBlue,
+      title: title,
+      subtitle: subtitle,
+      onTap: () => onChanged(!value),
+      trailing: Switch.adaptive(
+        value: value,
+        activeTrackColor: AppColors.primaryBlue,
+        activeThumbColor: Colors.white,
+        onChanged: onChanged,
       ),
-      child: Column(
-        crossAxisAlignment: CrossAxisAlignment.start,
-        children: [
-          Text(
-            title,
-            style: GoogleFonts.poppins(
-              fontSize: 15,
-              fontWeight: FontWeight.w700,
-              color: AppColors.deepNavy,
+    );
+  }
+
+  Widget _buildSettingRow({
+    required IconData icon,
+    required Color iconColor,
+    required String title,
+    required String subtitle,
+    required Widget trailing,
+    required VoidCallback onTap,
+    Color? titleColor,
+  }) {
+    return InkWell(
+      borderRadius: BorderRadius.circular(12),
+      onTap: onTap,
+      child: Padding(
+        padding: const EdgeInsets.symmetric(vertical: 11),
+        child: Row(
+          children: [
+            Container(
+              width: 38,
+              height: 38,
+              decoration: BoxDecoration(
+                color: iconColor.withValues(alpha: 0.1),
+                borderRadius: BorderRadius.circular(11),
+              ),
+              child: Icon(icon, size: 19, color: iconColor),
             ),
-          ),
-          const SizedBox(height: 8),
-          ...children,
-        ],
+            const SizedBox(width: 12),
+            Expanded(
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  Text(
+                    title,
+                    style: GoogleFonts.inter(
+                      fontSize: 13.5,
+                      fontWeight: FontWeight.w600,
+                      color: titleColor ?? AppColors.deepNavy,
+                    ),
+                  ),
+                  const SizedBox(height: 2),
+                  Text(
+                    subtitle,
+                    style: GoogleFonts.inter(
+                      fontSize: 11.5,
+                      height: 1.35,
+                      color: AppColors.grayText,
+                    ),
+                  ),
+                ],
+              ),
+            ),
+            const SizedBox(width: 10),
+            trailing,
+          ],
+        ),
       ),
     );
   }

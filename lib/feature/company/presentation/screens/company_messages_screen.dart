@@ -3,7 +3,7 @@ import 'package:google_fonts/google_fonts.dart';
 import 'package:link_vibe/core/constants/app_colors.dart';
 import 'package:link_vibe/core/services/app_data_service.dart';
 import 'package:link_vibe/core/services/supabase_helper.dart';
-import 'package:link_vibe/core/widgets/app_empty_state.dart';
+import 'package:link_vibe/feature/company/presentation/widgets/company_executive_app_bar.dart';
 
 class CompanyMessagesScreen extends StatefulWidget {
   const CompanyMessagesScreen({super.key});
@@ -21,6 +21,63 @@ class _CompanyMessagesScreenState extends State<CompanyMessagesScreen> {
   void dispose() {
     _searchController.dispose();
     super.dispose();
+  }
+
+  Widget _buildFilterSegment({
+    required String label,
+    required bool selected,
+    int badge = 0,
+    required VoidCallback onTap,
+  }) {
+    return GestureDetector(
+      onTap: onTap,
+      child: AnimatedContainer(
+        duration: const Duration(milliseconds: 180),
+        padding: EdgeInsets.symmetric(
+          horizontal: badge > 0 ? 10 : 12,
+          vertical: 6,
+        ),
+        decoration: BoxDecoration(
+          color: selected ? Colors.white : Colors.transparent,
+          borderRadius: BorderRadius.circular(9),
+          boxShadow: selected ? AppColors.softShadow : null,
+        ),
+        child: Row(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            Text(
+              label,
+              style: GoogleFonts.poppins(
+                fontSize: 12,
+                fontWeight: FontWeight.w600,
+                color: selected ? AppColors.deepNavy : AppColors.grayText,
+              ),
+            ),
+            if (badge > 0) ...[
+              const SizedBox(width: 5),
+              Container(
+                padding: const EdgeInsets.symmetric(
+                  horizontal: 6,
+                  vertical: 1.5,
+                ),
+                decoration: BoxDecoration(
+                  color: AppColors.primaryBlue,
+                  borderRadius: BorderRadius.circular(999),
+                ),
+                child: Text(
+                  '$badge',
+                  style: GoogleFonts.poppins(
+                    fontSize: 10.5,
+                    fontWeight: FontWeight.w700,
+                    color: Colors.white,
+                  ),
+                ),
+              ),
+            ],
+          ],
+        ),
+      ),
+    );
   }
 
   Future<void> _showNewMessageDialog() async {
@@ -288,50 +345,24 @@ class _CompanyMessagesScreenState extends State<CompanyMessagesScreen> {
 
         return Scaffold(
           backgroundColor: AppColors.background,
-          appBar: AppBar(
-            backgroundColor: AppColors.deepNavy,
-            foregroundColor: Colors.white,
-            elevation: 0,
-            leading: IconButton(
-              icon: const Icon(Icons.arrow_back_ios_new_rounded, size: 18),
-              onPressed: () => Navigator.pop(context),
-            ),
-            title: Column(
-              crossAxisAlignment: CrossAxisAlignment.start,
-              children: [
-                Text(
-                  'Corporate Messages',
-                  style: GoogleFonts.poppins(
-                    fontSize: 16.5,
-                    fontWeight: FontWeight.w700,
-                    color: Colors.white,
-                  ),
-                ),
-                Text(
-                  unreadTotal > 0
-                      ? '$unreadTotal unread message${unreadTotal == 1 ? '' : 's'}'
-                      : '${allChats.length} conversation${allChats.length == 1 ? '' : 's'}',
-                  style: GoogleFonts.inter(
-                    fontSize: 11.5,
-                    color: AppColors.lightAqua,
-                  ),
-                ),
-              ],
-            ),
+          appBar: CompanyExecutiveAppBar(
+            title: 'Messages',
+            subtitle: unreadTotal > 0
+                ? '$unreadTotal unread message${unreadTotal == 1 ? '' : 's'}'
+                : '${allChats.length} conversation${allChats.length == 1 ? '' : 's'}',
             actions: [
-              IconButton(
-                tooltip: 'Sync Messages',
-                icon: const Icon(Icons.refresh_rounded, size: 21),
+              CompanyHeaderIconButton(
+                icon: Icons.refresh_rounded,
+                tooltip: 'Refresh Messages',
                 onPressed: () => AppDataService.instance
                     .syncFromSupabase(forceRefresh: true),
               ),
-              Padding(
-                padding: const EdgeInsets.only(right: 8),
-                child: IconButton(
-                  tooltip: 'New Message',
-                  icon: const Icon(Icons.add_comment_rounded, size: 21),
-                  onPressed: _showNewMessageDialog,
-                ),
+              const SizedBox(width: 8),
+              CompanyHeaderPillButton(
+                label: 'New',
+                icon: Icons.add_comment_rounded,
+                filled: true,
+                onPressed: _showNewMessageDialog,
               ),
             ],
           ),
@@ -341,112 +372,238 @@ class _CompanyMessagesScreenState extends State<CompanyMessagesScreen> {
               child: Column(
                 children: [
                   Container(
-                    color: Colors.white,
+                    decoration: const BoxDecoration(
+                      color: Colors.white,
+                      border: Border(
+                        bottom: BorderSide(color: AppColors.borderLight),
+                      ),
+                    ),
                     padding: const EdgeInsets.fromLTRB(16, 12, 16, 12),
-                    child: Row(
+                    child: Column(
+                      crossAxisAlignment: CrossAxisAlignment.start,
                       children: [
-                        Expanded(
-                          child: TextField(
-                            controller: _searchController,
-                            onChanged: (v) => setState(() => _searchQuery = v),
-                            decoration: InputDecoration(
-                              hintText:
-                                  'Search student name, project, or message...',
-                              prefixIcon: const Icon(
-                                Icons.search_rounded,
-                                size: 20,
-                                color: AppColors.grayText,
+                        Row(
+                          children: [
+                            Expanded(
+                              child: TextField(
+                                controller: _searchController,
+                                onChanged: (v) =>
+                                    setState(() => _searchQuery = v),
+                                style: GoogleFonts.inter(
+                                  fontSize: 13.5,
+                                  color: AppColors.deepNavy,
+                                ),
+                                decoration: InputDecoration(
+                                  hintText:
+                                      'Search student, project, or message...',
+                                  hintStyle: GoogleFonts.inter(
+                                    fontSize: 13,
+                                    color: AppColors.textMuted,
+                                  ),
+                                  prefixIcon: const Icon(
+                                    Icons.search_rounded,
+                                    size: 19,
+                                    color: AppColors.grayText,
+                                  ),
+                                  suffixIcon: _searchQuery.isNotEmpty
+                                      ? IconButton(
+                                          icon: const Icon(
+                                            Icons.close_rounded,
+                                            size: 18,
+                                          ),
+                                          onPressed: () {
+                                            _searchController.clear();
+                                            setState(() => _searchQuery = '');
+                                          },
+                                        )
+                                      : null,
+                                  isDense: true,
+                                  filled: true,
+                                  fillColor: AppColors.background,
+                                  contentPadding: const EdgeInsets.symmetric(
+                                    horizontal: 14,
+                                    vertical: 11,
+                                  ),
+                                  enabledBorder: OutlineInputBorder(
+                                    borderRadius: BorderRadius.circular(12),
+                                    borderSide: const BorderSide(
+                                      color: AppColors.borderLight,
+                                    ),
+                                  ),
+                                  focusedBorder: OutlineInputBorder(
+                                    borderRadius: BorderRadius.circular(12),
+                                    borderSide: const BorderSide(
+                                      color: AppColors.primaryBlue,
+                                      width: 1.4,
+                                    ),
+                                  ),
+                                  border: OutlineInputBorder(
+                                    borderRadius: BorderRadius.circular(12),
+                                    borderSide: const BorderSide(
+                                      color: AppColors.borderLight,
+                                    ),
+                                  ),
+                                ),
                               ),
-                              suffixIcon: _searchQuery.isNotEmpty
-                                  ? IconButton(
-                                      icon: const Icon(
-                                        Icons.close_rounded,
-                                        size: 18,
-                                      ),
-                                      onPressed: () {
-                                        _searchController.clear();
-                                        setState(() => _searchQuery = '');
-                                      },
-                                    )
-                                  : null,
-                              isDense: true,
-                              filled: true,
-                              fillColor: AppColors.surfaceAlt,
-                              border: OutlineInputBorder(
+                            ),
+                            const SizedBox(width: 10),
+                            Container(
+                              padding: const EdgeInsets.all(3),
+                              decoration: BoxDecoration(
+                                color: AppColors.background,
                                 borderRadius: BorderRadius.circular(12),
-                                borderSide: BorderSide.none,
+                                border: Border.all(
+                                  color: AppColors.borderLight,
+                                ),
+                              ),
+                              child: Row(
+                                mainAxisSize: MainAxisSize.min,
+                                children: [
+                                  _buildFilterSegment(
+                                    label: 'All',
+                                    selected: !_unreadOnly,
+                                    onTap: () =>
+                                        setState(() => _unreadOnly = false),
+                                  ),
+                                  _buildFilterSegment(
+                                    label: 'Unread',
+                                    selected: _unreadOnly,
+                                    badge: unreadTotal,
+                                    onTap: () =>
+                                        setState(() => _unreadOnly = true),
+                                  ),
+                                ],
                               ),
                             ),
-                          ),
-                        ),
-                        const SizedBox(width: 10),
-                        ChoiceChip(
-                          selected: _unreadOnly,
-                          showCheckmark: false,
-                          label: Text(
-                            'Unread',
-                            style: GoogleFonts.inter(
-                              fontSize: 12.5,
-                              fontWeight: _unreadOnly
-                                  ? FontWeight.w700
-                                  : FontWeight.w500,
-                              color: _unreadOnly
-                                  ? Colors.white
-                                  : AppColors.deepNavy,
-                            ),
-                          ),
-                          selectedColor: AppColors.deepNavy,
-                          backgroundColor: AppColors.surfaceAlt,
-                          side: BorderSide(
-                            color: _unreadOnly
-                                ? AppColors.deepNavy
-                                : AppColors.lightGray,
-                          ),
-                          shape: RoundedRectangleBorder(
-                            borderRadius: BorderRadius.circular(12),
-                          ),
-                          onSelected: (v) => setState(() => _unreadOnly = v),
+                          ],
                         ),
                       ],
                     ),
                   ),
-                  const Divider(height: 1, color: AppColors.lightGray),
                   Expanded(
                     child: RefreshIndicator(
                       color: AppColors.primaryBlue,
+                      backgroundColor: Colors.white,
                       onRefresh: () => AppDataService.instance
                           .syncFromSupabase(forceRefresh: true),
                       child: filteredChats.isEmpty
                           ? ListView(
                               physics: const AlwaysScrollableScrollPhysics(),
-                              padding: const EdgeInsets.all(24),
+                              padding: const EdgeInsets.fromLTRB(
+                                16,
+                                28,
+                                16,
+                                28,
+                              ),
                               children: [
-                                const SizedBox(height: 40),
-                                AppEmptyState(
-                                  icon: Icons.chat_bubble_outline_rounded,
-                                  title: allChats.isEmpty
-                                      ? 'No Conversations Yet'
-                                      : 'No Matching Threads',
-                                  subtitle: allChats.isEmpty
-                                      ? 'Start messaging applicants or assigned student contributors directly from here.'
-                                      : 'Try clearing your search filter or start a new student thread.',
-                                  actionLabel: allChats.isEmpty
-                                      ? 'Message a Student'
-                                      : 'Clear Filters',
-                                  actionIcon: allChats.isEmpty
-                                      ? Icons.add_comment_rounded
-                                      : Icons.filter_alt_off_rounded,
-                                  onAction: () {
-                                    if (allChats.isEmpty) {
-                                      _showNewMessageDialog();
-                                    } else {
-                                      _searchController.clear();
-                                      setState(() {
-                                        _searchQuery = '';
-                                        _unreadOnly = false;
-                                      });
-                                    }
-                                  },
+                                Container(
+                                  padding: const EdgeInsets.symmetric(
+                                    horizontal: 24,
+                                    vertical: 34,
+                                  ),
+                                  decoration: BoxDecoration(
+                                    color: Colors.white,
+                                    borderRadius: BorderRadius.circular(22),
+                                    border: Border.all(
+                                      color: AppColors.borderLight,
+                                    ),
+                                    boxShadow: AppColors.softShadow,
+                                  ),
+                                  child: Column(
+                                    children: [
+                                      Container(
+                                        width: 74,
+                                        height: 74,
+                                        decoration: BoxDecoration(
+                                          shape: BoxShape.circle,
+                                          color: AppColors.primaryBlue
+                                              .withValues(alpha: 0.08),
+                                          border: Border.all(
+                                            color: AppColors.primaryBlue
+                                                .withValues(alpha: 0.18),
+                                            width: 6,
+                                          ),
+                                        ),
+                                        child: const Icon(
+                                          Icons.chat_bubble_outline_rounded,
+                                          size: 30,
+                                          color: AppColors.primaryBlue,
+                                        ),
+                                      ),
+                                      const SizedBox(height: 18),
+                                      Text(
+                                        allChats.isEmpty
+                                            ? 'No Active Conversations'
+                                            : 'No Matching Conversations',
+                                        textAlign: TextAlign.center,
+                                        style: GoogleFonts.poppins(
+                                          fontSize: 18,
+                                          fontWeight: FontWeight.w700,
+                                          color: AppColors.deepNavy,
+                                        ),
+                                      ),
+                                      const SizedBox(height: 8),
+                                      ConstrainedBox(
+                                        constraints: const BoxConstraints(
+                                          maxWidth: 360,
+                                        ),
+                                        child: Text(
+                                          allChats.isEmpty
+                                              ? 'Start a direct thread with student applicants or assigned contributors to coordinate milestones.'
+                                              : 'Adjust your search query or filter to view other conversations.',
+                                          textAlign: TextAlign.center,
+                                          style: GoogleFonts.inter(
+                                            fontSize: 13,
+                                            height: 1.5,
+                                            color: AppColors.grayText,
+                                          ),
+                                        ),
+                                      ),
+                                      const SizedBox(height: 20),
+                                      ElevatedButton.icon(
+                                        style: ElevatedButton.styleFrom(
+                                          backgroundColor:
+                                              AppColors.primaryBlue,
+                                          foregroundColor: Colors.white,
+                                          elevation: 0,
+                                          shape: RoundedRectangleBorder(
+                                            borderRadius:
+                                                BorderRadius.circular(12),
+                                          ),
+                                          padding: const EdgeInsets.symmetric(
+                                            horizontal: 20,
+                                            vertical: 12,
+                                          ),
+                                        ),
+                                        onPressed: () {
+                                          if (allChats.isEmpty) {
+                                            _showNewMessageDialog();
+                                          } else {
+                                            _searchController.clear();
+                                            setState(() {
+                                              _searchQuery = '';
+                                              _unreadOnly = false;
+                                            });
+                                          }
+                                        },
+                                        icon: Icon(
+                                          allChats.isEmpty
+                                              ? Icons.add_comment_rounded
+                                              : Icons.filter_alt_off_rounded,
+                                          size: 18,
+                                        ),
+                                        label: Text(
+                                          allChats.isEmpty
+                                              ? 'Start Conversation'
+                                              : 'Reset Filters',
+                                          style: GoogleFonts.poppins(
+                                            fontSize: 13,
+                                            fontWeight: FontWeight.w600,
+                                          ),
+                                        ),
+                                      ),
+                                    ],
+                                  ),
                                 ),
                               ],
                             )
@@ -526,19 +683,28 @@ class _CompanyMessagesScreenState extends State<CompanyMessagesScreen> {
                                       ),
                                       child: Row(
                                         children: [
-                                          CircleAvatar(
-                                            radius: 24,
-                                            backgroundColor:
-                                                AppColors.lightAqua,
-                                            child: Text(
-                                              SupabaseHelper.initialsFor(
-                                                studentName,
-                                                fallback: 'ST',
-                                              ),
-                                              style: GoogleFonts.poppins(
-                                                fontWeight: FontWeight.w700,
-                                                color: AppColors.primaryBlue,
-                                                fontSize: 14.5,
+                                          Container(
+                                            width: 46,
+                                            height: 46,
+                                            decoration: BoxDecoration(
+                                              color: unread > 0
+                                                  ? AppColors.primaryBlue
+                                                      .withValues(alpha: 0.12)
+                                                  : AppColors.lightAqua,
+                                              borderRadius:
+                                                  BorderRadius.circular(14),
+                                            ),
+                                            child: Center(
+                                              child: Text(
+                                                SupabaseHelper.initialsFor(
+                                                  studentName,
+                                                  fallback: 'ST',
+                                                ),
+                                                style: GoogleFonts.poppins(
+                                                  fontWeight: FontWeight.w700,
+                                                  color: AppColors.primaryBlue,
+                                                  fontSize: 14.5,
+                                                ),
                                               ),
                                             ),
                                           ),
@@ -755,57 +921,26 @@ class _CompanyChatDetailScreenState extends State<_CompanyChatDetailScreen> {
 
         return Scaffold(
           backgroundColor: AppColors.background,
-          appBar: AppBar(
-            backgroundColor: AppColors.deepNavy,
-            foregroundColor: Colors.white,
-            elevation: 0,
-            leading: IconButton(
-              icon: const Icon(Icons.arrow_back_ios_new_rounded, size: 18),
-              onPressed: () => Navigator.pop(context),
-            ),
-            titleSpacing: 0,
-            title: Row(
-              children: [
-                CircleAvatar(
-                  radius: 18,
-                  backgroundColor: Colors.white.withValues(alpha: 0.16),
-                  child: Text(
-                    SupabaseHelper.initialsFor(studentName, fallback: 'ST'),
-                    style: GoogleFonts.poppins(
-                      fontSize: 12,
-                      fontWeight: FontWeight.w700,
-                      color: Colors.white,
-                    ),
+          appBar: CompanyExecutiveAppBar(
+            title: studentName,
+            subtitle: subtitle,
+            leadingBadge: Container(
+              width: 38,
+              height: 38,
+              decoration: BoxDecoration(
+                gradient: AppColors.brandGradient,
+                borderRadius: BorderRadius.circular(11),
+              ),
+              child: Center(
+                child: Text(
+                  SupabaseHelper.initialsFor(studentName, fallback: 'ST'),
+                  style: GoogleFonts.poppins(
+                    fontSize: 12.5,
+                    fontWeight: FontWeight.w700,
+                    color: Colors.white,
                   ),
                 ),
-                const SizedBox(width: 10),
-                Expanded(
-                  child: Column(
-                    crossAxisAlignment: CrossAxisAlignment.start,
-                    children: [
-                      Text(
-                        studentName,
-                        maxLines: 1,
-                        overflow: TextOverflow.ellipsis,
-                        style: GoogleFonts.poppins(
-                          fontSize: 15.5,
-                          fontWeight: FontWeight.w700,
-                          color: Colors.white,
-                        ),
-                      ),
-                      Text(
-                        subtitle,
-                        maxLines: 1,
-                        overflow: TextOverflow.ellipsis,
-                        style: GoogleFonts.inter(
-                          fontSize: 11,
-                          color: AppColors.lightAqua,
-                        ),
-                      ),
-                    ],
-                  ),
-                ),
-              ],
+              ),
             ),
           ),
           body: Center(
@@ -933,7 +1068,7 @@ class _CompanyChatDetailScreenState extends State<_CompanyChatDetailScreen> {
                           'Please share your milestone update',
                         ),
                         const SizedBox(width: 8),
-                        _buildQuickAction('Submission looks great 👍'),
+                        _buildQuickAction('Great work on this submission'),
                         const SizedBox(width: 8),
                         _buildQuickAction('Can we schedule a brief review?'),
                       ],
@@ -971,22 +1106,33 @@ class _CompanyChatDetailScreenState extends State<_CompanyChatDetailScreen> {
                             ),
                           ),
                           const SizedBox(width: 8),
-                          IconButton(
-                            style: IconButton.styleFrom(
-                              backgroundColor: AppColors.primaryBlue,
-                              foregroundColor: Colors.white,
+                          Material(
+                            color: AppColors.primaryBlue,
+                            borderRadius: BorderRadius.circular(12),
+                            child: InkWell(
+                              borderRadius: BorderRadius.circular(12),
+                              onTap: _isSending ? null : () => _sendMessage(),
+                              child: SizedBox(
+                                width: 44,
+                                height: 44,
+                                child: Center(
+                                  child: _isSending
+                                      ? const SizedBox(
+                                          width: 16,
+                                          height: 16,
+                                          child: CircularProgressIndicator(
+                                            color: Colors.white,
+                                            strokeWidth: 2,
+                                          ),
+                                        )
+                                      : const Icon(
+                                          Icons.send_rounded,
+                                          size: 19,
+                                          color: Colors.white,
+                                        ),
+                                ),
+                              ),
                             ),
-                            icon: _isSending
-                                ? const SizedBox(
-                                    width: 16,
-                                    height: 16,
-                                    child: CircularProgressIndicator(
-                                      color: Colors.white,
-                                      strokeWidth: 2,
-                                    ),
-                                  )
-                                : const Icon(Icons.send_rounded, size: 20),
-                            onPressed: _isSending ? null : () => _sendMessage(),
                           ),
                         ],
                       ),
@@ -1002,15 +1148,30 @@ class _CompanyChatDetailScreenState extends State<_CompanyChatDetailScreen> {
   }
 
   Widget _buildQuickAction(String label) {
-    return ActionChip(
-      label: Text(
-        label,
-        style: GoogleFonts.inter(fontSize: 11.5, color: AppColors.deepNavy),
+    return Material(
+      color: AppColors.background,
+      borderRadius: BorderRadius.circular(10),
+      child: InkWell(
+        borderRadius: BorderRadius.circular(10),
+        onTap: () => _sendMessage(label),
+        child: Container(
+          padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 7),
+          decoration: BoxDecoration(
+            borderRadius: BorderRadius.circular(10),
+            border: Border.all(
+              color: AppColors.primaryBlue.withValues(alpha: 0.24),
+            ),
+          ),
+          child: Text(
+            label,
+            style: GoogleFonts.inter(
+              fontSize: 11.5,
+              fontWeight: FontWeight.w600,
+              color: AppColors.deepNavy,
+            ),
+          ),
+        ),
       ),
-      backgroundColor: AppColors.lightAqua.withValues(alpha: 0.55),
-      side: BorderSide(color: AppColors.primaryBlue.withValues(alpha: 0.3)),
-      padding: const EdgeInsets.symmetric(horizontal: 6),
-      onPressed: () => _sendMessage(label),
     );
   }
 }

@@ -3,6 +3,7 @@ import 'package:google_fonts/google_fonts.dart';
 import 'package:link_vibe/core/constants/app_colors.dart';
 import 'package:link_vibe/core/services/supabase_helper.dart';
 import 'package:link_vibe/feature/company/models/company_profile_model.dart';
+import 'package:link_vibe/feature/company/presentation/widgets/company_executive_app_bar.dart';
 import 'package:link_vibe/feature/company/services/company_profile_service.dart';
 
 class CompanyProfileScreen extends StatefulWidget {
@@ -193,7 +194,7 @@ class _CompanyProfileScreenState extends State<CompanyProfileScreen> {
 
       ScaffoldMessenger.of(context).showSnackBar(
         const SnackBar(
-          content: Text('Company profile saved to database.'),
+          content: Text('Company profile saved successfully.'),
           backgroundColor: AppColors.statusOpen,
           behavior: SnackBarBehavior.floating,
         ),
@@ -290,40 +291,23 @@ class _CompanyProfileScreenState extends State<CompanyProfileScreen> {
 
         return Scaffold(
           backgroundColor: AppColors.background,
-          appBar: AppBar(
-            backgroundColor: AppColors.deepNavy,
-            foregroundColor: Colors.white,
-            elevation: 0,
-            leading: IconButton(
-              icon: const Icon(Icons.arrow_back_ios_new_rounded, size: 18),
-              onPressed: () => Navigator.pop(context),
-            ),
-            title: Text(
-              _isEditing ? 'Edit Organization Profile' : 'Organization Profile',
-              style: GoogleFonts.poppins(
-                fontSize: 17,
-                fontWeight: FontWeight.w700,
-                color: Colors.white,
-              ),
-            ),
+          appBar: CompanyExecutiveAppBar(
+            title: _isEditing ? 'Edit Profile' : 'Organization Profile',
+            subtitle: profile.industry.isNotEmpty
+                ? profile.industry
+                : 'Corporate Identity',
             actions: [
               if (!_isEditing)
-                TextButton.icon(
+                CompanyHeaderPillButton(
+                  label: 'Edit',
+                  icon: Icons.edit_outlined,
                   onPressed: () => setState(() => _isEditing = true),
-                  icon: const Icon(Icons.edit_outlined,
-                      size: 18, color: Colors.white),
-                  label: Text(
-                    'Edit',
-                    style: GoogleFonts.inter(
-                      color: Colors.white,
-                      fontWeight: FontWeight.w600,
-                    ),
-                  ),
                 )
               else
-                TextButton(
+                CompanyHeaderPillButton(
+                  label: 'Cancel',
                   onPressed: _isSaving
-                      ? null
+                      ? () {}
                       : () {
                           final current = _profileService.currentProfile;
                           _nameController.text = current.companyName;
@@ -337,10 +321,6 @@ class _CompanyProfileScreenState extends State<CompanyProfileScreen> {
                           _addressController.text = current.completeAddress;
                           setState(() => _isEditing = false);
                         },
-                  child: Text(
-                    'Cancel',
-                    style: GoogleFonts.inter(color: Colors.white70),
-                  ),
                 ),
             ],
           ),
@@ -510,119 +490,34 @@ class _CompanyProfileScreenState extends State<CompanyProfileScreen> {
   }
 
   Widget _buildHeaderBanner(CompanyProfileModel profile, String displayName) {
-    return Container(
-      width: double.infinity,
-      padding: const EdgeInsets.all(20),
-      decoration: BoxDecoration(
-        gradient: AppColors.brandGradient,
-        borderRadius: BorderRadius.circular(20),
-        boxShadow: AppColors.softShadow,
-      ),
-      child: Column(
-        children: [
-          Row(
-            children: [
-              GestureDetector(
-                onTap: _openLogoColorSheet,
-                child: Stack(
-                  children: [
-                    CircleAvatar(
-                      radius: 32,
-                      backgroundColor: _selectedLogoColor,
-                      child: Text(
-                        _selectedLogoInitial,
-                        style: GoogleFonts.poppins(
-                          color: Colors.white,
-                          fontSize: 22,
-                          fontWeight: FontWeight.w700,
-                        ),
-                      ),
-                    ),
-                    if (_isEditing)
-                      Positioned(
-                        right: 0,
-                        bottom: 0,
-                        child: Container(
-                          padding: const EdgeInsets.all(4),
-                          decoration: const BoxDecoration(
-                            color: Colors.white,
-                            shape: BoxShape.circle,
-                          ),
-                          child: const Icon(
-                            Icons.palette_outlined,
-                            size: 14,
-                            color: AppColors.deepNavy,
-                          ),
-                        ),
-                      ),
-                  ],
-                ),
+    return CompanyHeroBanner(
+      initial: _selectedLogoInitial,
+      monogramColor: _selectedLogoColor,
+      monogramTextOnWhite: false,
+      title: displayName,
+      subtitle: profile.industry.isNotEmpty
+          ? profile.industry
+          : 'Corporate Partner',
+      secondaryLine: profile.officialEmail.trim().isNotEmpty
+          ? profile.officialEmail.trim()
+          : null,
+      footerText: 'Last updated: ${profile.lastUpdated}',
+      onMonogramTap: _openLogoColorSheet,
+      monogramBadgeOverlay: _isEditing
+          ? Container(
+              padding: const EdgeInsets.all(5),
+              decoration: BoxDecoration(
+                color: Colors.white,
+                shape: BoxShape.circle,
+                boxShadow: AppColors.softShadow,
               ),
-              const SizedBox(width: 16),
-              Expanded(
-                child: Column(
-                  crossAxisAlignment: CrossAxisAlignment.start,
-                  children: [
-                    Text(
-                      displayName,
-                      style: GoogleFonts.poppins(
-                        fontSize: 18,
-                        fontWeight: FontWeight.w700,
-                        color: Colors.white,
-                      ),
-                    ),
-                    const SizedBox(height: 2),
-                    Text(
-                      profile.industry.isNotEmpty
-                          ? profile.industry
-                          : 'Corporate Partner',
-                      style: GoogleFonts.inter(
-                        fontSize: 12.5,
-                        color: AppColors.lightAqua,
-                      ),
-                    ),
-                    if (profile.officialEmail.trim().isNotEmpty) ...[
-                      const SizedBox(height: 6),
-                      Row(
-                        children: [
-                          const Icon(
-                            Icons.mail_outline_rounded,
-                            size: 13.5,
-                            color: Colors.white70,
-                          ),
-                          const SizedBox(width: 6),
-                          Expanded(
-                            child: Text(
-                              profile.officialEmail,
-                              maxLines: 1,
-                              overflow: TextOverflow.ellipsis,
-                              style: GoogleFonts.inter(
-                                fontSize: 12,
-                                color: Colors.white70,
-                              ),
-                            ),
-                          ),
-                        ],
-                      ),
-                    ],
-                  ],
-                ),
+              child: const Icon(
+                Icons.palette_outlined,
+                size: 13,
+                color: AppColors.deepNavy,
               ),
-            ],
-          ),
-          const SizedBox(height: 12),
-          Align(
-            alignment: Alignment.centerRight,
-            child: Text(
-              'Last updated: ${profile.lastUpdated}',
-              style: GoogleFonts.inter(
-                fontSize: 11,
-                color: Colors.white70,
-              ),
-            ),
-          ),
-        ],
-      ),
+            )
+          : null,
     );
   }
 
@@ -631,36 +526,10 @@ class _CompanyProfileScreenState extends State<CompanyProfileScreen> {
     required IconData icon,
     required Widget child,
   }) {
-    return Container(
-      width: double.infinity,
-      padding: const EdgeInsets.all(18),
-      decoration: BoxDecoration(
-        color: AppColors.cardWhite,
-        borderRadius: BorderRadius.circular(18),
-        border: Border.all(color: AppColors.lightGray),
-        boxShadow: AppColors.softShadow,
-      ),
-      child: Column(
-        crossAxisAlignment: CrossAxisAlignment.start,
-        children: [
-          Row(
-            children: [
-              Icon(icon, size: 18, color: AppColors.primaryBlue),
-              const SizedBox(width: 8),
-              Text(
-                title,
-                style: GoogleFonts.poppins(
-                  fontSize: 15,
-                  fontWeight: FontWeight.w700,
-                  color: AppColors.deepNavy,
-                ),
-              ),
-            ],
-          ),
-          const SizedBox(height: 14),
-          child,
-        ],
-      ),
+    return CompanySectionCard(
+      title: title,
+      icon: icon,
+      child: child,
     );
   }
 
