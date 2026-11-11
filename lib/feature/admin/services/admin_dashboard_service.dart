@@ -167,9 +167,6 @@ class AdminDashboardService {
     final pendingCompanyVerifs = allVerifications
         .where((v) => v.status == VerificationStatus.pending)
         .length;
-    final pendingStudentVerifs = allStudents
-        .where((s) => s.verificationStatus == StudentVerificationStatus.pending)
-        .length;
 
     final pendingReports = allApps
         .where((a) =>
@@ -201,7 +198,7 @@ class AdminDashboardService {
     return PlatformStatsModel(
       totalStudents: filteredStudents.length,
       totalCompanies: filteredCompanies.length,
-      pendingVerifications: pendingCompanyVerifs + pendingStudentVerifs,
+      pendingVerifications: pendingCompanyVerifs,
       totalProjects: totalProjCount,
       activeProjects: activeProjectsList.length,
       completedProjects: completedProjectsList.length,
@@ -347,9 +344,9 @@ class AdminDashboardService {
           timeAgo: s.registrationDate,
           actorName: s.name,
           actorRole: 'Student',
-          badgeText: s.verificationStatus == StudentVerificationStatus.verified
-              ? 'Verified Student'
-              : 'Pending Review',
+          badgeText: s.accountStatus == StudentAccountStatus.suspended
+              ? 'Suspended'
+              : 'Active Student',
         ),
       ));
     }

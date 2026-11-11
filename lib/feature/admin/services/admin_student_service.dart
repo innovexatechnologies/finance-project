@@ -15,15 +15,6 @@ class AdminStudentService {
   List<AdminStudentModel> get allStudents => studentsNotifier.value;
 
   int get totalCount => studentsNotifier.value.length;
-  int get verifiedCount => studentsNotifier.value
-      .where((s) => s.verificationStatus == StudentVerificationStatus.verified)
-      .length;
-  int get pendingCount => studentsNotifier.value
-      .where((s) => s.verificationStatus == StudentVerificationStatus.pending)
-      .length;
-  int get rejectedCount => studentsNotifier.value
-      .where((s) => s.verificationStatus == StudentVerificationStatus.rejected)
-      .length;
   int get suspendedCount => studentsNotifier.value
       .where((s) => s.accountStatus == StudentAccountStatus.suspended)
       .length;
@@ -309,196 +300,6 @@ class AdminStudentService {
     }
   }
 
-  /// Approve student verification in Supabase (`students` + `profiles`).
-  Future<bool> approveStudentVerification({
-    required String studentId,
-    required String adminName,
-  }) async {
-    final list = List<AdminStudentModel>.from(studentsNotifier.value);
-    final idx = list.indexWhere((s) => s.id == studentId);
-    if (idx == -1) return false;
-
-    final student = list[idx];
-    final nowIso = DateTime.now().toIso8601String();
-    final supabase = SupabaseHelper.clientOrNull;
-
-    if (supabase != null) {
-      try {
-        if (SupabaseHelper.isUuid(studentId) && studentId != student.userId) {
-          await supabase.from('students').update({
-            'verification_status': 'verified',
-            'updated_at': nowIso,
-          }).eq('id', studentId);
-        } else if (SupabaseHelper.isUuid(student.userId)) {
-          await supabase.from('students').update({
-            'verification_status': 'verified',
-            'updated_at': nowIso,
-          }).eq('user_id', student.userId!);
-        }
-
-        if (SupabaseHelper.isUuid(student.userId)) {
-          await supabase.from('profiles').update({
-            'is_verified': true,
-            'updated_at': nowIso,
-          }).eq('id', student.userId!);
-        }
-
-        await _writeAuditLog(
-          action: 'STUDENT_VERIFICATION_APPROVED',
-          target: student.email.isNotEmpty ? student.email : student.name,
-          details: 'Approved by $adminName.',
-        );
-      } catch (e) {
-        debugPrint('AdminStudentService approveStudentVerification error: $e');
-        return false;
-      }
-    }
-
-    final history = List<StudentAuditRecord>.from(student.auditHistory);
-    history.insert(
-      0,
-      StudentAuditRecord(
-        id: 'aud_${DateTime.now().millisecondsSinceEpoch}',
-        action: 'Verification Approved',
-        adminName: adminName,
-        timestamp: 'Just now',
-        note: 'University credentials authenticated by platform administration.',
-      ),
-    );
-
-    list[idx] = student.copyWith(
-      verificationStatus: StudentVerificationStatus.verified,
-      auditHistory: history,
-    );
-    studentsNotifier.value = list;
-    return true;
-  }
-
-  /// Reject student verification with mandatory reason.
-  Future<bool> rejectStudentVerification({
-    required String studentId,
-    required String reason,
-    required String adminName,
-  }) async {
-    final list = List<AdminStudentModel>.from(studentsNotifier.value);
-    final idx = list.indexWhere((s) => s.id == studentId);
-    if (idx == -1) return false;
-
-    final student = list[idx];
-    final nowIso = DateTime.now().toIso8601String();
-    final supabase = SupabaseHelper.clientOrNull;
-
-    if (supabase != null) {
-      try {
-        if (SupabaseHelper.isUuid(studentId) && studentId != student.userId) {
-          await supabase.from('students').update({
-            'verification_status': 'rejected',
-            'updated_at': nowIso,
-          }).eq('id', studentId);
-        } else if (SupabaseHelper.isUuid(student.userId)) {
-          await supabase.from('students').update({
-            'verification_status': 'rejected',
-            'updated_at': nowIso,
-          }).eq('user_id', student.userId!);
-        }
-
-        if (SupabaseHelper.isUuid(student.userId)) {
-          await supabase.from('profiles').update({
-            'is_verified': false,
-            'updated_at': nowIso,
-          }).eq('id', student.userId!);
-        }
-
-        await _writeAuditLog(
-          action: 'STUDENT_VERIFICATION_REJECTED',
-          target: student.email.isNotEmpty ? student.email : student.name,
-          details: reason.trim(),
-        );
-      } catch (e) {
-        debugPrint('AdminStudentService rejectStudentVerification error: $e');
-        return false;
-      }
-    }
-
-    final history = List<StudentAuditRecord>.from(student.auditHistory);
-    history.insert(
-      0,
-      StudentAuditRecord(
-        id: 'aud_${DateTime.now().millisecondsSinceEpoch}',
-        action: 'Verification Rejected',
-        adminName: adminName,
-        timestamp: 'Just now',
-        note: reason.trim(),
-      ),
-    );
-
-    list[idx] = student.copyWith(
-      verificationStatus: StudentVerificationStatus.rejected,
-      auditHistory: history,
-    );
-    studentsNotifier.value = list;
-    return true;
-  }
-
-  /// Request document resubmission from a student.
-  Future<bool> requestDocumentResubmission({
-    required String studentId,
-    required String instructions,
-    required String adminName,
-  }) async {
-    final list = List<AdminStudentModel>.from(studentsNotifier.value);
-    final idx = list.indexWhere((s) => s.id == studentId);
-    if (idx == -1) return false;
-
-    final student = list[idx];
-    final nowIso = DateTime.now().toIso8601String();
-    final supabase = SupabaseHelper.clientOrNull;
-
-    if (supabase != null) {
-      try {
-        if (SupabaseHelper.isUuid(studentId) && studentId != student.userId) {
-          await supabase.from('students').update({
-            'verification_status': 'pending',
-            'updated_at': nowIso,
-          }).eq('id', studentId);
-        } else if (SupabaseHelper.isUuid(student.userId)) {
-          await supabase.from('students').update({
-            'verification_status': 'pending',
-            'updated_at': nowIso,
-          }).eq('user_id', student.userId!);
-        }
-
-        await _writeAuditLog(
-          action: 'STUDENT_DOCS_REQUESTED',
-          target: student.email.isNotEmpty ? student.email : student.name,
-          details: instructions.trim(),
-        );
-      } catch (e) {
-        debugPrint('AdminStudentService requestDocumentResubmission error: $e');
-        return false;
-      }
-    }
-
-    final history = List<StudentAuditRecord>.from(student.auditHistory);
-    history.insert(
-      0,
-      StudentAuditRecord(
-        id: 'aud_${DateTime.now().millisecondsSinceEpoch}',
-        action: 'Resubmission Requested',
-        adminName: adminName,
-        timestamp: 'Just now',
-        note: instructions.trim(),
-      ),
-    );
-
-    list[idx] = student.copyWith(
-      verificationStatus: StudentVerificationStatus.pending,
-      auditHistory: history,
-    );
-    studentsNotifier.value = list;
-    return true;
-  }
-
   /// Suspend student account with mandatory reason.
   Future<bool> suspendStudentAccount({
     required String studentId,
@@ -636,22 +437,6 @@ class AdminStudentService {
     return true;
   }
 
-  /// Bulk Approve multiple students sequentially against Supabase.
-  Future<int> bulkApproveStudents({
-    required List<String> studentIds,
-    required String adminName,
-  }) async {
-    int approvedCount = 0;
-    for (final id in studentIds) {
-      final ok = await approveStudentVerification(
-        studentId: id,
-        adminName: adminName,
-      );
-      if (ok) approvedCount++;
-    }
-    return approvedCount;
-  }
-
   Future<void> _writeAuditLog({
     required String action,
     required String target,
@@ -674,12 +459,12 @@ class AdminStudentService {
   String exportPermittedStudentsCsv(List<AdminStudentModel> students) {
     final buffer = StringBuffer();
     buffer.writeln(
-      'ID,Full Name,Email,University,Department,Degree,Semester,CGPA,Verification Status,Account Status,Registration Date',
+      'ID,Full Name,Email,University,Department,Degree,Semester,CGPA,Account Status,Registration Date',
     );
 
     for (final s in students) {
       buffer.writeln(
-        '${s.id},"${s.name}","${s.email}","${s.university}","${s.department}","${s.degree}","${s.semester}",${s.cgpa},${s.verificationStatus.name},${s.accountStatus.name},${s.registrationDate}',
+        '${s.id},"${s.name}","${s.email}","${s.university}","${s.department}","${s.degree}","${s.semester}",${s.cgpa},${s.accountStatus.name},${s.registrationDate}',
       );
     }
     return buffer.toString();
