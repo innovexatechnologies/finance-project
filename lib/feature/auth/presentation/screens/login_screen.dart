@@ -7,6 +7,7 @@ import 'package:link_vibe/core/services/supabase_helper.dart';
 import 'package:link_vibe/feature/admin/presentation/screens/admin_login_screen.dart';
 import 'package:link_vibe/feature/auth/presentation/screens/email_verification_screen.dart';
 import 'package:link_vibe/feature/auth/presentation/screens/reset_password_screen.dart';
+import 'package:link_vibe/feature/auth/presentation/widgets/auth_form_helpers.dart';
 import 'package:link_vibe/feature/company/presentation/screens/company_dashboard.dart';
 import 'package:link_vibe/feature/company/presentation/screens/company_main_nav.dart';
 import 'package:link_vibe/feature/company/services/company_profile_service.dart';
@@ -45,6 +46,20 @@ class _LoginScreenState extends State<LoginScreen> {
     _emailController.dispose();
     _passwordController.dispose();
     super.dispose();
+  }
+
+  void _handleRoleChange(String role) {
+    if (_selectedRole == role) return;
+    resetAuthRoleForm(
+      formKey: _formKey,
+      controllers: [_emailController, _passwordController],
+    );
+    setState(() {
+      _selectedRole = role;
+      _obscurePassword = true;
+      _errorBanner = null;
+      _needsEmailConfirmation = false;
+    });
   }
 
   Future<void> _resendVerificationEmail() async {
@@ -692,11 +707,7 @@ class _LoginScreenState extends State<LoginScreen> {
                                     borderRadius: BorderRadius.circular(12),
                                     onTap: _isLoading
                                         ? null
-                                        : () => setState(() {
-                                              _selectedRole = role;
-                                              _errorBanner = null;
-                                              _needsEmailConfirmation = false;
-                                            }),
+                                        : () => _handleRoleChange(role),
                                     child: AnimatedContainer(
                                       duration:
                                           const Duration(milliseconds: 180),
@@ -751,109 +762,122 @@ class _LoginScreenState extends State<LoginScreen> {
                           ),
                           const SizedBox(height: 16),
 
-                          Text(
-                            'Email Address',
-                            style: GoogleFonts.inter(
-                              fontSize: 12.5,
-                              fontWeight: FontWeight.w600,
-                              color: AppColors.darkText,
-                            ),
-                          ),
-                          const SizedBox(height: 6),
-                          TextFormField(
-                            controller: _emailController,
-                            keyboardType: TextInputType.emailAddress,
-                            textInputAction: TextInputAction.next,
-                            enabled: !_isLoading,
-                            decoration: InputDecoration(
-                              hintText: _selectedRole == 'Company'
-                                  ? 'team@company.com'
-                                  : 'you@university.edu',
-                              prefixIcon:
-                                  const Icon(Icons.email_outlined, size: 20),
-                            ),
-                            validator: (val) {
-                              final v = val?.trim() ?? '';
-                              if (v.isEmpty) {
-                                return 'Email address is required';
-                              }
-                              if (!v.contains('@') || !v.contains('.')) {
-                                return 'Enter a valid email address';
-                              }
-                              return null;
-                            },
-                          ),
-                          const SizedBox(height: 14),
-
-                          SizedBox(
-                            width: double.infinity,
-                            child: Wrap(
-                              spacing: 8,
-                              runSpacing: 4,
-                              alignment: WrapAlignment.spaceBetween,
-                              crossAxisAlignment: WrapCrossAlignment.center,
+                          KeyedSubtree(
+                            key: ValueKey('login_fields_$_selectedRole'),
+                            child: Column(
+                              crossAxisAlignment: CrossAxisAlignment.start,
+                              mainAxisSize: MainAxisSize.min,
                               children: [
                                 Text(
-                                  'Password',
+                                  'Email Address',
                                   style: GoogleFonts.inter(
                                     fontSize: 12.5,
                                     fontWeight: FontWeight.w600,
                                     color: AppColors.darkText,
                                   ),
                                 ),
-                                TextButton(
-                                  style: TextButton.styleFrom(
-                                    padding: EdgeInsets.zero,
-                                    minimumSize: const Size(0, 0),
-                                    tapTargetSize:
-                                        MaterialTapTargetSize.shrinkWrap,
-                                  ),
-                                  onPressed: _isLoading
-                                      ? null
-                                      : _openForgotPasswordDialog,
-                                  child: Text(
-                                    'Forgot Password?',
-                                    style: GoogleFonts.inter(
-                                      fontSize: 12,
-                                      fontWeight: FontWeight.w600,
+                                const SizedBox(height: 6),
+                                TextFormField(
+                                  controller: _emailController,
+                                  keyboardType: TextInputType.emailAddress,
+                                  textInputAction: TextInputAction.next,
+                                  enabled: !_isLoading,
+                                  decoration: InputDecoration(
+                                    hintText: _selectedRole == 'Company'
+                                        ? 'team@company.com'
+                                        : 'you@university.edu',
+                                    prefixIcon: const Icon(
+                                      Icons.email_outlined,
+                                      size: 20,
                                     ),
                                   ),
+                                  validator: (val) {
+                                    final v = val?.trim() ?? '';
+                                    if (v.isEmpty) {
+                                      return 'Email address is required';
+                                    }
+                                    if (!v.contains('@') || !v.contains('.')) {
+                                      return 'Enter a valid email address';
+                                    }
+                                    return null;
+                                  },
+                                ),
+                                const SizedBox(height: 14),
+
+                                SizedBox(
+                                  width: double.infinity,
+                                  child: Wrap(
+                                    spacing: 8,
+                                    runSpacing: 4,
+                                    alignment: WrapAlignment.spaceBetween,
+                                    crossAxisAlignment:
+                                        WrapCrossAlignment.center,
+                                    children: [
+                                      Text(
+                                        'Password',
+                                        style: GoogleFonts.inter(
+                                          fontSize: 12.5,
+                                          fontWeight: FontWeight.w600,
+                                          color: AppColors.darkText,
+                                        ),
+                                      ),
+                                      TextButton(
+                                        style: TextButton.styleFrom(
+                                          padding: EdgeInsets.zero,
+                                          minimumSize: const Size(0, 0),
+                                          tapTargetSize:
+                                              MaterialTapTargetSize.shrinkWrap,
+                                        ),
+                                        onPressed: _isLoading
+                                            ? null
+                                            : _openForgotPasswordDialog,
+                                        child: Text(
+                                          'Forgot Password?',
+                                          style: GoogleFonts.inter(
+                                            fontSize: 12,
+                                            fontWeight: FontWeight.w600,
+                                          ),
+                                        ),
+                                      ),
+                                    ],
+                                  ),
+                                ),
+                                const SizedBox(height: 6),
+                                TextFormField(
+                                  controller: _passwordController,
+                                  obscureText: _obscurePassword,
+                                  textInputAction: TextInputAction.done,
+                                  enabled: !_isLoading,
+                                  onFieldSubmitted: (_) => _handleLogin(),
+                                  decoration: InputDecoration(
+                                    hintText: 'Enter your password',
+                                    prefixIcon: const Icon(
+                                      Icons.lock_outline_rounded,
+                                      size: 20,
+                                    ),
+                                    suffixIcon: IconButton(
+                                      icon: Icon(
+                                        _obscurePassword
+                                            ? Icons.visibility_off_outlined
+                                            : Icons.visibility_outlined,
+                                        size: 20,
+                                        color: AppColors.grayText,
+                                      ),
+                                      onPressed: () => setState(
+                                        () => _obscurePassword =
+                                            !_obscurePassword,
+                                      ),
+                                    ),
+                                  ),
+                                  validator: (val) {
+                                    if (val == null || val.trim().isEmpty) {
+                                      return 'Password is required';
+                                    }
+                                    return null;
+                                  },
                                 ),
                               ],
                             ),
-                          ),
-                          const SizedBox(height: 6),
-                          TextFormField(
-                            controller: _passwordController,
-                            obscureText: _obscurePassword,
-                            textInputAction: TextInputAction.done,
-                            enabled: !_isLoading,
-                            onFieldSubmitted: (_) => _handleLogin(),
-                            decoration: InputDecoration(
-                              hintText: 'Enter your password',
-                              prefixIcon: const Icon(
-                                Icons.lock_outline_rounded,
-                                size: 20,
-                              ),
-                              suffixIcon: IconButton(
-                                icon: Icon(
-                                  _obscurePassword
-                                      ? Icons.visibility_off_outlined
-                                      : Icons.visibility_outlined,
-                                  size: 20,
-                                  color: AppColors.grayText,
-                                ),
-                                onPressed: () => setState(
-                                  () => _obscurePassword = !_obscurePassword,
-                                ),
-                              ),
-                            ),
-                            validator: (val) {
-                              if (val == null || val.trim().isEmpty) {
-                                return 'Password is required';
-                              }
-                              return null;
-                            },
                           ),
                           const SizedBox(height: 22),
 
