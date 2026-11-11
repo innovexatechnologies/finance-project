@@ -1669,7 +1669,7 @@ class _ReportsAnalyticsScreenState extends State<ReportsAnalyticsScreen>
     final report = _analyticsService.generateExecutiveReport(
       timeframe: _selectedTimeframe,
       categoryFilter: categoryFilter,
-      adminEmail: _authService.currentAdmin?.email ?? 'admin@campusconnect.edu.pk',
+      adminEmail: _authService.currentAdmin?.email ?? 'admin@skillbridge.edu.pk',
     );
     final stats = AdminDashboardService().statsNotifier.value;
     final verif = _analyticsService.getVerificationAnalytics();
@@ -1710,7 +1710,7 @@ class _ReportsAnalyticsScreenState extends State<ReportsAnalyticsScreen>
                           crossAxisAlignment: CrossAxisAlignment.start,
                           children: [
                             Text(
-                              'CampusConnect Executive Business Intelligence Audit',
+                              'SkillBridge Executive Business Intelligence Audit',
                               style: GoogleFonts.poppins(
                                 fontSize: 15,
                                 fontWeight: FontWeight.bold,

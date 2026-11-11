@@ -314,7 +314,7 @@ class AdminProjectService {
 
         await supabase.from('admin_audit_logs').insert({
           'admin_email':
-              SupabaseHelper.currentUser?.email ?? 'admin@campusconnect.edu.pk',
+              SupabaseHelper.currentUser?.email ?? 'admin@skillbridge.edu.pk',
           'action': auditAction,
           'target': project.title,
           'details': reason ?? actionLabel,

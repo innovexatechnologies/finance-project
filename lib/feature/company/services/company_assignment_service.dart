@@ -331,7 +331,7 @@ class CompanyAssignmentService {
               'status': 'valid',
               'cryptographic_hash':
                   'sha256:${hashInput.hashCode.toRadixString(16).padLeft(12, '0')}',
-              'verification_url': 'https://campusconnect.edu.pk/verify/$certCode',
+              'verification_url': 'https://skillbridge.edu.pk/verify/$certCode',
             });
           }
         }

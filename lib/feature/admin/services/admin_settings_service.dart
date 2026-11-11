@@ -301,7 +301,7 @@ class AdminSettingsService {
             : 'Executive Administrator';
         final dept = (row['university']?.toString().trim().isNotEmpty == true)
             ? row['university'].toString().trim()
-            : 'CampusConnect Governance Council';
+            : 'SkillBridge Governance Council';
         final email = row['email']?.toString() ?? '';
         admins.add(
           AdminUserModel(

@@ -1,6 +1,6 @@
 
 name: link_vibe
-description: "A new Flutter project."
+description: "SkillBridge — Student-Corporate Project & Talent Bridge."
 # The following line prevents the package from being accidentally published to
 # pub.dev using `flutter pub publish`. This is preferred for private packages.
 publish_to: 'none' # Remove this line if you wish to publish to pub.dev
@@ -69,9 +69,10 @@ flutter:
   # included in the application.
   uses-material-design: true
 
-  # Assets section for .env
+  # Assets section for .env and brand assets
   assets:
     - .env
+    - assets/skillbridge.png
 
   # An image asset can refer to one or more resolution-specific variants, see
   # https://flutter.dev/to/resolution-aware-images
@@ -98,7 +99,11 @@ flutter:
 # App Launcher Icon Configuration
 flutter_launcher_icons:
   android: true
-  ios: true
-  image_path: "assets/campusconnect.png"
+  ios: false
+  image_path: "assets/skillbridge.png"
   min_sdk_android: 21
-  remove_alpha_ios: true
+  web:
+    generate: true
+    image_path: "assets/skillbridge.png"
+    background_color: "#0F2344"
+    theme_color: "#0F2344"

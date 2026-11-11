@@ -541,7 +541,7 @@ class AdminCompanyService {
     if (supabase == null) return;
     try {
       await supabase.from('admin_audit_logs').insert({
-        'admin_email': SupabaseHelper.currentUser?.email ?? 'admin@campusconnect.edu.pk',
+        'admin_email': SupabaseHelper.currentUser?.email ?? 'admin@skillbridge.edu.pk',
         'action': action,
         'target': target,
         'details': details,

@@ -2,12 +2,13 @@ import 'dart:async';
 import 'package:flutter/material.dart';
 import 'package:google_fonts/google_fonts.dart';
 import 'package:link_vibe/core/constants/app_colors.dart';
+import 'package:link_vibe/core/widgets/skillbridge_logo.dart';
 import 'package:link_vibe/feature/admin/presentation/screens/admin_dashboard_screen.dart';
 import 'package:link_vibe/feature/admin/services/admin_auth_service.dart';
 import 'package:link_vibe/feature/auth/presentation/screens/login_screen.dart';
 import 'package:link_vibe/feature/auth/presentation/screens/reset_password_screen.dart';
 
-/// Enterprise Admin Login Screen for CampusConnect
+/// Enterprise Admin Login Screen for SkillBridge
 /// Features responsive split-screen layout, cryptographic verification, brute-force mitigation,
 /// and trusted administrative session management.
 class AdminLoginScreen extends StatefulWidget {
@@ -413,7 +414,7 @@ class _AdminLoginScreenState extends State<AdminLoginScreen> {
                     Icon(Icons.hub_rounded, color: Colors.white, size: 16),
                     SizedBox(width: 6),
                     Text(
-                      'CAMPUSCONNECT',
+                      'SKILLBRIDGE',
                       style: TextStyle(
                         color: Colors.white,
                         fontWeight: FontWeight.w900,
@@ -589,27 +590,20 @@ class _AdminLoginScreenState extends State<AdminLoginScreen> {
   Widget _buildMobileBrandingHeader() {
     return Column(
       children: [
-        Container(
-          width: 60,
-          height: 60,
-          decoration: BoxDecoration(
-            color: AppColors.darkNavy,
-            shape: BoxShape.circle,
-            boxShadow: [
-              BoxShadow(
-                color: AppColors.darkNavy.withValues(alpha: 0.2),
-                blurRadius: 12,
-                offset: const Offset(0, 4),
-              ),
-            ],
-          ),
-          child: const Center(
-            child: Icon(Icons.admin_panel_settings_rounded, color: AppColors.accentTeal, size: 32),
-          ),
+        SkillBridgeLogo(
+          size: 64,
+          circular: true,
+          shadows: [
+            BoxShadow(
+              color: AppColors.darkNavy.withValues(alpha: 0.2),
+              blurRadius: 12,
+              offset: const Offset(0, 4),
+            ),
+          ],
         ),
         const SizedBox(height: 12),
         const Text(
-          'CAMPUSCONNECT',
+          'SKILLBRIDGE',
           style: TextStyle(
             fontSize: 18,
             fontWeight: FontWeight.w900,

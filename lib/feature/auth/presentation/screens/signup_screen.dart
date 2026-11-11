@@ -256,7 +256,7 @@ class _SignupScreenState extends State<SignupScreen> {
                       ),
                       const SizedBox(height: 4),
                       Text(
-                        'Join CampusConnect as a university student or corporate partner.',
+                        'Join SkillBridge as a university student or corporate partner.',
                         style: GoogleFonts.inter(
                           fontSize: 13,
                           color: AppColors.grayText,

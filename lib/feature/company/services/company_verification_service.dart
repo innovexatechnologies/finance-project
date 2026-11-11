@@ -204,7 +204,7 @@ class CompanyVerificationService {
       status: status,
       reviewedAt: 'Just now',
       adminFeedback: feedback,
-      reviewerName: reviewerName ?? 'CampusConnect Governance Admin',
+      reviewerName: reviewerName ?? 'SkillBridge Governance Admin',
     );
   }
 

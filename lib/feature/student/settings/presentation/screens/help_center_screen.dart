@@ -22,9 +22,9 @@ class _HelpCenterScreenState extends State<HelpCenterScreen> {
       'category': 'Projects',
     },
     {
-      'question': 'Is CampusConnect completely free for students?',
+      'question': 'Is SkillBridge completely free for students?',
       'answer':
-          'Yes! CampusConnect is 100% free. There are no fees, wallet balances, or payment gateways. Our mission is to bridge academia and industry with zero financial barriers.',
+          'Yes! SkillBridge is 100% free. There are no fees, wallet balances, or payment gateways. Our mission is to bridge academia and industry with zero financial barriers.',
       'category': 'Platform',
     },
     {

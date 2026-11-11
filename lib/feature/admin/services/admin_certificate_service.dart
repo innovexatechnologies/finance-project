@@ -222,7 +222,7 @@ class AdminCertificateService {
 
         await supabase.from('admin_audit_logs').insert({
           'admin_email':
-              SupabaseHelper.currentUser?.email ?? 'admin@campusconnect.edu.pk',
+              SupabaseHelper.currentUser?.email ?? 'admin@skillbridge.edu.pk',
           'action': 'CERTIFICATE_REVOKED',
           'target': cert.credentialId,
           'details': cleanReason,
@@ -281,7 +281,7 @@ class AdminCertificateService {
 
         await supabase.from('admin_audit_logs').insert({
           'admin_email':
-              SupabaseHelper.currentUser?.email ?? 'admin@campusconnect.edu.pk',
+              SupabaseHelper.currentUser?.email ?? 'admin@skillbridge.edu.pk',
           'action': 'CERTIFICATE_REVIEW_HOLD',
           'target': cert.credentialId,
           'details': cleanReason,
@@ -337,7 +337,7 @@ class AdminCertificateService {
 
         await supabase.from('admin_audit_logs').insert({
           'admin_email':
-              SupabaseHelper.currentUser?.email ?? 'admin@campusconnect.edu.pk',
+              SupabaseHelper.currentUser?.email ?? 'admin@skillbridge.edu.pk',
           'action': 'CERTIFICATE_REINSTATED',
           'target': cert.credentialId,
           'details': cleanJustification,

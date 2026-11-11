@@ -173,7 +173,7 @@ class _ContactSupportScreenState extends State<ContactSupportScreen> {
                               crossAxisAlignment: CrossAxisAlignment.start,
                               children: [
                                 Text(
-                                  'CampusConnect Helpdesk',
+                                  'SkillBridge Helpdesk',
                                   style: GoogleFonts.poppins(
                                     fontSize: 14,
                                     fontWeight: FontWeight.bold,

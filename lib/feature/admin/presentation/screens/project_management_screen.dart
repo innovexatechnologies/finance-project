@@ -19,7 +19,7 @@ import 'package:link_vibe/feature/admin/services/admin_auth_service.dart';
 import 'package:link_vibe/feature/admin/services/admin_project_service.dart';
 import 'package:link_vibe/feature/admin/services/admin_settings_service.dart';
 
-/// Enterprise Project Management & Moderation Screen for CampusConnect Admin Panel (Screen 37)
+/// Enterprise Project Management & Moderation Screen for SkillBridge Admin Panel (Screen 37)
 /// Features project listing grid, multi-parameter filtering, full project inspection drawer,
 /// moderation workflows (publish, unpublish, close, remove), and policy retention controls.
 class ProjectManagementScreen extends StatefulWidget {

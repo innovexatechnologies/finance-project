@@ -154,10 +154,10 @@ class _AdminSettingsScreenState extends State<AdminSettingsScreen>
             const AdminUserModel(
               id: 'adm_root_001',
               fullName: 'Executive Administrator',
-              email: 'admin@campusconnect.edu.pk',
+              email: 'admin@skillbridge.edu.pk',
               role: 'SUPER_ADMIN',
               roleDisplayName: 'Executive Super Administrator',
-              department: 'CampusConnect Governance Council',
+              department: 'SkillBridge Governance Council',
               avatarInitial: 'EA',
               permissions: ['all'],
               lastLoginAt: 'Active Session',
@@ -3705,7 +3705,7 @@ class _AdminSettingsScreenState extends State<AdminSettingsScreen>
     final nameCtrl = TextEditingController();
     final emailCtrl = TextEditingController();
     final deptCtrl = TextEditingController(
-      text: 'CampusConnect Governance Council',
+      text: 'SkillBridge Governance Council',
     );
     String selectedRole = 'OPERATIONS_ADMIN';
     String roleDisplayName = 'Operations Administrator';

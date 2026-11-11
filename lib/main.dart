@@ -257,7 +257,7 @@ class _MyAppState extends State<MyApp> {
   Widget build(BuildContext context) {
     return MaterialApp(
       navigatorKey: MyApp.navigatorKey,
-      title: 'CAMPUSCONNECT — Student-Corporate Bridge',
+      title: 'SkillBridge — Student-Corporate Bridge',
       debugShowCheckedModeBanner: false,
       theme: AppTheme.lightTheme,
       home: const SplashScreen(),

@@ -5,7 +5,7 @@ import 'package:shared_preferences/shared_preferences.dart';
 import 'package:supabase_flutter/supabase_flutter.dart' show FileOptions;
 import 'package:link_vibe/core/services/supabase_helper.dart';
 
-/// Central Persistent & Supabase-Synchronized Data Service for CampusConnect.
+/// Central Persistent & Supabase-Synchronized Data Service for SkillBridge.
 class AppDataService extends ChangeNotifier {
   AppDataService._internal();
   static final AppDataService instance = AppDataService._internal();
@@ -568,7 +568,7 @@ class AppDataService extends ChangeNotifier {
                 'project': c['project_title']?.toString() ?? 'Corporate Sprint',
                 'issuer': c['issuer']?.toString() ??
                     c['company_name']?.toString() ??
-                    'CampusConnect Partner',
+                    'SkillBridge Partner',
                 'companyName': c['company_name']?.toString() ?? '',
                 'date': c['issue_date']?.toString() ??
                     _formatDbDate(c['created_at']),

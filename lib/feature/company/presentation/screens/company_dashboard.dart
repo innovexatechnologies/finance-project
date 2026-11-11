@@ -4,6 +4,7 @@ import 'package:link_vibe/core/constants/app_colors.dart';
 import 'package:link_vibe/core/services/supabase_helper.dart';
 import 'package:link_vibe/core/widgets/app_empty_state.dart';
 import 'package:link_vibe/core/widgets/section_header.dart';
+import 'package:link_vibe/core/widgets/skillbridge_logo.dart';
 import 'package:link_vibe/core/widgets/status_badge.dart';
 import 'package:link_vibe/feature/company/models/applicant_model.dart';
 import 'package:link_vibe/feature/company/models/assignment_model.dart';
@@ -309,25 +310,17 @@ class _CompanyDashboardScreenState extends State<CompanyDashboardScreen> {
         titleSpacing: 16,
         title: Row(
           children: [
-            Container(
-              width: 38,
-              height: 38,
-              decoration: BoxDecoration(
-                gradient: AppColors.brandGradient,
-                borderRadius: BorderRadius.circular(12),
-                boxShadow: [
-                  BoxShadow(
-                    color: AppColors.primaryBlue.withValues(alpha: 0.22),
-                    blurRadius: 8,
-                    offset: const Offset(0, 3),
-                  ),
-                ],
-              ),
-              child: const Icon(
-                Icons.business_center_rounded,
-                color: Colors.white,
-                size: 19,
-              ),
+            SkillBridgeLogo(
+              size: 38,
+              circular: false,
+              borderRadius: 11,
+              shadows: [
+                BoxShadow(
+                  color: AppColors.primaryBlue.withValues(alpha: 0.22),
+                  blurRadius: 8,
+                  offset: const Offset(0, 3),
+                ),
+              ],
             ),
             const SizedBox(width: 11),
             Expanded(
@@ -336,7 +329,7 @@ class _CompanyDashboardScreenState extends State<CompanyDashboardScreen> {
                 mainAxisSize: MainAxisSize.min,
                 children: [
                   Text(
-                    'CampusConnect',
+                    'SkillBridge',
                     maxLines: 1,
                     overflow: TextOverflow.ellipsis,
                     style: GoogleFonts.poppins(
@@ -1605,7 +1598,7 @@ class _CompanyDashboardScreenState extends State<CompanyDashboardScreen> {
       _buildActionTile(
         icon: Icons.add_circle_outline_rounded,
         label: 'Post Challenge',
-        subLabel: 'Publish to campus',
+        subLabel: 'Publish to SkillBridge',
         isPrimary: true,
         onTap: _navigateToCreateProject,
       ),

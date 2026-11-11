@@ -159,7 +159,7 @@ class _CompanyVerificationScreenState extends State<CompanyVerificationScreen> {
       ScaffoldMessenger.of(context).showSnackBar(
         const SnackBar(
           content: Text(
-            'Verification documents submitted to CampusConnect Governance Admin.',
+            'Verification documents submitted to SkillBridge Governance Admin.',
           ),
           backgroundColor: AppColors.statusOpen,
           behavior: SnackBarBehavior.floating,
@@ -450,7 +450,7 @@ class _CompanyVerificationScreenState extends State<CompanyVerificationScreen> {
       case VerificationStatus.verified:
         icon = Icons.verified_rounded;
         detail =
-            'Your organization has passed CampusConnect governance verification and is trusted across student talent feeds.';
+            'Your organization has passed SkillBridge governance verification and is trusted across student talent feeds.';
         break;
       case VerificationStatus.pending:
         icon = Icons.hourglass_top_rounded;

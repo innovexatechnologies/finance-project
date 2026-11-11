@@ -16,7 +16,7 @@ class DownloadService {
     try {
       final title = certificate['title'] ?? 'Project Completion Certificate';
       final project = certificate['project'] ?? 'Corporate Project';
-      final issuer = certificate['issuer'] ?? 'CampusConnect & Partner';
+      final issuer = certificate['issuer'] ?? 'SkillBridge & Partner';
       final certId =
           certificate['id'] ?? 'CC-${DateTime.now().millisecondsSinceEpoch}';
       final date = certificate['date'] ?? 'March 2026';
@@ -103,7 +103,7 @@ class DownloadService {
     try {
       final title = certificate['title'] ?? 'Project Completion Certificate';
       final project = certificate['project'] ?? 'Corporate Project';
-      final issuer = certificate['issuer'] ?? 'CampusConnect & Partner';
+      final issuer = certificate['issuer'] ?? 'SkillBridge & Partner';
       final certId =
           certificate['id'] ?? 'CC-${DateTime.now().millisecondsSinceEpoch}';
       final date = certificate['date'] ?? 'March 2026';

@@ -183,7 +183,7 @@ void main() {
       'id': 'CC-TEST-999',
       'title': 'AI Machine Learning Certificate',
       'project': 'Deep Learning Model Tuning',
-      'issuer': 'CampusConnect & AI Lab',
+      'issuer': 'SkillBridge & AI Lab',
       'date': 'Nov 09, 2026',
     });
 

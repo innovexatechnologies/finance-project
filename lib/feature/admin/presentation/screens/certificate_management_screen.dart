@@ -19,7 +19,7 @@ import 'package:link_vibe/feature/admin/services/admin_auth_service.dart';
 import 'package:link_vibe/feature/admin/services/admin_certificate_service.dart';
 import 'package:url_launcher/url_launcher.dart';
 
-/// Enterprise Certificate Management & Verification Desk for CampusConnect.
+/// Enterprise Certificate Management & Verification Desk for SkillBridge.
 /// Provides credential administration, verification lookup, document inspection,
 /// and tamper-recorded revocation workflows.
 class CertificateManagementScreen extends StatefulWidget {
@@ -350,7 +350,7 @@ class _CertificateManagementScreenState
                     ),
                     const SizedBox(height: 12),
                     Text(
-                      'No record matching "$query" exists in the CampusConnect Administrative Ledger.',
+                      'No record matching "$query" exists in the SkillBridge Administrative Ledger.',
                       style: const TextStyle(
                         fontSize: 13,
                         color: AppColors.darkNavy,
@@ -494,7 +494,7 @@ class _CertificateManagementScreenState
     final adminFullName =
         _authService.currentAdmin?.fullName ?? 'Executive Administrator';
     final adminDepartment = _authService.currentAdmin?.department ??
-        'CampusConnect Governance Council';
+        'SkillBridge Governance Council';
     final hasPdf = cert.pdfUrl?.trim().isNotEmpty == true;
     final hasVerifyUrl = cert.verificationUrl?.trim().isNotEmpty == true;
 
@@ -561,7 +561,7 @@ class _CertificateManagementScreenState
                             child: Column(
                               children: [
                                 Text(
-                                  'CAMPUSCONNECT CENTRAL GOVERNANCE',
+                                  'SKILLBRIDGE CENTRAL GOVERNANCE',
                                   textAlign: TextAlign.center,
                                   style: GoogleFonts.poppins(
                                     letterSpacing: 1.1,

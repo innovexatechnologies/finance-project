@@ -45,7 +45,7 @@ class _SettingsScreenState extends State<SettingsScreen> {
           ],
         ),
         content: Text(
-          'Are you sure you want to log out of your CampusConnect account?',
+          'Are you sure you want to log out of your SkillBridge account?',
           style: GoogleFonts.inter(fontSize: 13.5, color: AppColors.darkText),
         ),
         actions: [
@@ -87,7 +87,7 @@ class _SettingsScreenState extends State<SettingsScreen> {
         ? profile['name'].toString().trim()
         : (AppDataService.instance.userName.isNotEmpty
             ? AppDataService.instance.userName
-            : 'CampusConnect User');
+            : 'SkillBridge User');
     final email = (profile['email']?.toString().trim().isNotEmpty == true)
         ? profile['email'].toString().trim()
         : (SupabaseHelper.currentUser?.email ??

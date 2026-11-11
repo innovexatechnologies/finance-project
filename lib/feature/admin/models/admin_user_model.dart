@@ -70,7 +70,7 @@ class AdminUserModel {
       email: json['email'] as String,
       role: json['role'] as String,
       roleDisplayName: json['role_display_name'] as String,
-      department: json['department'] as String? ?? 'CampusConnect Executive Council',
+      department: json['department'] as String? ?? 'SkillBridge Executive Council',
       avatarInitial: json['avatar_initial'] as String? ?? 'AD',
       permissions: (json['permissions'] as List<dynamic>?)
               ?.map((e) => e.toString())

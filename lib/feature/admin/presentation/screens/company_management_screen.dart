@@ -21,7 +21,7 @@ import 'package:link_vibe/feature/admin/services/admin_company_service.dart';
 import 'package:link_vibe/feature/admin/services/admin_project_service.dart';
 import 'package:url_launcher/url_launcher.dart';
 
-/// Enterprise Company Management Module for CampusConnect Admin Panel (Screen 36)
+/// Enterprise Company Management Module for SkillBridge Admin Panel (Screen 36)
 /// Provides corporate registry overview, advanced multi-parameter filtering,
 /// SECP document authentication, project auditing, suspension controls, and audit trails.
 class CompanyManagementScreen extends StatefulWidget {

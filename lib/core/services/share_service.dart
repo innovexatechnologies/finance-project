@@ -58,7 +58,7 @@ class ShareService {
     }
 
     final buffer = StringBuffer();
-    buffer.writeln('📋 CAMPUSCONNECT PROJECT DETAILS');
+    buffer.writeln('📋 SKILLBRIDGE PROJECT DETAILS');
     buffer.writeln('----------------------------------------');
     buffer.writeln('• Title: $title');
     buffer.writeln('• Company: $company');
@@ -73,7 +73,7 @@ class ShareService {
       buffer.writeln('• Description: $description');
     }
     buffer.writeln('----------------------------------------');
-    buffer.writeln('Verified Project on CampusConnect');
+    buffer.writeln('Verified Project on SkillBridge');
 
     final shareMsg = buffer.toString();
 
@@ -81,7 +81,7 @@ class ShareService {
       context: context,
       text: shareMsg,
       title: 'Share Project: $title',
-      subject: 'CampusConnect Project: $title ($company)',
+      subject: 'SkillBridge Project: $title ($company)',
       sharePositionOrigin: sharePositionOrigin,
     );
   }
@@ -94,8 +94,8 @@ class ShareService {
     final title = certificate['title']?.toString() ??
         'Project Completion Certificate';
     final project = certificate['project']?.toString() ?? 'Corporate Project';
-    final certId = certificate['id']?.toString() ?? 'CC-CERT';
-    final issuer = certificate['issuer']?.toString() ?? 'CampusConnect Partner';
+    final certId = certificate['id']?.toString() ?? 'SB-CERT';
+    final issuer = certificate['issuer']?.toString() ?? 'SkillBridge Partner';
     final date = certificate['date']?.toString() ?? '2026';
     final studentName =
         (AppDataService.instance.userName.isNotEmpty
@@ -113,7 +113,7 @@ class ShareService {
     buffer.writeln('• Verification ID: $certId');
     buffer.writeln('• Issue Date: $date');
     buffer.writeln('----------------------------------------');
-    buffer.writeln('Verified via CampusConnect Student Platform');
+    buffer.writeln('Verified via SkillBridge Student Platform');
 
     final shareMsg = buffer.toString();
 
@@ -121,7 +121,7 @@ class ShareService {
       context: context,
       text: shareMsg,
       title: 'Share Certificate: $title',
-      subject: 'CampusConnect Certificate: $title',
+      subject: 'SkillBridge Certificate: $title',
       sharePositionOrigin: sharePositionOrigin,
     );
   }

@@ -72,10 +72,10 @@ class AdminAuthService {
   AdminAuthService._internal();
 
   // Offline/test-only fallback hash for default provisioned admin when Supabase is uninitialized
-  static const String _defaultAdminEmail = 'admin@campusconnect.edu.pk';
+  static const String _defaultAdminEmail = 'admin@skillbridge.edu.pk';
   static const String _defaultSalt = '7f9a8b2c4d1e3f5a';
   static final String _defaultPassHash = AdminHashUtil.hashPassword(
-    'Admin@CampusConnect2026!',
+    'Admin@SkillBridge2026!',
     _defaultSalt,
   );
 
@@ -179,7 +179,7 @@ class AdminAuthService {
         final department =
             (profileRow?['university']?.toString().trim().isNotEmpty == true)
                 ? profileRow!['university'].toString().trim()
-                : 'CampusConnect Governance Council';
+                : 'SkillBridge Governance Council';
 
         final authenticatedAdmin = AdminUserModel(
           id: user.id,
@@ -278,7 +278,7 @@ class AdminAuthService {
       email: _defaultAdminEmail,
       role: 'SUPER_ADMIN',
       roleDisplayName: 'Executive Super Administrator',
-      department: 'CampusConnect Governance Council',
+      department: 'SkillBridge Governance Council',
       avatarInitial: 'EA',
       permissions: const [
         'all',
@@ -322,7 +322,7 @@ class AdminAuthService {
       final department =
           (profileRow?['university']?.toString().trim().isNotEmpty == true)
               ? profileRow!['university'].toString().trim()
-              : 'CampusConnect Governance Council';
+              : 'SkillBridge Governance Council';
 
       final admin = AdminUserModel(
         id: user.id,

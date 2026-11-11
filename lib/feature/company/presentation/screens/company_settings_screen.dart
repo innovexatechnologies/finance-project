@@ -357,7 +357,7 @@ class _CompanySettingsScreenState extends State<CompanySettingsScreen> {
                     ),
                     const SizedBox(height: 8),
                     Text(
-                      'Submit a support ticket directly to the CampusConnect Governance team.',
+                      'Submit a support ticket directly to the SkillBridge Governance team.',
                       style: GoogleFonts.inter(
                         fontSize: 12.5,
                         color: AppColors.grayText,

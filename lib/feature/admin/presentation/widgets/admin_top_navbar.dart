@@ -35,10 +35,10 @@ class AdminTopNavbar extends StatelessWidget implements PreferredSizeWidget {
             const AdminUserModel(
               id: 'adm_root',
               fullName: 'Executive Administrator',
-              email: 'admin@campusconnect.edu.pk',
+              email: 'admin@skillbridge.edu.pk',
               role: 'SUPER_ADMIN',
               roleDisplayName: 'Executive Super Administrator',
-              department: 'CampusConnect Governance Council',
+              department: 'SkillBridge Governance Council',
               avatarInitial: 'EA',
               permissions: ['all'],
               lastLoginAt: 'Active Session',

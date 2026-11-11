@@ -4,6 +4,7 @@ import 'package:supabase_flutter/supabase_flutter.dart';
 import 'package:link_vibe/core/constants/app_colors.dart';
 import 'package:link_vibe/core/services/app_data_service.dart';
 import 'package:link_vibe/core/services/supabase_helper.dart';
+import 'package:link_vibe/core/widgets/skillbridge_logo.dart';
 import 'package:link_vibe/feature/admin/presentation/screens/admin_login_screen.dart';
 import 'package:link_vibe/feature/auth/presentation/screens/email_verification_screen.dart';
 import 'package:link_vibe/feature/auth/presentation/screens/reset_password_screen.dart';
@@ -502,32 +503,23 @@ class _LoginScreenState extends State<LoginScreen> {
                 mainAxisSize: MainAxisSize.min,
                 children: [
                   // Brand Header
-                  Container(
-                    width: 68,
-                    height: 68,
-                    decoration: BoxDecoration(
-                      gradient: AppColors.brandGradient,
-                      shape: BoxShape.circle,
-                      boxShadow: [
-                        BoxShadow(
-                          color: AppColors.primaryBlue.withValues(alpha: 0.22),
-                          blurRadius: 16,
-                          offset: const Offset(0, 6),
-                        ),
-                      ],
-                    ),
-                    child: const Icon(
-                      Icons.school_rounded,
-                      size: 34,
-                      color: Colors.white,
-                    ),
+                  SkillBridgeLogo(
+                    size: 74,
+                    circular: true,
+                    shadows: [
+                      BoxShadow(
+                        color: AppColors.primaryBlue.withValues(alpha: 0.22),
+                        blurRadius: 16,
+                        offset: const Offset(0, 6),
+                      ),
+                    ],
                   ),
                   const SizedBox(height: 12),
                   RichText(
                     text: TextSpan(
                       children: [
                         TextSpan(
-                          text: 'Campus',
+                          text: 'Skill',
                           style: GoogleFonts.poppins(
                             fontSize: 26,
                             fontWeight: FontWeight.w700,
@@ -535,7 +527,7 @@ class _LoginScreenState extends State<LoginScreen> {
                           ),
                         ),
                         TextSpan(
-                          text: 'Connect',
+                          text: 'Bridge',
                           style: GoogleFonts.poppins(
                             fontSize: 26,
                             fontWeight: FontWeight.w700,
@@ -582,7 +574,7 @@ class _LoginScreenState extends State<LoginScreen> {
                           ),
                           const SizedBox(height: 4),
                           Text(
-                            'Sign in to continue to your CampusConnect portal.',
+                            'Sign in to continue to your SkillBridge portal.',
                             style: GoogleFonts.inter(
                               fontSize: 13,
                               color: AppColors.grayText,

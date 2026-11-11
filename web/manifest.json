@@ -1,11 +1,11 @@
 {
-    "name": "link_vibe",
-    "short_name": "link_vibe",
+    "name": "SkillBridge",
+    "short_name": "SkillBridge",
     "start_url": ".",
     "display": "standalone",
-    "background_color": "#0175C2",
-    "theme_color": "#0175C2",
-    "description": "A new Flutter project.",
+    "background_color": "#0F2344",
+    "theme_color": "#0F2344",
+    "description": "SkillBridge — Student-Corporate Project & Talent Bridge.",
     "orientation": "portrait-primary",
     "prefer_related_applications": false,
     "icons": [

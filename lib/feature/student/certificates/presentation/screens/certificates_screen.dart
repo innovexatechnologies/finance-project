@@ -36,7 +36,7 @@ class CertificatesScreen extends StatelessWidget {
   void _showCertificateDialog(BuildContext context, Map<String, dynamic> cert) {
     final title = cert['title']?.toString() ?? 'Certificate of Completion';
     final project = cert['project']?.toString() ?? 'Corporate Project';
-    final issuer = cert['issuer']?.toString() ?? 'CampusConnect Partner';
+    final issuer = cert['issuer']?.toString() ?? 'SkillBridge Partner';
     final certId = cert['id']?.toString() ?? 'CC-CERT';
     final date = cert['date']?.toString() ?? 'Recently';
     final rating = (cert['rating'] as num?)?.toDouble();
@@ -78,7 +78,7 @@ class CertificatesScreen extends StatelessWidget {
                 ),
                 const SizedBox(height: 12),
                 Text(
-                  'CAMPUSCONNECT',
+                  'SKILLBRIDGE',
                   style: GoogleFonts.inter(
                     fontSize: 12,
                     fontWeight: FontWeight.bold,
@@ -402,7 +402,7 @@ class CertificatesScreen extends StatelessWidget {
                                     ),
                                     const SizedBox(height: 6),
                                     Text(
-                                      '${cert['issuer'] ?? 'CampusConnect Partner'}\n${cert['date'] ?? ''} • ID: ${cert['id'] ?? ''}',
+                                      '${cert['issuer'] ?? 'SkillBridge Partner'}\n${cert['date'] ?? ''} • ID: ${cert['id'] ?? ''}',
                                       textAlign: TextAlign.center,
                                       style: GoogleFonts.inter(
                                         fontSize: 12,

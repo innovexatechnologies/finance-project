@@ -236,7 +236,7 @@ class _ResetPasswordScreenState extends State<ResetPasswordScreen> {
         ),
         const SizedBox(height: 8),
         Text(
-          'Your CampusConnect account password has been updated successfully. You can now sign in with your new password.',
+          'Your SkillBridge account password has been updated successfully. You can now sign in with your new password.',
           textAlign: TextAlign.center,
           style: GoogleFonts.inter(
             fontSize: 13.5,

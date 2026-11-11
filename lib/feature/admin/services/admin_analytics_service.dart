@@ -13,7 +13,7 @@ import 'package:link_vibe/feature/admin/services/admin_dashboard_service.dart';
 import 'package:link_vibe/feature/admin/services/admin_project_service.dart';
 import 'package:link_vibe/feature/admin/services/admin_student_service.dart';
 
-/// Enterprise Business Intelligence & Analytics Service for CampusConnect Admin Console.
+/// Enterprise Business Intelligence & Analytics Service for SkillBridge Admin Console.
 /// Computes all registration cohorts, project metrics, category distributions, skills matrix,
 /// verification metrics, and executive reports strictly from live database state (zero mock numbers).
 class AdminAnalyticsService {
@@ -483,7 +483,7 @@ class AdminAnalyticsService {
     final verif = getVerificationAnalytics();
     final effectiveAdmin = adminEmail.trim().isNotEmpty
         ? adminEmail.trim()
-        : (AdminAuthService().currentAdmin?.email ?? 'admin@campusconnect.edu.pk');
+        : (AdminAuthService().currentAdmin?.email ?? 'admin@skillbridge.edu.pk');
 
     final randomHex = List.generate(
       16,
@@ -537,7 +537,7 @@ class AdminAnalyticsService {
     String categoryFilter,
   ) {
     final buffer = StringBuffer();
-    buffer.writeln('CAMPUSCONNECT PLATFORM ANALYTICS REPORT');
+    buffer.writeln('SKILLBRIDGE PLATFORM ANALYTICS REPORT');
     buffer.writeln('Export Generated: ${DateTime.now().toIso8601String()}');
     buffer.writeln('Selected Timeframe: ${timeframe.label}');
     buffer.writeln('Category Filter: $categoryFilter');

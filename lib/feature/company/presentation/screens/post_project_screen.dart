@@ -540,7 +540,7 @@ class _PostProjectScreenState extends State<PostProjectScreen> {
           content: Text(
             _isEditMode
                 ? 'Save updates to "${_titleController.text.trim()}" and keep it open for university candidates?'
-                : 'Publish "${_titleController.text.trim()}" to the live CampusConnect catalog for verified university students?',
+                : 'Publish "${_titleController.text.trim()}" to the live SkillBridge catalog for verified university students?',
             style: GoogleFonts.inter(
               fontSize: 13.5,
               color: AppColors.grayText,
@@ -582,7 +582,7 @@ class _PostProjectScreenState extends State<PostProjectScreen> {
           content: Text(
             _isEditMode
                 ? 'Project "${projectPayload.title}" updated.'
-                : 'Project "${projectPayload.title}" published to CampusConnect.',
+                : 'Project "${projectPayload.title}" published to SkillBridge.',
           ),
           backgroundColor: AppColors.statusOpen,
         ),

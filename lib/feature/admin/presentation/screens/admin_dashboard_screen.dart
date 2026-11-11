@@ -21,7 +21,7 @@ import 'package:link_vibe/feature/admin/presentation/widgets/stat_metric_card.da
 import 'package:link_vibe/feature/admin/services/admin_auth_service.dart';
 import 'package:link_vibe/feature/admin/services/admin_dashboard_service.dart';
 
-/// Enterprise Admin Dashboard Screen for CampusConnect
+/// Enterprise Admin Dashboard Screen for SkillBridge
 /// Features responsive layout, 7 live metric cards, interactive analytics charts,
 /// functional quick action drawers, real-time activity feed, and date-range filtering.
 class AdminDashboardScreen extends StatefulWidget {
@@ -264,10 +264,10 @@ class _AdminDashboardScreenState extends State<AdminDashboardScreen> {
             const AdminUserModel(
               id: 'adm_root',
               fullName: 'Executive Administrator',
-              email: 'admin@campusconnect.edu.pk',
+              email: 'admin@skillbridge.edu.pk',
               role: 'SUPER_ADMIN',
               roleDisplayName: 'Executive Super Administrator',
-              department: 'CampusConnect Governance Council',
+              department: 'SkillBridge Governance Council',
               avatarInitial: 'EA',
               permissions: ['all'],
               lastLoginAt: 'Active Session',
@@ -327,7 +327,7 @@ class _AdminDashboardScreenState extends State<AdminDashboardScreen> {
                         ),
                         const SizedBox(height: 12),
                         Text(
-                          'Welcome to CampusConnect Governance, ${admin.fullName}',
+                          'Welcome to SkillBridge Governance, ${admin.fullName}',
                           style: GoogleFonts.poppins(
                             color: Colors.white,
                             fontSize: 22,
@@ -636,7 +636,7 @@ class _AdminDashboardScreenState extends State<AdminDashboardScreen> {
               const SizedBox(width: 8),
               Flexible(
                 child: Text(
-                  'CampusConnect Governance Console • Strictly Non-Financial Academic Realm',
+                  'SkillBridge Governance Console • Strictly Non-Financial Academic Realm',
                   style: GoogleFonts.inter(
                     fontSize: 11.5,
                     color: AppColors.textSecondary,

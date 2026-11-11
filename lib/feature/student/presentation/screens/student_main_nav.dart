@@ -87,7 +87,7 @@ class _StudentMainNavState extends State<StudentMainNav> {
                   ),
                   const SizedBox(width: 8),
                   Text(
-                    'Press back again to exit CampusConnect',
+                    'Press back again to exit SkillBridge',
                     style: GoogleFonts.inter(
                       fontSize: 13,
                       fontWeight: FontWeight.w500,
