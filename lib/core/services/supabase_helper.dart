@@ -10,9 +10,18 @@ class SupabaseHelper {
   static const String authRedirectUri =
       'io.supabase.campusconnect://login-callback/';
 
-  /// Returns mobile deep-link callback URI on Android/iOS/desktop, or `null`
-  /// on Flutter Web so Supabase falls back to the current web origin.
-  static String? get emailRedirectUrl => kIsWeb ? null : authRedirectUri;
+  /// Returns mobile deep-link callback URI on Android/iOS/desktop, or the
+  /// active web origin when running in Flutter Web (avoiding localhost:3000
+  /// Site URL blanks).
+  static String? get emailRedirectUrl {
+    if (!kIsWeb) return authRedirectUri;
+    final base = Uri.base;
+    if (base.hasAuthority &&
+        (base.scheme == 'http' || base.scheme == 'https')) {
+      return '${base.origin}/';
+    }
+    return null;
+  }
 
   /// Guard set while LoginScreen / SignupScreen / AdminAuthService perform an
   /// interactive auth call so the global deep-link listener only handles
@@ -46,6 +55,9 @@ class SupabaseHelper {
     pendingPasswordRecovery = false;
     pendingEmailVerification = false;
     pendingAuthCallbackError = null;
+    pendingAuthFlow = null;
+    pendingAuthEmail = null;
+    pendingAuthRole = null;
   }
 
   /// Set if a password recovery deep link arrives during app cold boot before
@@ -55,6 +67,26 @@ class SupabaseHelper {
   /// Set if a signup/verification deep link completes during cold boot before
   /// the widget tree mounts.
   static bool pendingEmailVerification = false;
+
+  /// Tracks the latest in-flight email auth flow (`'signup'` or `'recovery'`)
+  /// plus the email and portal role so deep-link error callbacks route cleanly.
+  static String? pendingAuthFlow;
+  static String? pendingAuthEmail;
+  static String? pendingAuthRole;
+
+  static void setPendingAuthContext({
+    required String flow,
+    String? email,
+    String? role,
+  }) {
+    pendingAuthFlow = flow;
+    if (email != null && email.trim().isNotEmpty) {
+      pendingAuthEmail = email.trim();
+    }
+    if (role != null && role.trim().isNotEmpty) {
+      pendingAuthRole = role.trim();
+    }
+  }
 
   /// Captures an auth callback error (e.g. expired link or PKCE mismatch)
   /// arriving during cold boot so the UI can show a dedicated recovery screen.
@@ -222,6 +254,46 @@ class SupabaseHelper {
     return code == 'over_email_send_rate_limit' ||
         lower.contains('over_email_send_rate_limit') ||
         lower.contains('email rate limit exceeded');
+  }
+
+  static bool isEmailNotConfirmedError(Object error) {
+    final msg = error is AuthException ? error.message : error.toString();
+    final lower = msg.toLowerCase();
+    final code = error is AuthException ? (error.code?.toLowerCase() ?? '') : '';
+    return code == 'email_not_confirmed' ||
+        lower.contains('email_not_confirmed') ||
+        lower.contains('email not confirmed') ||
+        lower.contains('email is not verified');
+  }
+
+  static bool isAlreadyRegisteredError(Object error) {
+    final msg = error is AuthException ? error.message : error.toString();
+    final lower = msg.toLowerCase();
+    final code = error is AuthException ? (error.code?.toLowerCase() ?? '') : '';
+    return code == 'user_already_exists' ||
+        lower.contains('user already registered') ||
+        lower.contains('already registered') ||
+        lower.contains('already exists');
+  }
+
+  /// Extracts a cooldown duration in seconds from rate-limit errors when
+  /// specified by GoTrue (e.g. "after 45 seconds"), falling back to [fallback].
+  static int extractRateLimitCooldownSeconds(
+    Object error, {
+    int fallback = 60,
+  }) {
+    final msg = error is AuthException ? error.message : error.toString();
+    final match = RegExp(
+      r'(\d+)\s*seconds?',
+      caseSensitive: false,
+    ).firstMatch(msg);
+    if (match != null) {
+      final parsed = int.tryParse(match.group(1) ?? '');
+      if (parsed != null && parsed > 0 && parsed <= 300) {
+        return parsed;
+      }
+    }
+    return fallback;
   }
 
   /// Converts raw network/auth/platform exceptions into readable UI messages.

@@ -77,6 +77,11 @@ class _ResetPasswordScreenState extends State<ResetPasswordScreen> {
       _infoBanner = null;
     });
 
+    await AppDataService.instance.savePendingAuthContext(
+      flow: 'recovery',
+      email: email,
+    );
+
     try {
       await supabase.auth.resetPasswordForEmail(
         email,
@@ -92,10 +97,14 @@ class _ResetPasswordScreenState extends State<ResetPasswordScreen> {
       });
     } catch (e) {
       if (!mounted) return;
-      if (SupabaseHelper.isEmailRateLimitError(e)) {
-        _resendCooldown.start(() {
-          if (mounted) setState(() {});
-        });
+      if (SupabaseHelper.isEmailRateLimitError(e) ||
+          SupabaseHelper.friendlyError(e).toLowerCase().contains('seconds')) {
+        _resendCooldown.start(
+          () {
+            if (mounted) setState(() {});
+          },
+          seconds: SupabaseHelper.extractRateLimitCooldownSeconds(e),
+        );
       }
       setState(() => _errorBanner = SupabaseHelper.friendlyError(e));
     } finally {
@@ -140,6 +149,7 @@ class _ResetPasswordScreenState extends State<ResetPasswordScreen> {
       await supabase.auth.updateUser(
         UserAttributes(password: newPassword),
       );
+      await AppDataService.instance.clearPendingAuthContext();
 
       if (!AppDataService.instance.isLoggedIn) {
         await supabase.auth.signOut();

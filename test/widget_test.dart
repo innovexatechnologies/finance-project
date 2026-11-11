@@ -6,6 +6,7 @@ import 'package:shared_preferences/shared_preferences.dart';
 import 'package:supabase_flutter/supabase_flutter.dart';
 import 'package:link_vibe/core/services/app_data_service.dart';
 import 'package:link_vibe/core/services/supabase_helper.dart';
+import 'package:link_vibe/core/theme/app_theme.dart';
 import 'package:link_vibe/core/widgets/skillbridge_logo.dart';
 import 'package:link_vibe/core/widgets/student_avatar.dart';
 import 'package:link_vibe/feature/admin/presentation/screens/admin_dashboard_screen.dart';
@@ -13,6 +14,7 @@ import 'package:link_vibe/feature/admin/presentation/screens/admin_login_screen.
 import 'package:link_vibe/feature/auth/presentation/screens/email_verification_screen.dart';
 import 'package:link_vibe/feature/auth/presentation/screens/login_screen.dart';
 import 'package:link_vibe/feature/auth/presentation/screens/reset_password_screen.dart';
+import 'package:link_vibe/feature/auth/presentation/screens/signup_screen.dart';
 import 'package:link_vibe/feature/company/presentation/screens/company_dashboard.dart';
 import 'package:link_vibe/feature/splash/presentation/screens/splash_screen.dart';
 import 'package:link_vibe/feature/student/certificates/presentation/screens/certificates_screen.dart';
@@ -260,6 +262,112 @@ void main() {
         cooldown.dispose();
         expect(cooldown.isActive, isFalse);
         expect(cooldown.remainingSeconds, 0);
+
+        const unconfirmedErr = AuthApiException(
+          'Email not confirmed',
+          statusCode: '400',
+          code: 'email_not_confirmed',
+        );
+        expect(SupabaseHelper.isEmailNotConfirmedError(unconfirmedErr), isTrue);
+        expect(
+          SupabaseHelper.extractRateLimitCooldownSeconds(cooldownErr),
+          45,
+        );
+        const alreadyErr = AuthApiException(
+          'User already registered',
+          statusCode: '422',
+          code: 'user_already_exists',
+        );
+        expect(SupabaseHelper.isAlreadyRegisteredError(alreadyErr), isTrue);
+      },
+    );
+
+    test(
+      'AppDataService persists and clears pending email verification context cleanly',
+      () async {
+        await AppDataService.instance.savePendingAuthContext(
+          flow: 'signup',
+          email: 'hr@acme.io',
+          role: 'Company',
+        );
+        expect(SupabaseHelper.pendingAuthFlow, 'signup');
+        expect(SupabaseHelper.pendingAuthEmail, 'hr@acme.io');
+        expect(SupabaseHelper.pendingAuthRole, 'Company');
+
+        SupabaseHelper.clearAuthFlags();
+        await AppDataService.instance.init();
+        expect(SupabaseHelper.pendingAuthFlow, 'signup');
+        expect(SupabaseHelper.pendingAuthEmail, 'hr@acme.io');
+        expect(SupabaseHelper.pendingAuthRole, 'Company');
+
+        await AppDataService.instance.clearPendingAuthContext();
+        expect(SupabaseHelper.pendingAuthFlow, isNull);
+        expect(SupabaseHelper.pendingAuthEmail, isNull);
+        expect(SupabaseHelper.pendingAuthRole, isNull);
+      },
+    );
+
+    testWidgets(
+      'Company EmailVerificationScreen renders verified & unverified states cleanly under AppTheme transitions',
+      (tester) async {
+        tester.view.physicalSize = const Size(412, 915);
+        tester.view.devicePixelRatio = 1.0;
+        addTearDown(() => tester.view.resetPhysicalSize());
+
+        await tester.pumpWidget(
+          MaterialApp(
+            key: const ValueKey('company_verify_unverified'),
+            theme: AppTheme.lightTheme,
+            home: const EmailVerificationScreen(
+              email: 'founder@acme.io',
+              role: 'Company',
+              isVerified: false,
+              initialInfo: 'Verification email resent to founder@acme.io.',
+            ),
+          ),
+        );
+        await tester.pumpAndSettle();
+
+        expect(find.text('Verify Your Email'), findsOneWidget);
+        expect(find.text('Verify & Activate Account'), findsOneWidget);
+        expect(find.text('Resend Email'), findsOneWidget);
+        expect(
+          find.text('Verification email resent to founder@acme.io.'),
+          findsOneWidget,
+        );
+
+        await tester.pumpWidget(
+          MaterialApp(
+            key: const ValueKey('company_verify_unverified'),
+            theme: AppTheme.lightTheme,
+            home: const EmailVerificationScreen(
+              email: 'founder@acme.io',
+              role: 'Company',
+              isVerified: true,
+            ),
+          ),
+        );
+        await tester.pumpAndSettle();
+
+        expect(find.text('Email Verified Successfully'), findsOneWidget);
+        expect(find.text('Continue to Company Portal'), findsOneWidget);
+        await tester.tap(find.text('Continue to Company Portal'));
+        await tester.pumpAndSettle();
+
+        expect(find.byType(LoginScreen), findsOneWidget);
+        expect(find.text('Sign In as Company'), findsOneWidget);
+        expect(tester.takeException(), isNull);
+
+        await tester.pumpWidget(
+          MaterialApp(
+            key: const ValueKey('company_signup_screen'),
+            theme: AppTheme.lightTheme,
+            home: const SignupScreen(initialRole: 'Company'),
+          ),
+        );
+        await tester.pumpAndSettle();
+        expect(find.text('Create Company Account'), findsOneWidget);
+        expect(tester.takeException(), isNull);
       },
     );
 

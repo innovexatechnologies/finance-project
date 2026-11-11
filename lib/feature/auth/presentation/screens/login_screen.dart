@@ -60,6 +60,11 @@ class _LoginScreenState extends State<LoginScreen> {
     if (supabase == null) return;
 
     setState(() => _isResendingConfirmation = true);
+    await AppDataService.instance.savePendingAuthContext(
+      flow: 'signup',
+      email: email,
+      role: _selectedRole,
+    );
     try {
       await supabase.auth.resend(
         type: OtpType.signup,
@@ -70,18 +75,28 @@ class _LoginScreenState extends State<LoginScreen> {
       _resendCooldown.start(() {
         if (mounted) setState(() {});
       });
-      ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(
-          content: Text('Verification link resent to $email. Please check your inbox.'),
-          backgroundColor: AppColors.statusOpen,
+      Navigator.push(
+        context,
+        MaterialPageRoute(
+          builder: (_) => EmailVerificationScreen(
+            email: email,
+            role: _selectedRole,
+            isVerified: false,
+            initialInfo:
+                'Verification link & code resent to $email. Please check your inbox or spam folder.',
+          ),
         ),
       );
     } catch (e) {
       if (!mounted) return;
-      if (SupabaseHelper.isEmailRateLimitError(e)) {
-        _resendCooldown.start(() {
-          if (mounted) setState(() {});
-        });
+      if (SupabaseHelper.isEmailRateLimitError(e) ||
+          SupabaseHelper.friendlyError(e).toLowerCase().contains('seconds')) {
+        _resendCooldown.start(
+          () {
+            if (mounted) setState(() {});
+          },
+          seconds: SupabaseHelper.extractRateLimitCooldownSeconds(e),
+        );
       }
       setState(() => _errorBanner = SupabaseHelper.friendlyError(e));
     } finally {
@@ -332,9 +347,16 @@ class _LoginScreenState extends State<LoginScreen> {
       });
     } on AuthException catch (e) {
       if (!mounted) return;
+      final needsConfirm = SupabaseHelper.isEmailNotConfirmedError(e);
+      if (needsConfirm) {
+        AppDataService.instance.savePendingAuthContext(
+          flow: 'signup',
+          email: email,
+          role: _selectedRole,
+        );
+      }
       setState(() {
-        _needsEmailConfirmation =
-            e.message.toLowerCase().contains('email not confirmed');
+        _needsEmailConfirmation = needsConfirm;
         _errorBanner = SupabaseHelper.friendlyError(e);
       });
     } catch (e) {
@@ -447,6 +469,11 @@ class _LoginScreenState extends State<LoginScreen> {
                         if (supabase == null) {
                           throw Exception('Supabase client unavailable.');
                         }
+                        await AppDataService.instance.savePendingAuthContext(
+                          flow: 'recovery',
+                          email: target,
+                          role: _selectedRole,
+                        );
                         await supabase.auth.resetPasswordForEmail(
                           target,
                           redirectTo: SupabaseHelper.emailRedirectUrl,

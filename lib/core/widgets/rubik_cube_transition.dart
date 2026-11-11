@@ -24,17 +24,24 @@ class _RubikCubeFace extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
+    if (angleY == 0.0 && offsetX == 0.0 && shadeAlpha == 0.0) {
+      return IgnorePointer(ignoring: blockTouches, child: child);
+    }
+
     final isEdgeHidden = angleY.abs() >= (math.pi / 2) - 0.015;
+    final safeAngle = angleY.clamp(-(math.pi / 2) + 0.02, (math.pi / 2) - 0.02);
     final matrix = Matrix4.identity();
-    if (angleY != 0) {
+    if (safeAngle != 0) {
       matrix
         ..setEntry(3, 2, 0.0014)
-        ..rotateY(angleY);
+        ..rotateY(safeAngle);
     }
 
     return Visibility(
       visible: !isEdgeHidden,
       maintainState: true,
+      maintainAnimation: true,
+      maintainSize: true,
       child: IgnorePointer(
         ignoring: blockTouches,
         child: Transform.translate(
@@ -247,9 +254,16 @@ class RubikCubePageTransitionsBuilder extends PageTransitionsBuilder {
     Animation<double> secondaryAnimation,
     Widget child,
   ) {
+    if (MediaQuery.disableAnimationsOf(context)) {
+      return child;
+    }
+
     return LayoutBuilder(
       builder: (context, constraints) {
         final width = constraints.maxWidth;
+        if (!width.isFinite || width <= 0) {
+          return child;
+        }
         const maxAngle = math.pi / 2;
 
         return AnimatedBuilder(
@@ -259,6 +273,9 @@ class RubikCubePageTransitionsBuilder extends PageTransitionsBuilder {
             final isExitingForward = secondaryAnimation.value > 0.0;
             final isEntering = animation.value < 1.0;
             final isAnimating = isExitingForward || isEntering;
+            if (!isAnimating) {
+              return animatedChild!;
+            }
 
             var offsetX = 0.0;
             var alignment = Alignment.centerLeft;
@@ -281,7 +298,7 @@ class RubikCubePageTransitionsBuilder extends PageTransitionsBuilder {
             }
 
             return ClipRect(
-              clipBehavior: isAnimating ? Clip.hardEdge : Clip.none,
+              clipBehavior: Clip.hardEdge,
               child: _RubikCubeFace(
                 offsetX: offsetX,
                 alignment: alignment,

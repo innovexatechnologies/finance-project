@@ -1,4 +1,5 @@
 import 'dart:async';
+import 'package:flutter/foundation.dart' show kIsWeb;
 import 'package:flutter/material.dart';
 import 'package:flutter_dotenv/flutter_dotenv.dart';
 import 'package:supabase_flutter/supabase_flutter.dart';
@@ -9,8 +10,27 @@ import 'feature/auth/presentation/screens/email_verification_screen.dart';
 import 'feature/auth/presentation/screens/reset_password_screen.dart';
 import 'feature/splash/presentation/screens/splash_screen.dart';
 
+StreamSubscription<AuthState>? _bootAuthSub;
+
+Map<String, String> _extractUriParams(Uri uri) {
+  final params = <String, String>{...uri.queryParameters};
+  if (uri.fragment.isNotEmpty) {
+    final frag = uri.fragment.contains('?')
+        ? uri.fragment.split('?').last
+        : uri.fragment;
+    try {
+      params.addAll(Uri.splitQueryString(frag));
+    } catch (_) {}
+  }
+  return params;
+}
+
 void main() async {
   WidgetsFlutterBinding.ensureInitialized();
+
+  // Capture initial Web URL params BEFORE Supabase.initialize() clears them.
+  final initialWebParams =
+      kIsWeb ? _extractUriParams(Uri.base) : const <String, String>{};
 
   // Safely load .env and initialize Supabase if credentials are configured
   try {
@@ -47,11 +67,12 @@ void main() async {
     );
   }
 
-  await AppDataService.instance.init();
+  // Keep boot listener alive immediately after Supabase.initialize() until
+  // _MyAppState.initState() takes over so deep links arriving during init are
+  // never dropped.
   final bootSupabase = SupabaseHelper.clientOrNull;
-  StreamSubscription<AuthState>? bootSub;
   if (bootSupabase != null) {
-    bootSub = bootSupabase.auth.onAuthStateChange.listen(
+    _bootAuthSub = bootSupabase.auth.onAuthStateChange.listen(
       (data) {
         if (data.event == AuthChangeEvent.passwordRecovery) {
           SupabaseHelper.pendingPasswordRecovery = true;
@@ -67,7 +88,32 @@ void main() async {
     );
   }
 
-  await bootSub?.cancel();
+  await AppDataService.instance.init();
+
+  if (initialWebParams.isNotEmpty) {
+    final errDesc = initialWebParams['error_description'] ??
+        initialWebParams['error'];
+    final redirectType = initialWebParams['type']?.toLowerCase();
+    if (errDesc != null && errDesc.isNotEmpty) {
+      SupabaseHelper.pendingAuthCallbackError ??=
+          SupabaseHelper.friendlyError(AuthException(errDesc));
+    } else if (redirectType == 'recovery') {
+      SupabaseHelper.pendingPasswordRecovery = true;
+    } else if (initialWebParams.containsKey('access_token') ||
+        initialWebParams.containsKey('code')) {
+      SupabaseHelper.pendingEmailVerification = true;
+    }
+  }
+
+  // Recover sessions established inside Supabase.initialize() on cold start
+  // (e.g. Web _handleInitialUri or immediate mobile deep link) before listeners ran.
+  if (!AppDataService.instance.isLoggedIn &&
+      SupabaseHelper.currentUser != null &&
+      !SupabaseHelper.pendingPasswordRecovery &&
+      SupabaseHelper.pendingAuthCallbackError == null) {
+    SupabaseHelper.pendingEmailVerification = true;
+  }
+
   runApp(const MyApp());
 }
 
@@ -90,6 +136,9 @@ class _MyAppState extends State<MyApp> {
   @override
   void initState() {
     super.initState();
+    _bootAuthSub?.cancel();
+    _bootAuthSub = null;
+
     final supabase = SupabaseHelper.clientOrNull;
     if (supabase != null) {
       _authSub = supabase.auth.onAuthStateChange.listen(
@@ -111,10 +160,7 @@ class _MyAppState extends State<MyApp> {
       final err = SupabaseHelper.pendingAuthCallbackError!;
       SupabaseHelper.pendingAuthCallbackError = null;
       WidgetsBinding.instance.addPostFrameCallback((_) {
-        _openResetPasswordScreen(
-          hasRecoverySession: false,
-          initialError: err,
-        );
+        _routeAuthCallbackError(err);
       });
     }
   }
@@ -127,9 +173,50 @@ class _MyAppState extends State<MyApp> {
 
   void _onAuthError(Object error, StackTrace stackTrace) {
     final msg = SupabaseHelper.friendlyError(error);
+    _routeAuthCallbackError(msg);
+  }
+
+  void _routeAuthCallbackError(String msg) {
+    final isSignupFlow = SupabaseHelper.pendingAuthFlow == 'signup' ||
+        (SupabaseHelper.pendingAuthFlow == null &&
+            SupabaseHelper.pendingAuthEmail != null &&
+            SupabaseHelper.pendingAuthEmail!.isNotEmpty);
+
+    if (isSignupFlow) {
+      _openVerificationErrorScreen(msg);
+      return;
+    }
+
     _openResetPasswordScreen(
       hasRecoverySession: SupabaseHelper.currentUser != null,
       initialError: msg,
+    );
+  }
+
+  void _openVerificationErrorScreen(String err) {
+    final nav = MyApp.navigatorKey.currentState;
+    if (nav == null) {
+      WidgetsBinding.instance.addPostFrameCallback((_) {
+        if (mounted) _openVerificationErrorScreen(err);
+      });
+      return;
+    }
+
+    final email = SupabaseHelper.pendingAuthEmail ??
+        SupabaseHelper.currentUser?.email ??
+        '';
+    final role = SupabaseHelper.pendingAuthRole ?? 'Student';
+
+    nav.pushAndRemoveUntil(
+      MaterialPageRoute(
+        builder: (_) => EmailVerificationScreen(
+          email: email,
+          role: role,
+          isVerified: false,
+          initialError: err,
+        ),
+      ),
+      (route) => false,
     );
   }
 
@@ -160,49 +247,77 @@ class _MyAppState extends State<MyApp> {
     final supabase = SupabaseHelper.clientOrNull;
     if (supabase == null) return;
 
+    Map<String, dynamic>? profileRow;
     try {
-      final profileRow = await supabase
+      profileRow = await supabase
           .from('profiles')
           .select()
           .eq('id', user.id)
           .limit(1)
           .maybeSingle();
+    } catch (e) {
+      debugPrint('Deep link profile lookup warning: $e');
+    }
 
-      final status = (profileRow?['account_status']?.toString() ?? 'active')
-          .trim()
-          .toLowerCase();
-      if (status == 'suspended') {
+    final status = (profileRow?['account_status']?.toString() ?? 'active')
+        .trim()
+        .toLowerCase();
+    if (status == 'suspended') {
+      try {
         await supabase.auth.signOut();
-        return;
-      }
+      } catch (_) {}
+      return;
+    }
 
-      final role = await SupabaseHelper.resolveAccountRole(
+    String role = 'Student';
+    try {
+      role = await SupabaseHelper.resolveAccountRole(
         supabase,
         user,
         profileRow: profileRow,
       );
-
-      final nav = MyApp.navigatorKey.currentState;
-      if (nav == null) {
-        WidgetsBinding.instance.addPostFrameCallback((_) {
-          if (mounted) _completeDeepLinkVerification(user);
-        });
-        return;
-      }
-
-      nav.pushAndRemoveUntil(
-        MaterialPageRoute(
-          builder: (_) => EmailVerificationScreen(
-            email: user.email ?? '',
-            role: role,
-            isVerified: true,
-          ),
-        ),
-        (route) => false,
-      );
     } catch (e) {
-      debugPrint('Deep link verification navigation warning: $e');
+      final metaType =
+          user.userMetadata?['user_type']?.toString().trim().toLowerCase() ??
+              '';
+      if (metaType == 'company' ||
+          SupabaseHelper.pendingAuthRole == 'Company') {
+        role = 'Company';
+      } else if (metaType == 'admin') {
+        role = 'Admin';
+      }
+      debugPrint('Deep link role resolution warning: $e');
     }
+
+    if (role == 'Company') {
+      try {
+        await supabase
+            .from('companies')
+            .update({'is_email_verified': true})
+            .eq('user_id', user.id);
+      } catch (_) {}
+    }
+
+    await AppDataService.instance.clearPendingAuthContext();
+
+    final nav = MyApp.navigatorKey.currentState;
+    if (nav == null) {
+      WidgetsBinding.instance.addPostFrameCallback((_) {
+        if (mounted) _completeDeepLinkVerification(user);
+      });
+      return;
+    }
+
+    nav.pushAndRemoveUntil(
+      MaterialPageRoute(
+        builder: (_) => EmailVerificationScreen(
+          email: user.email ?? SupabaseHelper.pendingAuthEmail ?? '',
+          role: role,
+          isVerified: true,
+        ),
+      ),
+      (route) => false,
+    );
   }
 
   void _openResetPasswordScreen({

@@ -80,6 +80,9 @@ class AppDataService extends ChangeNotifier {
   static const _kChatConversations = 'cc_chat_conversations_v1';
   static const _kSupportTickets = 'cc_support_tickets_v1';
   static const _kUserAccounts = 'cc_user_accounts_v1';
+  static const _kPendingAuthFlow = 'cc_pending_auth_flow_v1';
+  static const _kPendingAuthEmail = 'cc_pending_auth_email_v1';
+  static const _kPendingAuthRole = 'cc_pending_auth_role_v1';
 
   bool get isSyncing => _isSyncing;
   String? get lastSyncError => _lastSyncError;
@@ -98,6 +101,15 @@ class AppDataService extends ChangeNotifier {
     _userEmail = _prefs!.getString(_kUserEmail) ?? '';
     _userName = _prefs!.getString(_kUserName) ?? '';
     _userId = _prefs!.getString(_kUserId) ?? '';
+
+    final savedFlow = _prefs!.getString(_kPendingAuthFlow);
+    if (savedFlow != null && savedFlow.isNotEmpty) {
+      SupabaseHelper.setPendingAuthContext(
+        flow: savedFlow,
+        email: _prefs!.getString(_kPendingAuthEmail),
+        role: _prefs!.getString(_kPendingAuthRole),
+      );
+    }
 
     // 1. Saved Projects
     _savedProjects = _decodeList(_prefs!.getString(_kSavedProjects));
@@ -1674,6 +1686,38 @@ class AppDataService extends ChangeNotifier {
     }
   }
 
+  Future<void> savePendingAuthContext({
+    required String flow,
+    String? email,
+    String? role,
+  }) async {
+    SupabaseHelper.setPendingAuthContext(
+      flow: flow,
+      email: email,
+      role: role,
+    );
+    if (_prefs != null) {
+      await _prefs!.setString(_kPendingAuthFlow, flow);
+      if (email != null && email.trim().isNotEmpty) {
+        await _prefs!.setString(_kPendingAuthEmail, email.trim());
+      }
+      if (role != null && role.trim().isNotEmpty) {
+        await _prefs!.setString(_kPendingAuthRole, role.trim());
+      }
+    }
+  }
+
+  Future<void> clearPendingAuthContext() async {
+    SupabaseHelper.pendingAuthFlow = null;
+    SupabaseHelper.pendingAuthEmail = null;
+    SupabaseHelper.pendingAuthRole = null;
+    if (_prefs != null) {
+      await _prefs!.remove(_kPendingAuthFlow);
+      await _prefs!.remove(_kPendingAuthEmail);
+      await _prefs!.remove(_kPendingAuthRole);
+    }
+  }
+
   /// Clears all user-scoped state & preferences so switching accounts never leaks data.
   Future<void> clearAuthSession() async {
     _isLoggedIn = false;
@@ -1714,6 +1758,9 @@ class AppDataService extends ChangeNotifier {
       await _prefs!.remove(_kChatConversations);
       await _prefs!.remove(_kSupportTickets);
       await _prefs!.remove(_kPrivacySettings);
+      await _prefs!.remove(_kPendingAuthFlow);
+      await _prefs!.remove(_kPendingAuthEmail);
+      await _prefs!.remove(_kPendingAuthRole);
     }
   }
 

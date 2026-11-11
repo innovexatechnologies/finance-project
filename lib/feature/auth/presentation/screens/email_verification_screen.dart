@@ -16,6 +16,7 @@ class EmailVerificationScreen extends StatefulWidget {
   final String role;
   final bool isVerified;
   final String? initialError;
+  final String? initialInfo;
 
   const EmailVerificationScreen({
     super.key,
@@ -23,6 +24,7 @@ class EmailVerificationScreen extends StatefulWidget {
     this.role = 'Student',
     this.isVerified = false,
     this.initialError,
+    this.initialInfo,
   });
 
   @override
@@ -30,10 +32,12 @@ class EmailVerificationScreen extends StatefulWidget {
       _EmailVerificationScreenState();
 }
 
-class _EmailVerificationScreenState extends State<EmailVerificationScreen> {
+class _EmailVerificationScreenState extends State<EmailVerificationScreen>
+    with WidgetsBindingObserver {
   final _codeCtrl = TextEditingController();
   bool _isWorking = false;
   bool _isResending = false;
+  bool _isCheckingStatus = false;
   final ResendCooldown _resendCooldown = ResendCooldown();
   late bool _verified;
   String? _errorBanner;
@@ -42,21 +46,116 @@ class _EmailVerificationScreenState extends State<EmailVerificationScreen> {
   @override
   void initState() {
     super.initState();
+    WidgetsBinding.instance.addObserver(this);
     _verified = widget.isVerified;
     _errorBanner = widget.initialError;
+    _infoBanner = widget.initialInfo;
+    if (!_verified && widget.email.trim().isNotEmpty) {
+      AppDataService.instance.savePendingAuthContext(
+        flow: 'signup',
+        email: widget.email.trim(),
+        role: widget.role,
+      );
+    }
+  }
+
+  @override
+  void didUpdateWidget(covariant EmailVerificationScreen oldWidget) {
+    super.didUpdateWidget(oldWidget);
+    if (widget.isVerified != oldWidget.isVerified && widget.isVerified) {
+      _verified = true;
+      _errorBanner = null;
+      _infoBanner = null;
+    }
+    if (widget.initialError != oldWidget.initialError &&
+        widget.initialError != null) {
+      _errorBanner = widget.initialError;
+    }
+    if (widget.initialInfo != oldWidget.initialInfo &&
+        widget.initialInfo != null) {
+      _infoBanner = widget.initialInfo;
+    }
   }
 
   @override
   void dispose() {
+    WidgetsBinding.instance.removeObserver(this);
     _resendCooldown.dispose();
     _codeCtrl.dispose();
     super.dispose();
   }
 
+  @override
+  void didChangeAppLifecycleState(AppLifecycleState state) {
+    if (state == AppLifecycleState.resumed && !_verified && !_isWorking) {
+      _checkVerificationStatus(silent: true);
+    }
+  }
+
+  Future<void> _checkVerificationStatus({bool silent = false}) async {
+    if (_verified || _isCheckingStatus) return;
+    final supabase = SupabaseHelper.clientOrNull;
+    if (supabase == null) return;
+
+    final targetEmail = widget.email.trim().toLowerCase();
+    final current = supabase.auth.currentUser;
+    if (current == null ||
+        (targetEmail.isNotEmpty &&
+            (current.email ?? '').trim().toLowerCase() != targetEmail)) {
+      if (!silent && mounted) {
+        setState(() {
+          _infoBanner =
+              'Open the verification link in your inbox or enter the 6-digit code sent to ${widget.email.trim()}.';
+        });
+      }
+      return;
+    }
+
+    if (!silent && mounted) {
+      setState(() {
+        _isCheckingStatus = true;
+        _errorBanner = null;
+      });
+    }
+
+    try {
+      final userRes = await supabase.auth.getUser();
+      final confirmed = userRes.user?.emailConfirmedAt != null;
+      if (!mounted) return;
+      if (confirmed) {
+        await AppDataService.instance.clearPendingAuthContext();
+        if (!mounted) return;
+        setState(() {
+          _verified = true;
+          _errorBanner = null;
+          _infoBanner = null;
+        });
+      } else if (!silent) {
+        setState(() {
+          _infoBanner =
+              'Email is still pending confirmation. Click the link in your email or enter the 6-digit code below.';
+        });
+      }
+    } catch (_) {
+      if (current.emailConfirmedAt != null && mounted) {
+        setState(() => _verified = true);
+      }
+    } finally {
+      if (!silent && mounted) {
+        setState(() => _isCheckingStatus = false);
+      }
+    }
+  }
+
   Future<void> _resendEmail() async {
-    if (widget.email.trim().isEmpty ||
-        _isResending ||
-        _resendCooldown.isActive) {
+    final targetEmail = widget.email.trim();
+    if (targetEmail.isEmpty || _isResending || _resendCooldown.isActive) {
+      if (targetEmail.isEmpty && mounted) {
+        setState(
+          () => _errorBanner =
+              'Email address is missing. Please go back to Sign In and try again.',
+        );
+      }
       return;
     }
     final supabase = SupabaseHelper.clientOrNull;
@@ -68,10 +167,16 @@ class _EmailVerificationScreenState extends State<EmailVerificationScreen> {
       _infoBanner = null;
     });
 
+    await AppDataService.instance.savePendingAuthContext(
+      flow: 'signup',
+      email: targetEmail,
+      role: widget.role,
+    );
+
     try {
       await supabase.auth.resend(
         type: OtpType.signup,
-        email: widget.email.trim(),
+        email: targetEmail,
         emailRedirectTo: SupabaseHelper.emailRedirectUrl,
       );
       if (!mounted) return;
@@ -80,14 +185,18 @@ class _EmailVerificationScreenState extends State<EmailVerificationScreen> {
       });
       setState(() {
         _infoBanner =
-            'Verification email resent to ${widget.email.trim()}. Check your inbox or spam folder.';
+            'Verification email resent to $targetEmail. Check your inbox or spam folder.';
       });
     } catch (e) {
       if (!mounted) return;
-      if (SupabaseHelper.isEmailRateLimitError(e)) {
-        _resendCooldown.start(() {
-          if (mounted) setState(() {});
-        });
+      if (SupabaseHelper.isEmailRateLimitError(e) ||
+          SupabaseHelper.friendlyError(e).toLowerCase().contains('seconds')) {
+        _resendCooldown.start(
+          () {
+            if (mounted) setState(() {});
+          },
+          seconds: SupabaseHelper.extractRateLimitCooldownSeconds(e),
+        );
       }
       setState(() => _errorBanner = SupabaseHelper.friendlyError(e));
     } finally {
@@ -96,7 +205,7 @@ class _EmailVerificationScreenState extends State<EmailVerificationScreen> {
   }
 
   Future<void> _verifyWithCode() async {
-    final code = _codeCtrl.text.trim();
+    final code = _codeCtrl.text.replaceAll(RegExp(r'\s+'), '').trim();
     if (code.length < 6) {
       setState(
         () => _errorBanner = 'Enter the 6-digit verification code from email.',
@@ -126,6 +235,7 @@ class _EmailVerificationScreenState extends State<EmailVerificationScreen> {
       if (res.user == null) {
         throw const AuthException('Invalid or expired verification code.');
       }
+      await AppDataService.instance.clearPendingAuthContext();
       if (!mounted) return;
       setState(() => _verified = true);
     } catch (e) {
@@ -201,47 +311,63 @@ class _EmailVerificationScreenState extends State<EmailVerificationScreen> {
             'university': resolvedUni,
             'account_status': 'active',
           });
-          if (role == 'Company') {
-            final existingComp = await supabase
-                .from('companies')
-                .select('id')
-                .eq('user_id', user.id)
-                .limit(1)
-                .maybeSingle();
-            if (existingComp == null) {
-              await supabase.from('companies').insert({
-                'user_id': user.id,
-                'company_name': resolvedName,
-                'email': user.email ?? widget.email.trim(),
-                'industry': resolvedUni.isNotEmpty
-                    ? resolvedUni
-                    : 'Software & Cloud Services',
-                'verification_status': 'not_submitted',
-                'logo_initial':
-                    SupabaseHelper.initialsFor(resolvedName, fallback: 'CO'),
-              });
-            }
-          } else if (role == 'Student') {
-            final existingStu = await supabase
-                .from('students')
-                .select('id')
-                .eq('user_id', user.id)
-                .limit(1)
-                .maybeSingle();
-            if (existingStu == null) {
-              await supabase.from('students').insert({
-                'user_id': user.id,
-                'full_name': resolvedName,
-                'email': user.email ?? widget.email.trim(),
-                'university': resolvedUni,
-              });
-            }
-          }
         } catch (e) {
           debugPrint('EmailVerification profile initialization warning: $e');
         }
       }
 
+      if (role == 'Company') {
+        try {
+          final existingComp = await supabase
+              .from('companies')
+              .select('id')
+              .eq('user_id', user.id)
+              .limit(1)
+              .maybeSingle();
+          if (existingComp == null) {
+            await supabase.from('companies').insert({
+              'user_id': user.id,
+              'company_name': resolvedName,
+              'email': user.email ?? widget.email.trim(),
+              'industry': resolvedUni.isNotEmpty
+                  ? resolvedUni
+                  : 'Software & Cloud Services',
+              'verification_status': 'not_submitted',
+              'is_email_verified': true,
+              'logo_initial':
+                  SupabaseHelper.initialsFor(resolvedName, fallback: 'CO'),
+            });
+          } else {
+            await supabase
+                .from('companies')
+                .update({'is_email_verified': true})
+                .eq('user_id', user.id);
+          }
+        } catch (e) {
+          debugPrint('EmailVerification company initialization warning: $e');
+        }
+      } else if (role == 'Student') {
+        try {
+          final existingStu = await supabase
+              .from('students')
+              .select('id')
+              .eq('user_id', user.id)
+              .limit(1)
+              .maybeSingle();
+          if (existingStu == null) {
+            await supabase.from('students').insert({
+              'user_id': user.id,
+              'full_name': resolvedName,
+              'email': user.email ?? widget.email.trim(),
+              'university': resolvedUni,
+            });
+          }
+        } catch (e) {
+          debugPrint('EmailVerification student initialization warning: $e');
+        }
+      }
+
+      await AppDataService.instance.clearPendingAuthContext();
       await AppDataService.instance.saveAuthSession(
         role: role,
         email: user.email ?? widget.email,
@@ -258,10 +384,22 @@ class _EmailVerificationScreenState extends State<EmailVerificationScreen> {
         }
         destination = const AdminDashboardScreen();
       } else if (role == 'Company') {
-        await CompanyProfileService.loadAllCompanyPanelData();
+        try {
+          await CompanyProfileService.loadAllCompanyPanelData().timeout(
+            const Duration(seconds: 6),
+          );
+        } catch (e) {
+          debugPrint('Company panel preload warning: $e');
+        }
         destination = const CompanyMainNav();
       } else {
-        await AppDataService.instance.syncFromSupabase(forceRefresh: true);
+        try {
+          await AppDataService.instance
+              .syncFromSupabase(forceRefresh: true)
+              .timeout(const Duration(seconds: 6));
+        } catch (e) {
+          debugPrint('Student portal preload warning: $e');
+        }
         destination = const StudentMainNav();
       }
 
@@ -469,6 +607,19 @@ class _EmailVerificationScreenState extends State<EmailVerificationScreen> {
                                       : 'Resend Email',
                             ),
                           ),
+                          if (SupabaseHelper.currentUser != null)
+                            TextButton(
+                              onPressed: _isCheckingStatus
+                                  ? null
+                                  : () => _checkVerificationStatus(
+                                      silent: false,
+                                    ),
+                              child: Text(
+                                _isCheckingStatus
+                                    ? 'Checking...'
+                                    : 'Check Status',
+                              ),
+                            ),
                           TextButton(
                             onPressed: () {
                               Navigator.pushAndRemoveUntil(
