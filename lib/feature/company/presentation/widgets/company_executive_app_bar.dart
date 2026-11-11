@@ -220,6 +220,7 @@ class CompanyHeroBanner extends StatelessWidget {
   final String subtitle;
   final String? secondaryLine;
   final String? footerText;
+  final Widget? bottomContent;
   final Widget? trailingAction;
   final Widget? monogramBadgeOverlay;
   final VoidCallback? onMonogramTap;
@@ -233,6 +234,7 @@ class CompanyHeroBanner extends StatelessWidget {
     this.monogramTextOnWhite = true,
     this.secondaryLine,
     this.footerText,
+    this.bottomContent,
     this.trailingAction,
     this.monogramBadgeOverlay,
     this.onMonogramTap,
@@ -394,6 +396,10 @@ class CompanyHeroBanner extends StatelessWidget {
                       ],
                     ],
                   ),
+                  if (bottomContent != null) ...[
+                    const SizedBox(height: 16),
+                    bottomContent!,
+                  ],
                   if (footerText != null && footerText!.trim().isNotEmpty) ...[
                     const SizedBox(height: 12),
                     Align(
