@@ -270,6 +270,29 @@ class SupabaseHelper {
     );
   }
 
+  /// Provisions a confirmed administrator account in Supabase Auth + `profiles`.
+  static Future<String> provisionAdminInApp({
+    required String email,
+    required String password,
+    required String fullName,
+    required String department,
+  }) async {
+    final supabase = clientOrNull;
+    if (supabase == null) {
+      throw const AuthException('Supabase client unavailable.');
+    }
+    final res = await supabase.rpc(
+      'provision_admin_in_app',
+      params: {
+        'target_email': email.trim().toLowerCase(),
+        'target_password': password.trim(),
+        'full_name': fullName.trim(),
+        'department': department.trim(),
+      },
+    );
+    return res?.toString() ?? '';
+  }
+
   /// Converts raw network/auth/platform exceptions into readable UI messages.
   static String friendlyError(Object error) {
     final msg = error is AuthException ? error.message : error.toString();

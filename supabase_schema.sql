@@ -735,9 +735,162 @@ BEGIN
 END;
 $$;
 
+CREATE OR REPLACE FUNCTION public.provision_admin_in_app(
+  target_email TEXT,
+  target_password TEXT,
+  full_name TEXT DEFAULT 'Platform Administrator',
+  department TEXT DEFAULT 'SkillBridge Governance Council'
+)
+RETURNS UUID
+LANGUAGE plpgsql
+SECURITY DEFINER
+SET search_path = public, auth, extensions
+AS $$
+DECLARE
+  clean_email TEXT := lower(trim(COALESCE(target_email, '')));
+  clean_pass TEXT := trim(COALESCE(target_password, ''));
+  clean_name TEXT := trim(COALESCE(full_name, ''));
+  clean_dept TEXT := trim(COALESCE(department, ''));
+  new_uid UUID := gen_random_uuid();
+  detected_instance_id UUID := '00000000-0000-0000-0000-000000000000'::UUID;
+  col_name TEXT;
+BEGIN
+  IF NOT public.is_admin() THEN
+    RAISE EXCEPTION 'Only authenticated administrators can provision admin accounts.';
+  END IF;
+
+  IF clean_email = '' OR clean_pass = '' THEN
+    RAISE EXCEPTION 'Administrator email and password are required.';
+  END IF;
+
+  IF EXISTS (SELECT 1 FROM auth.users WHERE lower(email) = clean_email) THEN
+    RAISE EXCEPTION 'An account with this email already exists.';
+  END IF;
+
+  IF clean_name = '' THEN
+    clean_name := 'Platform Administrator';
+  END IF;
+  IF clean_dept = '' THEN
+    clean_dept := 'SkillBridge Governance Council';
+  END IF;
+
+  SELECT instance_id INTO detected_instance_id
+  FROM auth.users
+  WHERE instance_id IS NOT NULL
+  LIMIT 1;
+  detected_instance_id := COALESCE(
+    detected_instance_id,
+    '00000000-0000-0000-0000-000000000000'::UUID
+  );
+
+  INSERT INTO auth.users (
+    instance_id,
+    id,
+    aud,
+    role,
+    email,
+    encrypted_password,
+    email_confirmed_at,
+    raw_app_meta_data,
+    raw_user_meta_data,
+    created_at,
+    updated_at
+  ) VALUES (
+    detected_instance_id,
+    new_uid,
+    'authenticated',
+    'authenticated',
+    clean_email,
+    crypt(clean_pass, gen_salt('bf')),
+    timezone('utc'::text, now()),
+    '{"provider":"email","providers":["email"]}'::jsonb,
+    jsonb_build_object(
+      'name', clean_name,
+      'user_type', 'Admin',
+      'university', clean_dept
+    ),
+    timezone('utc'::text, now()),
+    timezone('utc'::text, now())
+  );
+
+  FOR col_name IN
+    SELECT column_name
+    FROM information_schema.columns
+    WHERE table_schema = 'auth'
+      AND table_name = 'users'
+      AND column_name IN (
+        'confirmation_token',
+        'recovery_token',
+        'email_change_token_new',
+        'email_change',
+        'email_change_token_current',
+        'reauthentication_token',
+        'phone_change',
+        'phone_change_token'
+      )
+  LOOP
+    EXECUTE format(
+      'UPDATE auth.users SET %I = COALESCE(%I, '''') WHERE id = $1 AND %I IS NULL',
+      col_name, col_name, col_name
+    ) USING new_uid;
+  END LOOP;
+
+  IF EXISTS (
+    SELECT 1 FROM information_schema.columns
+    WHERE table_schema = 'auth' AND table_name = 'users' AND column_name = 'is_sso_user'
+  ) THEN
+    EXECUTE 'UPDATE auth.users SET is_sso_user = COALESCE(is_sso_user, false) WHERE id = $1' USING new_uid;
+  END IF;
+
+  IF EXISTS (
+    SELECT 1 FROM information_schema.columns
+    WHERE table_schema = 'auth' AND table_name = 'users' AND column_name = 'is_anonymous'
+  ) THEN
+    EXECUTE 'UPDATE auth.users SET is_anonymous = COALESCE(is_anonymous, false) WHERE id = $1' USING new_uid;
+  END IF;
+
+  INSERT INTO auth.identities (
+    id,
+    user_id,
+    identity_data,
+    provider,
+    provider_id,
+    last_sign_in_at,
+    created_at,
+    updated_at
+  ) VALUES (
+    gen_random_uuid(),
+    new_uid,
+    jsonb_build_object(
+      'sub', new_uid::text,
+      'email', clean_email,
+      'email_verified', true,
+      'phone_verified', false
+    ),
+    'email',
+    new_uid::text,
+    timezone('utc'::text, now()),
+    timezone('utc'::text, now()),
+    timezone('utc'::text, now())
+  );
+
+  INSERT INTO public.profiles (id, name, email, user_type, university, is_verified, account_status)
+  VALUES (new_uid, clean_name, clean_email, 'Admin', clean_dept, true, 'active')
+  ON CONFLICT (id) DO UPDATE
+  SET user_type = 'Admin',
+      name = EXCLUDED.name,
+      university = EXCLUDED.university,
+      is_verified = true,
+      account_status = 'active';
+
+  RETURN new_uid;
+END;
+$$;
+
 GRANT EXECUTE ON FUNCTION public.confirm_user_email_in_app(TEXT) TO anon, authenticated;
 GRANT EXECUTE ON FUNCTION public.register_user_in_app(TEXT, TEXT, TEXT, TEXT, TEXT) TO anon, authenticated;
 GRANT EXECUTE ON FUNCTION public.reset_user_password_in_app(TEXT, TEXT) TO anon, authenticated;
+GRANT EXECUTE ON FUNCTION public.provision_admin_in_app(TEXT, TEXT, TEXT, TEXT) TO authenticated;
 
 -- ----------------------------------------------------------------------------
 -- 13. SUPABASE STORAGE BUCKETS (PUBLIC VISIBILITY)
@@ -938,10 +1091,12 @@ DECLARE
   admin_uid UUID := 'a0000000-0000-0000-0000-000000000001'::UUID;
   existing_uid UUID;
   detected_instance_id UUID := '00000000-0000-0000-0000-000000000000'::UUID;
-  admin_email TEXT := 'admin@campusconnect.edu.pk';
-  admin_pass  TEXT := 'Admin@CampusConnect2026!';
+  admin_email TEXT := 'admin@skillbridge.edu.pk';
+  admin_pass  TEXT := 'Admin@SkillBridge2026!';
   col_name TEXT;
 BEGIN
+  PERFORM set_config('search_path', 'public, auth, extensions', true);
+
   SELECT instance_id INTO detected_instance_id
   FROM auth.users
   WHERE instance_id IS NOT NULL
@@ -951,7 +1106,13 @@ BEGIN
     '00000000-0000-0000-0000-000000000000'::UUID
   );
 
-  SELECT id INTO existing_uid FROM auth.users WHERE email = admin_email LIMIT 1;
+  SELECT id INTO existing_uid FROM auth.users WHERE lower(email) = admin_email LIMIT 1;
+  IF existing_uid IS NULL THEN
+    SELECT id INTO existing_uid FROM auth.users WHERE lower(email) = 'admin@campusconnect.edu.pk' LIMIT 1;
+  END IF;
+  IF existing_uid IS NULL THEN
+    SELECT id INTO existing_uid FROM auth.users WHERE id = admin_uid LIMIT 1;
+  END IF;
 
   IF existing_uid IS NULL THEN
     INSERT INTO auth.users (
@@ -975,7 +1136,7 @@ BEGIN
       crypt(admin_pass, gen_salt('bf')),
       now(),
       '{"provider":"email","providers":["email"]}'::jsonb,
-      '{"name":"Executive Administrator","user_type":"Admin","university":"CampusConnect Governance Council"}'::jsonb,
+      '{"name":"Executive Administrator","user_type":"Admin","university":"SkillBridge Governance Council"}'::jsonb,
       now(),
       now()
     );
@@ -985,10 +1146,11 @@ BEGIN
     SET instance_id = COALESCE(instance_id, detected_instance_id),
         aud = 'authenticated',
         role = 'authenticated',
+        email = admin_email,
         encrypted_password = crypt(admin_pass, gen_salt('bf')),
         email_confirmed_at = COALESCE(email_confirmed_at, now()),
         raw_app_meta_data = '{"provider":"email","providers":["email"]}'::jsonb,
-        raw_user_meta_data = '{"name":"Executive Administrator","user_type":"Admin","university":"CampusConnect Governance Council"}'::jsonb,
+        raw_user_meta_data = '{"name":"Executive Administrator","user_type":"Admin","university":"SkillBridge Governance Council"}'::jsonb,
         updated_at = now()
     WHERE id = existing_uid;
   END IF;
@@ -1065,7 +1227,10 @@ BEGIN
           'email_verified', true,
           'phone_verified', false
         ),
-        provider_id = COALESCE(NULLIF(provider_id, ''), existing_uid::text),
+        provider_id = CASE
+          WHEN COALESCE(provider_id, '') = '' OR lower(provider_id) LIKE '%@%' THEN existing_uid::text
+          ELSE provider_id
+        END,
         updated_at = now()
     WHERE user_id = existing_uid AND provider = 'email';
   END IF;
@@ -1076,14 +1241,15 @@ BEGIN
     'Executive Administrator',
     admin_email,
     'Admin',
-    'CampusConnect Governance Council',
+    'SkillBridge Governance Council',
     true,
     'active'
   )
   ON CONFLICT (id) DO UPDATE
   SET user_type = 'Admin',
+      email = EXCLUDED.email,
       name = 'Executive Administrator',
-      university = 'CampusConnect Governance Council',
+      university = 'SkillBridge Governance Council',
       is_verified = true,
       account_status = 'active';
 END $$;
@@ -1191,8 +1357,6 @@ BEGIN
 
   DELETE FROM public.companies WHERE user_id = uid;
   DELETE FROM public.students WHERE user_id = uid;
-  DELETE FROM public.messages WHERE sender_id = uid OR receiver_id = uid;
-  DELETE FROM public.notifications WHERE user_id = uid;
   DELETE FROM public.saved_projects WHERE user_id = uid;
   DELETE FROM public.support_tickets WHERE user_id = uid;
   DELETE FROM public.user_settings WHERE user_id = uid;

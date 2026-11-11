@@ -258,46 +258,128 @@ class AdminCompanyService {
     }
   }
 
+  /// Shared helper to persist corporate verification or account state to Supabase.
+  /// Handles both full `companies` rows and synthesized profile-only companies (`id == userId`).
+  Future<({bool ok, String resolvedId})> _persistCompanyUpdate(
+    AdminCompanyModel company, {
+    required Map<String, dynamic> companyFields,
+    Map<String, dynamic>? profileFields,
+    required String auditAction,
+    required String auditDetails,
+  }) async {
+    final supabase = SupabaseHelper.clientOrNull;
+    if (supabase == null) {
+      return (ok: true, resolvedId: company.id);
+    }
+
+    final effectiveUserId = SupabaseHelper.isUuid(company.userId)
+        ? company.userId!
+        : (SupabaseHelper.isUuid(company.id) ? company.id : '');
+
+    if (!SupabaseHelper.isUuid(company.id) && effectiveUserId.isEmpty) {
+      return (ok: false, resolvedId: company.id);
+    }
+
+    try {
+      String resolvedId = company.id;
+      List<dynamic> updated = const [];
+
+      if (SupabaseHelper.isUuid(company.id) && company.id != effectiveUserId) {
+        updated = await supabase
+            .from('companies')
+            .update(companyFields)
+            .eq('id', company.id)
+            .select('id');
+      }
+
+      if (updated.isEmpty && effectiveUserId.isNotEmpty) {
+        updated = await supabase
+            .from('companies')
+            .update(companyFields)
+            .eq('user_id', effectiveUserId)
+            .select('id');
+      }
+
+      if (updated.isNotEmpty) {
+        final firstId = updated.first['id']?.toString() ?? '';
+        if (firstId.isNotEmpty) resolvedId = firstId;
+      } else if (effectiveUserId.isNotEmpty) {
+        final inserted = await supabase
+            .from('companies')
+            .insert({
+              'user_id': effectiveUserId,
+              'company_name': company.companyName,
+              'email': company.officialEmail,
+              'industry': company.industry,
+              'city': company.city,
+              'location': company.city,
+              'address': company.completeAddress,
+              'contact_person': company.contactPersonName,
+              'phone': company.phoneNumber,
+              'website': company.websiteUrl,
+              'description': company.description,
+              'registration_number': company.registrationNumber,
+              'logo_initial': company.logoInitial,
+              ...companyFields,
+            })
+            .select('id')
+            .single();
+        final newId = inserted['id']?.toString() ?? '';
+        if (newId.isNotEmpty) resolvedId = newId;
+      } else {
+        return (ok: false, resolvedId: company.id);
+      }
+
+      if (profileFields != null &&
+          profileFields.isNotEmpty &&
+          effectiveUserId.isNotEmpty) {
+        await supabase
+            .from('profiles')
+            .update(profileFields)
+            .eq('id', effectiveUserId);
+      }
+
+      await _writeAuditLog(
+        action: auditAction,
+        target: company.companyName,
+        details: auditDetails,
+      );
+
+      return (ok: true, resolvedId: resolvedId);
+    } catch (e) {
+      debugPrint('AdminCompanyService _persistCompanyUpdate error: $e');
+      return (ok: false, resolvedId: company.id);
+    }
+  }
+
   /// Approve Company Verification in Supabase & synchronize Verification Desk cleanly.
   Future<bool> approveCompanyVerification({
     required String companyId,
     required String adminName,
   }) async {
     final list = List<AdminCompanyModel>.from(companiesNotifier.value);
-    final idx = list.indexWhere((c) => c.id == companyId);
+    final idx = list.indexWhere((c) => c.id == companyId || c.userId == companyId);
     if (idx == -1) return false;
 
     final company = list[idx];
     final nowIso = DateTime.now().toIso8601String();
-    final supabase = SupabaseHelper.clientOrNull;
-
-    if (supabase != null && SupabaseHelper.isUuid(companyId)) {
-      try {
-        await supabase.from('companies').update({
-          'verification_status': 'verified',
-          'reviewer_name': adminName,
-          'reviewed_at': nowIso,
-          'admin_feedback': null,
-          'updated_at': nowIso,
-        }).eq('id', companyId);
-
-        if (SupabaseHelper.isUuid(company.userId)) {
-          await supabase.from('profiles').update({
-            'is_verified': true,
-            'updated_at': nowIso,
-          }).eq('id', company.userId!);
-        }
-
-        await _writeAuditLog(
-          action: 'COMPANY_VERIFICATION_APPROVED',
-          target: company.companyName,
-          details: 'Corporate entity approved by $adminName.',
-        );
-      } catch (e) {
-        debugPrint('AdminCompanyService approveCompanyVerification error: $e');
-        return false;
-      }
-    }
+    final persisted = await _persistCompanyUpdate(
+      company,
+      companyFields: {
+        'verification_status': 'verified',
+        'reviewer_name': adminName,
+        'reviewed_at': nowIso,
+        'admin_feedback': null,
+        'updated_at': nowIso,
+      },
+      profileFields: {
+        'is_verified': true,
+        'updated_at': nowIso,
+      },
+      auditAction: 'COMPANY_VERIFICATION_APPROVED',
+      auditDetails: 'Corporate entity approved by $adminName.',
+    );
+    if (!persisted.ok) return false;
 
     final history = List<CompanyAuditRecord>.from(company.auditHistory);
     history.insert(
@@ -312,20 +394,23 @@ class AdminCompanyService {
     );
 
     list[idx] = company.copyWith(
+      id: persisted.resolvedId,
       verificationStatus: CompanyVerificationState.verified,
       auditHistory: history,
     );
     companiesNotifier.value = list;
 
     AdminVerificationService().syncVerificationStateLocal(
-      companyId: companyId,
+      companyId: persisted.resolvedId,
       status: VerificationStatus.verified,
       reviewerName: adminName,
       adminFeedback: null,
     );
 
-    if (companyId.isNotEmpty &&
-        companyId == CompanyProfileService().currentProfile.id) {
+    if (persisted.resolvedId.isNotEmpty &&
+        (persisted.resolvedId == CompanyProfileService().currentProfile.id ||
+            (company.userId != null &&
+                company.userId == SupabaseHelper.currentUserId))) {
       CompanyVerificationService().applyAdminDecision(
         status: VerificationStatus.verified,
         feedback: null,
@@ -345,40 +430,28 @@ class AdminCompanyService {
     required String adminName,
   }) async {
     final list = List<AdminCompanyModel>.from(companiesNotifier.value);
-    final idx = list.indexWhere((c) => c.id == companyId);
+    final idx = list.indexWhere((c) => c.id == companyId || c.userId == companyId);
     if (idx == -1) return false;
 
     final company = list[idx];
     final nowIso = DateTime.now().toIso8601String();
-    final supabase = SupabaseHelper.clientOrNull;
-
-    if (supabase != null && SupabaseHelper.isUuid(companyId)) {
-      try {
-        await supabase.from('companies').update({
-          'verification_status': 'rejected',
-          'reviewer_name': adminName,
-          'reviewed_at': nowIso,
-          'admin_feedback': reason.trim(),
-          'updated_at': nowIso,
-        }).eq('id', companyId);
-
-        if (SupabaseHelper.isUuid(company.userId)) {
-          await supabase.from('profiles').update({
-            'is_verified': false,
-            'updated_at': nowIso,
-          }).eq('id', company.userId!);
-        }
-
-        await _writeAuditLog(
-          action: 'COMPANY_VERIFICATION_REJECTED',
-          target: company.companyName,
-          details: reason.trim(),
-        );
-      } catch (e) {
-        debugPrint('AdminCompanyService rejectCompanyVerification error: $e');
-        return false;
-      }
-    }
+    final persisted = await _persistCompanyUpdate(
+      company,
+      companyFields: {
+        'verification_status': 'rejected',
+        'reviewer_name': adminName,
+        'reviewed_at': nowIso,
+        'admin_feedback': reason.trim(),
+        'updated_at': nowIso,
+      },
+      profileFields: {
+        'is_verified': false,
+        'updated_at': nowIso,
+      },
+      auditAction: 'COMPANY_VERIFICATION_REJECTED',
+      auditDetails: reason.trim(),
+    );
+    if (!persisted.ok) return false;
 
     final history = List<CompanyAuditRecord>.from(company.auditHistory);
     history.insert(
@@ -393,20 +466,23 @@ class AdminCompanyService {
     );
 
     list[idx] = company.copyWith(
+      id: persisted.resolvedId,
       verificationStatus: CompanyVerificationState.rejected,
       auditHistory: history,
     );
     companiesNotifier.value = list;
 
     AdminVerificationService().syncVerificationStateLocal(
-      companyId: companyId,
+      companyId: persisted.resolvedId,
       status: VerificationStatus.rejected,
       reviewerName: adminName,
       adminFeedback: reason.trim(),
     );
 
-    if (companyId.isNotEmpty &&
-        companyId == CompanyProfileService().currentProfile.id) {
+    if (persisted.resolvedId.isNotEmpty &&
+        (persisted.resolvedId == CompanyProfileService().currentProfile.id ||
+            (company.userId != null &&
+                company.userId == SupabaseHelper.currentUserId))) {
       CompanyVerificationService().applyAdminDecision(
         status: VerificationStatus.rejected,
         feedback: reason.trim(),
@@ -426,32 +502,23 @@ class AdminCompanyService {
     required String adminName,
   }) async {
     final list = List<AdminCompanyModel>.from(companiesNotifier.value);
-    final idx = list.indexWhere((c) => c.id == companyId);
+    final idx = list.indexWhere((c) => c.id == companyId || c.userId == companyId);
     if (idx == -1) return false;
 
     final company = list[idx];
     final nowIso = DateTime.now().toIso8601String();
-    final supabase = SupabaseHelper.clientOrNull;
-
-    if (supabase != null && SupabaseHelper.isUuid(companyId)) {
-      try {
-        await supabase.from('companies').update({
-          'verification_status': 'pending',
-          'admin_feedback': instructions.trim(),
-          'reviewer_name': adminName,
-          'updated_at': nowIso,
-        }).eq('id', companyId);
-
-        await _writeAuditLog(
-          action: 'COMPANY_DOCS_REQUESTED',
-          target: company.companyName,
-          details: instructions.trim(),
-        );
-      } catch (e) {
-        debugPrint('AdminCompanyService requestAdditionalDocuments error: $e');
-        return false;
-      }
-    }
+    final persisted = await _persistCompanyUpdate(
+      company,
+      companyFields: {
+        'verification_status': 'pending',
+        'admin_feedback': instructions.trim(),
+        'reviewer_name': adminName,
+        'updated_at': nowIso,
+      },
+      auditAction: 'COMPANY_DOCS_REQUESTED',
+      auditDetails: instructions.trim(),
+    );
+    if (!persisted.ok) return false;
 
     final history = List<CompanyAuditRecord>.from(company.auditHistory);
     history.insert(
@@ -466,13 +533,14 @@ class AdminCompanyService {
     );
 
     list[idx] = company.copyWith(
+      id: persisted.resolvedId,
       verificationStatus: CompanyVerificationState.pending,
       auditHistory: history,
     );
     companiesNotifier.value = list;
 
     AdminVerificationService().syncVerificationStateLocal(
-      companyId: companyId,
+      companyId: persisted.resolvedId,
       status: VerificationStatus.pending,
       reviewerName: adminName,
       adminFeedback: instructions.trim(),
@@ -488,38 +556,26 @@ class AdminCompanyService {
     required String adminName,
   }) async {
     final list = List<AdminCompanyModel>.from(companiesNotifier.value);
-    final idx = list.indexWhere((c) => c.id == companyId);
+    final idx = list.indexWhere((c) => c.id == companyId || c.userId == companyId);
     if (idx == -1) return false;
 
     final company = list[idx];
     final nowIso = DateTime.now().toIso8601String();
-    final supabase = SupabaseHelper.clientOrNull;
-
-    if (supabase != null && SupabaseHelper.isUuid(companyId)) {
-      try {
-        await supabase.from('companies').update({
-          'account_status': 'suspended',
-          'suspension_reason': reason.trim(),
-          'updated_at': nowIso,
-        }).eq('id', companyId);
-
-        if (SupabaseHelper.isUuid(company.userId)) {
-          await supabase.from('profiles').update({
-            'account_status': 'suspended',
-            'updated_at': nowIso,
-          }).eq('id', company.userId!);
-        }
-
-        await _writeAuditLog(
-          action: 'COMPANY_SUSPENDED',
-          target: company.companyName,
-          details: reason.trim(),
-        );
-      } catch (e) {
-        debugPrint('AdminCompanyService suspendCompanyAccount error: $e');
-        return false;
-      }
-    }
+    final persisted = await _persistCompanyUpdate(
+      company,
+      companyFields: {
+        'account_status': 'suspended',
+        'suspension_reason': reason.trim(),
+        'updated_at': nowIso,
+      },
+      profileFields: {
+        'account_status': 'suspended',
+        'updated_at': nowIso,
+      },
+      auditAction: 'COMPANY_SUSPENDED',
+      auditDetails: reason.trim(),
+    );
+    if (!persisted.ok) return false;
 
     final history = List<CompanyAuditRecord>.from(company.auditHistory);
     history.insert(
@@ -534,6 +590,7 @@ class AdminCompanyService {
     );
 
     list[idx] = company.copyWith(
+      id: persisted.resolvedId,
       accountStatus: CompanyAccountState.suspended,
       suspensionReason: reason.trim(),
       auditHistory: history,
@@ -548,38 +605,26 @@ class AdminCompanyService {
     required String adminName,
   }) async {
     final list = List<AdminCompanyModel>.from(companiesNotifier.value);
-    final idx = list.indexWhere((c) => c.id == companyId);
+    final idx = list.indexWhere((c) => c.id == companyId || c.userId == companyId);
     if (idx == -1) return false;
 
     final company = list[idx];
     final nowIso = DateTime.now().toIso8601String();
-    final supabase = SupabaseHelper.clientOrNull;
-
-    if (supabase != null && SupabaseHelper.isUuid(companyId)) {
-      try {
-        await supabase.from('companies').update({
-          'account_status': 'active',
-          'suspension_reason': null,
-          'updated_at': nowIso,
-        }).eq('id', companyId);
-
-        if (SupabaseHelper.isUuid(company.userId)) {
-          await supabase.from('profiles').update({
-            'account_status': 'active',
-            'updated_at': nowIso,
-          }).eq('id', company.userId!);
-        }
-
-        await _writeAuditLog(
-          action: 'COMPANY_REACTIVATED',
-          target: company.companyName,
-          details: 'Account reactivated by $adminName.',
-        );
-      } catch (e) {
-        debugPrint('AdminCompanyService reactivateCompanyAccount error: $e');
-        return false;
-      }
-    }
+    final persisted = await _persistCompanyUpdate(
+      company,
+      companyFields: {
+        'account_status': 'active',
+        'suspension_reason': null,
+        'updated_at': nowIso,
+      },
+      profileFields: {
+        'account_status': 'active',
+        'updated_at': nowIso,
+      },
+      auditAction: 'COMPANY_REACTIVATED',
+      auditDetails: 'Account reactivated by $adminName.',
+    );
+    if (!persisted.ok) return false;
 
     final history = List<CompanyAuditRecord>.from(company.auditHistory);
     history.insert(
@@ -594,6 +639,7 @@ class AdminCompanyService {
     );
 
     list[idx] = company.copyWith(
+      id: persisted.resolvedId,
       accountStatus: CompanyAccountState.active,
       clearSuspensionReason: true,
       auditHistory: history,
@@ -608,7 +654,7 @@ class AdminCompanyService {
     String? feedback,
   }) {
     final list = List<AdminCompanyModel>.from(companiesNotifier.value);
-    final idx = list.indexWhere((c) => c.id == companyId);
+    final idx = list.indexWhere((c) => c.id == companyId || c.userId == companyId);
     if (idx == -1) return;
     list[idx] = list[idx].copyWith(verificationStatus: state);
     companiesNotifier.value = list;

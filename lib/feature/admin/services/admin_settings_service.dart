@@ -1,4 +1,3 @@
-import 'dart:async';
 import 'package:flutter/material.dart';
 import 'package:supabase_flutter/supabase_flutter.dart';
 import 'package:link_vibe/core/services/supabase_helper.dart';
@@ -16,6 +15,8 @@ class AdminSettingsService {
   factory AdminSettingsService() => _instance;
 
   AdminSettingsService._internal();
+
+  String? lastError;
 
   final ValueNotifier<List<CategorySettingItem>> categoriesNotifier =
       ValueNotifier<List<CategorySettingItem>>([]);
@@ -43,8 +44,9 @@ class AdminSettingsService {
 
     final projects = AdminProjectService().allProjects;
     final students = AdminStudentService().allStudents;
+    final Map<String, Map<String, dynamic>> adminRbacByEmail = {};
 
-    // 1. Load platform_taxonomies (category, skill, university, policy)
+    // 1. Load platform_taxonomies (category, skill, university, policy, admin_rbac)
     try {
       final taxRows = await supabase
           .from('platform_taxonomies')
@@ -69,7 +71,13 @@ class AdminSettingsService {
             ? Map<String, dynamic>.from(row['metadata'] as Map)
             : <String, dynamic>{};
 
-        if (itemType == 'category') {
+        if (itemType == 'admin_rbac') {
+          final key = name.trim().toLowerCase();
+          if (key.isNotEmpty) {
+            adminRbacByEmail[key] = meta;
+          }
+          continue;
+        } else if (itemType == 'category') {
           final colorVal = (meta['color_value'] as num?)?.toInt() ?? 0xFF6366F1;
           final projCount = projects
               .where((p) => p.category.toLowerCase() == name.toLowerCase())
@@ -303,24 +311,36 @@ class AdminSettingsService {
             ? row['university'].toString().trim()
             : 'SkillBridge Governance Council';
         final email = row['email']?.toString() ?? '';
+        final rbac = adminRbacByEmail[email.trim().toLowerCase()];
+        final roleKey = rbac?['role']?.toString().trim().isNotEmpty == true
+            ? rbac!['role'].toString().trim()
+            : 'SUPER_ADMIN';
+        final roleDisplay =
+            rbac?['role_display_name']?.toString().trim().isNotEmpty == true
+                ? rbac!['role_display_name'].toString().trim()
+                : 'Platform Administrator';
+        final parsedPerms = SupabaseHelper.parseStringList(rbac?['permissions']);
+        final permissions = parsedPerms.isNotEmpty
+            ? parsedPerms
+            : const [
+                'all',
+                'manage_categories',
+                'manage_skills',
+                'manage_universities',
+                'manage_support',
+                'manage_policies',
+                'manage_admins',
+              ];
         admins.add(
           AdminUserModel(
             id: row['id']?.toString() ?? '',
             fullName: name,
             email: email,
-            role: 'SUPER_ADMIN',
-            roleDisplayName: 'Platform Administrator',
+            role: roleKey,
+            roleDisplayName: roleDisplay,
             department: dept,
             avatarInitial: SupabaseHelper.initialsFor(name, fallback: 'EA'),
-            permissions: const [
-              'all',
-              'manage_categories',
-              'manage_skills',
-              'manage_universities',
-              'manage_support',
-              'manage_policies',
-              'manage_admins',
-            ],
+            permissions: permissions,
             lastLoginAt: SupabaseHelper.formatRelativeTime(
               row['updated_at'] ?? row['created_at'],
             ),
@@ -378,6 +398,136 @@ class AdminSettingsService {
     }
   }
 
+  Future<bool> _insertTaxonomyRow(Map<String, dynamic> row) async {
+    lastError = null;
+    final supabase = SupabaseHelper.clientOrNull;
+    if (supabase == null) return true;
+    try {
+      await supabase.from('platform_taxonomies').insert(row);
+      return true;
+    } catch (e) {
+      lastError = SupabaseHelper.friendlyError(e);
+      debugPrint('AdminSettingsService _insertTaxonomyRow error: $e');
+      return false;
+    }
+  }
+
+  Future<bool> _updateTaxonomyRow(String id, Map<String, dynamic> fields) async {
+    lastError = null;
+    final supabase = SupabaseHelper.clientOrNull;
+    if (supabase == null) return true;
+    if (!SupabaseHelper.isUuid(id)) {
+      lastError = 'Invalid record identifier.';
+      return false;
+    }
+    try {
+      final updated = await supabase
+          .from('platform_taxonomies')
+          .update(fields)
+          .eq('id', id)
+          .select('id');
+      if ((updated as List).isEmpty) {
+        lastError = 'Database record was not updated. Check administrator permissions.';
+        return false;
+      }
+      return true;
+    } catch (e) {
+      lastError = SupabaseHelper.friendlyError(e);
+      debugPrint('AdminSettingsService _updateTaxonomyRow error: $e');
+      return false;
+    }
+  }
+
+  Future<bool> _deleteTaxonomyRow(String id) async {
+    lastError = null;
+    final supabase = SupabaseHelper.clientOrNull;
+    if (supabase == null) return true;
+    if (!SupabaseHelper.isUuid(id)) {
+      lastError = 'Invalid record identifier.';
+      return false;
+    }
+    try {
+      final deleted = await supabase
+          .from('platform_taxonomies')
+          .delete()
+          .eq('id', id)
+          .select('id');
+      if ((deleted as List).isEmpty) {
+        lastError = 'Unable to remove record from Supabase.';
+        return false;
+      }
+      return true;
+    } catch (e) {
+      lastError = SupabaseHelper.friendlyError(e);
+      debugPrint('AdminSettingsService _deleteTaxonomyRow error: $e');
+      return false;
+    }
+  }
+
+  Future<bool> _updateSupportTicketRow(
+    String ticketId,
+    Map<String, dynamic> fields,
+  ) async {
+    lastError = null;
+    final supabase = SupabaseHelper.clientOrNull;
+    if (supabase == null) return true;
+    if (!SupabaseHelper.isUuid(ticketId)) {
+      lastError = 'Invalid support ticket identifier.';
+      return false;
+    }
+    try {
+      final updated = await supabase
+          .from('support_tickets')
+          .update(fields)
+          .eq('id', ticketId)
+          .select('id');
+      if ((updated as List).isEmpty) {
+        lastError = 'Ticket update did not match any row in Supabase.';
+        return false;
+      }
+      return true;
+    } catch (e) {
+      lastError = SupabaseHelper.friendlyError(e);
+      debugPrint('AdminSettingsService _updateSupportTicketRow error: $e');
+      return false;
+    }
+  }
+
+  Future<bool> _upsertAdminRbacRow({
+    required String email,
+    required String department,
+    required String role,
+    required String roleDisplayName,
+    required List<String> permissions,
+  }) async {
+    lastError = null;
+    final supabase = SupabaseHelper.clientOrNull;
+    if (supabase == null) return true;
+    final normalizedEmail = email.trim().toLowerCase();
+    try {
+      await supabase.from('platform_taxonomies').upsert(
+        {
+          'item_type': 'admin_rbac',
+          'name': normalizedEmail,
+          'description': roleDisplayName,
+          'is_active': true,
+          'metadata': {
+            'role': role,
+            'role_display_name': roleDisplayName,
+            'department': department.trim(),
+            'permissions': permissions,
+          },
+        },
+        onConflict: 'item_type,name',
+      );
+      return true;
+    } catch (e) {
+      lastError = SupabaseHelper.friendlyError(e);
+      debugPrint('AdminSettingsService _upsertAdminRbacRow error: $e');
+      return false;
+    }
+  }
+
   // --- 1. CATEGORY MANAGEMENT ---
   bool isDuplicateCategory(String name, {String? excludeId}) {
     final lower = name.trim().toLowerCase();
@@ -386,13 +536,16 @@ class AdminSettingsService {
     );
   }
 
-  bool addCategory({
+  Future<bool> addCategory({
     required String name,
     required String description,
     required Color color,
     required String adminEmail,
-  }) {
-    if (isDuplicateCategory(name)) return false;
+  }) async {
+    if (isDuplicateCategory(name)) {
+      lastError = 'Category with this title already exists.';
+      return false;
+    }
 
     final newId = SupabaseHelper.generateUuid();
     final newCat = CategorySettingItem(
@@ -405,21 +558,18 @@ class AdminSettingsService {
       createdAt: DateTime.now(),
     );
 
-    categoriesNotifier.value = [...categoriesNotifier.value, newCat];
-    _persistAsync(() async {
-      final supabase = SupabaseHelper.clientOrNull;
-      if (supabase != null) {
-        await supabase.from('platform_taxonomies').insert({
-          'id': newId,
-          'item_type': 'category',
-          'name': newCat.name,
-          'description': newCat.description,
-          'is_active': true,
-          'metadata': {'color_value': color.toARGB32()},
-        });
-      }
+    final ok = await _insertTaxonomyRow({
+      'id': newId,
+      'item_type': 'category',
+      'name': newCat.name,
+      'description': newCat.description,
+      'is_active': true,
+      'metadata': {'color_value': color.toARGB32()},
     });
-    _logAction(
+    if (!ok) return false;
+
+    categoriesNotifier.value = [...categoriesNotifier.value, newCat];
+    await _logAction(
       adminEmail,
       'CATEGORY_CREATE',
       newCat.name,
@@ -428,14 +578,24 @@ class AdminSettingsService {
     return true;
   }
 
-  bool updateCategory({
+  Future<bool> updateCategory({
     required String id,
     required String name,
     required String description,
     required Color color,
     required String adminEmail,
-  }) {
-    if (isDuplicateCategory(name, excludeId: id)) return false;
+  }) async {
+    if (isDuplicateCategory(name, excludeId: id)) {
+      lastError = 'Duplicate category name detected.';
+      return false;
+    }
+
+    final ok = await _updateTaxonomyRow(id, {
+      'name': name.trim(),
+      'description': description.trim(),
+      'metadata': {'color_value': color.toARGB32()},
+    });
+    if (!ok) return false;
 
     categoriesNotifier.value = categoriesNotifier.value.map((c) {
       if (c.id == id) {
@@ -448,17 +608,7 @@ class AdminSettingsService {
       return c;
     }).toList();
 
-    _persistAsync(() async {
-      final supabase = SupabaseHelper.clientOrNull;
-      if (supabase != null && SupabaseHelper.isUuid(id)) {
-        await supabase.from('platform_taxonomies').update({
-          'name': name.trim(),
-          'description': description.trim(),
-          'metadata': {'color_value': color.toARGB32()},
-        }).eq('id', id);
-      }
-    });
-    _logAction(
+    await _logAction(
       adminEmail,
       'CATEGORY_UPDATE',
       name.trim(),
@@ -467,28 +617,27 @@ class AdminSettingsService {
     return true;
   }
 
-  void toggleCategoryActive(String id, String adminEmail) {
+  Future<bool> toggleCategoryActive(String id, String adminEmail) async {
+    final idx = categoriesNotifier.value.indexWhere((c) => c.id == id);
+    if (idx == -1) return false;
+    final target = categoriesNotifier.value[idx];
+    final newStatus = !target.isActive;
+
+    final ok = await _updateTaxonomyRow(id, {'is_active': newStatus});
+    if (!ok) return false;
+
     categoriesNotifier.value = categoriesNotifier.value.map((c) {
-      if (c.id == id) {
-        final newStatus = !c.isActive;
-        _persistAsync(() async {
-          final supabase = SupabaseHelper.clientOrNull;
-          if (supabase != null && SupabaseHelper.isUuid(id)) {
-            await supabase
-                .from('platform_taxonomies')
-                .update({'is_active': newStatus}).eq('id', id);
-          }
-        });
-        _logAction(
-          adminEmail,
-          'CATEGORY_TOGGLE',
-          c.name,
-          'Toggled status to ${newStatus ? 'Active' : 'Inactive'}.',
-        );
-        return c.copyWith(isActive: newStatus);
-      }
+      if (c.id == id) return c.copyWith(isActive: newStatus);
       return c;
     }).toList();
+
+    await _logAction(
+      adminEmail,
+      'CATEGORY_TOGGLE',
+      target.name,
+      'Toggled status to ${newStatus ? 'Active' : 'Inactive'}.',
+    );
+    return true;
   }
 
   // --- 2. SKILLS MANAGEMENT ---
@@ -499,12 +648,15 @@ class AdminSettingsService {
     );
   }
 
-  bool addSkill({
+  Future<bool> addSkill({
     required String name,
     required String categoryName,
     required String adminEmail,
-  }) {
-    if (isDuplicateSkill(name)) return false;
+  }) async {
+    if (isDuplicateSkill(name)) {
+      lastError = 'Duplicate skill name detected.';
+      return false;
+    }
 
     final newId = SupabaseHelper.generateUuid();
     final newSkill = SkillSettingItem(
@@ -516,21 +668,18 @@ class AdminSettingsService {
       createdAt: DateTime.now(),
     );
 
-    skillsNotifier.value = [...skillsNotifier.value, newSkill];
-    _persistAsync(() async {
-      final supabase = SupabaseHelper.clientOrNull;
-      if (supabase != null) {
-        await supabase.from('platform_taxonomies').insert({
-          'id': newId,
-          'item_type': 'skill',
-          'name': newSkill.name,
-          'description': '',
-          'is_active': true,
-          'metadata': {'category_name': categoryName},
-        });
-      }
+    final ok = await _insertTaxonomyRow({
+      'id': newId,
+      'item_type': 'skill',
+      'name': newSkill.name,
+      'description': '',
+      'is_active': true,
+      'metadata': {'category_name': categoryName},
     });
-    _logAction(
+    if (!ok) return false;
+
+    skillsNotifier.value = [...skillsNotifier.value, newSkill];
+    await _logAction(
       adminEmail,
       'SKILL_CREATE',
       newSkill.name,
@@ -539,13 +688,22 @@ class AdminSettingsService {
     return true;
   }
 
-  bool updateSkill({
+  Future<bool> updateSkill({
     required String id,
     required String name,
     required String categoryName,
     required String adminEmail,
-  }) {
-    if (isDuplicateSkill(name, excludeId: id)) return false;
+  }) async {
+    if (isDuplicateSkill(name, excludeId: id)) {
+      lastError = 'Duplicate skill name detected.';
+      return false;
+    }
+
+    final ok = await _updateTaxonomyRow(id, {
+      'name': name.trim(),
+      'metadata': {'category_name': categoryName},
+    });
+    if (!ok) return false;
 
     skillsNotifier.value = skillsNotifier.value.map((s) {
       if (s.id == id) {
@@ -554,16 +712,7 @@ class AdminSettingsService {
       return s;
     }).toList();
 
-    _persistAsync(() async {
-      final supabase = SupabaseHelper.clientOrNull;
-      if (supabase != null && SupabaseHelper.isUuid(id)) {
-        await supabase.from('platform_taxonomies').update({
-          'name': name.trim(),
-          'metadata': {'category_name': categoryName},
-        }).eq('id', id);
-      }
-    });
-    _logAction(
+    await _logAction(
       adminEmail,
       'SKILL_UPDATE',
       name.trim(),
@@ -572,49 +721,47 @@ class AdminSettingsService {
     return true;
   }
 
-  void deleteSkill(String id, String adminEmail) {
+  Future<bool> deleteSkill(String id, String adminEmail) async {
     final idx = skillsNotifier.value.indexWhere((s) => s.id == id);
-    if (idx == -1) return;
+    if (idx == -1) return false;
     final target = skillsNotifier.value[idx];
+
+    final ok = await _deleteTaxonomyRow(id);
+    if (!ok) return false;
+
     skillsNotifier.value =
         skillsNotifier.value.where((s) => s.id != id).toList();
 
-    _persistAsync(() async {
-      final supabase = SupabaseHelper.clientOrNull;
-      if (supabase != null && SupabaseHelper.isUuid(id)) {
-        await supabase.from('platform_taxonomies').delete().eq('id', id);
-      }
-    });
-    _logAction(
+    await _logAction(
       adminEmail,
       'SKILL_DELETE',
       target.name,
       'Removed skill from taxonomy registry.',
     );
+    return true;
   }
 
-  void toggleSkillActive(String id, String adminEmail) {
+  Future<bool> toggleSkillActive(String id, String adminEmail) async {
+    final idx = skillsNotifier.value.indexWhere((s) => s.id == id);
+    if (idx == -1) return false;
+    final target = skillsNotifier.value[idx];
+    final newStatus = !target.isActive;
+
+    final ok = await _updateTaxonomyRow(id, {'is_active': newStatus});
+    if (!ok) return false;
+
     skillsNotifier.value = skillsNotifier.value.map((s) {
-      if (s.id == id) {
-        final newStatus = !s.isActive;
-        _persistAsync(() async {
-          final supabase = SupabaseHelper.clientOrNull;
-          if (supabase != null && SupabaseHelper.isUuid(id)) {
-            await supabase
-                .from('platform_taxonomies')
-                .update({'is_active': newStatus}).eq('id', id);
-          }
-        });
-        _logAction(
-          adminEmail,
-          'SKILL_TOGGLE',
-          s.name,
-          'Toggled skill status to ${newStatus ? 'Active' : 'Deactivated'}.',
-        );
-        return s.copyWith(isActive: newStatus);
-      }
+      if (s.id == id) return s.copyWith(isActive: newStatus);
       return s;
     }).toList();
+
+    await _logAction(
+      adminEmail,
+      'SKILL_TOGGLE',
+      target.name,
+      'Toggled skill status to ${newStatus ? 'Active' : 'Deactivated'}.',
+    );
+    return true;
   }
 
   // --- 3. UNIVERSITY MANAGEMENT ---
@@ -624,20 +771,24 @@ class AdminSettingsService {
     return universitiesNotifier.value.any(
       (u) =>
           (u.name.trim().toLowerCase() == lowerName ||
-              u.domain.trim().toLowerCase() == lowerDomain) &&
+              (lowerDomain.isNotEmpty &&
+                  u.domain.trim().toLowerCase() == lowerDomain)) &&
           u.id != excludeId,
     );
   }
 
-  bool addUniversity({
+  Future<bool> addUniversity({
     required String name,
     required String shortName,
     required String city,
     required String province,
     required String domain,
     required String adminEmail,
-  }) {
-    if (isDuplicateUniversity(name, domain)) return false;
+  }) async {
+    if (isDuplicateUniversity(name, domain)) {
+      lastError = 'University with this name or domain already accredited.';
+      return false;
+    }
 
     final newId = SupabaseHelper.generateUuid();
     final newUni = UniversitySettingItem(
@@ -652,26 +803,23 @@ class AdminSettingsService {
       createdAt: DateTime.now(),
     );
 
-    universitiesNotifier.value = [...universitiesNotifier.value, newUni];
-    _persistAsync(() async {
-      final supabase = SupabaseHelper.clientOrNull;
-      if (supabase != null) {
-        await supabase.from('platform_taxonomies').insert({
-          'id': newId,
-          'item_type': 'university',
-          'name': newUni.name,
-          'description': '${newUni.city}, ${newUni.province}',
-          'is_active': true,
-          'metadata': {
-            'short_name': newUni.shortName,
-            'city': newUni.city,
-            'province': newUni.province,
-            'domain': newUni.domain,
-          },
-        });
-      }
+    final ok = await _insertTaxonomyRow({
+      'id': newId,
+      'item_type': 'university',
+      'name': newUni.name,
+      'description': '${newUni.city}, ${newUni.province}',
+      'is_active': true,
+      'metadata': {
+        'short_name': newUni.shortName,
+        'city': newUni.city,
+        'province': newUni.province,
+        'domain': newUni.domain,
+      },
     });
-    _logAction(
+    if (!ok) return false;
+
+    universitiesNotifier.value = [...universitiesNotifier.value, newUni];
+    await _logAction(
       adminEmail,
       'UNIVERSITY_CREATE',
       newUni.shortName,
@@ -680,7 +828,7 @@ class AdminSettingsService {
     return true;
   }
 
-  bool updateUniversity({
+  Future<bool> updateUniversity({
     required String id,
     required String name,
     required String shortName,
@@ -688,8 +836,23 @@ class AdminSettingsService {
     required String province,
     required String domain,
     required String adminEmail,
-  }) {
-    if (isDuplicateUniversity(name, domain, excludeId: id)) return false;
+  }) async {
+    if (isDuplicateUniversity(name, domain, excludeId: id)) {
+      lastError = 'Duplicate university records detected.';
+      return false;
+    }
+
+    final ok = await _updateTaxonomyRow(id, {
+      'name': name.trim(),
+      'description': '${city.trim()}, ${province.trim()}',
+      'metadata': {
+        'short_name': shortName.trim(),
+        'city': city.trim(),
+        'province': province.trim(),
+        'domain': domain.trim().toLowerCase(),
+      },
+    });
+    if (!ok) return false;
 
     universitiesNotifier.value = universitiesNotifier.value.map((u) {
       if (u.id == id) {
@@ -704,22 +867,7 @@ class AdminSettingsService {
       return u;
     }).toList();
 
-    _persistAsync(() async {
-      final supabase = SupabaseHelper.clientOrNull;
-      if (supabase != null && SupabaseHelper.isUuid(id)) {
-        await supabase.from('platform_taxonomies').update({
-          'name': name.trim(),
-          'description': '${city.trim()}, ${province.trim()}',
-          'metadata': {
-            'short_name': shortName.trim(),
-            'city': city.trim(),
-            'province': province.trim(),
-            'domain': domain.trim().toLowerCase(),
-          },
-        }).eq('id', id);
-      }
-    });
-    _logAction(
+    await _logAction(
       adminEmail,
       'UNIVERSITY_UPDATE',
       shortName.trim(),
@@ -728,37 +876,44 @@ class AdminSettingsService {
     return true;
   }
 
-  void toggleUniversityActive(String id, String adminEmail) {
+  Future<bool> toggleUniversityActive(String id, String adminEmail) async {
+    final idx = universitiesNotifier.value.indexWhere((u) => u.id == id);
+    if (idx == -1) return false;
+    final target = universitiesNotifier.value[idx];
+    final newStatus = !target.isActive;
+
+    final ok = await _updateTaxonomyRow(id, {'is_active': newStatus});
+    if (!ok) return false;
+
     universitiesNotifier.value = universitiesNotifier.value.map((u) {
-      if (u.id == id) {
-        final newStatus = !u.isActive;
-        _persistAsync(() async {
-          final supabase = SupabaseHelper.clientOrNull;
-          if (supabase != null && SupabaseHelper.isUuid(id)) {
-            await supabase
-                .from('platform_taxonomies')
-                .update({'is_active': newStatus}).eq('id', id);
-          }
-        });
-        _logAction(
-          adminEmail,
-          'UNIVERSITY_TOGGLE',
-          u.shortName,
-          'Changed accreditation state to ${newStatus ? 'Active' : 'Suspended'}.',
-        );
-        return u.copyWith(isActive: newStatus);
-      }
+      if (u.id == id) return u.copyWith(isActive: newStatus);
       return u;
     }).toList();
+
+    await _logAction(
+      adminEmail,
+      'UNIVERSITY_TOGGLE',
+      target.shortName,
+      'Changed accreditation state to ${newStatus ? 'Active' : 'Suspended'}.',
+    );
+    return true;
   }
 
   // --- 4. HELP REQUESTS ---
-  void addAdminResponse({
+  Future<bool> addAdminResponse({
     required String ticketId,
     required String responseText,
     required String adminEmail,
-  }) {
+  }) async {
     final cleanResp = responseText.trim();
+    final ok = await _updateSupportTicketRow(ticketId, {
+      'admin_response': cleanResp,
+      'assigned_to': adminEmail,
+      'status': 'In Progress',
+      'updated_at': DateTime.now().toIso8601String(),
+    });
+    if (!ok) return false;
+
     helpRequestsNotifier.value = helpRequestsNotifier.value.map((t) {
       if (t.id == ticketId) {
         return t.copyWith(
@@ -770,31 +925,29 @@ class AdminSettingsService {
       return t;
     }).toList();
 
-    _persistAsync(() async {
-      final supabase = SupabaseHelper.clientOrNull;
-      if (supabase != null && SupabaseHelper.isUuid(ticketId)) {
-        await supabase.from('support_tickets').update({
-          'admin_response': cleanResp,
-          'assigned_to': adminEmail,
-          'status': 'In Progress',
-          'updated_at': DateTime.now().toIso8601String(),
-        }).eq('id', ticketId);
-      }
-    });
-    _logAction(
+    await _logAction(
       adminEmail,
       'HELP_TICKET_RESPOND',
       ticketId,
       'Provided administrative answer.',
     );
+    return true;
   }
 
-  void resolveHelpRequest({
+  Future<bool> resolveHelpRequest({
     required String ticketId,
     required String resolutionNotes,
     required String adminEmail,
-  }) {
+  }) async {
     final cleanNotes = resolutionNotes.trim();
+    final ok = await _updateSupportTicketRow(ticketId, {
+      'admin_response': cleanNotes,
+      'assigned_to': adminEmail,
+      'status': 'Resolved',
+      'updated_at': DateTime.now().toIso8601String(),
+    });
+    if (!ok) return false;
+
     helpRequestsNotifier.value = helpRequestsNotifier.value.map((t) {
       if (t.id == ticketId) {
         return t.copyWith(
@@ -810,32 +963,30 @@ class AdminSettingsService {
       return t;
     }).toList();
 
-    _persistAsync(() async {
-      final supabase = SupabaseHelper.clientOrNull;
-      if (supabase != null && SupabaseHelper.isUuid(ticketId)) {
-        await supabase.from('support_tickets').update({
-          'admin_response': cleanNotes,
-          'assigned_to': adminEmail,
-          'status': 'Resolved',
-          'updated_at': DateTime.now().toIso8601String(),
-        }).eq('id', ticketId);
-      }
-    });
-    _logAction(
+    await _logAction(
       adminEmail,
       'HELP_TICKET_RESOLVE',
       ticketId,
       'Ticket resolved: $cleanNotes',
     );
+    return true;
   }
 
   // --- 5. COMPLAINT MANAGEMENT ---
-  void updateInvestigationNotes({
+  Future<bool> updateInvestigationNotes({
     required String complaintId,
     required String notes,
     required String adminEmail,
-  }) {
+  }) async {
     final cleanNotes = notes.trim();
+    final ok = await _updateSupportTicketRow(complaintId, {
+      'admin_response': cleanNotes,
+      'assigned_to': adminEmail,
+      'status': 'under_investigation',
+      'updated_at': DateTime.now().toIso8601String(),
+    });
+    if (!ok) return false;
+
     complaintsNotifier.value = complaintsNotifier.value.map((c) {
       if (c.id == complaintId) {
         final newHistory = [
@@ -856,31 +1007,29 @@ class AdminSettingsService {
       return c;
     }).toList();
 
-    _persistAsync(() async {
-      final supabase = SupabaseHelper.clientOrNull;
-      if (supabase != null && SupabaseHelper.isUuid(complaintId)) {
-        await supabase.from('support_tickets').update({
-          'admin_response': cleanNotes,
-          'assigned_to': adminEmail,
-          'status': 'under_investigation',
-          'updated_at': DateTime.now().toIso8601String(),
-        }).eq('id', complaintId);
-      }
-    });
-    _logAction(
+    await _logAction(
       adminEmail,
       'COMPLAINT_NOTE',
       complaintId,
       'Recorded investigation observations.',
     );
+    return true;
   }
 
-  void resolveComplaint({
+  Future<bool> resolveComplaint({
     required String complaintId,
     required String reason,
     required String adminEmail,
-  }) {
+  }) async {
     final cleanReason = reason.trim();
+    final ok = await _updateSupportTicketRow(complaintId, {
+      'admin_response': cleanReason,
+      'assigned_to': adminEmail,
+      'status': 'resolved',
+      'updated_at': DateTime.now().toIso8601String(),
+    });
+    if (!ok) return false;
+
     complaintsNotifier.value = complaintsNotifier.value.map((c) {
       if (c.id == complaintId) {
         final newHistory = [
@@ -903,31 +1052,29 @@ class AdminSettingsService {
       return c;
     }).toList();
 
-    _persistAsync(() async {
-      final supabase = SupabaseHelper.clientOrNull;
-      if (supabase != null && SupabaseHelper.isUuid(complaintId)) {
-        await supabase.from('support_tickets').update({
-          'admin_response': cleanReason,
-          'assigned_to': adminEmail,
-          'status': 'resolved',
-          'updated_at': DateTime.now().toIso8601String(),
-        }).eq('id', complaintId);
-      }
-    });
-    _logAction(
+    await _logAction(
       adminEmail,
       'COMPLAINT_RESOLVE',
       complaintId,
       'Resolved complaint with formal outcome.',
     );
+    return true;
   }
 
-  void dismissComplaint({
+  Future<bool> dismissComplaint({
     required String complaintId,
     required String reason,
     required String adminEmail,
-  }) {
+  }) async {
     final cleanReason = reason.trim();
+    final ok = await _updateSupportTicketRow(complaintId, {
+      'admin_response': cleanReason,
+      'assigned_to': adminEmail,
+      'status': 'dismissed',
+      'updated_at': DateTime.now().toIso8601String(),
+    });
+    if (!ok) return false;
+
     complaintsNotifier.value = complaintsNotifier.value.map((c) {
       if (c.id == complaintId) {
         final newHistory = [
@@ -950,108 +1097,96 @@ class AdminSettingsService {
       return c;
     }).toList();
 
-    _persistAsync(() async {
-      final supabase = SupabaseHelper.clientOrNull;
-      if (supabase != null && SupabaseHelper.isUuid(complaintId)) {
-        await supabase.from('support_tickets').update({
-          'admin_response': cleanReason,
-          'assigned_to': adminEmail,
-          'status': 'dismissed',
-          'updated_at': DateTime.now().toIso8601String(),
-        }).eq('id', complaintId);
-      }
-    });
-    _logAction(
+    await _logAction(
       adminEmail,
       'COMPLAINT_DISMISS',
       complaintId,
       'Dismissed grievance without penalty.',
     );
+    return true;
   }
 
   // --- 6. PLATFORM POLICIES ---
-  void updatePolicy({
+  Future<bool> updatePolicy({
     required String policyKey,
     required String title,
     required String content,
     required String changeSummary,
     required String adminEmail,
-  }) {
-    PlatformPolicyItem? updatedPolicy;
-    policiesNotifier.value = policiesNotifier.value.map((p) {
-      if (p.policyKey == policyKey || p.id == policyKey) {
-        final currentParts = p.version.replaceAll('v', '').split('.');
-        final major = currentParts.isNotEmpty ? currentParts[0] : '1';
-        final minor = currentParts.length > 1
-            ? (int.tryParse(currentParts[1]) ?? 0) + 1
-            : 1;
-        final nextVersion = 'v$major.$minor';
+  }) async {
+    final idx = policiesNotifier.value.indexWhere(
+      (p) => p.policyKey == policyKey || p.id == policyKey,
+    );
+    if (idx == -1) return false;
 
-        final newHistory = [
-          PolicyVersionRecord(
-            version: nextVersion,
-            updatedAt: DateTime.now(),
-            updatedByAdmin: adminEmail,
-            changeSummary: changeSummary.trim(),
-          ),
-          ...p.history,
-        ];
+    final p = policiesNotifier.value[idx];
+    final currentParts = p.version.replaceAll('v', '').split('.');
+    final major = currentParts.isNotEmpty ? currentParts[0] : '1';
+    final minor = currentParts.length > 1
+        ? (int.tryParse(currentParts[1]) ?? 0) + 1
+        : 1;
+    final nextVersion = 'v$major.$minor';
+    final now = DateTime.now();
 
-        updatedPolicy = p.copyWith(
-          title: title.trim(),
-          content: content.trim(),
-          version: nextVersion,
-          lastUpdatedAt: DateTime.now(),
-          updatedByAdmin: adminEmail,
-          history: newHistory,
-        );
-        return updatedPolicy!;
-      }
-      return p;
-    }).toList();
+    final newHistory = [
+      PolicyVersionRecord(
+        version: nextVersion,
+        updatedAt: now,
+        updatedByAdmin: adminEmail,
+        changeSummary: changeSummary.trim(),
+      ),
+      ...p.history,
+    ];
 
-    if (updatedPolicy != null) {
-      final pol = updatedPolicy!;
-      _persistAsync(() async {
-        final supabase = SupabaseHelper.clientOrNull;
-        if (supabase != null && SupabaseHelper.isUuid(pol.id)) {
-          await supabase.from('platform_taxonomies').update({
-            'name': pol.title,
-            'description': pol.content,
-            'metadata': {
-              'policy_key': pol.policyKey,
-              'version': pol.version,
-              'last_updated_at': pol.lastUpdatedAt.toIso8601String(),
-              'updated_by_admin': pol.updatedByAdmin,
-              'history': pol.history
-                  .map((h) => {
-                        'version': h.version,
-                        'updated_at': h.updatedAt.toIso8601String(),
-                        'updated_by_admin': h.updatedByAdmin,
-                        'change_summary': h.changeSummary,
-                      })
-                  .toList(),
-            },
-          }).eq('id', pol.id);
-        }
-      });
-    }
+    final updatedPolicy = p.copyWith(
+      title: title.trim(),
+      content: content.trim(),
+      version: nextVersion,
+      lastUpdatedAt: now,
+      updatedByAdmin: adminEmail,
+      history: newHistory,
+    );
 
-    _logAction(
+    final ok = await _updateTaxonomyRow(updatedPolicy.id, {
+      'name': updatedPolicy.title,
+      'description': updatedPolicy.content,
+      'metadata': {
+        'policy_key': updatedPolicy.policyKey,
+        'version': updatedPolicy.version,
+        'last_updated_at': updatedPolicy.lastUpdatedAt.toIso8601String(),
+        'updated_by_admin': updatedPolicy.updatedByAdmin,
+        'history': updatedPolicy.history
+            .map((h) => {
+                  'version': h.version,
+                  'updated_at': h.updatedAt.toIso8601String(),
+                  'updated_by_admin': h.updatedByAdmin,
+                  'change_summary': h.changeSummary,
+                })
+            .toList(),
+      },
+    });
+    if (!ok) return false;
+
+    final nextList = List<PlatformPolicyItem>.from(policiesNotifier.value);
+    nextList[idx] = updatedPolicy;
+    policiesNotifier.value = nextList;
+
+    await _logAction(
       adminEmail,
       'POLICY_UPDATE',
       title.trim(),
       'Published version update with audit changelog.',
     );
+    return true;
   }
 
   /// Create a brand-new policy when policy table starts empty.
-  bool createPolicy({
+  Future<bool> createPolicy({
     required String policyKey,
     required String title,
     required String content,
     required String adminEmail,
-  }) {
+  }) async {
     final newId = SupabaseHelper.generateUuid();
     final now = DateTime.now();
     final item = PlatformPolicyItem(
@@ -1071,26 +1206,32 @@ class AdminSettingsService {
         ),
       ],
     );
-    policiesNotifier.value = [...policiesNotifier.value, item];
-    _persistAsync(() async {
-      final supabase = SupabaseHelper.clientOrNull;
-      if (supabase != null) {
-        await supabase.from('platform_taxonomies').insert({
-          'id': newId,
-          'item_type': 'policy',
-          'name': item.title,
-          'description': item.content,
-          'is_active': true,
-          'metadata': {
-            'policy_key': item.policyKey,
-            'version': item.version,
-            'last_updated_at': now.toIso8601String(),
+
+    final ok = await _insertTaxonomyRow({
+      'id': newId,
+      'item_type': 'policy',
+      'name': item.title,
+      'description': item.content,
+      'is_active': true,
+      'metadata': {
+        'policy_key': item.policyKey,
+        'version': item.version,
+        'last_updated_at': now.toIso8601String(),
+        'updated_by_admin': adminEmail,
+        'history': [
+          {
+            'version': 'v1.0',
+            'updated_at': now.toIso8601String(),
             'updated_by_admin': adminEmail,
+            'change_summary': 'Initial policy publication.',
           },
-        });
-      }
+        ],
+      },
     });
-    _logAction(
+    if (!ok) return false;
+
+    policiesNotifier.value = [...policiesNotifier.value, item];
+    await _logAction(
       adminEmail,
       'POLICY_CREATE',
       item.title,
@@ -1100,22 +1241,59 @@ class AdminSettingsService {
   }
 
   // --- 7. ADMIN ACCESS & RBAC ---
-  bool provisionAdminAccount({
+  Future<bool> provisionAdminAccount({
     required String fullName,
     required String email,
+    String password = '',
     required String role,
     required String roleDisplayName,
     required String department,
     required List<String> permissions,
     required String adminEmail,
-  }) {
+  }) async {
+    lastError = null;
     final normalized = email.trim().toLowerCase();
     if (adminsNotifier.value.any((a) => a.email.toLowerCase() == normalized)) {
+      lastError = 'Administrator with this email already exists.';
       return false;
     }
 
+    String newId = SupabaseHelper.generateUuid();
+    final supabase = SupabaseHelper.clientOrNull;
+    if (supabase != null) {
+      final cleanPass = password.trim();
+      if (cleanPass.isEmpty) {
+        lastError = 'Initial password is required to create a Supabase admin account.';
+        return false;
+      }
+      try {
+        final rpcId = await SupabaseHelper.provisionAdminInApp(
+          email: normalized,
+          password: cleanPass,
+          fullName: fullName.trim(),
+          department: department.trim(),
+        );
+        if (SupabaseHelper.isUuid(rpcId)) {
+          newId = rpcId;
+        }
+      } catch (e) {
+        lastError = SupabaseHelper.friendlyError(e);
+        debugPrint('AdminSettingsService provisionAdminAccount RPC error: $e');
+        return false;
+      }
+
+      final rbacSaved = await _upsertAdminRbacRow(
+        email: normalized,
+        department: department,
+        role: role,
+        roleDisplayName: roleDisplayName,
+        permissions: permissions,
+      );
+      if (!rbacSaved) return false;
+    }
+
     final newAdmin = AdminUserModel(
-      id: SupabaseHelper.generateUuid(),
+      id: newId,
       fullName: fullName.trim(),
       email: normalized,
       role: role,
@@ -1123,12 +1301,12 @@ class AdminSettingsService {
       department: department.trim(),
       avatarInitial: SupabaseHelper.initialsFor(fullName, fallback: 'AD'),
       permissions: permissions,
-      lastLoginAt: 'Pending Auth Activation',
+      lastLoginAt: 'Provisioned & Active',
       isActive: true,
     );
 
     adminsNotifier.value = [...adminsNotifier.value, newAdmin];
-    _logAction(
+    await _logAction(
       adminEmail,
       'ADMIN_PROVISION',
       normalized,
@@ -1137,15 +1315,40 @@ class AdminSettingsService {
     return true;
   }
 
-  bool toggleAdminActive(String id, String adminEmail) {
+  Future<bool> toggleAdminActive(String id, String adminEmail) async {
+    lastError = null;
     final idx = adminsNotifier.value.indexWhere((a) => a.id == id);
     if (idx == -1) return false;
     final target = adminsNotifier.value[idx];
     if (target.role == 'SUPER_ADMIN') {
+      lastError = 'Root Super Administrator accounts cannot be deactivated.';
       return false;
     }
 
     final newStatus = !target.isActive;
+    final supabase = SupabaseHelper.clientOrNull;
+    if (supabase != null) {
+      if (!SupabaseHelper.isUuid(id)) return false;
+      try {
+        final updated = await supabase
+            .from('profiles')
+            .update({
+              'account_status': newStatus ? 'active' : 'suspended',
+              'updated_at': DateTime.now().toIso8601String(),
+            })
+            .eq('id', id)
+            .select('id');
+        if ((updated as List).isEmpty) {
+          lastError = 'Unable to update administrator account status in Supabase.';
+          return false;
+        }
+      } catch (e) {
+        lastError = SupabaseHelper.friendlyError(e);
+        debugPrint('AdminSettingsService toggleAdminActive error: $e');
+        return false;
+      }
+    }
+
     adminsNotifier.value = adminsNotifier.value.map((a) {
       if (a.id == id) {
         return a.copyWith(isActive: newStatus);
@@ -1153,16 +1356,7 @@ class AdminSettingsService {
       return a;
     }).toList();
 
-    _persistAsync(() async {
-      final supabase = SupabaseHelper.clientOrNull;
-      if (supabase != null && SupabaseHelper.isUuid(id)) {
-        await supabase.from('profiles').update({
-          'account_status': newStatus ? 'active' : 'suspended',
-          'updated_at': DateTime.now().toIso8601String(),
-        }).eq('id', id);
-      }
-    });
-    _logAction(
+    await _logAction(
       adminEmail,
       'ADMIN_STATUS',
       target.email,
@@ -1171,59 +1365,89 @@ class AdminSettingsService {
     return true;
   }
 
-  void updateAdminPermissions({
+  Future<bool> updateAdminPermissions({
     required String id,
     required List<String> permissions,
     required String adminEmail,
-  }) {
+  }) async {
+    final idx = adminsNotifier.value.indexWhere((a) => a.id == id);
+    if (idx == -1) return false;
+    final target = adminsNotifier.value[idx];
+
+    final ok = await _upsertAdminRbacRow(
+      email: target.email,
+      department: target.department,
+      role: target.role,
+      roleDisplayName: target.roleDisplayName,
+      permissions: permissions,
+    );
+    if (!ok) return false;
+
     adminsNotifier.value = adminsNotifier.value.map((a) {
-      if (a.id == id) {
-        _logAction(
-          adminEmail,
-          'ADMIN_PERMISSIONS',
-          a.email,
-          'Updated assigned granular roles.',
-        );
-        return a.copyWith(permissions: permissions);
-      }
+      if (a.id == id) return a.copyWith(permissions: permissions);
       return a;
     }).toList();
+
+    await _logAction(
+      adminEmail,
+      'ADMIN_PERMISSIONS',
+      target.email,
+      'Updated assigned granular roles.',
+    );
+    return true;
   }
 
   // --- 8. ADMIN PROFILE, PASSWORD & SESSIONS ---
-  void updateProfile({
+  Future<bool> updateProfile({
     required String fullName,
     required String department,
-  }) {
+  }) async {
+    lastError = null;
     final current = AdminAuthService().currentAdmin;
-    if (current == null) return;
+    if (current == null) return false;
 
-    final updated = current.copyWith(
+    final supabase = SupabaseHelper.clientOrNull;
+    final uid = supabase?.auth.currentUser?.id;
+    if (supabase != null && uid != null) {
+      try {
+        final updated = await supabase
+            .from('profiles')
+            .update({
+              'name': fullName.trim(),
+              'university': department.trim(),
+              'updated_at': DateTime.now().toIso8601String(),
+            })
+            .eq('id', uid)
+            .select('id');
+        if ((updated as List).isEmpty) {
+          lastError = 'Administrator profile record not found in Supabase.';
+          return false;
+        }
+      } catch (e) {
+        lastError = SupabaseHelper.friendlyError(e);
+        debugPrint('AdminSettingsService updateProfile error: $e');
+        return false;
+      }
+    }
+
+    final updatedAdmin = current.copyWith(
       fullName: fullName.trim(),
       department: department.trim(),
       avatarInitial: SupabaseHelper.initialsFor(fullName, fallback: 'EA'),
     );
 
-    AdminAuthService().currentAdminNotifier.value = updated;
+    AdminAuthService().currentAdminNotifier.value = updatedAdmin;
+    adminsNotifier.value = adminsNotifier.value
+        .map((a) => a.id == updatedAdmin.id ? updatedAdmin : a)
+        .toList();
 
-    _persistAsync(() async {
-      final supabase = SupabaseHelper.clientOrNull;
-      final uid = supabase?.auth.currentUser?.id;
-      if (supabase != null && uid != null) {
-        await supabase.from('profiles').update({
-          'name': fullName.trim(),
-          'university': department.trim(),
-          'updated_at': DateTime.now().toIso8601String(),
-        }).eq('id', uid);
-      }
-    });
-
-    _logAction(
+    await _logAction(
       current.email,
       'PROFILE_UPDATE',
       current.email,
       'Updated administrative profile contact info.',
     );
+    return true;
   }
 
   Future<bool> changePassword({
@@ -1231,6 +1455,7 @@ class AdminSettingsService {
     required String newPassword,
     required String adminEmail,
   }) async {
+    lastError = null;
     final trimmedNew = newPassword.trim();
     if (trimmedNew.isEmpty) return false;
 
@@ -1250,12 +1475,13 @@ class AdminSettingsService {
           }
         }
       } catch (e) {
+        lastError = SupabaseHelper.friendlyError(e);
         debugPrint('AdminSettingsService changePassword error: $e');
         return false;
       }
     }
 
-    _logAction(
+    await _logAction(
       adminEmail,
       'PASSWORD_CHANGE',
       adminEmail,
@@ -1264,11 +1490,11 @@ class AdminSettingsService {
     return true;
   }
 
-  void terminateSession(String sessionId, String adminEmail) {
+  Future<void> terminateSession(String sessionId, String adminEmail) async {
     sessionsNotifier.value = sessionsNotifier.value
         .where((s) => s.sessionId != sessionId)
         .toList();
-    _logAction(
+    await _logAction(
       adminEmail,
       'SESSION_TERMINATE',
       sessionId,
@@ -1276,12 +1502,12 @@ class AdminSettingsService {
     );
   }
 
-  void _logAction(
+  Future<void> _logAction(
     String adminEmail,
     String action,
     String target,
     String details,
-  ) {
+  ) async {
     final log = AdminAuditLogItem(
       id: SupabaseHelper.generateUuid(),
       adminEmail: adminEmail,
@@ -1293,28 +1519,23 @@ class AdminSettingsService {
     );
 
     auditLogsNotifier.value = [log, ...auditLogsNotifier.value];
-    _persistAsync(() async {
-      final supabase = SupabaseHelper.clientOrNull;
-      if (supabase != null) {
+    final supabase = SupabaseHelper.clientOrNull;
+    if (supabase != null) {
+      try {
         await supabase.from('admin_audit_logs').insert({
           'admin_email': adminEmail,
           'action': action,
           'target': target,
           'details': details,
         });
+      } catch (e) {
+        debugPrint('AdminSettingsService audit log insert error: $e');
       }
-    });
-  }
-
-  void _persistAsync(Future<void> Function() task) {
-    unawaited(
-      task().catchError((e) {
-        debugPrint('AdminSettingsService background persist error: $e');
-      }),
-    );
+    }
   }
 
   void reset() {
+    lastError = null;
     categoriesNotifier.value = [];
     skillsNotifier.value = [];
     universitiesNotifier.value = [];

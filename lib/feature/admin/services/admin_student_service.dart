@@ -300,6 +300,146 @@ class AdminStudentService {
     }
   }
 
+  /// Shared helper to persist student verification or account moderation to Supabase.
+  /// Inserts a missing `students` row when moderating a profile-only account (`id == userId`).
+  Future<({bool ok, String resolvedId})> _persistStudentUpdate(
+    AdminStudentModel student, {
+    required Map<String, dynamic> studentFields,
+    Map<String, dynamic>? profileFields,
+    required String auditAction,
+    required String auditDetails,
+  }) async {
+    final supabase = SupabaseHelper.clientOrNull;
+    if (supabase == null) {
+      return (ok: true, resolvedId: student.id);
+    }
+
+    final effectiveUserId = SupabaseHelper.isUuid(student.userId)
+        ? student.userId!
+        : (SupabaseHelper.isUuid(student.id) ? student.id : '');
+
+    if (!SupabaseHelper.isUuid(student.id) && effectiveUserId.isEmpty) {
+      return (ok: false, resolvedId: student.id);
+    }
+
+    try {
+      String resolvedId = student.id;
+      List<dynamic> updated = const [];
+
+      if (SupabaseHelper.isUuid(student.id) && student.id != effectiveUserId) {
+        updated = await supabase
+            .from('students')
+            .update(studentFields)
+            .eq('id', student.id)
+            .select('id');
+      }
+
+      if (updated.isEmpty && effectiveUserId.isNotEmpty) {
+        updated = await supabase
+            .from('students')
+            .update(studentFields)
+            .eq('user_id', effectiveUserId)
+            .select('id');
+      }
+
+      if (updated.isNotEmpty) {
+        final firstId = updated.first['id']?.toString() ?? '';
+        if (firstId.isNotEmpty) resolvedId = firstId;
+      } else if (effectiveUserId.isNotEmpty) {
+        final inserted = await supabase
+            .from('students')
+            .insert({
+              'user_id': effectiveUserId,
+              'full_name': student.name,
+              'email': student.email,
+              'university': student.university,
+              'department': student.department,
+              'degree': student.degree,
+              'semester': student.semester,
+              'cgpa': student.cgpa,
+              'skills': student.skills,
+              'bio': student.bio,
+              'portfolio_url': student.portfolioUrl,
+              'github_url': student.githubUrl,
+              ...studentFields,
+            })
+            .select('id')
+            .single();
+        final newId = inserted['id']?.toString() ?? '';
+        if (newId.isNotEmpty) resolvedId = newId;
+      } else {
+        return (ok: false, resolvedId: student.id);
+      }
+
+      if (profileFields != null &&
+          profileFields.isNotEmpty &&
+          effectiveUserId.isNotEmpty) {
+        await supabase
+            .from('profiles')
+            .update(profileFields)
+            .eq('id', effectiveUserId);
+      }
+
+      await _writeAuditLog(
+        action: auditAction,
+        target: student.email.isNotEmpty ? student.email : student.name,
+        details: auditDetails,
+      );
+
+      return (ok: true, resolvedId: resolvedId);
+    } catch (e) {
+      debugPrint('AdminStudentService _persistStudentUpdate error: $e');
+      return (ok: false, resolvedId: student.id);
+    }
+  }
+
+  /// Approve student verification in Supabase (`students` + `profiles`).
+  Future<bool> approveStudentVerification({
+    required String studentId,
+    required String adminName,
+  }) async {
+    final list = List<AdminStudentModel>.from(studentsNotifier.value);
+    final idx = list.indexWhere((s) => s.id == studentId || s.userId == studentId);
+    if (idx == -1) return false;
+
+    final student = list[idx];
+    final nowIso = DateTime.now().toIso8601String();
+    final persisted = await _persistStudentUpdate(
+      student,
+      studentFields: {
+        'verification_status': 'verified',
+        'updated_at': nowIso,
+      },
+      profileFields: {
+        'is_verified': true,
+        'updated_at': nowIso,
+      },
+      auditAction: 'STUDENT_VERIFICATION_APPROVED',
+      auditDetails: 'Approved by $adminName.',
+    );
+    if (!persisted.ok) return false;
+
+    final history = List<StudentAuditRecord>.from(student.auditHistory);
+    history.insert(
+      0,
+      StudentAuditRecord(
+        id: 'aud_${DateTime.now().millisecondsSinceEpoch}',
+        action: 'Verification Approved',
+        adminName: adminName,
+        timestamp: 'Just now',
+        note: 'University credentials authenticated by platform administration.',
+      ),
+    );
+
+    list[idx] = student.copyWith(
+      id: persisted.resolvedId,
+      verificationStatus: StudentVerificationStatus.verified,
+      auditHistory: history,
+    );
+    studentsNotifier.value = list;
+    return true;
+  }
+
   /// Suspend student account with mandatory reason.
   Future<bool> suspendStudentAccount({
     required String studentId,
@@ -307,46 +447,26 @@ class AdminStudentService {
     required String adminName,
   }) async {
     final list = List<AdminStudentModel>.from(studentsNotifier.value);
-    final idx = list.indexWhere((s) => s.id == studentId);
+    final idx = list.indexWhere((s) => s.id == studentId || s.userId == studentId);
     if (idx == -1) return false;
 
     final student = list[idx];
     final nowIso = DateTime.now().toIso8601String();
-    final supabase = SupabaseHelper.clientOrNull;
-
-    if (supabase != null) {
-      try {
-        if (SupabaseHelper.isUuid(studentId) && studentId != student.userId) {
-          await supabase.from('students').update({
-            'account_status': 'suspended',
-            'suspension_reason': reason.trim(),
-            'updated_at': nowIso,
-          }).eq('id', studentId);
-        } else if (SupabaseHelper.isUuid(student.userId)) {
-          await supabase.from('students').update({
-            'account_status': 'suspended',
-            'suspension_reason': reason.trim(),
-            'updated_at': nowIso,
-          }).eq('user_id', student.userId!);
-        }
-
-        if (SupabaseHelper.isUuid(student.userId)) {
-          await supabase.from('profiles').update({
-            'account_status': 'suspended',
-            'updated_at': nowIso,
-          }).eq('id', student.userId!);
-        }
-
-        await _writeAuditLog(
-          action: 'STUDENT_SUSPENDED',
-          target: student.email.isNotEmpty ? student.email : student.name,
-          details: reason.trim(),
-        );
-      } catch (e) {
-        debugPrint('AdminStudentService suspendStudentAccount error: $e');
-        return false;
-      }
-    }
+    final persisted = await _persistStudentUpdate(
+      student,
+      studentFields: {
+        'account_status': 'suspended',
+        'suspension_reason': reason.trim(),
+        'updated_at': nowIso,
+      },
+      profileFields: {
+        'account_status': 'suspended',
+        'updated_at': nowIso,
+      },
+      auditAction: 'STUDENT_SUSPENDED',
+      auditDetails: reason.trim(),
+    );
+    if (!persisted.ok) return false;
 
     final history = List<StudentAuditRecord>.from(student.auditHistory);
     history.insert(
@@ -361,6 +481,7 @@ class AdminStudentService {
     );
 
     list[idx] = student.copyWith(
+      id: persisted.resolvedId,
       accountStatus: StudentAccountStatus.suspended,
       suspensionReason: reason.trim(),
       auditHistory: history,
@@ -375,46 +496,26 @@ class AdminStudentService {
     required String adminName,
   }) async {
     final list = List<AdminStudentModel>.from(studentsNotifier.value);
-    final idx = list.indexWhere((s) => s.id == studentId);
+    final idx = list.indexWhere((s) => s.id == studentId || s.userId == studentId);
     if (idx == -1) return false;
 
     final student = list[idx];
     final nowIso = DateTime.now().toIso8601String();
-    final supabase = SupabaseHelper.clientOrNull;
-
-    if (supabase != null) {
-      try {
-        if (SupabaseHelper.isUuid(studentId) && studentId != student.userId) {
-          await supabase.from('students').update({
-            'account_status': 'active',
-            'suspension_reason': null,
-            'updated_at': nowIso,
-          }).eq('id', studentId);
-        } else if (SupabaseHelper.isUuid(student.userId)) {
-          await supabase.from('students').update({
-            'account_status': 'active',
-            'suspension_reason': null,
-            'updated_at': nowIso,
-          }).eq('user_id', student.userId!);
-        }
-
-        if (SupabaseHelper.isUuid(student.userId)) {
-          await supabase.from('profiles').update({
-            'account_status': 'active',
-            'updated_at': nowIso,
-          }).eq('id', student.userId!);
-        }
-
-        await _writeAuditLog(
-          action: 'STUDENT_REACTIVATED',
-          target: student.email.isNotEmpty ? student.email : student.name,
-          details: 'Reactivated by $adminName.',
-        );
-      } catch (e) {
-        debugPrint('AdminStudentService reactivateStudentAccount error: $e');
-        return false;
-      }
-    }
+    final persisted = await _persistStudentUpdate(
+      student,
+      studentFields: {
+        'account_status': 'active',
+        'suspension_reason': null,
+        'updated_at': nowIso,
+      },
+      profileFields: {
+        'account_status': 'active',
+        'updated_at': nowIso,
+      },
+      auditAction: 'STUDENT_REACTIVATED',
+      auditDetails: 'Reactivated by $adminName.',
+    );
+    if (!persisted.ok) return false;
 
     final history = List<StudentAuditRecord>.from(student.auditHistory);
     history.insert(
@@ -429,6 +530,7 @@ class AdminStudentService {
     );
 
     list[idx] = student.copyWith(
+      id: persisted.resolvedId,
       accountStatus: StudentAccountStatus.active,
       clearSuspensionReason: true,
       auditHistory: history,

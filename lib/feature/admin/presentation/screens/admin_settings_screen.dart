@@ -53,6 +53,26 @@ class _AdminSettingsScreenState extends State<AdminSettingsScreen>
   void initState() {
     super.initState();
     _tabController = TabController(length: 8, vsync: this);
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      if (!mounted) return;
+      _settingsService.loadFromSupabase();
+    });
+  }
+
+  void _showPersistResult(bool ok, String successMessage) {
+    if (!mounted) return;
+    ScaffoldMessenger.of(context).showSnackBar(
+      SnackBar(
+        content: Text(
+          ok
+              ? successMessage
+              : (_settingsService.lastError ??
+                  'Unable to save changes to Supabase. Please retry.'),
+        ),
+        backgroundColor: ok ? AppColors.success : AppColors.error,
+        behavior: SnackBarBehavior.floating,
+      ),
+    );
   }
 
   @override
@@ -570,11 +590,15 @@ class _AdminSettingsScreenState extends State<AdminSettingsScreen>
                               Switch(
                                 value: cat.isActive,
                                 activeThumbColor: AppColors.success,
-                                onChanged: (_) {
-                                  _settingsService.toggleCategoryActive(
+                                onChanged: (_) async {
+                                  final ok = await _settingsService
+                                      .toggleCategoryActive(
                                     cat.id,
                                     currentAdmin.email,
                                   );
+                                  if (!ok) {
+                                    _showPersistResult(false, '');
+                                  }
                                 },
                               ),
                               IconButton(
@@ -689,11 +713,15 @@ class _AdminSettingsScreenState extends State<AdminSettingsScreen>
                             Switch(
                               value: s.isActive,
                               activeThumbColor: AppColors.success,
-                              onChanged: (_) {
-                                _settingsService.toggleSkillActive(
+                              onChanged: (_) async {
+                                final ok = await _settingsService
+                                    .toggleSkillActive(
                                   s.id,
                                   currentAdmin.email,
                                 );
+                                if (!ok) {
+                                  _showPersistResult(false, '');
+                                }
                               },
                             ),
                           ),
@@ -712,11 +740,15 @@ class _AdminSettingsScreenState extends State<AdminSettingsScreen>
                                     size: 18,
                                     color: AppColors.error,
                                   ),
-                                  onPressed: () {
-                                    _settingsService.deleteSkill(
+                                  onPressed: () async {
+                                    final ok = await _settingsService
+                                        .deleteSkill(
                                       s.id,
                                       currentAdmin.email,
                                     );
+                                    if (!ok) {
+                                      _showPersistResult(false, '');
+                                    }
                                   },
                                 ),
                               ],
@@ -914,11 +946,15 @@ class _AdminSettingsScreenState extends State<AdminSettingsScreen>
                             Switch(
                               value: u.isActive,
                               activeThumbColor: AppColors.success,
-                              onChanged: (_) {
-                                _settingsService.toggleUniversityActive(
+                              onChanged: (_) async {
+                                final ok = await _settingsService
+                                    .toggleUniversityActive(
                                   u.id,
                                   currentAdmin.email,
                                 );
+                                if (!ok) {
+                                  _showPersistResult(false, '');
+                                }
                               },
                             ),
                           ),
@@ -1973,11 +2009,15 @@ class _AdminSettingsScreenState extends State<AdminSettingsScreen>
                                 : Switch(
                                     value: adm.isActive,
                                     activeThumbColor: AppColors.success,
-                                    onChanged: (_) {
-                                      _settingsService.toggleAdminActive(
+                                    onChanged: (_) async {
+                                      final ok = await _settingsService
+                                          .toggleAdminActive(
                                         adm.id,
                                         currentAdmin.email,
                                       );
+                                      if (!ok) {
+                                        _showPersistResult(false, '');
+                                      }
                                     },
                                   ),
                           ),
@@ -2531,16 +2571,17 @@ class _AdminSettingsScreenState extends State<AdminSettingsScreen>
                   ),
                   if (sessions.length > 1)
                     TextButton.icon(
-                      onPressed: () {
+                      onPressed: () async {
                         for (final s in sessions) {
                           if (!s.isCurrent) {
-                            _settingsService.terminateSession(
+                            await _settingsService.terminateSession(
                               s.sessionId,
                               currentAdmin.email,
                             );
                           }
                         }
-                        ScaffoldMessenger.of(context).showSnackBar(
+                        if (!mounted) return;
+                        ScaffoldMessenger.of(this.context).showSnackBar(
                           const SnackBar(
                             content: Text(
                               'All secondary administrative sessions terminated.',
@@ -2643,8 +2684,8 @@ class _AdminSettingsScreenState extends State<AdminSettingsScreen>
                               color: AppColors.error,
                             ),
                             tooltip: 'Revoke Session',
-                            onPressed: () {
-                              _settingsService.terminateSession(
+                            onPressed: () async {
+                              await _settingsService.terminateSession(
                                 s.sessionId,
                                 currentAdmin.email,
                               );
@@ -2740,22 +2781,20 @@ class _AdminSettingsScreenState extends State<AdminSettingsScreen>
                   child: const Text('Cancel'),
                 ),
                 ElevatedButton(
-                  onPressed: () {
+                  onPressed: () async {
                     if (nameCtrl.text.trim().isEmpty) return;
-                    final success = _settingsService.addCategory(
+                    final success = await _settingsService.addCategory(
                       name: nameCtrl.text,
                       description: descCtrl.text,
                       color: selectedColor,
                       adminEmail: currentAdmin.email,
                     );
+                    if (!mounted || !ctx.mounted) return;
                     if (success) {
                       Navigator.pop(ctx);
+                      _showPersistResult(true, 'Category saved to Supabase.');
                     } else {
-                      ScaffoldMessenger.of(context).showSnackBar(
-                        const SnackBar(
-                          content: Text('Category with this title already exists.'),
-                        ),
-                      );
+                      _showPersistResult(false, '');
                     }
                   },
                   child: const Text('Add Category'),
@@ -2811,23 +2850,21 @@ class _AdminSettingsScreenState extends State<AdminSettingsScreen>
                   child: const Text('Cancel'),
                 ),
                 ElevatedButton(
-                  onPressed: () {
+                  onPressed: () async {
                     if (nameCtrl.text.trim().isEmpty) return;
-                    final success = _settingsService.updateCategory(
+                    final success = await _settingsService.updateCategory(
                       id: cat.id,
                       name: nameCtrl.text,
                       description: descCtrl.text,
                       color: selectedColor,
                       adminEmail: currentAdmin.email,
                     );
+                    if (!mounted || !ctx.mounted) return;
                     if (success) {
                       Navigator.pop(ctx);
+                      _showPersistResult(true, 'Category updated in Supabase.');
                     } else {
-                      ScaffoldMessenger.of(context).showSnackBar(
-                        const SnackBar(
-                          content: Text('Duplicate category name detected.'),
-                        ),
-                      );
+                      _showPersistResult(false, '');
                     }
                   },
                   child: const Text('Save Changes'),
@@ -2893,21 +2930,19 @@ class _AdminSettingsScreenState extends State<AdminSettingsScreen>
                   child: const Text('Cancel'),
                 ),
                 ElevatedButton(
-                  onPressed: () {
+                  onPressed: () async {
                     if (nameCtrl.text.trim().isEmpty) return;
-                    final success = _settingsService.addSkill(
+                    final success = await _settingsService.addSkill(
                       name: nameCtrl.text,
                       categoryName: selectedCat,
                       adminEmail: currentAdmin.email,
                     );
+                    if (!mounted || !ctx.mounted) return;
                     if (success) {
                       Navigator.pop(ctx);
+                      _showPersistResult(true, 'Skill saved to Supabase.');
                     } else {
-                      ScaffoldMessenger.of(context).showSnackBar(
-                        const SnackBar(
-                          content: Text('Duplicate skill name detected.'),
-                        ),
-                      );
+                      _showPersistResult(false, '');
                     }
                   },
                   child: const Text('Add Skill'),
@@ -2975,22 +3010,20 @@ class _AdminSettingsScreenState extends State<AdminSettingsScreen>
                   child: const Text('Cancel'),
                 ),
                 ElevatedButton(
-                  onPressed: () {
+                  onPressed: () async {
                     if (nameCtrl.text.trim().isEmpty) return;
-                    final success = _settingsService.updateSkill(
+                    final success = await _settingsService.updateSkill(
                       id: skill.id,
                       name: nameCtrl.text,
                       categoryName: selectedCat,
                       adminEmail: currentAdmin.email,
                     );
+                    if (!mounted || !ctx.mounted) return;
                     if (success) {
                       Navigator.pop(ctx);
+                      _showPersistResult(true, 'Skill updated in Supabase.');
                     } else {
-                      ScaffoldMessenger.of(context).showSnackBar(
-                        const SnackBar(
-                          content: Text('Duplicate skill name detected.'),
-                        ),
-                      );
+                      _showPersistResult(false, '');
                     }
                   },
                   child: const Text('Save Changes'),
@@ -3079,9 +3112,9 @@ class _AdminSettingsScreenState extends State<AdminSettingsScreen>
               child: const Text('Cancel'),
             ),
             ElevatedButton(
-              onPressed: () {
+              onPressed: () async {
                 if (nameCtrl.text.trim().isEmpty) return;
-                final success = _settingsService.addUniversity(
+                final success = await _settingsService.addUniversity(
                   name: nameCtrl.text,
                   shortName: shortNameCtrl.text,
                   city: cityCtrl.text,
@@ -3089,16 +3122,12 @@ class _AdminSettingsScreenState extends State<AdminSettingsScreen>
                   domain: domainCtrl.text,
                   adminEmail: currentAdmin.email,
                 );
+                if (!mounted || !ctx.mounted) return;
                 if (success) {
                   Navigator.pop(ctx);
+                  _showPersistResult(true, 'University accredited in Supabase.');
                 } else {
-                  ScaffoldMessenger.of(context).showSnackBar(
-                    const SnackBar(
-                      content: Text(
-                        'University with this name or domain already accredited.',
-                      ),
-                    ),
-                  );
+                  _showPersistResult(false, '');
                 }
               },
               child: const Text('Accredit Institution'),
@@ -3186,9 +3215,9 @@ class _AdminSettingsScreenState extends State<AdminSettingsScreen>
               child: const Text('Cancel'),
             ),
             ElevatedButton(
-              onPressed: () {
+              onPressed: () async {
                 if (nameCtrl.text.trim().isEmpty) return;
-                final success = _settingsService.updateUniversity(
+                final success = await _settingsService.updateUniversity(
                   id: uni.id,
                   name: nameCtrl.text,
                   shortName: shortNameCtrl.text,
@@ -3197,14 +3226,12 @@ class _AdminSettingsScreenState extends State<AdminSettingsScreen>
                   domain: domainCtrl.text,
                   adminEmail: currentAdmin.email,
                 );
+                if (!mounted || !ctx.mounted) return;
                 if (success) {
                   Navigator.pop(ctx);
+                  _showPersistResult(true, 'University updated in Supabase.');
                 } else {
-                  ScaffoldMessenger.of(context).showSnackBar(
-                    const SnackBar(
-                      content: Text('Duplicate university records detected.'),
-                    ),
-                  );
+                  _showPersistResult(false, '');
                 }
               },
               child: const Text('Save Details'),
@@ -3317,44 +3344,39 @@ class _AdminSettingsScreenState extends State<AdminSettingsScreen>
           ),
           actions: [
             OutlinedButton(
-              onPressed: () {
-                _settingsService.addAdminResponse(
+              onPressed: () async {
+                final ok = await _settingsService.addAdminResponse(
                   ticketId: ticket.id,
                   responseText: responseCtrl.text,
                   adminEmail: currentAdmin.email,
                 );
-                Navigator.pop(ctx);
-                ScaffoldMessenger.of(context).showSnackBar(
-                  const SnackBar(
-                    content: Text('Administrative response delivered.'),
-                    behavior: SnackBarBehavior.floating,
-                  ),
-                );
+                if (!mounted || !ctx.mounted) return;
+                if (ok) Navigator.pop(ctx);
+                _showPersistResult(ok, 'Administrative response delivered.');
               },
               child: const Text('Save Response'),
             ),
             ElevatedButton(
-              onPressed: () {
-                _settingsService.addAdminResponse(
-                  ticketId: ticket.id,
-                  responseText: responseCtrl.text,
-                  adminEmail: currentAdmin.email,
-                );
-                _settingsService.resolveHelpRequest(
-                  ticketId: ticket.id,
-                  resolutionNotes: resolutionCtrl.text.isNotEmpty
-                      ? resolutionCtrl.text
-                      : 'Ticket addressed by admin.',
-                  adminEmail: currentAdmin.email,
-                );
-                Navigator.pop(ctx);
-                ScaffoldMessenger.of(context).showSnackBar(
-                  const SnackBar(
-                    content: Text('Help request marked as RESOLVED.'),
-                    backgroundColor: AppColors.success,
-                    behavior: SnackBarBehavior.floating,
-                  ),
-                );
+              onPressed: () async {
+                final okResp = responseCtrl.text.trim().isNotEmpty
+                    ? await _settingsService.addAdminResponse(
+                        ticketId: ticket.id,
+                        responseText: responseCtrl.text,
+                        adminEmail: currentAdmin.email,
+                      )
+                    : true;
+                final okResolve = okResp
+                    ? await _settingsService.resolveHelpRequest(
+                        ticketId: ticket.id,
+                        resolutionNotes: resolutionCtrl.text.isNotEmpty
+                            ? resolutionCtrl.text
+                            : 'Ticket addressed by admin.',
+                        adminEmail: currentAdmin.email,
+                      )
+                    : false;
+                if (!mounted || !ctx.mounted) return;
+                if (okResolve) Navigator.pop(ctx);
+                _showPersistResult(okResolve, 'Help request marked as RESOLVED.');
               },
               style: ElevatedButton.styleFrom(
                 backgroundColor: AppColors.success,
@@ -3458,7 +3480,7 @@ class _AdminSettingsScreenState extends State<AdminSettingsScreen>
           ),
           actions: [
             TextButton(
-              onPressed: () {
+              onPressed: () async {
                 if (reasonCtrl.text.trim().isEmpty) {
                   ScaffoldMessenger.of(context).showSnackBar(
                     const SnackBar(
@@ -3469,12 +3491,14 @@ class _AdminSettingsScreenState extends State<AdminSettingsScreen>
                   );
                   return;
                 }
-                _settingsService.dismissComplaint(
+                final ok = await _settingsService.dismissComplaint(
                   complaintId: cmp.id,
                   reason: reasonCtrl.text,
                   adminEmail: currentAdmin.email,
                 );
-                Navigator.pop(ctx);
+                if (!mounted || !ctx.mounted) return;
+                if (ok) Navigator.pop(ctx);
+                _showPersistResult(ok, 'Complaint dismissed and recorded in Supabase.');
               },
               child: const Text(
                 'Dismiss Complaint',
@@ -3482,7 +3506,7 @@ class _AdminSettingsScreenState extends State<AdminSettingsScreen>
               ),
             ),
             ElevatedButton(
-              onPressed: () {
+              onPressed: () async {
                 if (reasonCtrl.text.trim().isEmpty) {
                   ScaffoldMessenger.of(context).showSnackBar(
                     const SnackBar(
@@ -3494,25 +3518,27 @@ class _AdminSettingsScreenState extends State<AdminSettingsScreen>
                   return;
                 }
                 if (noteCtrl.text.trim().isNotEmpty) {
-                  _settingsService.updateInvestigationNotes(
+                  final okNote = await _settingsService.updateInvestigationNotes(
                     complaintId: cmp.id,
                     notes: noteCtrl.text,
                     adminEmail: currentAdmin.email,
                   );
+                  if (!okNote) {
+                    if (!mounted) return;
+                    _showPersistResult(false, '');
+                    return;
+                  }
                 }
-                _settingsService.resolveComplaint(
+                final ok = await _settingsService.resolveComplaint(
                   complaintId: cmp.id,
                   reason: reasonCtrl.text,
                   adminEmail: currentAdmin.email,
                 );
-                Navigator.pop(ctx);
-                ScaffoldMessenger.of(context).showSnackBar(
-                  const SnackBar(
-                    content: Text(
-                      'Grievance marked as Resolved with formal outcome.',
-                    ),
-                    behavior: SnackBarBehavior.floating,
-                  ),
+                if (!mounted || !ctx.mounted) return;
+                if (ok) Navigator.pop(ctx);
+                _showPersistResult(
+                  ok,
+                  'Grievance marked as Resolved with formal outcome.',
                 );
               },
               style: ElevatedButton.styleFrom(
@@ -3577,7 +3603,7 @@ class _AdminSettingsScreenState extends State<AdminSettingsScreen>
               child: const Text('Cancel'),
             ),
             ElevatedButton(
-              onPressed: () {
+              onPressed: () async {
                 final title = titleCtrl.text.trim();
                 final content = contentCtrl.text.trim();
                 final key = keyCtrl.text.trim().isNotEmpty
@@ -3591,20 +3617,15 @@ class _AdminSettingsScreenState extends State<AdminSettingsScreen>
                   );
                   return;
                 }
-                _settingsService.createPolicy(
+                final ok = await _settingsService.createPolicy(
                   policyKey: key,
                   title: title,
                   content: content,
                   adminEmail: currentAdmin.email,
                 );
-                Navigator.pop(ctx);
-                ScaffoldMessenger.of(context).showSnackBar(
-                  const SnackBar(
-                    content: Text('Governance policy published successfully.'),
-                    backgroundColor: AppColors.success,
-                    behavior: SnackBarBehavior.floating,
-                  ),
-                );
+                if (!mounted || !ctx.mounted) return;
+                if (ok) Navigator.pop(ctx);
+                _showPersistResult(ok, 'Governance policy published successfully.');
               },
               child: const Text('Publish Policy'),
             ),
@@ -3666,7 +3687,7 @@ class _AdminSettingsScreenState extends State<AdminSettingsScreen>
               child: const Text('Cancel'),
             ),
             ElevatedButton(
-              onPressed: () {
+              onPressed: () async {
                 if (changelogCtrl.text.trim().isEmpty) {
                   ScaffoldMessenger.of(context).showSnackBar(
                     const SnackBar(
@@ -3677,21 +3698,18 @@ class _AdminSettingsScreenState extends State<AdminSettingsScreen>
                   );
                   return;
                 }
-                _settingsService.updatePolicy(
+                final ok = await _settingsService.updatePolicy(
                   policyKey: policy.policyKey,
                   title: titleCtrl.text,
                   content: contentCtrl.text,
                   changeSummary: changelogCtrl.text,
                   adminEmail: currentAdmin.email,
                 );
-                Navigator.pop(ctx);
-                ScaffoldMessenger.of(context).showSnackBar(
-                  const SnackBar(
-                    content: Text(
-                      'Policy version successfully bumped and updated.',
-                    ),
-                    behavior: SnackBarBehavior.floating,
-                  ),
+                if (!mounted || !ctx.mounted) return;
+                if (ok) Navigator.pop(ctx);
+                _showPersistResult(
+                  ok,
+                  'Policy version successfully bumped and updated.',
                 );
               },
               child: const Text('Publish Version Update'),
@@ -3705,6 +3723,7 @@ class _AdminSettingsScreenState extends State<AdminSettingsScreen>
   void _showProvisionAdminModal(AdminUserModel currentAdmin) {
     final nameCtrl = TextEditingController();
     final emailCtrl = TextEditingController();
+    final passwordCtrl = TextEditingController();
     final deptCtrl = TextEditingController(
       text: 'SkillBridge Governance Council',
     );
@@ -3715,6 +3734,8 @@ class _AdminSettingsScreenState extends State<AdminSettingsScreen>
       'manage_skills',
       'manage_support',
     ];
+    bool isSaving = false;
+    bool obscurePassword = true;
 
     showDialog(
       context: context,
@@ -3746,8 +3767,30 @@ class _AdminSettingsScreenState extends State<AdminSettingsScreen>
                       const SizedBox(height: 10),
                       TextField(
                         controller: emailCtrl,
+                        keyboardType: TextInputType.emailAddress,
                         decoration: const InputDecoration(
                           labelText: 'Institutional Email',
+                        ),
+                      ),
+                      const SizedBox(height: 10),
+                      TextField(
+                        controller: passwordCtrl,
+                        obscureText: obscurePassword,
+                        decoration: InputDecoration(
+                          labelText: 'Initial Login Password',
+                          suffixIcon: IconButton(
+                            icon: Icon(
+                              obscurePassword
+                                  ? Icons.visibility_outlined
+                                  : Icons.visibility_off_outlined,
+                              size: 18,
+                            ),
+                            onPressed: () {
+                              setModalState(
+                                () => obscurePassword = !obscurePassword,
+                              );
+                            },
+                          ),
                         ),
                       ),
                       const SizedBox(height: 10),
@@ -3800,44 +3843,47 @@ class _AdminSettingsScreenState extends State<AdminSettingsScreen>
               ),
               actions: [
                 TextButton(
-                  onPressed: () => Navigator.pop(ctx),
+                  onPressed: isSaving ? null : () => Navigator.pop(ctx),
                   child: const Text('Cancel'),
                 ),
                 ElevatedButton(
-                  onPressed: () {
-                    if (nameCtrl.text.trim().isEmpty ||
-                        emailCtrl.text.trim().isEmpty) {
-                      return;
-                    }
-                    final success = _settingsService.provisionAdminAccount(
-                      fullName: nameCtrl.text,
-                      email: emailCtrl.text,
-                      role: selectedRole,
-                      roleDisplayName: roleDisplayName,
-                      department: deptCtrl.text,
-                      permissions: permissions,
-                      adminEmail: currentAdmin.email,
-                    );
-                    if (success) {
-                      Navigator.pop(ctx);
-                      ScaffoldMessenger.of(context).showSnackBar(
-                        const SnackBar(
-                          content: Text('Admin account provisioned successfully.'),
-                          backgroundColor: AppColors.success,
-                          behavior: SnackBarBehavior.floating,
-                        ),
-                      );
-                    } else {
-                      ScaffoldMessenger.of(context).showSnackBar(
-                        const SnackBar(
-                          content: Text(
-                            'Administrator with this email already exists.',
-                          ),
-                        ),
-                      );
-                    }
-                  },
-                  child: const Text('Provision Account'),
+                  onPressed: isSaving
+                      ? null
+                      : () async {
+                          if (nameCtrl.text.trim().isEmpty ||
+                              emailCtrl.text.trim().isEmpty ||
+                              passwordCtrl.text.trim().isEmpty) {
+                            _showPersistResult(
+                              false,
+                              '',
+                            );
+                            return;
+                          }
+                          setModalState(() => isSaving = true);
+                          final success =
+                              await _settingsService.provisionAdminAccount(
+                            fullName: nameCtrl.text,
+                            email: emailCtrl.text,
+                            password: passwordCtrl.text,
+                            role: selectedRole,
+                            roleDisplayName: roleDisplayName,
+                            department: deptCtrl.text,
+                            permissions: permissions,
+                            adminEmail: currentAdmin.email,
+                          );
+                          if (!mounted || !ctx.mounted) return;
+                          setModalState(() => isSaving = false);
+                          if (success) {
+                            Navigator.pop(ctx);
+                            _showPersistResult(
+                              true,
+                              'Admin account provisioned and saved in Supabase.',
+                            );
+                          } else {
+                            _showPersistResult(false, '');
+                          }
+                        },
+                  child: Text(isSaving ? 'Provisioning...' : 'Provision Account'),
                 ),
               ],
             );
@@ -3881,19 +3927,17 @@ class _AdminSettingsScreenState extends State<AdminSettingsScreen>
               child: const Text('Cancel'),
             ),
             ElevatedButton(
-              onPressed: () {
-                _settingsService.updateProfile(
+              onPressed: () async {
+                final ok = await _settingsService.updateProfile(
                   fullName: nameCtrl.text,
                   department: deptCtrl.text,
                 );
-                Navigator.pop(ctx);
-                setState(() {});
-                ScaffoldMessenger.of(context).showSnackBar(
-                  const SnackBar(
-                    content: Text('Profile information updated.'),
-                    behavior: SnackBarBehavior.floating,
-                  ),
-                );
+                if (!mounted || !ctx.mounted) return;
+                if (ok) {
+                  Navigator.pop(ctx);
+                  setState(() {});
+                }
+                _showPersistResult(ok, 'Profile information updated in Supabase.');
               },
               child: const Text('Save Profile'),
             ),

@@ -70,6 +70,34 @@ class _CertificateManagementScreenState
   ];
 
   @override
+  void initState() {
+    super.initState();
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      if (!mounted) return;
+      _certService.loadFromSupabase();
+    });
+  }
+
+  void _showActionResult(
+    bool ok,
+    String successMessage, {
+    Color successColor = AppColors.success,
+  }) {
+    if (!mounted) return;
+    ScaffoldMessenger.of(context).showSnackBar(
+      SnackBar(
+        content: Text(
+          ok
+              ? successMessage
+              : 'Unable to update certificate status in Supabase.',
+        ),
+        backgroundColor: ok ? successColor : AppColors.error,
+        behavior: SnackBarBehavior.floating,
+      ),
+    );
+  }
+
+  @override
   void dispose() {
     _lookupController.dispose();
     super.dispose();
@@ -990,20 +1018,17 @@ class _CertificateManagementScreenState
 
               final admin =
                   _authService.currentAdmin?.fullName ?? 'Executive Administrator';
-              await _certService.revokeCertificate(
+              final ok = await _certService.revokeCertificate(
                 certificateId: cert.id,
                 reason: reason,
                 adminName: admin,
               );
 
               if (ctx.mounted) Navigator.pop(ctx);
-              if (!mounted) return;
-              ScaffoldMessenger.of(context).showSnackBar(
-                SnackBar(
-                  content: Text('${cert.credentialId} revoked. Audit ledger updated.'),
-                  backgroundColor: AppColors.error,
-                  behavior: SnackBarBehavior.floating,
-                ),
+              _showActionResult(
+                ok,
+                '${cert.credentialId} revoked. Audit ledger updated.',
+                successColor: AppColors.error,
               );
             },
             child: const Text('Confirm Revocation'),
@@ -1075,20 +1100,17 @@ class _CertificateManagementScreenState
 
               final admin =
                   _authService.currentAdmin?.fullName ?? 'Executive Administrator';
-              await _certService.markCertificateForReview(
+              final ok = await _certService.markCertificateForReview(
                 certificateId: cert.id,
                 reason: reason,
                 adminName: admin,
               );
 
               if (ctx.mounted) Navigator.pop(ctx);
-              if (!mounted) return;
-              ScaffoldMessenger.of(context).showSnackBar(
-                SnackBar(
-                  content: Text('${cert.credentialId} placed under verification review hold.'),
-                  backgroundColor: AppColors.warning,
-                  behavior: SnackBarBehavior.floating,
-                ),
+              _showActionResult(
+                ok,
+                '${cert.credentialId} placed under verification review hold.',
+                successColor: AppColors.warning,
               );
             },
             child: const Text('Impose Hold'),
@@ -1163,20 +1185,16 @@ class _CertificateManagementScreenState
 
               final admin =
                   _authService.currentAdmin?.fullName ?? 'Executive Administrator';
-              await _certService.reinstateCertificate(
+              final ok = await _certService.reinstateCertificate(
                 certificateId: cert.id,
                 justification: just,
                 adminName: admin,
               );
 
               if (ctx.mounted) Navigator.pop(ctx);
-              if (!mounted) return;
-              ScaffoldMessenger.of(context).showSnackBar(
-                SnackBar(
-                  content: Text('${cert.credentialId} successfully reinstated to Valid status.'),
-                  backgroundColor: AppColors.success,
-                  behavior: SnackBarBehavior.floating,
-                ),
+              _showActionResult(
+                ok,
+                '${cert.credentialId} successfully reinstated to Valid status.',
               );
             },
             child: const Text('Confirm Reinstatement'),

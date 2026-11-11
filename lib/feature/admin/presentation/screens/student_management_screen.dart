@@ -26,6 +26,34 @@ class _StudentManagementScreenState extends State<StudentManagementScreen> {
 
   String _searchQuery = '';
 
+  @override
+  void initState() {
+    super.initState();
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      if (!mounted) return;
+      _studentService.loadFromSupabase();
+    });
+  }
+
+  void _showActionResult(
+    bool ok,
+    String successMessage, {
+    Color successColor = AppColors.success,
+  }) {
+    if (!mounted) return;
+    ScaffoldMessenger.of(context).showSnackBar(
+      SnackBar(
+        content: Text(
+          ok
+              ? successMessage
+              : 'Unable to save student update to Supabase. Please retry.',
+        ),
+        backgroundColor: ok ? successColor : AppColors.error,
+        behavior: SnackBarBehavior.floating,
+      ),
+    );
+  }
+
   bool _isSidebarCollapsed = false;
 
   // Pagination controls
@@ -461,7 +489,7 @@ class _StudentManagementScreenState extends State<StudentManagementScreen> {
 
               final admin =
                   _authService.currentAdmin?.fullName ?? 'Executive Administrator';
-              await _studentService.suspendStudentAccount(
+              final ok = await _studentService.suspendStudentAccount(
                 studentId: student.id,
                 reason: reason,
                 adminName: admin,
@@ -469,12 +497,10 @@ class _StudentManagementScreenState extends State<StudentManagementScreen> {
 
               if (!mounted || !ctx.mounted) return;
               Navigator.pop(ctx);
-              ScaffoldMessenger.of(context).showSnackBar(
-                SnackBar(
-                  content: Text('${student.name} account has been suspended.'),
-                  backgroundColor: AppColors.error,
-                  behavior: SnackBarBehavior.floating,
-                ),
+              _showActionResult(
+                ok,
+                '${student.name} account has been suspended.',
+                successColor: AppColors.error,
               );
             },
             child: const Text('Confirm Suspension'),
@@ -518,20 +544,14 @@ class _StudentManagementScreenState extends State<StudentManagementScreen> {
             onPressed: () async {
               final admin =
                   _authService.currentAdmin?.fullName ?? 'Executive Administrator';
-              await _studentService.reactivateStudentAccount(
+              final ok = await _studentService.reactivateStudentAccount(
                 studentId: student.id,
                 adminName: admin,
               );
 
               if (!mounted || !ctx.mounted) return;
               Navigator.pop(ctx);
-              ScaffoldMessenger.of(context).showSnackBar(
-                SnackBar(
-                  content: Text('${student.name} account is reactivated.'),
-                  backgroundColor: AppColors.success,
-                  behavior: SnackBarBehavior.floating,
-                ),
-              );
+              _showActionResult(ok, '${student.name} account is reactivated.');
             },
             child: const Text('Confirm Reactivation'),
           ),

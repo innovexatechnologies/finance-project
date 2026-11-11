@@ -33,6 +33,35 @@ class _ProjectManagementScreenState extends State<ProjectManagementScreen> {
   String _selectedPublicationStatus = 'All Publications';
   String _sortBy = 'Newest First';
 
+  @override
+  void initState() {
+    super.initState();
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      if (!mounted) return;
+      _projectService.loadFromSupabase();
+      _settingsService.loadFromSupabase();
+    });
+  }
+
+  void _showActionResult(
+    bool ok,
+    String successMessage, {
+    Color successColor = AppColors.success,
+  }) {
+    if (!mounted) return;
+    ScaffoldMessenger.of(context).showSnackBar(
+      SnackBar(
+        content: Text(
+          ok
+              ? successMessage
+              : 'Unable to save project moderation change to Supabase.',
+        ),
+        backgroundColor: ok ? successColor : AppColors.error,
+        behavior: SnackBarBehavior.floating,
+      ),
+    );
+  }
+
   bool _isSidebarCollapsed = false;
   final Set<String> _selectedProjectIds = {};
 
@@ -554,18 +583,14 @@ class _ProjectManagementScreenState extends State<ProjectManagementScreen> {
                       onPressed: () async {
                         final admin =
                             _authService.currentAdmin?.fullName ?? 'Executive Administrator';
-                        await _projectService.publishProject(
+                        final ok = await _projectService.publishProject(
                           projectId: project.id,
                           moderatorName: admin,
                         );
                         if (ctx.mounted) Navigator.pop(ctx);
-                        if (!mounted) return;
-                        ScaffoldMessenger.of(context).showSnackBar(
-                          SnackBar(
-                            content: Text('"${project.title}" has been published for students!'),
-                            backgroundColor: AppColors.success,
-                            behavior: SnackBarBehavior.floating,
-                          ),
+                        _showActionResult(
+                          ok,
+                          '"${project.title}" has been published for students!',
                         );
                       },
                     ),
@@ -622,18 +647,14 @@ class _ProjectManagementScreenState extends State<ProjectManagementScreen> {
                       onPressed: () async {
                         final admin =
                             _authService.currentAdmin?.fullName ?? 'Executive Administrator';
-                        await _projectService.restoreRemovedProject(
+                        final ok = await _projectService.restoreRemovedProject(
                           projectId: project.id,
                           moderatorName: admin,
                         );
                         if (ctx.mounted) Navigator.pop(ctx);
-                        if (!mounted) return;
-                        ScaffoldMessenger.of(context).showSnackBar(
-                          SnackBar(
-                            content: Text('"${project.title}" listing has been restored.'),
-                            backgroundColor: AppColors.success,
-                            behavior: SnackBarBehavior.floating,
-                          ),
+                        _showActionResult(
+                          ok,
+                          '"${project.title}" listing has been restored.',
                         );
                       },
                     ),
@@ -707,20 +728,17 @@ class _ProjectManagementScreenState extends State<ProjectManagementScreen> {
 
               final admin =
                   _authService.currentAdmin?.fullName ?? 'Executive Administrator';
-              await _projectService.rejectProject(
+              final ok = await _projectService.rejectProject(
                 projectId: project.id,
                 reason: reason,
                 moderatorName: admin,
               );
 
               if (ctx.mounted) Navigator.pop(ctx);
-              if (!mounted) return;
-              ScaffoldMessenger.of(context).showSnackBar(
-                const SnackBar(
-                  content: Text('Project rejected. Reason logged in audit vault.'),
-                  backgroundColor: AppColors.error,
-                  behavior: SnackBarBehavior.floating,
-                ),
+              _showActionResult(
+                ok,
+                'Project rejected. Reason logged in audit vault.',
+                successColor: AppColors.error,
               );
             },
             child: const Text('Submit Rejection'),
@@ -790,20 +808,17 @@ class _ProjectManagementScreenState extends State<ProjectManagementScreen> {
 
               final admin =
                   _authService.currentAdmin?.fullName ?? 'Executive Administrator';
-              await _projectService.removePolicyViolatingProject(
+              final ok = await _projectService.removePolicyViolatingProject(
                 projectId: project.id,
                 reason: reason,
                 moderatorName: admin,
               );
 
               if (ctx.mounted) Navigator.pop(ctx);
-              if (!mounted) return;
-              ScaffoldMessenger.of(context).showSnackBar(
-                const SnackBar(
-                  content: Text('Project de-listed and archived for retention compliance.'),
-                  backgroundColor: AppColors.error,
-                  behavior: SnackBarBehavior.floating,
-                ),
+              _showActionResult(
+                ok,
+                'Project de-listed and archived for retention compliance.',
+                successColor: AppColors.error,
               );
             },
             child: const Text('Confirm De-listing'),
@@ -873,20 +888,17 @@ class _ProjectManagementScreenState extends State<ProjectManagementScreen> {
 
               final admin =
                   _authService.currentAdmin?.fullName ?? 'Executive Administrator';
-              await _projectService.unpublishProject(
+              final ok = await _projectService.unpublishProject(
                 projectId: project.id,
                 reason: reason,
                 moderatorName: admin,
               );
 
               if (ctx.mounted) Navigator.pop(ctx);
-              if (!mounted) return;
-              ScaffoldMessenger.of(context).showSnackBar(
-                const SnackBar(
-                  content: Text('Project unpublished from public discovery.'),
-                  backgroundColor: AppColors.warning,
-                  behavior: SnackBarBehavior.floating,
-                ),
+              _showActionResult(
+                ok,
+                'Project unpublished from public discovery.',
+                successColor: AppColors.warning,
               );
             },
             child: const Text('Unpublish Listing'),
@@ -932,19 +944,16 @@ class _ProjectManagementScreenState extends State<ProjectManagementScreen> {
             onPressed: () async {
               final admin =
                   _authService.currentAdmin?.fullName ?? 'Executive Administrator';
-              await _projectService.closeProject(
+              final ok = await _projectService.closeProject(
                 projectId: project.id,
                 moderatorName: admin,
               );
 
               if (ctx.mounted) Navigator.pop(ctx);
-              if (!mounted) return;
-              ScaffoldMessenger.of(context).showSnackBar(
-                const SnackBar(
-                  content: Text('Project closed successfully.'),
-                  backgroundColor: AppColors.primary,
-                  behavior: SnackBarBehavior.floating,
-                ),
+              _showActionResult(
+                ok,
+                'Project closed successfully.',
+                successColor: AppColors.primary,
               );
             },
             child: const Text('Confirm Close'),
@@ -988,19 +997,15 @@ class _ProjectManagementScreenState extends State<ProjectManagementScreen> {
 
     if (confirmed == true && mounted) {
       final admin = _authService.currentAdmin?.fullName ?? 'Executive Administrator';
-      await _projectService.bulkModerateProjects(
+      final updatedCount = await _projectService.bulkModerateProjects(
         projectIds: _selectedProjectIds.toList(),
         newStatus: newStatus,
         moderatorName: admin,
       );
       setState(() => _selectedProjectIds.clear());
-      if (!mounted) return;
-      ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(
-          content: Text('Successfully executed batch moderation across $count projects!'),
-          backgroundColor: AppColors.success,
-          behavior: SnackBarBehavior.floating,
-        ),
+      _showActionResult(
+        updatedCount > 0,
+        'Successfully executed batch moderation across $updatedCount of $count projects!',
       );
     }
   }

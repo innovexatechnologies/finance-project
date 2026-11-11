@@ -47,6 +47,34 @@ class _ApplicationMonitoringScreenState
   bool _isSidebarCollapsed = false;
   bool _isRefreshing = false;
 
+  @override
+  void initState() {
+    super.initState();
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      if (!mounted) return;
+      _monitoringService.loadFromSupabase();
+    });
+  }
+
+  void _showActionResult(
+    bool ok,
+    String successMessage, {
+    Color successColor = AppColors.success,
+  }) {
+    if (!mounted) return;
+    ScaffoldMessenger.of(context).showSnackBar(
+      SnackBar(
+        content: Text(
+          ok
+              ? successMessage
+              : 'Unable to persist investigation update to Supabase.',
+        ),
+        backgroundColor: ok ? successColor : AppColors.error,
+        behavior: SnackBarBehavior.floating,
+      ),
+    );
+  }
+
   int _currentPage = 1;
   final int _itemsPerPage = 5;
 
@@ -1135,20 +1163,17 @@ class _ApplicationMonitoringScreenState
 
               final admin =
                   _authService.currentAdmin?.fullName ?? 'Executive Administrator';
-              await _monitoringService.markCaseUnderInvestigation(
+              final ok = await _monitoringService.markCaseUnderInvestigation(
                 applicationId: app.id,
                 adminName: admin,
                 initialNote: note,
               );
 
               if (ctx.mounted) Navigator.pop(ctx);
-              if (!mounted) return;
-              ScaffoldMessenger.of(context).showSnackBar(
-                SnackBar(
-                  content: Text('${app.id} marked under active investigation.'),
-                  backgroundColor: AppColors.warning,
-                  behavior: SnackBarBehavior.floating,
-                ),
+              _showActionResult(
+                ok,
+                '${app.id} marked under active investigation.',
+                successColor: AppColors.warning,
               );
             },
             child: const Text('Initiate Review'),
@@ -1220,20 +1245,17 @@ class _ApplicationMonitoringScreenState
 
               final admin =
                   _authService.currentAdmin?.fullName ?? 'Executive Administrator';
-              await _monitoringService.recordInvestigationNote(
+              final ok = await _monitoringService.recordInvestigationNote(
                 applicationId: app.id,
                 adminName: admin,
                 note: note,
               );
 
               if (ctx.mounted) Navigator.pop(ctx);
-              if (!mounted) return;
-              ScaffoldMessenger.of(context).showSnackBar(
-                const SnackBar(
-                  content: Text('Investigation note securely logged into audit vault.'),
-                  backgroundColor: AppColors.primary,
-                  behavior: SnackBarBehavior.floating,
-                ),
+              _showActionResult(
+                ok,
+                'Investigation note securely logged into audit vault.',
+                successColor: AppColors.primary,
               );
             },
             child: const Text('Save Note'),
@@ -1305,20 +1327,16 @@ class _ApplicationMonitoringScreenState
 
               final admin =
                   _authService.currentAdmin?.fullName ?? 'Executive Administrator';
-              await _monitoringService.dismissReport(
+              final ok = await _monitoringService.dismissReport(
                 applicationId: app.id,
                 adminName: admin,
                 reason: reason,
               );
 
               if (ctx.mounted) Navigator.pop(ctx);
-              if (!mounted) return;
-              ScaffoldMessenger.of(context).showSnackBar(
-                const SnackBar(
-                  content: Text('Report dismissed and student standing cleared.'),
-                  backgroundColor: AppColors.success,
-                  behavior: SnackBarBehavior.floating,
-                ),
+              _showActionResult(
+                ok,
+                'Report dismissed and student standing cleared.',
               );
             },
             child: const Text('Confirm Dismissal'),
@@ -1426,7 +1444,7 @@ class _ApplicationMonitoringScreenState
 
                 final admin =
                     _authService.currentAdmin?.fullName ?? 'Executive Administrator';
-                await _monitoringService.resolveReportWithAction(
+                final ok = await _monitoringService.resolveReportWithAction(
                   applicationId: app.id,
                   adminName: admin,
                   resolutionSummary: summary,
@@ -1434,15 +1452,9 @@ class _ApplicationMonitoringScreenState
                 );
 
                 if (ctx.mounted) Navigator.pop(ctx);
-                if (!mounted) return;
-                ScaffoldMessenger.of(context).showSnackBar(
-                  SnackBar(
-                    content: Text(
-                      'Case resolved.${revokeApplication ? " Application administratively revoked." : ""}',
-                    ),
-                    backgroundColor: AppColors.success,
-                    behavior: SnackBarBehavior.floating,
-                  ),
+                _showActionResult(
+                  ok,
+                  'Case resolved.${revokeApplication ? " Application administratively revoked." : ""}',
                 );
               },
               child: const Text('Conclude Investigation'),
