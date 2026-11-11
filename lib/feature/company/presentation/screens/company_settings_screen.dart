@@ -564,6 +564,7 @@ class _CompanySettingsScreenState extends State<CompanySettingsScreen> {
           style: GoogleFonts.poppins(
             fontSize: 17,
             fontWeight: FontWeight.w700,
+            color: Colors.white,
           ),
         ),
       ),
@@ -582,7 +583,10 @@ class _CompanySettingsScreenState extends State<CompanySettingsScreen> {
 
                   return SingleChildScrollView(
                     padding: const EdgeInsets.fromLTRB(16, 16, 16, 36),
-                    child: Column(
+                    child: Center(
+                      child: ConstrainedBox(
+                        constraints: const BoxConstraints(maxWidth: 820),
+                        child: Column(
                       crossAxisAlignment: CrossAxisAlignment.start,
                       children: [
                         Container(
@@ -831,6 +835,8 @@ class _CompanySettingsScreenState extends State<CompanySettingsScreen> {
                           ],
                         ),
                       ],
+                        ),
+                      ),
                     ),
                   );
                 },
