@@ -4,6 +4,7 @@ import 'package:google_fonts/google_fonts.dart';
 import 'package:link_vibe/core/constants/app_colors.dart';
 import 'package:link_vibe/core/services/app_data_service.dart';
 import 'package:link_vibe/core/services/supabase_helper.dart';
+import 'package:link_vibe/core/widgets/rubik_cube_transition.dart';
 import 'package:link_vibe/feature/auth/presentation/screens/login_screen.dart';
 import 'package:link_vibe/feature/company/models/applicant_model.dart';
 import 'package:link_vibe/feature/company/models/assignment_model.dart';
@@ -317,8 +318,8 @@ class _CompanyMainNavState extends State<CompanyMainNav> {
         key: _scaffoldKey,
         endDrawerEnableOpenDragGesture: _currentIndex == 0,
         endDrawer: _buildStandardDrawer(drawerWidth),
-        body: IndexedStack(
-          index: _currentIndex,
+        body: RubikCubeTabView(
+          currentIndex: _currentIndex,
           children: screens,
         ),
         bottomNavigationBar: Container(
