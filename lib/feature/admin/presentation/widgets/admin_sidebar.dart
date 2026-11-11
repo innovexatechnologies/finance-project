@@ -161,31 +161,35 @@ class AdminSidebar extends StatelessWidget {
               ),
             ),
           ),
-          child: Column(
-            children: [
-              _buildBrandHeader(),
-              const Divider(color: Colors.white12, height: 1),
-              Expanded(
-                child: ListView.builder(
-                  padding:
-                      const EdgeInsets.symmetric(vertical: 16, horizontal: 10),
-                  itemCount: items.length,
-                  itemBuilder: (context, index) {
-                    final item = items[index];
-                    final isSelected = item.routeId == activeRouteId;
-                    return _buildNavItemTile(item, isSelected);
-                  },
+          child: SafeArea(
+            left: false,
+            right: false,
+            child: Column(
+              children: [
+                _buildBrandHeader(context),
+                const Divider(color: Colors.white12, height: 1),
+                Expanded(
+                  child: ListView.builder(
+                    padding:
+                        const EdgeInsets.symmetric(vertical: 16, horizontal: 10),
+                    itemCount: items.length,
+                    itemBuilder: (context, index) {
+                      final item = items[index];
+                      final isSelected = item.routeId == activeRouteId;
+                      return _buildNavItemTile(item, isSelected);
+                    },
+                  ),
                 ),
-              ),
-              _buildFooterSection(),
-            ],
+                _buildFooterSection(),
+              ],
+            ),
           ),
         );
       },
     );
   }
 
-  Widget _buildBrandHeader() {
+  Widget _buildBrandHeader(BuildContext context) {
     return Container(
       height: 70,
       padding: EdgeInsets.symmetric(horizontal: isCollapsed ? 12 : 20),
@@ -279,6 +283,16 @@ class AdminSidebar extends StatelessWidget {
               ),
               onPressed: onToggleCollapse,
               tooltip: 'Collapse Sidebar',
+            )
+          else if (!isCollapsed)
+            IconButton(
+              icon: const Icon(
+                Icons.close_rounded,
+                color: Colors.white70,
+                size: 20,
+              ),
+              onPressed: () => Navigator.maybePop(context),
+              tooltip: 'Close Menu',
             ),
         ],
       ),

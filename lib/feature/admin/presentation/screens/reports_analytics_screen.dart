@@ -92,7 +92,7 @@ class _ReportsAnalyticsScreenState extends State<ReportsAnalyticsScreen>
   }
 
   void _onRouteSelected(String routeId) {
-    if (_scaffoldKey.currentState?.isDrawerOpen ?? false) {
+    if (_scaffoldKey.currentState?.isEndDrawerOpen ?? false) {
       Navigator.pop(context);
     }
     if (routeId == 'analytics' || routeId == 'reports') {
@@ -162,9 +162,10 @@ class _ReportsAnalyticsScreenState extends State<ReportsAnalyticsScreen>
     return Scaffold(
       key: _scaffoldKey,
       backgroundColor: const Color(0xFFF8FAFC),
-      drawer: isDesktop
+      endDrawer: isDesktop
           ? null
           : Drawer(
+              backgroundColor: AppColors.darkNavy,
               child: AdminSidebar(
                 activeRouteId: 'analytics',
                 onRouteSelected: _onRouteSelected,
@@ -191,7 +192,7 @@ class _ReportsAnalyticsScreenState extends State<ReportsAnalyticsScreen>
                 AdminTopNavbar(
                   pageTitle: 'Reports & Business Intelligence',
                   breadcrumb: 'Analytics Hub',
-                  onOpenDrawer: () => _scaffoldKey.currentState?.openDrawer(),
+                  onOpenDrawer: () => _scaffoldKey.currentState?.openEndDrawer(),
                   onSignOut: _handleSignOut,
                 ),
                 Expanded(

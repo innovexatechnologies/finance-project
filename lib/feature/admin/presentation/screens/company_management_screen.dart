@@ -181,7 +181,7 @@ class _CompanyManagementScreenState extends State<CompanyManagementScreen> {
   }
 
   void _onRouteSelected(String routeId) {
-    if (_scaffoldKey.currentState?.isDrawerOpen ?? false) {
+    if (_scaffoldKey.currentState?.isEndDrawerOpen ?? false) {
       Navigator.pop(context);
     }
     if (routeId == 'company_management') return;
@@ -1585,9 +1585,10 @@ class _CompanyManagementScreenState extends State<CompanyManagementScreen> {
         return Scaffold(
           key: _scaffoldKey,
           backgroundColor: AppColors.background,
-          drawer: isDesktop
+          endDrawer: isDesktop
               ? null
               : Drawer(
+                  backgroundColor: AppColors.darkNavy,
                   child: AdminSidebar(
                     activeRouteId: 'company_verifications',
                     onRouteSelected: _onRouteSelected,
@@ -1617,7 +1618,7 @@ class _CompanyManagementScreenState extends State<CompanyManagementScreen> {
                     AdminTopNavbar(
                       pageTitle: 'Company Management & Verification',
                       onOpenDrawer: () =>
-                          _scaffoldKey.currentState?.openDrawer(),
+                          _scaffoldKey.currentState?.openEndDrawer(),
                       onSignOut: _handleSignOut,
                       onSearch: (query) {
                         setState(() {

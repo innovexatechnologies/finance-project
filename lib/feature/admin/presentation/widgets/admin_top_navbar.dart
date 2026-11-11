@@ -47,7 +47,7 @@ class AdminTopNavbar extends StatelessWidget implements PreferredSizeWidget {
   });
 
   @override
-  Size get preferredSize => const Size.fromHeight(70);
+  Size get preferredSize => const Size.fromHeight(65);
 
   List<_AdminAlertItem> _collectLiveAlerts() {
     final alerts = <_AdminAlertItem>[];
@@ -265,77 +265,134 @@ class AdminTopNavbar extends StatelessWidget implements PreferredSizeWidget {
         final alertCount = _collectLiveAlerts().length;
 
         return Container(
-          height: 70,
-          padding: const EdgeInsets.symmetric(horizontal: 20),
           decoration: const BoxDecoration(
             color: Colors.white,
             border: Border(
               bottom: BorderSide(color: AppColors.border, width: 1),
             ),
           ),
-          child: Row(
-            children: [
-              if (!isDesktop) ...[
-                IconButton(
-                  icon: const Icon(Icons.menu_rounded, color: AppColors.darkNavy),
-                  onPressed: onOpenDrawer,
-                  tooltip: 'Open Navigation Menu',
+          child: SafeArea(
+            bottom: false,
+            child: SizedBox(
+              height: 64,
+              child: Padding(
+                padding: EdgeInsets.symmetric(
+                  horizontal: isDesktop ? 20 : 12,
                 ),
-                const SizedBox(width: 8),
-              ],
-
-              Expanded(
-                flex: 3,
-                child: Column(
-                  mainAxisAlignment: MainAxisAlignment.center,
-                  crossAxisAlignment: CrossAxisAlignment.start,
+                child: Row(
                   children: [
-                    Row(
-                      children: [
-                        Flexible(
-                          child: Text(
-                            breadcrumb ?? 'Admin',
-                            maxLines: 1,
-                            overflow: TextOverflow.ellipsis,
-                            style: GoogleFonts.inter(
-                              fontSize: 11,
-                              color: AppColors.textMuted,
-                              fontWeight: FontWeight.w500,
+                    if (!isDesktop) ...[
+                      Container(
+                        width: 36,
+                        height: 36,
+                        decoration: BoxDecoration(
+                          gradient: AppColors.brandGradient,
+                          borderRadius: BorderRadius.circular(10),
+                          boxShadow: [
+                            BoxShadow(
+                              color: AppColors.primaryBlue.withValues(
+                                alpha: 0.22,
+                              ),
+                              blurRadius: 8,
+                              offset: const Offset(0, 3),
                             ),
+                          ],
+                        ),
+                        child: const Center(
+                          child: Icon(
+                            Icons.hub_rounded,
+                            color: Colors.white,
+                            size: 19,
                           ),
                         ),
-                        const Text(
-                          ' / ',
-                          style: TextStyle(fontSize: 11, color: AppColors.textMuted),
-                        ),
-                        Flexible(
-                          child: Text(
-                            pageTitle,
-                            maxLines: 1,
-                            overflow: TextOverflow.ellipsis,
-                            style: GoogleFonts.inter(
-                              fontSize: 11,
-                              color: AppColors.primary,
-                              fontWeight: FontWeight.w600,
-                            ),
-                          ),
-                        ),
-                      ],
-                    ),
-                    const SizedBox(height: 2),
-                    Text(
-                      pageTitle,
-                      overflow: TextOverflow.ellipsis,
-                      style: GoogleFonts.poppins(
-                        fontSize: 18,
-                        fontWeight: FontWeight.bold,
-                        color: AppColors.darkNavy,
-                        letterSpacing: -0.3,
                       ),
-                    ),
-                  ],
-                ),
-              ),
+                      const SizedBox(width: 9),
+                      Expanded(
+                        child: Column(
+                          mainAxisAlignment: MainAxisAlignment.center,
+                          crossAxisAlignment: CrossAxisAlignment.start,
+                          children: [
+                            Text(
+                              'CampusConnect',
+                              maxLines: 1,
+                              overflow: TextOverflow.ellipsis,
+                              style: GoogleFonts.poppins(
+                                fontSize: 15,
+                                fontWeight: FontWeight.w700,
+                                color: AppColors.deepNavy,
+                                height: 1.15,
+                                letterSpacing: -0.3,
+                              ),
+                            ),
+                            Text(
+                              pageTitle,
+                              maxLines: 1,
+                              overflow: TextOverflow.ellipsis,
+                              style: GoogleFonts.inter(
+                                fontSize: 11,
+                                color: AppColors.grayText,
+                                fontWeight: FontWeight.w500,
+                              ),
+                            ),
+                          ],
+                        ),
+                      ),
+                    ] else
+                      Expanded(
+                        flex: 3,
+                        child: Column(
+                          mainAxisAlignment: MainAxisAlignment.center,
+                          crossAxisAlignment: CrossAxisAlignment.start,
+                          children: [
+                            Row(
+                              children: [
+                                Flexible(
+                                  child: Text(
+                                    breadcrumb ?? 'Admin',
+                                    maxLines: 1,
+                                    overflow: TextOverflow.ellipsis,
+                                    style: GoogleFonts.inter(
+                                      fontSize: 11,
+                                      color: AppColors.textMuted,
+                                      fontWeight: FontWeight.w500,
+                                    ),
+                                  ),
+                                ),
+                                const Text(
+                                  ' / ',
+                                  style: TextStyle(
+                                    fontSize: 11,
+                                    color: AppColors.textMuted,
+                                  ),
+                                ),
+                                Flexible(
+                                  child: Text(
+                                    pageTitle,
+                                    maxLines: 1,
+                                    overflow: TextOverflow.ellipsis,
+                                    style: GoogleFonts.inter(
+                                      fontSize: 11,
+                                      color: AppColors.primary,
+                                      fontWeight: FontWeight.w600,
+                                    ),
+                                  ),
+                                ),
+                              ],
+                            ),
+                            const SizedBox(height: 2),
+                            Text(
+                              pageTitle,
+                              overflow: TextOverflow.ellipsis,
+                              style: GoogleFonts.poppins(
+                                fontSize: 18,
+                                fontWeight: FontWeight.bold,
+                                color: AppColors.darkNavy,
+                                letterSpacing: -0.3,
+                              ),
+                            ),
+                          ],
+                        ),
+                      ),
 
               if (isDesktop && onSearch != null)
                 Container(
@@ -388,27 +445,42 @@ class AdminTopNavbar extends StatelessWidget implements PreferredSizeWidget {
                 const SizedBox(width: 12),
               ],
 
+              const SizedBox(width: 4),
               Stack(
+                clipBehavior: Clip.none,
                 children: [
                   IconButton(
+                    style: IconButton.styleFrom(
+                      tapTargetSize: MaterialTapTargetSize.shrinkWrap,
+                      minimumSize: const Size(38, 38),
+                      fixedSize: const Size(38, 38),
+                      padding: EdgeInsets.zero,
+                    ),
                     icon: const Icon(
                       Icons.notifications_outlined,
                       color: AppColors.darkNavy,
+                      size: 22,
                     ),
                     tooltip: 'Alerts',
                     onPressed: () => _showNotificationsSheet(context),
                   ),
                   if (alertCount > 0)
                     Positioned(
-                      right: 8,
-                      top: 8,
+                      right: 2,
+                      top: 2,
                       child: Container(
-                        padding: const EdgeInsets.symmetric(horizontal: 5, vertical: 1),
+                        padding: const EdgeInsets.symmetric(
+                          horizontal: 5,
+                          vertical: 1,
+                        ),
                         decoration: BoxDecoration(
                           color: AppColors.error,
                           borderRadius: BorderRadius.circular(10),
                         ),
-                        constraints: const BoxConstraints(minWidth: 16, minHeight: 16),
+                        constraints: const BoxConstraints(
+                          minWidth: 16,
+                          minHeight: 16,
+                        ),
                         child: Text(
                           alertCount > 99 ? '99+' : '$alertCount',
                           textAlign: TextAlign.center,
@@ -426,7 +498,7 @@ class AdminTopNavbar extends StatelessWidget implements PreferredSizeWidget {
 
               PopupMenuButton<String>(
                 tooltip: 'Administrator Account',
-                offset: const Offset(0, 50),
+                offset: const Offset(0, 48),
                 shape: RoundedRectangleBorder(
                   borderRadius: BorderRadius.circular(12),
                 ),
@@ -458,7 +530,10 @@ class AdminTopNavbar extends StatelessWidget implements PreferredSizeWidget {
                         ),
                         const SizedBox(height: 6),
                         Container(
-                          padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 2),
+                          padding: const EdgeInsets.symmetric(
+                            horizontal: 6,
+                            vertical: 2,
+                          ),
                           decoration: BoxDecoration(
                             color: AppColors.lightIceBlue,
                             borderRadius: BorderRadius.circular(4),
@@ -480,7 +555,11 @@ class AdminTopNavbar extends StatelessWidget implements PreferredSizeWidget {
                     value: 'logout',
                     child: Row(
                       children: [
-                        Icon(Icons.logout_rounded, size: 18, color: AppColors.error),
+                        Icon(
+                          Icons.logout_rounded,
+                          size: 18,
+                          color: AppColors.error,
+                        ),
                         SizedBox(width: 10),
                         Text(
                           'Sign Out Session',
@@ -501,22 +580,52 @@ class AdminTopNavbar extends StatelessWidget implements PreferredSizeWidget {
                     border: Border.all(color: AppColors.primary, width: 1.5),
                   ),
                   child: CircleAvatar(
-                    radius: 17,
+                    radius: isDesktop ? 17 : 15,
                     backgroundColor: AppColors.darkNavy,
                     child: Text(
                       admin.avatarInitial,
                       style: GoogleFonts.poppins(
                         color: Colors.white,
                         fontWeight: FontWeight.bold,
-                        fontSize: 12,
+                        fontSize: isDesktop ? 12 : 11,
                       ),
                     ),
                   ),
                 ),
               ),
-            ],
-          ),
-        );
+              if (!isDesktop) ...[
+                const SizedBox(width: 8),
+                Tooltip(
+                  message: 'Open Navigation Menu',
+                  child: Material(
+                    color: AppColors.background,
+                    borderRadius: BorderRadius.circular(11),
+                    child: InkWell(
+                      borderRadius: BorderRadius.circular(11),
+                      onTap: onOpenDrawer,
+                      child: Container(
+                        width: 38,
+                        height: 38,
+                        decoration: BoxDecoration(
+                          borderRadius: BorderRadius.circular(11),
+                          border: Border.all(color: AppColors.lightGray),
+                        ),
+                        child: const Icon(
+                          Icons.menu_rounded,
+                          size: 20,
+                          color: AppColors.deepNavy,
+                        ),
+                      ),
+                    ),
+                  ),
+                ),
+              ],
+                    ],
+                  ),
+                ),
+              ),
+            ),
+          );
       },
     );
   }

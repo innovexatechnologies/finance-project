@@ -80,7 +80,7 @@ class _AdminSettingsScreenState extends State<AdminSettingsScreen>
   }
 
   void _onRouteSelected(String routeId) {
-    if (_scaffoldKey.currentState?.isDrawerOpen ?? false) {
+    if (_scaffoldKey.currentState?.isEndDrawerOpen ?? false) {
       Navigator.pop(context);
     }
     if (routeId == 'settings') {
@@ -166,9 +166,10 @@ class _AdminSettingsScreenState extends State<AdminSettingsScreen>
         return Scaffold(
           key: _scaffoldKey,
           backgroundColor: const Color(0xFFF8FAFC),
-          drawer: isDesktop
+          endDrawer: isDesktop
               ? null
               : Drawer(
+                  backgroundColor: AppColors.darkNavy,
                   child: AdminSidebar(
                     activeRouteId: 'settings',
                     onRouteSelected: _onRouteSelected,
@@ -196,7 +197,7 @@ class _AdminSettingsScreenState extends State<AdminSettingsScreen>
                       pageTitle: 'Platform Settings & Governance',
                       breadcrumb: 'Configuration Hub',
                       onOpenDrawer: () =>
-                          _scaffoldKey.currentState?.openDrawer(),
+                          _scaffoldKey.currentState?.openEndDrawer(),
                       onSignOut: _handleSignOut,
                     ),
                     Container(

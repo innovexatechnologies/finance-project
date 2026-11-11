@@ -124,7 +124,7 @@ class _AdminDashboardScreenState extends State<AdminDashboardScreen> {
   }
 
   void _onRouteSelected(String routeId) {
-    if (_scaffoldKey.currentState?.isDrawerOpen ?? false) {
+    if (_scaffoldKey.currentState?.isEndDrawerOpen ?? false) {
       Navigator.pop(context);
     }
     if (routeId == _activeRouteId) return;
@@ -215,9 +215,10 @@ class _AdminDashboardScreenState extends State<AdminDashboardScreen> {
         return Scaffold(
           key: _scaffoldKey,
           backgroundColor: AppColors.background,
-          drawer: isDesktop
+          endDrawer: isDesktop
               ? null
               : Drawer(
+                  backgroundColor: AppColors.darkNavy,
                   child: AdminSidebar(
                     activeRouteId: _activeRouteId,
                     onRouteSelected: _onRouteSelected,
@@ -244,7 +245,7 @@ class _AdminDashboardScreenState extends State<AdminDashboardScreen> {
                       pageTitle: 'Admin Overview',
                       breadcrumb: 'Governance',
                       onOpenDrawer: () =>
-                          _scaffoldKey.currentState?.openDrawer(),
+                          _scaffoldKey.currentState?.openEndDrawer(),
                       onSignOut: _handleSignOut,
                     ),
                     Expanded(

@@ -147,7 +147,7 @@ class _ProjectManagementScreenState extends State<ProjectManagementScreen> {
   }
 
   void _onRouteSelected(String routeId) {
-    if (_scaffoldKey.currentState?.isDrawerOpen ?? false) {
+    if (_scaffoldKey.currentState?.isEndDrawerOpen ?? false) {
       Navigator.pop(context);
     }
     if (routeId == 'projects_audit' || routeId == 'projects') return;
@@ -1249,9 +1249,10 @@ class _ProjectManagementScreenState extends State<ProjectManagementScreen> {
         return Scaffold(
           key: _scaffoldKey,
           backgroundColor: AppColors.background,
-          drawer: isDesktop
+          endDrawer: isDesktop
               ? null
               : Drawer(
+                  backgroundColor: AppColors.darkNavy,
                   child: AdminSidebar(
                     activeRouteId: 'projects_audit',
                     onRouteSelected: _onRouteSelected,
@@ -1280,7 +1281,7 @@ class _ProjectManagementScreenState extends State<ProjectManagementScreen> {
                     // Top Navigation Bar
                     AdminTopNavbar(
                       pageTitle: 'Project Moderation & Sprints',
-                      onOpenDrawer: () => _scaffoldKey.currentState?.openDrawer(),
+                      onOpenDrawer: () => _scaffoldKey.currentState?.openEndDrawer(),
                       onSignOut: _handleSignOut,
                       onSearch: (query) {
                         setState(() {
