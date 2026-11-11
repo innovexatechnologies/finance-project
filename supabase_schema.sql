@@ -992,24 +992,66 @@ CREATE POLICY "Students Self Manage" ON public.students FOR ALL TO authenticated
 
 CREATE POLICY "Projects Public View" ON public.projects FOR SELECT USING (true);
 CREATE POLICY "Projects Company Manage" ON public.projects FOR ALL TO authenticated
-  USING (auth.uid() = posted_by OR auth.uid() = user_id OR public.is_admin())
-  WITH CHECK (auth.uid() = posted_by OR auth.uid() = user_id OR public.is_admin());
+  USING (
+    auth.uid() = posted_by
+    OR auth.uid() = user_id
+    OR EXISTS (
+      SELECT 1 FROM public.companies c
+      WHERE c.id = public.projects.company_id
+        AND c.user_id = auth.uid()
+    )
+    OR public.is_admin()
+  )
+  WITH CHECK (
+    auth.uid() = posted_by
+    OR auth.uid() = user_id
+    OR EXISTS (
+      SELECT 1 FROM public.companies c
+      WHERE c.id = public.projects.company_id
+        AND c.user_id = auth.uid()
+    )
+    OR public.is_admin()
+  );
 
 CREATE POLICY "Applications Student Manage" ON public.applications FOR ALL TO authenticated
   USING (auth.uid() = student_id OR auth.uid() = user_id)
   WITH CHECK (auth.uid() = student_id OR auth.uid() = user_id);
 
 CREATE POLICY "Applications Company Manage" ON public.applications FOR ALL TO authenticated
-  USING (EXISTS (
-    SELECT 1 FROM public.projects
-    WHERE public.projects.id = public.applications.project_id
-      AND (public.projects.posted_by = auth.uid() OR public.projects.user_id = auth.uid())
-  ))
-  WITH CHECK (EXISTS (
-    SELECT 1 FROM public.projects
-    WHERE public.projects.id = public.applications.project_id
-      AND (public.projects.posted_by = auth.uid() OR public.projects.user_id = auth.uid())
-  ));
+  USING (
+    EXISTS (
+      SELECT 1 FROM public.projects p
+      LEFT JOIN public.companies c ON c.id = p.company_id
+      WHERE p.id = public.applications.project_id
+        AND (
+          p.posted_by = auth.uid()
+          OR p.user_id = auth.uid()
+          OR c.user_id = auth.uid()
+        )
+    )
+    OR EXISTS (
+      SELECT 1 FROM public.companies c
+      WHERE c.id = public.applications.company_id
+        AND c.user_id = auth.uid()
+    )
+  )
+  WITH CHECK (
+    EXISTS (
+      SELECT 1 FROM public.projects p
+      LEFT JOIN public.companies c ON c.id = p.company_id
+      WHERE p.id = public.applications.project_id
+        AND (
+          p.posted_by = auth.uid()
+          OR p.user_id = auth.uid()
+          OR c.user_id = auth.uid()
+        )
+    )
+    OR EXISTS (
+      SELECT 1 FROM public.companies c
+      WHERE c.id = public.applications.company_id
+        AND c.user_id = auth.uid()
+    )
+  );
 
 CREATE POLICY "Applications Admin Manage" ON public.applications FOR ALL TO authenticated
   USING (public.is_admin())
@@ -1203,3 +1245,127 @@ BEGIN
       is_verified = true,
       account_status = 'active';
 END $$;
+
+-- ----------------------------------------------------------------------------
+-- 17. COMPANY PANEL PRODUCTION HARDENING, INDEXES & DELETE ACCOUNT RPC
+-- ----------------------------------------------------------------------------
+
+-- 17a. Deduplicate public.companies by user_id & enforce unique company per user
+DELETE FROM public.companies a
+USING public.companies b
+WHERE a.user_id IS NOT NULL
+  AND a.user_id = b.user_id
+  AND (
+    COALESCE(a.updated_at, a.created_at, now()) < COALESCE(b.updated_at, b.created_at, now())
+    OR (
+      COALESCE(a.updated_at, a.created_at, now()) = COALESCE(b.updated_at, b.created_at, now())
+      AND a.ctid < b.ctid
+    )
+  );
+
+CREATE UNIQUE INDEX IF NOT EXISTS idx_companies_unique_user_id
+  ON public.companies (user_id)
+  WHERE user_id IS NOT NULL;
+
+-- 17b. Backfill missing company rows for existing Company auth accounts
+INSERT INTO public.companies (
+  user_id,
+  company_name,
+  email,
+  industry,
+  verification_status,
+  logo_initial
+)
+SELECT
+  p.id,
+  COALESCE(NULLIF(trim(p.name), ''), NULLIF(split_part(COALESCE(p.email, ''), '@', 1), ''), 'Company Partner'),
+  COALESCE(p.email, ''),
+  COALESCE(NULLIF(trim(p.university), ''), 'Software & Cloud Services'),
+  'not_submitted',
+  upper(left(regexp_replace(COALESCE(NULLIF(trim(p.name), ''), 'CO'), '[^a-zA-Z0-9]', '', 'g') || 'CO', 2))
+FROM public.profiles p
+WHERE lower(COALESCE(p.user_type, '')) = 'company'
+  AND NOT EXISTS (
+    SELECT 1 FROM public.companies c WHERE c.user_id = p.id
+  );
+
+-- 17c. Backfill company_id on projects & applications
+UPDATE public.projects p
+SET company_id = c.id
+FROM public.companies c
+WHERE p.company_id IS NULL
+  AND c.user_id IN (p.posted_by, p.user_id);
+
+UPDATE public.applications a
+SET company_id = p.company_id
+FROM public.projects p
+WHERE a.company_id IS NULL
+  AND a.project_id = p.id
+  AND p.company_id IS NOT NULL;
+
+-- 17d. Deduplicate certificates per (student_id, project_id) & prevent duplicates
+DELETE FROM public.certificates a
+USING public.certificates b
+WHERE a.student_id IS NOT NULL
+  AND a.project_id IS NOT NULL
+  AND a.student_id = b.student_id
+  AND a.project_id = b.project_id
+  AND (
+    COALESCE(a.created_at, now()) < COALESCE(b.created_at, now())
+    OR (COALESCE(a.created_at, now()) = COALESCE(b.created_at, now()) AND a.ctid < b.ctid)
+  );
+
+CREATE UNIQUE INDEX IF NOT EXISTS idx_certificates_student_project
+  ON public.certificates (student_id, project_id)
+  WHERE student_id IS NOT NULL AND project_id IS NOT NULL;
+
+-- 17e. Account deletion RPC used by CompanySettingsService.deleteAccount()
+CREATE OR REPLACE FUNCTION public.delete_user_account()
+RETURNS VOID
+LANGUAGE plpgsql
+SECURITY DEFINER
+SET search_path = public, auth
+AS $$
+DECLARE
+  uid UUID := auth.uid();
+BEGIN
+  IF uid IS NULL THEN
+    RAISE EXCEPTION 'Not authenticated';
+  END IF;
+
+  DELETE FROM public.applications
+  WHERE project_id IN (
+    SELECT p.id FROM public.projects p
+    LEFT JOIN public.companies c ON c.id = p.company_id
+    WHERE p.posted_by = uid OR p.user_id = uid OR c.user_id = uid
+  )
+  OR student_id = uid
+  OR user_id = uid;
+
+  DELETE FROM public.projects
+  WHERE posted_by = uid
+     OR user_id = uid
+     OR company_id IN (SELECT id FROM public.companies WHERE user_id = uid);
+
+  DELETE FROM public.companies WHERE user_id = uid;
+  DELETE FROM public.students WHERE user_id = uid;
+  DELETE FROM public.saved_projects WHERE user_id = uid;
+  DELETE FROM public.support_tickets WHERE user_id = uid;
+  DELETE FROM public.user_settings WHERE user_id = uid;
+  DELETE FROM public.profiles WHERE id = uid;
+
+  DELETE FROM auth.users WHERE id = uid;
+END;
+$$;
+
+REVOKE ALL ON FUNCTION public.delete_user_account() FROM PUBLIC;
+GRANT EXECUTE ON FUNCTION public.delete_user_account() TO authenticated;
+
+-- 17f. Performance indexes for Company, Student & Admin queries
+CREATE INDEX IF NOT EXISTS idx_projects_posted_by ON public.projects (posted_by);
+CREATE INDEX IF NOT EXISTS idx_projects_user_id ON public.projects (user_id);
+CREATE INDEX IF NOT EXISTS idx_projects_company_id ON public.projects (company_id);
+CREATE INDEX IF NOT EXISTS idx_applications_project_id ON public.applications (project_id);
+CREATE INDEX IF NOT EXISTS idx_applications_student_id ON public.applications (student_id);
+CREATE INDEX IF NOT EXISTS idx_certificates_student_id ON public.certificates (student_id);
+

@@ -18,11 +18,12 @@ void main() async {
     debugPrint('Notice: .env asset load fallback ($e).');
   }
 
-  final supabaseUrl = dotenv.env['SUPABASE_URL']?.trim() ?? '';
-  final supabaseKey = (dotenv.env['SUPABASE_ANON_KEY'] ??
-          dotenv.env['SUPABASE_PUBLISHABLE_KEY'] ??
-          '')
-      .trim();
+  final supabaseUrl = (dotenv.env['SUPABASE_URL'] ?? '')
+      .trim()
+      .replaceAll(RegExp(r'/+$'), '');
+  final anonKey = (dotenv.env['SUPABASE_ANON_KEY'] ?? '').trim();
+  final publishableKey = (dotenv.env['SUPABASE_PUBLISHABLE_KEY'] ?? '').trim();
+  final supabaseKey = anonKey.isNotEmpty ? anonKey : publishableKey;
 
   if (supabaseUrl.isNotEmpty &&
       supabaseKey.isNotEmpty &&
