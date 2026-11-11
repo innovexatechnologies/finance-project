@@ -53,6 +53,8 @@ class SkillBridgeLogo extends StatelessWidget {
           assetPath,
           width: size,
           height: size,
+          cacheWidth: (size * 2).round(),
+          cacheHeight: (size * 2).round(),
           fit: BoxFit.cover,
           errorBuilder: (_, _, _) => Center(
             child: Icon(
