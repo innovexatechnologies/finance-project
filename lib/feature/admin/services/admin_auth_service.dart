@@ -115,66 +115,21 @@ class AdminAuthService {
           );
         }
 
-        // Verify Admin role from profiles table (or metadata fallback if row pending)
-        final profileRow = await supabase
-            .from('profiles')
-            .select()
-            .eq('id', user.id)
-            .maybeSingle();
-
-        final rawRole = (profileRow?['user_type']?.toString() ??
-                user.userMetadata?['user_type']?.toString() ??
-                '')
-            .trim()
-            .toLowerCase();
-
-        if (rawRole != 'admin') {
-          await supabase.auth.signOut();
-          return AdminAuthResult.failed(
-            'Access denied. This account does not have Administrator privileges.',
-          );
-        }
-
-        final accountStatus =
-            (profileRow?['account_status']?.toString() ?? 'active')
-                .trim()
-                .toLowerCase();
-        if (accountStatus == 'suspended') {
-          await supabase.auth.signOut();
-          return AdminAuthResult.failed(
-            'This administrator account is currently suspended. Contact root governance.',
-          );
-        }
-
-        final fullName = (profileRow?['name']?.toString().trim().isNotEmpty == true)
-            ? profileRow!['name'].toString().trim()
-            : (user.userMetadata?['name']?.toString().trim().isNotEmpty == true
-                ? user.userMetadata!['name'].toString().trim()
-                : 'Executive Administrator');
-        final department =
-            (profileRow?['university']?.toString().trim().isNotEmpty == true)
-                ? profileRow!['university'].toString().trim()
-                : 'SkillBridge Governance Council';
-
-        final authenticatedAdmin = AdminUserModel(
-          id: user.id,
-          fullName: fullName,
-          email: user.email ?? normalizedEmail,
-          role: 'SUPER_ADMIN',
-          roleDisplayName: 'Executive Super Administrator',
-          department: department,
-          avatarInitial: SupabaseHelper.initialsFor(fullName, fallback: 'EA'),
-          permissions: const [
-            'all',
-            'manage_companies',
-            'verify_students',
-            'audit_projects',
-            'manage_settings',
-          ],
+        final resolved = await _resolveAuthorizedAdmin(
+          supabase,
+          user,
+          fallbackEmail: normalizedEmail,
+          accessToken: response.session?.accessToken,
           lastLoginAt: 'Just now',
-          sessionToken: response.session?.accessToken,
-          isActive: true,
         );
+        if (!resolved.allowed) {
+          await supabase.auth.signOut();
+          return AdminAuthResult.failed(
+            resolved.errorMessage ?? 'Access denied.',
+          );
+        }
+
+        final authenticatedAdmin = resolved.admin!;
 
         _rememberMeEnabled = rememberMe;
         currentAdminNotifier.value = authenticatedAdmin;
@@ -254,6 +209,106 @@ class AdminAuthService {
     return AdminAuthResult.successful(offlineAdmin);
   }
 
+  Future<({bool allowed, AdminUserModel? admin, String? errorMessage})>
+      _resolveAuthorizedAdmin(
+    SupabaseClient supabase,
+    User user, {
+    required String fallbackEmail,
+    String? accessToken,
+    required String lastLoginAt,
+  }) async {
+    final profileRow = await supabase
+        .from('profiles')
+        .select()
+        .eq('id', user.id)
+        .maybeSingle();
+
+    final rawRole = (profileRow?['user_type']?.toString() ??
+            user.userMetadata?['user_type']?.toString() ??
+            '')
+        .trim()
+        .toLowerCase();
+
+    if (rawRole != 'admin') {
+      return (
+        allowed: false,
+        admin: null,
+        errorMessage:
+            'Access denied. This account does not have Administrator privileges.',
+      );
+    }
+
+    final accountStatus =
+        (profileRow?['account_status']?.toString() ?? 'active')
+            .trim()
+            .toLowerCase();
+    if (accountStatus == 'suspended') {
+      return (
+        allowed: false,
+        admin: null,
+        errorMessage:
+            'This administrator account is currently suspended. Contact root governance.',
+      );
+    }
+
+    final email = (user.email ?? fallbackEmail).trim().toLowerCase();
+    final fullName = (profileRow?['name']?.toString().trim().isNotEmpty == true)
+        ? profileRow!['name'].toString().trim()
+        : (user.userMetadata?['name']?.toString().trim().isNotEmpty == true
+            ? user.userMetadata!['name'].toString().trim()
+            : 'Executive Administrator');
+    var department =
+        (profileRow?['university']?.toString().trim().isNotEmpty == true)
+            ? profileRow!['university'].toString().trim()
+            : 'SkillBridge Governance Council';
+
+    String roleKey = 'SUPER_ADMIN';
+    String roleDisplayName = 'Executive Super Administrator';
+    List<String> permissions = const [
+      'all',
+      'manage_companies',
+      'verify_students',
+      'audit_projects',
+      'manage_settings',
+    ];
+
+    try {
+      final rbacRow = await supabase
+          .from('platform_taxonomies')
+          .select()
+          .eq('item_type', 'admin_rbac')
+          .ilike('name', email)
+          .maybeSingle();
+      if (rbacRow != null && rbacRow['metadata'] is Map) {
+        final meta = Map<String, dynamic>.from(rbacRow['metadata'] as Map);
+        final rKey = meta['role']?.toString().trim() ?? '';
+        final rDisp = meta['role_display_name']?.toString().trim() ?? '';
+        final deptMeta = meta['department']?.toString().trim() ?? '';
+        final parsedPerms = SupabaseHelper.parseStringList(meta['permissions']);
+        if (rKey.isNotEmpty) roleKey = rKey;
+        if (rDisp.isNotEmpty) roleDisplayName = rDisp;
+        if (deptMeta.isNotEmpty) department = deptMeta;
+        if (parsedPerms.isNotEmpty) permissions = parsedPerms;
+      }
+    } catch (_) {}
+
+    final admin = AdminUserModel(
+      id: user.id,
+      fullName: fullName,
+      email: email,
+      role: roleKey,
+      roleDisplayName: roleDisplayName,
+      department: department,
+      avatarInitial: SupabaseHelper.initialsFor(fullName, fallback: 'EA'),
+      permissions: permissions,
+      lastLoginAt: lastLoginAt,
+      sessionToken: accessToken,
+      isActive: true,
+    );
+
+    return (allowed: true, admin: admin, errorMessage: null);
+  }
+
   /// Restores active admin session cleanly (e.g. from SplashScreen on cold start).
   Future<AdminUserModel?> restoreFromCurrentUser() async {
     final supabase = SupabaseHelper.clientOrNull;
@@ -261,49 +316,20 @@ class AdminAuthService {
     if (supabase == null || user == null) return null;
 
     try {
-      final profileRow = await supabase
-          .from('profiles')
-          .select()
-          .eq('id', user.id)
-          .maybeSingle();
-
-      final rawRole = (profileRow?['user_type']?.toString() ??
-              user.userMetadata?['user_type']?.toString() ??
-              '')
-          .trim()
-          .toLowerCase();
-      if (rawRole != 'admin') return null;
-
-      final fullName = (profileRow?['name']?.toString().trim().isNotEmpty == true)
-          ? profileRow!['name'].toString().trim()
-          : 'Executive Administrator';
-      final department =
-          (profileRow?['university']?.toString().trim().isNotEmpty == true)
-              ? profileRow!['university'].toString().trim()
-              : 'SkillBridge Governance Council';
-
-      final admin = AdminUserModel(
-        id: user.id,
-        fullName: fullName,
-        email: user.email ?? '',
-        role: 'SUPER_ADMIN',
-        roleDisplayName: 'Executive Super Administrator',
-        department: department,
-        avatarInitial: SupabaseHelper.initialsFor(fullName, fallback: 'EA'),
-        permissions: const [
-          'all',
-          'manage_companies',
-          'verify_students',
-          'audit_projects',
-          'manage_settings',
-        ],
+      final resolved = await _resolveAuthorizedAdmin(
+        supabase,
+        user,
+        fallbackEmail: user.email ?? '',
         lastLoginAt: 'Active Session',
-        isActive: true,
       );
+      if (!resolved.allowed || resolved.admin == null) {
+        await supabase.auth.signOut();
+        return null;
+      }
 
-      currentAdminNotifier.value = admin;
+      currentAdminNotifier.value = resolved.admin!;
       await AdminDashboardService().loadAllAdminData();
-      return admin;
+      return resolved.admin!;
     } catch (e) {
       debugPrint('AdminAuthService restoreFromCurrentUser error: $e');
       return null;

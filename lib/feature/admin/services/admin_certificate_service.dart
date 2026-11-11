@@ -197,6 +197,38 @@ class AdminCertificateService {
     return null;
   }
 
+  Future<bool> _persistCertificateStatus({
+    required AdminCertificateModel cert,
+    required Map<String, dynamic> fields,
+    required String auditAction,
+    required String auditDetails,
+  }) async {
+    final supabase = SupabaseHelper.clientOrNull;
+    if (supabase == null) return true;
+    if (!SupabaseHelper.isUuid(cert.id)) return false;
+
+    try {
+      final updated = await supabase
+          .from('certificates')
+          .update(fields)
+          .eq('id', cert.id)
+          .select('id');
+      if ((updated as List).isEmpty) return false;
+
+      await supabase.from('admin_audit_logs').insert({
+        'admin_email':
+            SupabaseHelper.currentUser?.email ?? 'admin@skillbridge.edu.pk',
+        'action': auditAction,
+        'target': cert.credentialId,
+        'details': auditDetails,
+      });
+      return true;
+    } catch (e) {
+      debugPrint('AdminCertificateService update error ($auditAction): $e');
+      return false;
+    }
+  }
+
   Future<bool> revokeCertificate({
     required String certificateId,
     required String reason,
@@ -210,28 +242,17 @@ class AdminCertificateService {
 
     final cert = list[idx];
     final cleanReason = reason.trim();
-    final supabase = SupabaseHelper.clientOrNull;
-
-    if (supabase != null && SupabaseHelper.isUuid(cert.id)) {
-      try {
-        await supabase.from('certificates').update({
-          'status': 'revoked',
-          'revocation_reason': cleanReason,
-          'revoking_admin_name': adminName,
-        }).eq('id', cert.id);
-
-        await supabase.from('admin_audit_logs').insert({
-          'admin_email':
-              SupabaseHelper.currentUser?.email ?? 'admin@skillbridge.edu.pk',
-          'action': 'CERTIFICATE_REVOKED',
-          'target': cert.credentialId,
-          'details': cleanReason,
-        });
-      } catch (e) {
-        debugPrint('revokeCertificate error: $e');
-        return false;
-      }
-    }
+    final ok = await _persistCertificateStatus(
+      cert: cert,
+      fields: {
+        'status': 'revoked',
+        'revocation_reason': cleanReason,
+        'revoking_admin_name': adminName,
+      },
+      auditAction: 'CERTIFICATE_REVOKED',
+      auditDetails: cleanReason,
+    );
+    if (!ok) return false;
 
     final history = List<CertificateAuditRecord>.from(cert.verificationHistory);
     history.insert(
@@ -271,26 +292,13 @@ class AdminCertificateService {
 
     final cert = list[idx];
     final cleanReason = reason.trim();
-    final supabase = SupabaseHelper.clientOrNull;
-
-    if (supabase != null && SupabaseHelper.isUuid(cert.id)) {
-      try {
-        await supabase.from('certificates').update({
-          'status': 'pending_review',
-        }).eq('id', cert.id);
-
-        await supabase.from('admin_audit_logs').insert({
-          'admin_email':
-              SupabaseHelper.currentUser?.email ?? 'admin@skillbridge.edu.pk',
-          'action': 'CERTIFICATE_REVIEW_HOLD',
-          'target': cert.credentialId,
-          'details': cleanReason,
-        });
-      } catch (e) {
-        debugPrint('markCertificateForReview error: $e');
-        return false;
-      }
-    }
+    final ok = await _persistCertificateStatus(
+      cert: cert,
+      fields: {'status': 'pending_review'},
+      auditAction: 'CERTIFICATE_REVIEW_HOLD',
+      auditDetails: cleanReason,
+    );
+    if (!ok) return false;
 
     final history = List<CertificateAuditRecord>.from(cert.verificationHistory);
     history.insert(
@@ -325,28 +333,17 @@ class AdminCertificateService {
 
     final cert = list[idx];
     final cleanJustification = justification.trim();
-    final supabase = SupabaseHelper.clientOrNull;
-
-    if (supabase != null && SupabaseHelper.isUuid(cert.id)) {
-      try {
-        await supabase.from('certificates').update({
-          'status': 'valid',
-          'revocation_reason': null,
-          'revoking_admin_name': null,
-        }).eq('id', cert.id);
-
-        await supabase.from('admin_audit_logs').insert({
-          'admin_email':
-              SupabaseHelper.currentUser?.email ?? 'admin@skillbridge.edu.pk',
-          'action': 'CERTIFICATE_REINSTATED',
-          'target': cert.credentialId,
-          'details': cleanJustification,
-        });
-      } catch (e) {
-        debugPrint('reinstateCertificate error: $e');
-        return false;
-      }
-    }
+    final ok = await _persistCertificateStatus(
+      cert: cert,
+      fields: {
+        'status': 'valid',
+        'revocation_reason': null,
+        'revoking_admin_name': null,
+      },
+      auditAction: 'CERTIFICATE_REINSTATED',
+      auditDetails: cleanJustification,
+    );
+    if (!ok) return false;
 
     final history = List<CertificateAuditRecord>.from(cert.verificationHistory);
     history.insert(

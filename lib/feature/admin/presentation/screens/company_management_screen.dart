@@ -37,6 +37,35 @@ class _CompanyManagementScreenState extends State<CompanyManagementScreen> {
   String _selectedAccountStatus = 'All'; // 'All', 'Active', 'Suspended'
   String _sortBy = 'Newest First'; // 'Newest First', 'Oldest First', 'Most Projects', 'Company Name (A-Z)'
 
+  @override
+  void initState() {
+    super.initState();
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      if (!mounted) return;
+      _companyService.loadFromSupabase();
+      AdminProjectService().loadFromSupabase();
+    });
+  }
+
+  void _showActionResult(
+    bool ok,
+    String successMessage, {
+    Color successColor = AppColors.success,
+  }) {
+    if (!mounted) return;
+    ScaffoldMessenger.of(context).showSnackBar(
+      SnackBar(
+        content: Text(
+          ok
+              ? successMessage
+              : 'Unable to save changes to Supabase. Check connection or permissions.',
+        ),
+        backgroundColor: ok ? successColor : AppColors.error,
+        behavior: SnackBarBehavior.floating,
+      ),
+    );
+  }
+
   bool _isSidebarCollapsed = false;
 
   // Pagination controls
@@ -827,20 +856,15 @@ class _CompanyManagementScreenState extends State<CompanyManagementScreen> {
                             final admin =
                                 _authService.currentAdmin?.fullName ??
                                 'Executive Administrator';
-                            await _companyService.approveCompanyVerification(
+                            final ok = await _companyService
+                                .approveCompanyVerification(
                               companyId: company.id,
                               adminName: admin,
                             );
                             if (ctx.mounted) Navigator.pop(ctx);
-                            if (!mounted) return;
-                            ScaffoldMessenger.of(this.context).showSnackBar(
-                              SnackBar(
-                                content: Text(
-                                  'Verification approved for ${company.companyName}!',
-                                ),
-                                backgroundColor: AppColors.success,
-                                behavior: SnackBarBehavior.floating,
-                              ),
+                            _showActionResult(
+                              ok,
+                              'Verification approved for ${company.companyName}!',
                             );
                           },
                         ),
@@ -1119,22 +1143,17 @@ class _CompanyManagementScreenState extends State<CompanyManagementScreen> {
               final admin =
                   _authService.currentAdmin?.fullName ??
                   'Executive Administrator';
-              await _companyService.rejectCompanyVerification(
+              final ok = await _companyService.rejectCompanyVerification(
                 companyId: company.id,
                 reason: reason,
                 adminName: admin,
               );
 
               if (ctx.mounted) Navigator.pop(ctx);
-              if (!mounted) return;
-              ScaffoldMessenger.of(context).showSnackBar(
-                SnackBar(
-                  content: Text(
-                    'Verification rejected for ${company.companyName}. Reason recorded.',
-                  ),
-                  backgroundColor: AppColors.error,
-                  behavior: SnackBarBehavior.floating,
-                ),
+              _showActionResult(
+                ok,
+                'Verification rejected for ${company.companyName}. Reason recorded.',
+                successColor: AppColors.error,
               );
             },
             child: const Text('Submit Rejection'),
@@ -1214,22 +1233,17 @@ class _CompanyManagementScreenState extends State<CompanyManagementScreen> {
               final admin =
                   _authService.currentAdmin?.fullName ??
                   'Executive Administrator';
-              await _companyService.requestAdditionalDocuments(
+              final ok = await _companyService.requestAdditionalDocuments(
                 companyId: company.id,
                 instructions: instructions,
                 adminName: admin,
               );
 
               if (ctx.mounted) Navigator.pop(ctx);
-              if (!mounted) return;
-              ScaffoldMessenger.of(context).showSnackBar(
-                SnackBar(
-                  content: Text(
-                    'Additional document request dispatched to ${company.companyName}.',
-                  ),
-                  backgroundColor: AppColors.warning,
-                  behavior: SnackBarBehavior.floating,
-                ),
+              _showActionResult(
+                ok,
+                'Additional document request dispatched to ${company.companyName}.',
+                successColor: AppColors.warning,
               );
             },
             child: const Text('Dispatch Request'),
@@ -1306,22 +1320,17 @@ class _CompanyManagementScreenState extends State<CompanyManagementScreen> {
               final admin =
                   _authService.currentAdmin?.fullName ??
                   'Executive Administrator';
-              await _companyService.suspendCompanyAccount(
+              final ok = await _companyService.suspendCompanyAccount(
                 companyId: company.id,
                 reason: reason,
                 adminName: admin,
               );
 
               if (ctx.mounted) Navigator.pop(ctx);
-              if (!mounted) return;
-              ScaffoldMessenger.of(context).showSnackBar(
-                SnackBar(
-                  content: Text(
-                    '${company.companyName} corporate account has been suspended.',
-                  ),
-                  backgroundColor: AppColors.error,
-                  behavior: SnackBarBehavior.floating,
-                ),
+              _showActionResult(
+                ok,
+                '${company.companyName} corporate account has been suspended.',
+                successColor: AppColors.error,
               );
             },
             child: const Text('Confirm Suspension'),
@@ -1371,21 +1380,15 @@ class _CompanyManagementScreenState extends State<CompanyManagementScreen> {
               final admin =
                   _authService.currentAdmin?.fullName ??
                   'Executive Administrator';
-              await _companyService.reactivateCompanyAccount(
+              final ok = await _companyService.reactivateCompanyAccount(
                 companyId: company.id,
                 adminName: admin,
               );
 
               if (ctx.mounted) Navigator.pop(ctx);
-              if (!mounted) return;
-              ScaffoldMessenger.of(context).showSnackBar(
-                SnackBar(
-                  content: Text(
-                    '${company.companyName} account has been reactivated.',
-                  ),
-                  backgroundColor: AppColors.success,
-                  behavior: SnackBarBehavior.floating,
-                ),
+              _showActionResult(
+                ok,
+                '${company.companyName} account has been reactivated.',
               );
             },
             child: const Text('Confirm Reactivation'),

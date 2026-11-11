@@ -111,10 +111,11 @@ class AdminVerificationService {
     }
   }
 
-  /// Approve a company verification in Supabase & sync in-memory company registry.
-  Future<bool> approveCompany({
+  Future<bool> _applyDecision({
     required String verificationId,
+    required VerificationStatus nextStatus,
     required String reviewerName,
+    String? feedback,
   }) async {
     final currentList =
         List<AdminCompanyVerificationItem>.from(verificationsNotifier.value);
@@ -125,21 +126,46 @@ class AdminVerificationService {
 
     final target = currentList[index];
     final nowIso = DateTime.now().toIso8601String();
+    final isApprove = nextStatus == VerificationStatus.verified;
+    final cleanFeedback = feedback?.trim();
     final supabase = SupabaseHelper.clientOrNull;
 
-    if (supabase != null && SupabaseHelper.isUuid(target.companyId)) {
+    if (supabase != null) {
+      if (!SupabaseHelper.isUuid(target.companyId) &&
+          !SupabaseHelper.isUuid(target.userId)) {
+        return false;
+      }
       try {
-        await supabase.from('companies').update({
-          'verification_status': 'verified',
+        final fields = {
+          'verification_status': isApprove ? 'verified' : 'rejected',
           'reviewer_name': reviewerName,
           'reviewed_at': nowIso,
-          'admin_feedback': null,
+          'admin_feedback': isApprove ? null : cleanFeedback,
           'updated_at': nowIso,
-        }).eq('id', target.companyId);
+        };
+
+        List<dynamic> updated = const [];
+        if (SupabaseHelper.isUuid(target.companyId)) {
+          updated = await supabase
+              .from('companies')
+              .update(fields)
+              .eq('id', target.companyId)
+              .select('id');
+        }
+        if (updated.isEmpty && SupabaseHelper.isUuid(target.userId)) {
+          updated = await supabase
+              .from('companies')
+              .update(fields)
+              .eq('user_id', target.userId!)
+              .select('id');
+        }
+        if (updated.isEmpty) {
+          return false;
+        }
 
         if (SupabaseHelper.isUuid(target.userId)) {
           await supabase.from('profiles').update({
-            'is_verified': true,
+            'is_verified': isApprove,
             'updated_at': nowIso,
           }).eq('id', target.userId!);
         }
@@ -147,118 +173,76 @@ class AdminVerificationService {
         await supabase.from('admin_audit_logs').insert({
           'admin_email':
               SupabaseHelper.currentUser?.email ?? 'admin@skillbridge.edu.pk',
-          'action': 'COMPANY_VERIFICATION_APPROVED',
+          'action': isApprove
+              ? 'COMPANY_VERIFICATION_APPROVED'
+              : 'COMPANY_VERIFICATION_REJECTED',
           'target': target.companyName,
-          'details': 'Approved corporate verification by $reviewerName.',
+          'details': isApprove
+              ? 'Approved corporate verification by $reviewerName.'
+              : (cleanFeedback ?? ''),
         });
       } catch (e) {
-        debugPrint('AdminVerificationService approveCompany error: $e');
+        debugPrint('AdminVerificationService _applyDecision error: $e');
         return false;
       }
     }
 
     currentList[index] = target.copyWith(
-      status: VerificationStatus.verified,
+      status: nextStatus,
       reviewedAt: 'Just now',
       reviewerName: reviewerName,
-      clearAdminFeedback: true,
+      adminFeedback: isApprove ? null : cleanFeedback,
+      clearAdminFeedback: isApprove,
     );
     verificationsNotifier.value = currentList;
 
     AdminCompanyService().syncLocalVerificationStatus(
       companyId: target.companyId,
-      state: CompanyVerificationState.verified,
+      state: isApprove
+          ? CompanyVerificationState.verified
+          : CompanyVerificationState.rejected,
+      feedback: cleanFeedback,
     );
 
     if (target.companyId.isNotEmpty &&
-        target.companyId == CompanyProfileService().currentProfile.id) {
+        (target.companyId == CompanyProfileService().currentProfile.id ||
+            (target.userId != null &&
+                target.userId == SupabaseHelper.currentUserId))) {
       CompanyVerificationService().applyAdminDecision(
-        status: VerificationStatus.verified,
-        feedback: null,
+        status: nextStatus,
+        feedback: isApprove ? null : cleanFeedback,
         reviewerName: reviewerName,
       );
       CompanyProfileService().currentProfileNotifier.value =
-          CompanyProfileService().currentProfile.copyWith(isVerified: true);
+          CompanyProfileService().currentProfile.copyWith(isVerified: isApprove);
     }
 
     return true;
   }
+
+  /// Approve a company verification in Supabase & sync in-memory company registry.
+  Future<bool> approveCompany({
+    required String verificationId,
+    required String reviewerName,
+  }) =>
+      _applyDecision(
+        verificationId: verificationId,
+        nextStatus: VerificationStatus.verified,
+        reviewerName: reviewerName,
+      );
 
   /// Reject a company verification with mandatory feedback in Supabase.
   Future<bool> rejectCompany({
     required String verificationId,
     required String feedback,
     required String reviewerName,
-  }) async {
-    final currentList =
-        List<AdminCompanyVerificationItem>.from(verificationsNotifier.value);
-    final index = currentList.indexWhere(
-      (i) => i.id == verificationId || i.companyId == verificationId,
-    );
-    if (index == -1) return false;
-
-    final target = currentList[index];
-    final cleanFeedback = feedback.trim();
-    final nowIso = DateTime.now().toIso8601String();
-    final supabase = SupabaseHelper.clientOrNull;
-
-    if (supabase != null && SupabaseHelper.isUuid(target.companyId)) {
-      try {
-        await supabase.from('companies').update({
-          'verification_status': 'rejected',
-          'reviewer_name': reviewerName,
-          'reviewed_at': nowIso,
-          'admin_feedback': cleanFeedback,
-          'updated_at': nowIso,
-        }).eq('id', target.companyId);
-
-        if (SupabaseHelper.isUuid(target.userId)) {
-          await supabase.from('profiles').update({
-            'is_verified': false,
-            'updated_at': nowIso,
-          }).eq('id', target.userId!);
-        }
-
-        await supabase.from('admin_audit_logs').insert({
-          'admin_email':
-              SupabaseHelper.currentUser?.email ?? 'admin@skillbridge.edu.pk',
-          'action': 'COMPANY_VERIFICATION_REJECTED',
-          'target': target.companyName,
-          'details': cleanFeedback,
-        });
-      } catch (e) {
-        debugPrint('AdminVerificationService rejectCompany error: $e');
-        return false;
-      }
-    }
-
-    currentList[index] = target.copyWith(
-      status: VerificationStatus.rejected,
-      reviewedAt: 'Just now',
-      reviewerName: reviewerName,
-      adminFeedback: cleanFeedback,
-    );
-    verificationsNotifier.value = currentList;
-
-    AdminCompanyService().syncLocalVerificationStatus(
-      companyId: target.companyId,
-      state: CompanyVerificationState.rejected,
-      feedback: cleanFeedback,
-    );
-
-    if (target.companyId.isNotEmpty &&
-        target.companyId == CompanyProfileService().currentProfile.id) {
-      CompanyVerificationService().applyAdminDecision(
-        status: VerificationStatus.rejected,
-        feedback: cleanFeedback,
+  }) =>
+      _applyDecision(
+        verificationId: verificationId,
+        nextStatus: VerificationStatus.rejected,
         reviewerName: reviewerName,
+        feedback: feedback,
       );
-      CompanyProfileService().currentProfileNotifier.value =
-          CompanyProfileService().currentProfile.copyWith(isVerified: false);
-    }
-
-    return true;
-  }
 
   void syncVerificationStateLocal({
     required String companyId,

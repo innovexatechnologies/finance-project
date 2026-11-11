@@ -1,9 +1,11 @@
+import 'dart:io';
 import 'dart:typed_data';
 
 import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 import 'package:supabase_flutter/supabase_flutter.dart';
+import 'package:link_vibe/core/constants/app_colors.dart';
 import 'package:link_vibe/core/services/app_data_service.dart';
 import 'package:link_vibe/core/services/deep_link_service.dart';
 import 'package:link_vibe/core/services/share_service.dart';
@@ -12,8 +14,24 @@ import 'package:link_vibe/core/theme/app_theme.dart';
 import 'package:link_vibe/core/widgets/executive_ui.dart';
 import 'package:link_vibe/core/widgets/skillbridge_logo.dart';
 import 'package:link_vibe/core/widgets/student_avatar.dart';
+import 'package:link_vibe/feature/admin/models/admin_company_model.dart';
+import 'package:link_vibe/feature/admin/models/admin_project_model.dart';
+import 'package:link_vibe/feature/admin/models/admin_student_model.dart';
 import 'package:link_vibe/feature/admin/presentation/screens/admin_dashboard_screen.dart';
 import 'package:link_vibe/feature/admin/presentation/screens/admin_login_screen.dart';
+import 'package:link_vibe/feature/admin/presentation/screens/admin_settings_screen.dart';
+import 'package:link_vibe/feature/admin/presentation/screens/application_monitoring_screen.dart';
+import 'package:link_vibe/feature/admin/presentation/screens/certificate_management_screen.dart';
+import 'package:link_vibe/feature/admin/presentation/screens/company_management_screen.dart';
+import 'package:link_vibe/feature/admin/presentation/screens/company_verifications_screen.dart';
+import 'package:link_vibe/feature/admin/presentation/screens/project_management_screen.dart';
+import 'package:link_vibe/feature/admin/presentation/screens/reports_analytics_screen.dart';
+import 'package:link_vibe/feature/admin/presentation/screens/student_management_screen.dart';
+import 'package:link_vibe/feature/admin/services/admin_auth_service.dart';
+import 'package:link_vibe/feature/admin/services/admin_company_service.dart';
+import 'package:link_vibe/feature/admin/services/admin_project_service.dart';
+import 'package:link_vibe/feature/admin/services/admin_settings_service.dart';
+import 'package:link_vibe/feature/admin/services/admin_student_service.dart';
 import 'package:link_vibe/feature/auth/presentation/screens/login_screen.dart';
 import 'package:link_vibe/feature/auth/presentation/screens/reset_password_screen.dart';
 import 'package:link_vibe/feature/auth/presentation/screens/signup_screen.dart';
@@ -1420,6 +1438,257 @@ void main() {
         expect(find.text('Completion Certificate'), findsOneWidget);
         expect(find.textContaining('CERT-DL-1'), findsOneWidget);
         expect(tester.takeException(), isNull);
+      },
+    );
+  });
+
+  group('Admin Panel Supabase Readiness & Persistence Flows', () {
+    test('supabase_schema.sql matches SkillBridge Admin & RPCs', () {
+      final schema = File('supabase_schema.sql').readAsStringSync();
+      expect(schema.contains('admin@skillbridge.edu.pk'), isTrue);
+      expect(schema.contains('Admin@SkillBridge2026!'), isTrue);
+      expect(schema.contains('SkillBridge Governance Council'), isTrue);
+      expect(schema.contains('CREATE OR REPLACE FUNCTION public.provision_admin_in_app'), isTrue);
+      expect(schema.contains('GRANT EXECUTE ON FUNCTION public.provision_admin_in_app'), isTrue);
+    });
+
+    test(
+      'AdminAuthService & AdminSettingsService support async Supabase-first persistence',
+      () async {
+        final authService = AdminAuthService();
+        final settings = AdminSettingsService();
+        settings.reset();
+
+        final authOk = await authService.login(
+          email: 'admin@skillbridge.edu.pk',
+          password: 'Admin@SkillBridge2026!',
+        );
+        expect(authOk.success, isTrue);
+        expect(authOk.admin?.email, 'admin@skillbridge.edu.pk');
+
+        final catAdded = await settings.addCategory(
+          name: 'FinTech Systems',
+          description: 'Financial technology sprints',
+          color: AppColors.primary,
+          adminEmail: 'admin@skillbridge.edu.pk',
+        );
+        expect(catAdded, isTrue);
+        expect(settings.categoriesNotifier.value.length, 1);
+
+        final skillAdded = await settings.addSkill(
+          name: 'PostgreSQL RLS',
+          categoryName: 'FinTech Systems',
+          adminEmail: 'admin@skillbridge.edu.pk',
+        );
+        expect(skillAdded, isTrue);
+        expect(settings.skillsNotifier.value.length, 1);
+
+        final uniAdded = await settings.addUniversity(
+          name: 'NUST Islamabad',
+          shortName: 'NUST',
+          city: 'Islamabad',
+          province: 'ICT',
+          domain: 'nust.edu.pk',
+          adminEmail: 'admin@skillbridge.edu.pk',
+        );
+        expect(uniAdded, isTrue);
+        expect(settings.universitiesNotifier.value.length, 1);
+
+        final policyCreated = await settings.createPolicy(
+          policyKey: 'data_governance',
+          title: 'Data Governance Policy',
+          content: 'All data stored safely in Supabase.',
+          adminEmail: 'admin@skillbridge.edu.pk',
+        );
+        expect(policyCreated, isTrue);
+        final policyUpdated = await settings.updatePolicy(
+          policyKey: 'data_governance',
+          title: 'Data Governance Policy',
+          content: 'Updated policy rules.',
+          changeSummary: 'Clarified RLS rules',
+          adminEmail: 'admin@skillbridge.edu.pk',
+        );
+        expect(policyUpdated, isTrue);
+        expect(settings.policiesNotifier.value.first.version, 'v1.1');
+
+        final provisioned = await settings.provisionAdminAccount(
+          fullName: 'Ops Admin',
+          email: 'ops@skillbridge.edu.pk',
+          password: 'OpsPassword123',
+          role: 'OPERATIONS_ADMIN',
+          roleDisplayName: 'Operations Administrator',
+          department: 'Operations',
+          permissions: const ['manage_categories'],
+          adminEmail: 'admin@skillbridge.edu.pk',
+        );
+        expect(provisioned, isTrue);
+        final opsAdmin = settings.adminsNotifier.value.firstWhere(
+          (a) => a.email == 'ops@skillbridge.edu.pk',
+        );
+        final toggled = await settings.toggleAdminActive(
+          opsAdmin.id,
+          'admin@skillbridge.edu.pk',
+        );
+        expect(toggled, isTrue);
+        expect(
+          settings.adminsNotifier.value
+              .firstWhere((a) => a.email == 'ops@skillbridge.edu.pk')
+              .isActive,
+          isFalse,
+        );
+
+        await authService.logout();
+        expect(authService.isAuthenticated, isFalse);
+        expect(settings.categoriesNotifier.value, isEmpty);
+      },
+    );
+
+    test(
+      'AdminCompanyService, AdminStudentService & AdminProjectService handle moderation cleanly',
+      () async {
+        final compService = AdminCompanyService();
+        final studService = AdminStudentService();
+        final projService = AdminProjectService();
+        compService.reset();
+        studService.reset();
+        projService.reset();
+
+        const synthUid = '11111111-1111-4111-8111-111111111111';
+        compService.companiesNotifier.value = [
+          AdminCompanyModel(
+            id: synthUid,
+            userId: synthUid,
+            companyName: 'Synthesized Corp',
+            logoInitial: 'SC',
+            officialEmail: 'corp@example.com',
+            isEmailVerified: true,
+            industry: 'Software',
+            city: 'Lahore',
+            completeAddress: 'Lahore',
+            contactPersonName: 'Ali',
+            phoneNumber: '03000000000',
+            websiteUrl: 'https://example.com',
+            description: 'Corp',
+            registrationNumber: 'REG-1',
+            verificationStatus: CompanyVerificationState.pending,
+            accountStatus: CompanyAccountState.active,
+            registrationDate: '2026-11-11',
+            registrationDateTime: DateTime(2026, 11, 11),
+            evidenceFileName: '',
+            evidenceFileType: 'SECP Registration',
+            evidenceFileSize: '',
+            auditHistory: const [],
+          ),
+        ];
+
+        final compApproved = await compService.approveCompanyVerification(
+          companyId: synthUid,
+          adminName: 'Executive Administrator',
+        );
+        expect(compApproved, isTrue);
+        expect(
+          compService.companiesNotifier.value.first.verificationStatus,
+          CompanyVerificationState.verified,
+        );
+
+        studService.studentsNotifier.value = [
+          AdminStudentModel(
+            id: synthUid,
+            userId: synthUid,
+            name: 'Ayesha Student',
+            email: 'ayesha@example.edu.pk',
+            avatarInitial: 'AS',
+            university: 'FAST',
+            department: 'CS',
+            degree: 'BS',
+            semester: '6th',
+            cgpa: 3.7,
+            skills: const ['Flutter'],
+            verificationStatus: StudentVerificationStatus.pending,
+            accountStatus: StudentAccountStatus.active,
+            registrationDate: '2026-11-11',
+            registrationDateTime: DateTime(2026, 11, 11),
+            verificationDocumentName: '',
+            verificationDocumentType: 'Transcript',
+            verificationDocumentSize: '',
+            portfolioUrl: '',
+            githubUrl: '',
+            bio: '',
+            auditHistory: const [],
+          ),
+        ];
+
+        final studApproved = await studService.approveStudentVerification(
+          studentId: synthUid,
+          adminName: 'Executive Administrator',
+        );
+        expect(studApproved, isTrue);
+        expect(
+          studService.studentsNotifier.value.first.verificationStatus,
+          StudentVerificationStatus.verified,
+        );
+
+        const projUid = '22222222-2222-4222-8222-222222222222';
+        projService.projectsNotifier.value = [
+          AdminProjectModel(
+            id: projUid,
+            title: 'AI Analytics Engine',
+            companyId: synthUid,
+            companyName: 'Synthesized Corp',
+            category: 'AI',
+            description: 'Build engine',
+            requirements: 'Dart',
+            skillsRequired: const ['Dart'],
+            deliverables: 'App',
+            deadline: '2026-12-31',
+            deadlineDateTime: DateTime(2026, 12, 31),
+            projectType: 'Sprint',
+            duration: '4 Weeks',
+            openings: 2,
+            additionalInstructions: '',
+            applicantsCount: 0,
+            status: AdminProjectStatus.pendingReview,
+            publicationStatus: AdminPublicationStatus.pendingModeration,
+            createdAt: '2026-11-11',
+            createdDateTime: DateTime(2026, 11, 11),
+            moderationHistory: const [],
+          ),
+        ];
+
+        final moderatedCount = await projService.bulkModerateProjects(
+          projectIds: const [projUid],
+          newStatus: AdminProjectStatus.published,
+          moderatorName: 'Executive Administrator',
+        );
+        expect(moderatedCount, 1);
+        expect(
+          projService.projectsNotifier.value.first.status,
+          AdminProjectStatus.published,
+        );
+      },
+    );
+
+    testWidgets(
+      'All primary Admin screens render cleanly without exceptions',
+      (tester) async {
+        tester.view.physicalSize = const Size(1280, 800);
+        tester.view.devicePixelRatio = 1.0;
+        addTearDown(() => tester.view.resetPhysicalSize());
+
+        for (final screen in const [
+          StudentManagementScreen(),
+          CompanyManagementScreen(),
+          CompanyVerificationsScreen(),
+          ProjectManagementScreen(),
+          ApplicationMonitoringScreen(),
+          CertificateManagementScreen(),
+          ReportsAnalyticsScreen(),
+          AdminSettingsScreen(),
+        ]) {
+          await tester.pumpWidget(MaterialApp(home: screen));
+          await tester.pump(const Duration(milliseconds: 250));
+          expect(tester.takeException(), isNull);
+        }
       },
     );
   });

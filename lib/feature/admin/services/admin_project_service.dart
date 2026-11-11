@@ -305,14 +305,23 @@ class AdminProjectService {
     final nowIso = DateTime.now().toIso8601String();
     final supabase = SupabaseHelper.clientOrNull;
 
-    if (supabase != null && SupabaseHelper.isUuid(projectId)) {
+    if (supabase != null) {
+      if (!SupabaseHelper.isUuid(projectId)) return false;
       try {
-        await supabase.from('projects').update({
-          'status': dbStatus,
-          'moderation_reason': clearModerationReason ? null : reason,
-          'moderator_name': moderatorName,
-          'updated_at': nowIso,
-        }).eq('id', projectId);
+        final updated = await supabase
+            .from('projects')
+            .update({
+              'status': dbStatus,
+              'moderation_reason': clearModerationReason ? null : reason,
+              'moderator_name': moderatorName,
+              'updated_at': nowIso,
+            })
+            .eq('id', projectId)
+            .select('id');
+
+        if ((updated as List).isEmpty) {
+          return false;
+        }
 
         await supabase.from('admin_audit_logs').insert({
           'admin_email':
@@ -372,32 +381,36 @@ class AdminProjectService {
     return true;
   }
 
-  /// Bulk Moderation across selected projects.
-  Future<void> bulkModerateProjects({
+  /// Bulk Moderation across selected projects. Returns number of persisted updates.
+  Future<int> bulkModerateProjects({
     required List<String> projectIds,
     required AdminProjectStatus newStatus,
     required String moderatorName,
     String? reason,
   }) async {
+    int updatedCount = 0;
     for (final pid in projectIds) {
+      bool ok = false;
       if (newStatus == AdminProjectStatus.published) {
-        await publishProject(projectId: pid, moderatorName: moderatorName);
+        ok = await publishProject(projectId: pid, moderatorName: moderatorName);
       } else if (newStatus == AdminProjectStatus.closed) {
-        await closeProject(projectId: pid, moderatorName: moderatorName);
+        ok = await closeProject(projectId: pid, moderatorName: moderatorName);
       } else if (newStatus == AdminProjectStatus.removed) {
-        await removePolicyViolatingProject(
+        ok = await removePolicyViolatingProject(
           projectId: pid,
           reason: reason ?? 'Batch policy moderation removal.',
           moderatorName: moderatorName,
         );
       } else if (newStatus == AdminProjectStatus.rejected) {
-        await rejectProject(
+        ok = await rejectProject(
           projectId: pid,
           reason: reason ?? 'Batch listing rejection.',
           moderatorName: moderatorName,
         );
       }
+      if (ok) updatedCount++;
     }
+    return updatedCount;
   }
 
   void _syncToCompanyProjectService(String projectId, String newCompanyStatus) {

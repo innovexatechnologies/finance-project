@@ -738,29 +738,18 @@ class _ReportsAnalyticsScreenState extends State<ReportsAnalyticsScreen> {
             height: 230,
           ),
           const SizedBox(height: 14),
-          Container(
-            padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 10),
-            decoration: BoxDecoration(
-              color: AppColors.background,
-              borderRadius: BorderRadius.circular(10),
-              border: Border.all(color: AppColors.border),
+          _buildMiniMetricsStrip([
+            _buildMiniMetric('Window Total', '$periodStudents'),
+            _buildMiniMetric(
+              'Avg / Day',
+              avgStudents.toStringAsFixed(1),
             ),
-            child: Row(
-              mainAxisAlignment: MainAxisAlignment.spaceAround,
-              children: [
-                _buildMiniMetric('Window Total', '$periodStudents'),
-                _buildMiniMetric(
-                  'Avg / Day',
-                  avgStudents.toStringAsFixed(1),
-                ),
-                _buildMiniMetric('Peak Day', '$peakStudents'),
-                _buildMiniMetric(
-                  'Active Days',
-                  '${dailyRecords.where((r) => r.studentCount > 0).length}',
-                ),
-              ],
+            _buildMiniMetric('Peak Day', '$peakStudents'),
+            _buildMiniMetric(
+              'Active Days',
+              '${dailyRecords.where((r) => r.studentCount > 0).length}',
             ),
-          ),
+          ]),
         ],
       ),
     );
@@ -781,29 +770,18 @@ class _ReportsAnalyticsScreenState extends State<ReportsAnalyticsScreen> {
             height: 230,
           ),
           const SizedBox(height: 14),
-          Container(
-            padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 10),
-            decoration: BoxDecoration(
-              color: AppColors.background,
-              borderRadius: BorderRadius.circular(10),
-              border: Border.all(color: AppColors.border),
+          _buildMiniMetricsStrip([
+            _buildMiniMetric('Window Total', '$periodCompanies'),
+            _buildMiniMetric(
+              'Avg / Day',
+              avgCompanies.toStringAsFixed(1),
             ),
-            child: Row(
-              mainAxisAlignment: MainAxisAlignment.spaceAround,
-              children: [
-                _buildMiniMetric('Window Total', '$periodCompanies'),
-                _buildMiniMetric(
-                  'Avg / Day',
-                  avgCompanies.toStringAsFixed(1),
-                ),
-                _buildMiniMetric('Peak Day', '$peakCompanies'),
-                _buildMiniMetric(
-                  'Active Days',
-                  '${dailyRecords.where((r) => r.companyCount > 0).length}',
-                ),
-              ],
+            _buildMiniMetric('Peak Day', '$peakCompanies'),
+            _buildMiniMetric(
+              'Active Days',
+              '${dailyRecords.where((r) => r.companyCount > 0).length}',
             ),
-          ),
+          ]),
         ],
       ),
     );
@@ -1847,6 +1825,25 @@ class _ReportsAnalyticsScreenState extends State<ReportsAnalyticsScreen> {
           const SizedBox(height: 16),
           child,
         ],
+      ),
+    );
+  }
+
+  Widget _buildMiniMetricsStrip(List<Widget> children) {
+    return Container(
+      width: double.infinity,
+      padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 10),
+      decoration: BoxDecoration(
+        color: AppColors.background,
+        borderRadius: BorderRadius.circular(10),
+        border: Border.all(color: AppColors.border),
+      ),
+      child: Wrap(
+        alignment: WrapAlignment.spaceAround,
+        runAlignment: WrapAlignment.center,
+        spacing: 14,
+        runSpacing: 10,
+        children: children,
       ),
     );
   }

@@ -36,6 +36,35 @@ class _StudentManagementScreenState extends State<StudentManagementScreen> {
   String _selectedEngagement = 'All'; // 'All', 'Engaged in Projects', 'Active Projects', 'Completed'
   String _sortBy = 'Newest First'; // 'Newest First', 'Oldest First', 'Most Engaged', 'Highest CGPA'
 
+  @override
+  void initState() {
+    super.initState();
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      if (!mounted) return;
+      _studentService.loadFromSupabase();
+      _settingsService.loadFromSupabase();
+    });
+  }
+
+  void _showActionResult(
+    bool ok,
+    String successMessage, {
+    Color successColor = AppColors.success,
+  }) {
+    if (!mounted) return;
+    ScaffoldMessenger.of(context).showSnackBar(
+      SnackBar(
+        content: Text(
+          ok
+              ? successMessage
+              : 'Unable to save student update to Supabase. Please retry.',
+        ),
+        backgroundColor: ok ? successColor : AppColors.error,
+        behavior: SnackBarBehavior.floating,
+      ),
+    );
+  }
+
   bool _isSidebarCollapsed = false;
   final Set<String> _selectedStudentIds = {};
 
@@ -562,19 +591,13 @@ class _StudentManagementScreenState extends State<StudentManagementScreen> {
                       onPressed: () async {
                         final admin =
                             _authService.currentAdmin?.fullName ?? 'Executive Administrator';
-                        await _studentService.approveStudentVerification(
+                        final ok = await _studentService.approveStudentVerification(
                           studentId: student.id,
                           adminName: admin,
                         );
                         if (!mounted || !ctx.mounted) return;
                         Navigator.pop(ctx);
-                        ScaffoldMessenger.of(context).showSnackBar(
-                          SnackBar(
-                            content: Text('${student.name} is now verified!'),
-                            backgroundColor: AppColors.success,
-                            behavior: SnackBarBehavior.floating,
-                          ),
-                        );
+                        _showActionResult(ok, '${student.name} is now verified!');
                       },
                     ),
                   ],
@@ -781,7 +804,7 @@ class _StudentManagementScreenState extends State<StudentManagementScreen> {
 
               final admin =
                   _authService.currentAdmin?.fullName ?? 'Executive Administrator';
-              await _studentService.rejectStudentVerification(
+              final ok = await _studentService.rejectStudentVerification(
                 studentId: student.id,
                 reason: reason,
                 adminName: admin,
@@ -789,12 +812,10 @@ class _StudentManagementScreenState extends State<StudentManagementScreen> {
 
               if (!mounted || !ctx.mounted) return;
               Navigator.pop(ctx);
-              ScaffoldMessenger.of(context).showSnackBar(
-                SnackBar(
-                  content: Text('Verification rejected for ${student.name}. Reason logged in audit vault.'),
-                  backgroundColor: AppColors.error,
-                  behavior: SnackBarBehavior.floating,
-                ),
+              _showActionResult(
+                ok,
+                'Verification rejected for ${student.name}. Reason logged in audit vault.',
+                successColor: AppColors.error,
               );
             },
             child: const Text('Submit Rejection'),
@@ -862,7 +883,7 @@ class _StudentManagementScreenState extends State<StudentManagementScreen> {
 
               final admin =
                   _authService.currentAdmin?.fullName ?? 'Executive Administrator';
-              await _studentService.suspendStudentAccount(
+              final ok = await _studentService.suspendStudentAccount(
                 studentId: student.id,
                 reason: reason,
                 adminName: admin,
@@ -870,12 +891,10 @@ class _StudentManagementScreenState extends State<StudentManagementScreen> {
 
               if (!mounted || !ctx.mounted) return;
               Navigator.pop(ctx);
-              ScaffoldMessenger.of(context).showSnackBar(
-                SnackBar(
-                  content: Text('${student.name} account has been suspended.'),
-                  backgroundColor: AppColors.error,
-                  behavior: SnackBarBehavior.floating,
-                ),
+              _showActionResult(
+                ok,
+                '${student.name} account has been suspended.',
+                successColor: AppColors.error,
               );
             },
             child: const Text('Confirm Suspension'),
@@ -919,20 +938,14 @@ class _StudentManagementScreenState extends State<StudentManagementScreen> {
             onPressed: () async {
               final admin =
                   _authService.currentAdmin?.fullName ?? 'Executive Administrator';
-              await _studentService.reactivateStudentAccount(
+              final ok = await _studentService.reactivateStudentAccount(
                 studentId: student.id,
                 adminName: admin,
               );
 
               if (!mounted || !ctx.mounted) return;
               Navigator.pop(ctx);
-              ScaffoldMessenger.of(context).showSnackBar(
-                SnackBar(
-                  content: Text('${student.name} account is reactivated.'),
-                  backgroundColor: AppColors.success,
-                  behavior: SnackBarBehavior.floating,
-                ),
-              );
+              _showActionResult(ok, '${student.name} account is reactivated.');
             },
             child: const Text('Confirm Reactivation'),
           ),
@@ -966,18 +979,14 @@ class _StudentManagementScreenState extends State<StudentManagementScreen> {
 
     if (confirmed == true && mounted) {
       final admin = _authService.currentAdmin?.fullName ?? 'Executive Administrator';
-      await _studentService.bulkApproveStudents(
+      final approvedCount = await _studentService.bulkApproveStudents(
         studentIds: _selectedStudentIds.toList(),
         adminName: admin,
       );
       setState(() => _selectedStudentIds.clear());
-      if (!mounted) return;
-      ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(
-          content: Text('Successfully batch-verified $count student profiles!'),
-          backgroundColor: AppColors.success,
-          behavior: SnackBarBehavior.floating,
-        ),
+      _showActionResult(
+        approvedCount > 0,
+        'Successfully batch-verified $approvedCount of $count student profiles!',
       );
     }
   }

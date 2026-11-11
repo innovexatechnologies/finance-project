@@ -41,6 +41,34 @@ class _CompanyVerificationsScreenState
   String _selectedStatusFilter = 'All';
   bool _isSidebarCollapsed = false;
 
+  @override
+  void initState() {
+    super.initState();
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      if (!mounted) return;
+      _verificationService.loadFromSupabase();
+    });
+  }
+
+  void _showActionResult(
+    bool ok,
+    String successMessage, {
+    Color successColor = AppColors.success,
+  }) {
+    if (!mounted) return;
+    ScaffoldMessenger.of(context).showSnackBar(
+      SnackBar(
+        content: Text(
+          ok
+              ? successMessage
+              : 'Unable to save verification decision to Supabase.',
+        ),
+        backgroundColor: ok ? successColor : AppColors.error,
+        behavior: SnackBarBehavior.floating,
+      ),
+    );
+  }
+
   final List<String> _filters = ['All', 'Pending', 'Verified', 'Rejected'];
 
   Future<void> _handleSignOut() async {
@@ -389,20 +417,15 @@ class _CompanyVerificationsScreenState
                       onPressed: () async {
                         final admin = _authService.currentAdmin?.fullName ??
                             'Executive Administrator';
-                        await _verificationService.approveCompany(
+                        final ok = await _verificationService.approveCompany(
                           verificationId: item.id,
                           reviewerName: admin,
                         );
                         if (!mounted || !ctx.mounted) return;
                         Navigator.pop(ctx);
-                        ScaffoldMessenger.of(context).showSnackBar(
-                          SnackBar(
-                            content: Text(
-                              '${item.companyName} has been verified and authorized across SkillBridge.',
-                            ),
-                            backgroundColor: AppColors.success,
-                            behavior: SnackBarBehavior.floating,
-                          ),
+                        _showActionResult(
+                          ok,
+                          '${item.companyName} has been verified and authorized across SkillBridge.',
                         );
                       },
                     ),
@@ -619,7 +642,7 @@ class _CompanyVerificationsScreenState
 
               final admin = _authService.currentAdmin?.fullName ??
                   'Executive Administrator';
-              await _verificationService.rejectCompany(
+              final ok = await _verificationService.rejectCompany(
                 verificationId: item.id,
                 feedback: text,
                 reviewerName: admin,
@@ -627,14 +650,10 @@ class _CompanyVerificationsScreenState
 
               if (!mounted || !ctx.mounted) return;
               Navigator.pop(ctx);
-              ScaffoldMessenger.of(context).showSnackBar(
-                SnackBar(
-                  content: Text(
-                    'Verification rejected for ${item.companyName}. Feedback logged.',
-                  ),
-                  backgroundColor: AppColors.error,
-                  behavior: SnackBarBehavior.floating,
-                ),
+              _showActionResult(
+                ok,
+                'Verification rejected for ${item.companyName}. Feedback logged.',
+                successColor: AppColors.error,
               );
             },
             child: const Text('Submit Rejection'),

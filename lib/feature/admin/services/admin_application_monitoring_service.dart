@@ -311,6 +311,38 @@ class AdminApplicationMonitoringService {
     }
   }
 
+  Future<bool> _persistApplicationUpdate({
+    required String applicationId,
+    required Map<String, dynamic> fields,
+    required String auditAction,
+    required String auditDetails,
+  }) async {
+    final supabase = SupabaseHelper.clientOrNull;
+    if (supabase == null) return true;
+    if (!SupabaseHelper.isUuid(applicationId)) return false;
+
+    try {
+      final updated = await supabase
+          .from('applications')
+          .update(fields)
+          .eq('id', applicationId)
+          .select('id');
+      if ((updated as List).isEmpty) return false;
+
+      await supabase.from('admin_audit_logs').insert({
+        'admin_email':
+            SupabaseHelper.currentUser?.email ?? 'admin@skillbridge.edu.pk',
+        'action': auditAction,
+        'target': applicationId,
+        'details': auditDetails,
+      });
+      return true;
+    } catch (e) {
+      debugPrint('AdminApplicationMonitoringService update error ($auditAction): $e');
+      return false;
+    }
+  }
+
   Future<bool> markCaseUnderInvestigation({
     required String applicationId,
     required String adminName,
@@ -325,27 +357,17 @@ class AdminApplicationMonitoringService {
     final notes = List<String>.from(app.investigationNotes);
     notes.insert(0, '[$adminName]: ${initialNote.trim()}');
 
-    final supabase = SupabaseHelper.clientOrNull;
-    if (supabase != null && SupabaseHelper.isUuid(applicationId)) {
-      try {
-        await supabase.from('applications').update({
-          'report_status': 'under_investigation',
-          'investigation_notes': notes,
-          'updated_at': DateTime.now().toIso8601String(),
-        }).eq('id', applicationId);
-
-        await supabase.from('admin_audit_logs').insert({
-          'admin_email':
-              SupabaseHelper.currentUser?.email ?? 'admin@skillbridge.edu.pk',
-          'action': 'APPLICATION_INVESTIGATION_STARTED',
-          'target': applicationId,
-          'details': initialNote.trim(),
-        });
-      } catch (e) {
-        debugPrint('markCaseUnderInvestigation error: $e');
-        return false;
-      }
-    }
+    final ok = await _persistApplicationUpdate(
+      applicationId: applicationId,
+      fields: {
+        'report_status': 'under_investigation',
+        'investigation_notes': notes,
+        'updated_at': DateTime.now().toIso8601String(),
+      },
+      auditAction: 'APPLICATION_INVESTIGATION_STARTED',
+      auditDetails: initialNote.trim(),
+    );
+    if (!ok) return false;
 
     history.insert(
       0,
@@ -381,26 +403,16 @@ class AdminApplicationMonitoringService {
     final notes = List<String>.from(app.investigationNotes);
     notes.insert(0, '[$adminName]: ${note.trim()}');
 
-    final supabase = SupabaseHelper.clientOrNull;
-    if (supabase != null && SupabaseHelper.isUuid(applicationId)) {
-      try {
-        await supabase.from('applications').update({
-          'investigation_notes': notes,
-          'updated_at': DateTime.now().toIso8601String(),
-        }).eq('id', applicationId);
-
-        await supabase.from('admin_audit_logs').insert({
-          'admin_email':
-              SupabaseHelper.currentUser?.email ?? 'admin@skillbridge.edu.pk',
-          'action': 'APPLICATION_NOTE_RECORDED',
-          'target': applicationId,
-          'details': note.trim(),
-        });
-      } catch (e) {
-        debugPrint('recordInvestigationNote error: $e');
-        return false;
-      }
-    }
+    final ok = await _persistApplicationUpdate(
+      applicationId: applicationId,
+      fields: {
+        'investigation_notes': notes,
+        'updated_at': DateTime.now().toIso8601String(),
+      },
+      auditAction: 'APPLICATION_NOTE_RECORDED',
+      auditDetails: note.trim(),
+    );
+    if (!ok) return false;
 
     history.insert(
       0,
@@ -435,27 +447,17 @@ class AdminApplicationMonitoringService {
     final notes = List<String>.from(app.investigationNotes);
     notes.insert(0, '[$adminName - Dismissal]: ${reason.trim()}');
 
-    final supabase = SupabaseHelper.clientOrNull;
-    if (supabase != null && SupabaseHelper.isUuid(applicationId)) {
-      try {
-        await supabase.from('applications').update({
-          'report_status': 'dismissed',
-          'investigation_notes': notes,
-          'updated_at': DateTime.now().toIso8601String(),
-        }).eq('id', applicationId);
-
-        await supabase.from('admin_audit_logs').insert({
-          'admin_email':
-              SupabaseHelper.currentUser?.email ?? 'admin@skillbridge.edu.pk',
-          'action': 'APPLICATION_REPORT_DISMISSED',
-          'target': applicationId,
-          'details': reason.trim(),
-        });
-      } catch (e) {
-        debugPrint('dismissReport error: $e');
-        return false;
-      }
-    }
+    final ok = await _persistApplicationUpdate(
+      applicationId: applicationId,
+      fields: {
+        'report_status': 'dismissed',
+        'investigation_notes': notes,
+        'updated_at': DateTime.now().toIso8601String(),
+      },
+      auditAction: 'APPLICATION_REPORT_DISMISSED',
+      auditDetails: reason.trim(),
+    );
+    if (!ok) return false;
 
     history.insert(
       0,
@@ -497,37 +499,25 @@ class AdminApplicationMonitoringService {
       '[$adminName - Resolution]: ${resolutionSummary.trim()}${revokeApplication ? " (Application Administratively Revoked)" : ""}',
     );
 
-    final supabase = SupabaseHelper.clientOrNull;
-    if (supabase != null && SupabaseHelper.isUuid(applicationId)) {
-      try {
-        final updatePayload = <String, dynamic>{
-          'report_status': 'resolved',
-          'investigation_notes': notes,
-          'updated_at': DateTime.now().toIso8601String(),
-        };
-        if (revokeApplication) {
-          updatePayload['status'] = 'Rejected';
-          updatePayload['company_feedback'] = resolutionSummary.trim();
-        }
-        await supabase
-            .from('applications')
-            .update(updatePayload)
-            .eq('id', applicationId);
-
-        await supabase.from('admin_audit_logs').insert({
-          'admin_email':
-              SupabaseHelper.currentUser?.email ?? 'admin@skillbridge.edu.pk',
-          'action': revokeApplication
-              ? 'APPLICATION_REVOKED'
-              : 'APPLICATION_REPORT_RESOLVED',
-          'target': applicationId,
-          'details': resolutionSummary.trim(),
-        });
-      } catch (e) {
-        debugPrint('resolveReportWithAction error: $e');
-        return false;
-      }
+    final updatePayload = <String, dynamic>{
+      'report_status': 'resolved',
+      'investigation_notes': notes,
+      'updated_at': DateTime.now().toIso8601String(),
+    };
+    if (revokeApplication) {
+      updatePayload['status'] = 'Rejected';
+      updatePayload['company_feedback'] = resolutionSummary.trim();
     }
+
+    final ok = await _persistApplicationUpdate(
+      applicationId: applicationId,
+      fields: updatePayload,
+      auditAction: revokeApplication
+          ? 'APPLICATION_REVOKED'
+          : 'APPLICATION_REPORT_RESOLVED',
+      auditDetails: resolutionSummary.trim(),
+    );
+    if (!ok) return false;
 
     history.insert(
       0,
