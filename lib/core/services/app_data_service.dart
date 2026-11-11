@@ -2070,6 +2070,18 @@ class AppDataService extends ChangeNotifier {
     }
   }
 
+  Future<void> removeUserAccount(String email) async {
+    final cleanEmail = email.trim().toLowerCase();
+    if (cleanEmail.isEmpty) return;
+
+    _userAccounts.remove(cleanEmail);
+    _safeNotifyListeners();
+
+    if (_prefs != null) {
+      await _prefs!.setString(_kUserAccounts, jsonEncode(_userAccounts));
+    }
+  }
+
   // ===========================================================================
   // CERTIFICATES
   // ===========================================================================

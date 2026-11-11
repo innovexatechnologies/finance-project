@@ -6,12 +6,9 @@ import 'package:link_vibe/core/widgets/status_badge.dart';
 import 'package:link_vibe/feature/auth/presentation/screens/login_screen.dart';
 import 'package:link_vibe/feature/company/models/company_profile_model.dart';
 import 'package:link_vibe/feature/company/models/company_settings_model.dart';
-import 'package:link_vibe/feature/company/models/company_verification_model.dart';
 import 'package:link_vibe/feature/company/presentation/screens/company_profile_screen.dart';
-import 'package:link_vibe/feature/company/presentation/screens/company_verification_screen.dart';
 import 'package:link_vibe/feature/company/services/company_profile_service.dart';
 import 'package:link_vibe/feature/company/services/company_settings_service.dart';
-import 'package:link_vibe/feature/company/services/company_verification_service.dart';
 
 class CompanySettingsScreen extends StatefulWidget {
   const CompanySettingsScreen({super.key});
@@ -22,7 +19,6 @@ class CompanySettingsScreen extends StatefulWidget {
 
 class _CompanySettingsScreenState extends State<CompanySettingsScreen> {
   final _profileService = CompanyProfileService();
-  final _verificationService = CompanyVerificationService();
   final _settingsService = CompanySettingsService();
 
   void _navigateToEditProfile() {
@@ -278,14 +274,13 @@ class _CompanySettingsScreenState extends State<CompanySettingsScreen> {
   void _openHelpAndSupportModal() {
     final subjectCtrl = TextEditingController();
     final messageCtrl = TextEditingController();
-    String selectedCategory = 'Verification & Compliance';
+    String selectedCategory = 'Project Recruitment';
     bool isSubmitting = false;
 
     const categories = [
-      'Verification & Compliance',
       'Project Recruitment',
       'Student Deliverables & Certificates',
-      'Account & Billing',
+      'Account & Security',
       'Technical Issue',
     ];
 
@@ -372,7 +367,7 @@ class _CompanySettingsScreenState extends State<CompanySettingsScreen> {
                       maxLines: 3,
                       decoration: const InputDecoration(
                         labelText: 'Details *',
-                        hintText: 'Provide relevant project or verification details...',
+                        hintText: 'Provide relevant project or account details...',
                       ),
                     ),
                     const SizedBox(height: 14),
@@ -534,17 +529,78 @@ class _CompanySettingsScreenState extends State<CompanySettingsScreen> {
     }
   }
 
-  String _verificationBadgeText(VerificationStatus status) {
-    switch (status) {
-      case VerificationStatus.verified:
-        return 'Verified';
-      case VerificationStatus.pending:
-        return 'Pending Review';
-      case VerificationStatus.rejected:
-        return 'Rejected';
-      case VerificationStatus.notSubmitted:
-        return 'Not Submitted';
+  Future<void> _confirmDeleteAccount() async {
+    final confirmed = await showDialog<bool>(
+      context: context,
+      builder: (ctx) => AlertDialog(
+        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(18)),
+        title: Row(
+          children: [
+            const Icon(
+              Icons.warning_amber_rounded,
+              color: AppColors.statusClosed,
+              size: 24,
+            ),
+            const SizedBox(width: 8),
+            Expanded(
+              child: Text(
+                'Delete Account?',
+                style: GoogleFonts.poppins(
+                  fontSize: 17,
+                  fontWeight: FontWeight.w700,
+                  color: AppColors.deepNavy,
+                ),
+              ),
+            ),
+          ],
+        ),
+        content: Text(
+          'This will permanently delete your company profile, posted projects, messages, and notifications from this workspace. This action cannot be undone.',
+          style: GoogleFonts.inter(
+            fontSize: 13.5,
+            height: 1.45,
+            color: AppColors.darkText,
+          ),
+        ),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.pop(ctx, false),
+            child: const Text('Cancel'),
+          ),
+          ElevatedButton(
+            style: ElevatedButton.styleFrom(
+              backgroundColor: AppColors.statusClosed,
+              foregroundColor: Colors.white,
+            ),
+            onPressed: () => Navigator.pop(ctx, true),
+            child: const Text('Delete Account'),
+          ),
+        ],
+      ),
+    );
+
+    if (confirmed != true || !mounted) return;
+
+    final ok = await _settingsService.deleteAccount();
+    if (!mounted) return;
+
+    if (!ok) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(
+          content: Text(
+            _settingsService.lastError ?? 'Could not delete account right now.',
+          ),
+          backgroundColor: AppColors.statusClosed,
+        ),
+      );
+      return;
     }
+
+    Navigator.pushAndRemoveUntil(
+      context,
+      MaterialPageRoute(builder: (_) => const LoginScreen()),
+      (route) => false,
+    );
   }
 
   @override
@@ -571,22 +627,19 @@ class _CompanySettingsScreenState extends State<CompanySettingsScreen> {
       body: ValueListenableBuilder<CompanyProfileModel>(
         valueListenable: _profileService.currentProfileNotifier,
         builder: (context, profile, _) {
-          return ValueListenableBuilder<CompanyVerificationModel>(
-            valueListenable: _verificationService.verificationNotifier,
-            builder: (context, verification, _) {
-              return ValueListenableBuilder<CompanySettingsModel>(
-                valueListenable: _settingsService.settingsNotifier,
-                builder: (context, settings, _) {
-                  final orgName = profile.companyName.trim().isNotEmpty
-                      ? profile.companyName.trim()
-                      : 'Corporate Partner';
+          return ValueListenableBuilder<CompanySettingsModel>(
+            valueListenable: _settingsService.settingsNotifier,
+            builder: (context, settings, _) {
+              final orgName = profile.companyName.trim().isNotEmpty
+                  ? profile.companyName.trim()
+                  : 'Corporate Partner';
 
-                  return SingleChildScrollView(
-                    padding: const EdgeInsets.fromLTRB(16, 16, 16, 36),
-                    child: Center(
-                      child: ConstrainedBox(
-                        constraints: const BoxConstraints(maxWidth: 820),
-                        child: Column(
+              return SingleChildScrollView(
+                padding: const EdgeInsets.fromLTRB(16, 16, 16, 36),
+                child: Center(
+                  child: ConstrainedBox(
+                    constraints: const BoxConstraints(maxWidth: 820),
+                    child: Column(
                       crossAxisAlignment: CrossAxisAlignment.start,
                       children: [
                         Container(
@@ -635,15 +688,12 @@ class _CompanySettingsScreenState extends State<CompanySettingsScreen> {
                                   ],
                                 ),
                               ),
-                              StatusBadge(
-                                label: _verificationBadgeText(verification.status),
-                              ),
                             ],
                           ),
                         ),
                         const SizedBox(height: 18),
                         _buildSectionCard(
-                          title: 'Account & Verification',
+                          title: 'Account & Security',
                           children: [
                             ListTile(
                               contentPadding: EdgeInsets.zero,
@@ -661,37 +711,6 @@ class _CompanySettingsScreenState extends State<CompanySettingsScreen> {
                               ),
                               trailing: const Icon(Icons.chevron_right_rounded),
                               onTap: _navigateToEditProfile,
-                            ),
-                            const Divider(height: 1),
-                            ListTile(
-                              contentPadding: EdgeInsets.zero,
-                              leading: const Icon(Icons.verified_user_outlined,
-                                  color: AppColors.primaryBlue),
-                              title: Text(
-                                'Company Verification Status',
-                                style: GoogleFonts.inter(
-                                    fontWeight: FontWeight.w600, fontSize: 14),
-                              ),
-                              subtitle: Padding(
-                                padding: const EdgeInsets.only(top: 4),
-                                child: Align(
-                                  alignment: Alignment.centerLeft,
-                                  child: StatusBadge(
-                                    label: _verificationBadgeText(
-                                        verification.status),
-                                  ),
-                                ),
-                              ),
-                              trailing: const Icon(Icons.chevron_right_rounded),
-                              onTap: () {
-                                Navigator.push(
-                                  context,
-                                  MaterialPageRoute(
-                                    builder: (_) =>
-                                        const CompanyVerificationScreen(),
-                                  ),
-                                );
-                              },
                             ),
                             const Divider(height: 1),
                             ListTile(
@@ -742,9 +761,9 @@ class _CompanySettingsScreenState extends State<CompanySettingsScreen> {
                             SwitchListTile(
                               contentPadding: EdgeInsets.zero,
                               activeThumbColor: AppColors.primaryBlue,
-                              title: const Text('Governance & Verification Updates'),
+                              title: const Text('Workspace & Account Updates'),
                               subtitle: const Text(
-                                  'Admin review updates on organization status'),
+                                  'Updates on organization workspace activity'),
                               value: settings.notifyStatusChanges,
                               onChanged: (v) => _settingsService.updateSettings(
                                 settings.copyWith(notifyStatusChanges: v),
@@ -821,25 +840,48 @@ class _CompanySettingsScreenState extends State<CompanySettingsScreen> {
                             ListTile(
                               contentPadding: EdgeInsets.zero,
                               leading: const Icon(Icons.logout_rounded,
-                                  color: AppColors.statusClosed),
+                                  color: AppColors.deepNavy),
                               title: Text(
                                 'Sign Out',
+                                style: GoogleFonts.inter(
+                                  fontWeight: FontWeight.w700,
+                                  fontSize: 14,
+                                  color: AppColors.deepNavy,
+                                ),
+                              ),
+                              subtitle: Text(
+                                'End your current session on this device',
+                                style: GoogleFonts.inter(
+                                    fontSize: 12, color: AppColors.grayText),
+                              ),
+                              onTap: _confirmLogout,
+                            ),
+                            const Divider(height: 1),
+                            ListTile(
+                              contentPadding: EdgeInsets.zero,
+                              leading: const Icon(Icons.delete_forever_rounded,
+                                  color: AppColors.statusClosed),
+                              title: Text(
+                                'Delete Account',
                                 style: GoogleFonts.inter(
                                   fontWeight: FontWeight.w700,
                                   fontSize: 14,
                                   color: AppColors.statusClosed,
                                 ),
                               ),
-                              onTap: _confirmLogout,
+                              subtitle: Text(
+                                'Permanently remove your company account and workspace data',
+                                style: GoogleFonts.inter(
+                                    fontSize: 12, color: AppColors.grayText),
+                              ),
+                              onTap: _confirmDeleteAccount,
                             ),
                           ],
                         ),
                       ],
-                        ),
-                      ),
                     ),
-                  );
-                },
+                  ),
+                ),
               );
             },
           );

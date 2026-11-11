@@ -2,9 +2,7 @@ import 'package:flutter/material.dart';
 import 'package:google_fonts/google_fonts.dart';
 import 'package:link_vibe/core/constants/app_colors.dart';
 import 'package:link_vibe/core/services/supabase_helper.dart';
-import 'package:link_vibe/core/widgets/status_badge.dart';
 import 'package:link_vibe/feature/company/models/company_profile_model.dart';
-import 'package:link_vibe/feature/company/presentation/screens/company_verification_screen.dart';
 import 'package:link_vibe/feature/company/services/company_profile_service.dart';
 
 class CompanyProfileScreen extends StatefulWidget {
@@ -583,22 +581,30 @@ class _CompanyProfileScreenState extends State<CompanyProfileScreen> {
                         color: AppColors.lightAqua,
                       ),
                     ),
-                    const SizedBox(height: 8),
-                    InkWell(
-                      onTap: () {
-                        Navigator.push(
-                          context,
-                          MaterialPageRoute(
-                            builder: (_) => const CompanyVerificationScreen(),
+                    if (profile.officialEmail.trim().isNotEmpty) ...[
+                      const SizedBox(height: 6),
+                      Row(
+                        children: [
+                          const Icon(
+                            Icons.mail_outline_rounded,
+                            size: 13.5,
+                            color: Colors.white70,
                           ),
-                        );
-                      },
-                      child: StatusBadge(
-                        label: profile.isVerified
-                            ? 'Verified Partner'
-                            : 'Complete Verification',
+                          const SizedBox(width: 6),
+                          Expanded(
+                            child: Text(
+                              profile.officialEmail,
+                              maxLines: 1,
+                              overflow: TextOverflow.ellipsis,
+                              style: GoogleFonts.inter(
+                                fontSize: 12,
+                                color: Colors.white70,
+                              ),
+                            ),
+                          ),
+                        ],
                       ),
-                    ),
+                    ],
                   ],
                 ),
               ),

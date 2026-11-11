@@ -121,6 +121,117 @@ class CompanySettingsService {
     return true;
   }
 
+  Future<bool> deleteAccount() async {
+    lastError = null;
+    final supabase = SupabaseHelper.clientOrNull;
+    final user = supabase?.auth.currentUser;
+    final accountEmail =
+        (user?.email ??
+                CompanyProfileService().currentProfile.officialEmail)
+            .trim()
+            .toLowerCase();
+
+    if (supabase != null && user != null) {
+      try {
+        try {
+          final projRows = await supabase
+              .from('projects')
+              .select('id')
+              .or('posted_by.eq.${user.id},user_id.eq.${user.id}');
+          final projectIds = List<Map<String, dynamic>>.from(projRows)
+              .map((row) => row['id']?.toString() ?? '')
+              .where((id) => id.isNotEmpty)
+              .toList();
+          if (projectIds.isNotEmpty) {
+            await supabase
+                .from('applications')
+                .delete()
+                .inFilter('project_id', projectIds);
+          }
+        } catch (e) {
+          debugPrint('Delete applications cleanup skipped: $e');
+        }
+
+        try {
+          await supabase
+              .from('projects')
+              .delete()
+              .or('posted_by.eq.${user.id},user_id.eq.${user.id}');
+        } catch (e) {
+          debugPrint('Delete projects cleanup skipped: $e');
+        }
+
+        try {
+          await supabase.from('companies').delete().eq('user_id', user.id);
+        } catch (e) {
+          debugPrint('Delete companies cleanup skipped: $e');
+        }
+
+        try {
+          await supabase
+              .from('messages')
+              .delete()
+              .or('sender_id.eq.${user.id},receiver_id.eq.${user.id}');
+        } catch (e) {
+          debugPrint('Delete messages cleanup skipped: $e');
+        }
+
+        try {
+          await supabase.from('notifications').delete().eq('user_id', user.id);
+        } catch (e) {
+          debugPrint('Delete notifications cleanup skipped: $e');
+        }
+
+        try {
+          await supabase
+              .from('support_tickets')
+              .delete()
+              .eq('user_id', user.id);
+        } catch (e) {
+          debugPrint('Delete support_tickets cleanup skipped: $e');
+        }
+
+        try {
+          await supabase.from('user_settings').delete().eq('user_id', user.id);
+        } catch (e) {
+          debugPrint('Delete user_settings cleanup skipped: $e');
+        }
+
+        var rpcDeleted = false;
+        try {
+          await supabase.rpc('delete_user_account');
+          rpcDeleted = true;
+        } catch (_) {}
+
+        if (!rpcDeleted) {
+          try {
+            await supabase
+                .from('profiles')
+                .update({'name': 'Deleted Account', 'bio': '', 'phone': ''})
+                .eq('id', user.id);
+          } catch (e) {
+            debugPrint('Anonymize profile skipped: $e');
+          }
+        }
+      } catch (e) {
+        lastError = e.toString();
+        return false;
+      }
+    }
+
+    if (accountEmail.isNotEmpty) {
+      await AppDataService.instance.removeUserAccount(accountEmail);
+    }
+    if (AppDataService.instance.userEmail.isNotEmpty) {
+      await AppDataService.instance.removeUserAccount(
+        AppDataService.instance.userEmail,
+      );
+    }
+
+    await logout();
+    return true;
+  }
+
   Future<void> logout() async {
     final supabase = SupabaseHelper.clientOrNull;
     try {
