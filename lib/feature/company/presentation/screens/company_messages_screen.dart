@@ -853,12 +853,15 @@ class _CompanyChatDetailScreenState extends State<_CompanyChatDetailScreen> {
   @override
   void initState() {
     super.initState();
+    AppDataService.instance.setActiveConversation(widget.conversationId);
     AppDataService.instance.markConversationRead(widget.conversationId);
     WidgetsBinding.instance.addPostFrameCallback((_) => _scrollToBottom());
   }
 
   @override
   void dispose() {
+    AppDataService.instance.setActiveConversation(null);
+    AppDataService.instance.markConversationRead(widget.conversationId);
     _messageController.dispose();
     _scrollController.dispose();
     super.dispose();

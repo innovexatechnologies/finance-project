@@ -2,8 +2,10 @@ import 'package:flutter/material.dart';
 import 'package:google_fonts/google_fonts.dart';
 import 'package:link_vibe/core/constants/app_colors.dart';
 import 'package:link_vibe/core/services/app_data_service.dart';
+import 'package:link_vibe/core/services/share_service.dart';
 import 'package:link_vibe/core/services/supabase_helper.dart';
 import 'package:link_vibe/core/widgets/app_empty_state.dart';
+import 'package:link_vibe/core/widgets/executive_ui.dart';
 import 'package:link_vibe/core/widgets/status_badge.dart';
 import 'package:link_vibe/feature/student/certificates/presentation/screens/certificates_screen.dart';
 import 'package:link_vibe/feature/student/chat/presentation/screens/chat_list_screen.dart';
@@ -119,26 +121,37 @@ class _MyProjectsScreenState extends State<MyProjectsScreen>
 
         return Scaffold(
           backgroundColor: AppColors.background,
-          appBar: AppBar(
-            title: const Text('My Projects'),
-            centerTitle: false,
+          appBar: ExecutiveAppBar(
+            title: 'My Projects',
+            subtitle: 'Active Engagements & Deliverables',
+            showLeading: Navigator.canPop(context),
+            leadingBadge: Container(
+              width: 36,
+              height: 36,
+              decoration: BoxDecoration(
+                gradient: AppColors.brandGradient,
+                borderRadius: BorderRadius.circular(11),
+                boxShadow: [
+                  BoxShadow(
+                    color: AppColors.primaryBlue.withValues(alpha: 0.22),
+                    blurRadius: 8,
+                    offset: const Offset(0, 3),
+                  ),
+                ],
+              ),
+              child: const Icon(
+                Icons.business_center_rounded,
+                color: Colors.white,
+                size: 19,
+              ),
+            ),
             actions: [
-              IconButton(
+              ExecutiveHeaderIconButton(
                 tooltip:
                     _isRefreshing ? 'Syncing Projects...' : 'Refresh Projects',
-                icon: _isRefreshing
-                    ? const SizedBox(
-                        width: 18,
-                        height: 18,
-                        child: CircularProgressIndicator(
-                          strokeWidth: 2.2,
-                          color: AppColors.primaryBlue,
-                        ),
-                      )
-                    : const Icon(Icons.refresh_rounded),
+                icon: Icons.refresh_rounded,
                 onPressed: _isRefreshing ? null : _refreshProjects,
               ),
-              const SizedBox(width: 4),
             ],
             bottom: TabBar(
               controller: _tabController,
@@ -146,8 +159,8 @@ class _MyProjectsScreenState extends State<MyProjectsScreen>
               unselectedLabelColor: AppColors.grayText,
               indicatorColor: AppColors.primaryBlue,
               labelStyle: GoogleFonts.poppins(
-                fontWeight: FontWeight.bold,
-                fontSize: 13.5,
+                fontWeight: FontWeight.w700,
+                fontSize: 13,
               ),
               tabs: [
                 Tab(text: 'Active (${activeList.length})'),
@@ -232,8 +245,14 @@ class _MyProjectsScreenState extends State<MyProjectsScreen>
     final assignedDate = project['appliedDate']?.toString().trim() ?? 'Recently';
     final feedback = project['companyFeedback']?.toString().trim() ?? '';
 
-    return Card(
+    return Container(
       margin: const EdgeInsets.only(bottom: 14),
+      decoration: BoxDecoration(
+        color: AppColors.cardWhite,
+        borderRadius: BorderRadius.circular(18),
+        border: Border.all(color: AppColors.lightGray),
+        boxShadow: AppColors.softShadow,
+      ),
       child: Padding(
         padding: const EdgeInsets.all(16),
         child: Column(
@@ -242,18 +261,23 @@ class _MyProjectsScreenState extends State<MyProjectsScreen>
             Row(
               children: [
                 Container(
-                  width: 44,
-                  height: 44,
+                  width: 46,
+                  height: 46,
                   decoration: BoxDecoration(
-                    color: AppColors.lightAqua,
-                    borderRadius: BorderRadius.circular(12),
+                    gradient: LinearGradient(
+                      colors: [
+                        AppColors.lightAqua,
+                        AppColors.primaryBlue.withValues(alpha: 0.14),
+                      ],
+                    ),
+                    borderRadius: BorderRadius.circular(13),
                   ),
                   child: Center(
                     child: Text(
                       SupabaseHelper.initialsFor(company, fallback: 'CO'),
                       style: GoogleFonts.poppins(
                         fontSize: 15,
-                        fontWeight: FontWeight.bold,
+                        fontWeight: FontWeight.w700,
                         color: AppColors.primaryBlue,
                       ),
                     ),
@@ -385,6 +409,20 @@ class _MyProjectsScreenState extends State<MyProjectsScreen>
                   onPressed: () => _openCompanyChat(project),
                   icon: const Icon(Icons.chat_bubble_outline_rounded, size: 15),
                   label: const Text('Message'),
+                ),
+                OutlinedButton.icon(
+                  style: OutlinedButton.styleFrom(
+                    padding: const EdgeInsets.symmetric(
+                        horizontal: 12, vertical: 10),
+                  ),
+                  onPressed: () {
+                    ShareService.shareProject(
+                      context: context,
+                      project: project,
+                    );
+                  },
+                  icon: const Icon(Icons.share_outlined, size: 15),
+                  label: const Text('Share'),
                 ),
                 if (!isCompleted)
                   ElevatedButton.icon(

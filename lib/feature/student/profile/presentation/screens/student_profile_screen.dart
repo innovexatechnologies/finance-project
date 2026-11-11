@@ -3,6 +3,8 @@ import 'package:google_fonts/google_fonts.dart';
 import 'package:link_vibe/core/constants/app_colors.dart';
 import 'package:image_picker/image_picker.dart';
 import 'package:link_vibe/core/services/app_data_service.dart';
+import 'package:link_vibe/core/services/share_service.dart';
+import 'package:link_vibe/core/widgets/executive_ui.dart';
 import 'package:link_vibe/core/widgets/student_avatar.dart';
 import 'package:link_vibe/core/services/supabase_helper.dart';
 import 'package:link_vibe/feature/student/certificates/presentation/screens/certificates_screen.dart';
@@ -367,19 +369,55 @@ class _StudentProfileScreenState extends State<StudentProfileScreen> {
 
         return Scaffold(
           backgroundColor: AppColors.background,
-          appBar: AppBar(
-            title: const Text('Student Profile'),
+          appBar: ExecutiveAppBar(
+            title: 'Student Profile',
+            subtitle: 'Academic Portfolio & Identity',
+            showLeading: Navigator.canPop(context),
+            leadingBadge: Container(
+              width: 36,
+              height: 36,
+              decoration: BoxDecoration(
+                gradient: AppColors.brandGradient,
+                borderRadius: BorderRadius.circular(11),
+                boxShadow: [
+                  BoxShadow(
+                    color: AppColors.primaryBlue.withValues(alpha: 0.22),
+                    blurRadius: 8,
+                    offset: const Offset(0, 3),
+                  ),
+                ],
+              ),
+              child: const Icon(
+                Icons.person_rounded,
+                color: Colors.white,
+                size: 19,
+              ),
+            ),
             actions: [
-              IconButton(
+              ExecutiveHeaderIconButton(
+                tooltip: 'Share Profile',
+                icon: Icons.share_outlined,
+                iconColor: AppColors.primaryBlue,
+                onPressed: () {
+                  ShareService.shareStudentProfile(
+                    context: context,
+                    profile: profile,
+                    skills: skills,
+                  );
+                },
+              ),
+              const SizedBox(width: 8),
+              ExecutiveHeaderIconButton(
                 tooltip: 'Edit Profile',
-                icon: const Icon(Icons.edit_outlined,
-                    color: AppColors.primaryBlue),
+                icon: Icons.edit_outlined,
+                iconColor: AppColors.primaryBlue,
                 onPressed: _showEditProfileDialog,
               ),
-              IconButton(
+              const SizedBox(width: 8),
+              ExecutiveHeaderIconButton(
                 tooltip: 'Settings',
-                icon: const Icon(Icons.settings_outlined,
-                    color: AppColors.deepNavy),
+                icon: Icons.settings_outlined,
+                iconColor: AppColors.deepNavy,
                 onPressed: () {
                   Navigator.push(
                     context,
@@ -387,19 +425,19 @@ class _StudentProfileScreenState extends State<StudentProfileScreen> {
                   );
                 },
               ),
-              const SizedBox(width: 8),
             ],
           ),
           body: RefreshIndicator(
             color: AppColors.primaryBlue,
+            backgroundColor: Colors.white,
             onRefresh: () =>
                 AppDataService.instance.syncFromSupabase(forceRefresh: true),
             child: SingleChildScrollView(
               physics: const AlwaysScrollableScrollPhysics(),
-              padding: const EdgeInsets.all(20),
+              padding: const EdgeInsets.fromLTRB(16, 18, 16, 28),
               child: Center(
                 child: ConstrainedBox(
-                  constraints: const BoxConstraints(maxWidth: 820),
+                  constraints: const BoxConstraints(maxWidth: 860),
                   child: Column(
                     children: [
                       if (!profileVisibility) ...[
@@ -411,7 +449,7 @@ class _StudentProfileScreenState extends State<StudentProfileScreen> {
                           ),
                           decoration: BoxDecoration(
                             color: AppColors.warningBg,
-                            borderRadius: BorderRadius.circular(12),
+                            borderRadius: BorderRadius.circular(14),
                             border: Border.all(
                               color: AppColors.statusPending
                                   .withValues(alpha: 0.5),
@@ -441,156 +479,152 @@ class _StudentProfileScreenState extends State<StudentProfileScreen> {
                         const SizedBox(height: 16),
                       ],
 
-                      // Avatar & Gallery Photo
-                      Center(
-                        child: Builder(
-                          builder: (_) {
-                            final currentProfile =
-                                AppDataService.instance.getProfile();
-                            final avatarUrl =
-                                currentProfile['avatarUrl']?.toString();
-                            final avatarBase64 =
-                                currentProfile['avatarBase64']?.toString();
-                            final hasPhoto = (avatarBase64 != null &&
-                                    avatarBase64.isNotEmpty) ||
-                                (avatarUrl != null && avatarUrl.isNotEmpty);
+                      // Executive Student Hero Card
+                      Builder(
+                        builder: (_) {
+                          final avatarUrl = profile['avatarUrl']?.toString();
+                          final avatarBase64 =
+                              profile['avatarBase64']?.toString();
+                          final hasPhoto = (avatarBase64 != null &&
+                                  avatarBase64.isNotEmpty) ||
+                              (avatarUrl != null && avatarUrl.isNotEmpty);
 
-                            return Stack(
-                              children: [
-                                GestureDetector(
-                                  onTap: () =>
-                                      _showAvatarOptionsSheet(hasPhoto),
-                                  child: Stack(
-                                    alignment: Alignment.center,
-                                    children: [
-                                      StudentAvatar(
-                                        name: name,
-                                        avatarUrl: avatarUrl,
-                                        avatarBase64: avatarBase64,
-                                        size: 92,
-                                        borderWidth: 3,
-                                        shadows: [
-                                          BoxShadow(
-                                            color: AppColors.primaryBlue
-                                                .withValues(alpha: 0.2),
-                                            blurRadius: 16,
-                                            offset: const Offset(0, 6),
-                                          ),
-                                        ],
-                                      ),
-                                      if (_isUploadingPhoto)
-                                        Container(
-                                          width: 92,
-                                          height: 92,
-                                          decoration: BoxDecoration(
-                                            shape: BoxShape.circle,
-                                            color: Colors.black
-                                                .withValues(alpha: 0.45),
-                                          ),
-                                          child: const Center(
-                                            child: SizedBox(
-                                              width: 24,
-                                              height: 24,
-                                              child: CircularProgressIndicator(
-                                                strokeWidth: 2.5,
-                                                color: Colors.white,
-                                              ),
+                          final subtitleLine = (degree.isNotEmpty ||
+                                  department.isNotEmpty)
+                              ? [
+                                  if (degree.isNotEmpty) degree,
+                                  if (department.isNotEmpty) department,
+                                ].join(' • ')
+                              : (university.isNotEmpty
+                                    ? university
+                                    : 'Verified Student Portfolio');
+
+                          final emailDisplay = (showEmail && email.isNotEmpty)
+                              ? email
+                              : (!showEmail
+                                    ? 'Email hidden (Privacy Settings)'
+                                    : null);
+
+                          return ExecutiveHeroBanner(
+                            initial: SupabaseHelper.initialsFor(
+                              name,
+                              fallback: 'ST',
+                            ),
+                            title: name,
+                            subtitle: subtitleLine,
+                            secondaryLine: emailDisplay,
+                            secondaryIcon: showEmail
+                                ? Icons.mail_outline_rounded
+                                : Icons.visibility_off_outlined,
+                            onMonogramTap: () =>
+                                _showAvatarOptionsSheet(hasPhoto),
+                            leadingVisual: Container(
+                              width: 66,
+                              height: 66,
+                              decoration: BoxDecoration(
+                                color: Colors.white,
+                                borderRadius: BorderRadius.circular(18),
+                                boxShadow: [
+                                  BoxShadow(
+                                    color: Colors.black.withValues(alpha: 0.14),
+                                    blurRadius: 10,
+                                    offset: const Offset(0, 4),
+                                  ),
+                                ],
+                              ),
+                              child: Center(
+                                child: Stack(
+                                  alignment: Alignment.center,
+                                  children: [
+                                    StudentAvatar(
+                                      name: name,
+                                      avatarUrl: avatarUrl,
+                                      avatarBase64: avatarBase64,
+                                      size: 58,
+                                      borderWidth: 0,
+                                    ),
+                                    if (_isUploadingPhoto)
+                                      Container(
+                                        width: 58,
+                                        height: 58,
+                                        decoration: BoxDecoration(
+                                          shape: BoxShape.circle,
+                                          color: Colors.black
+                                              .withValues(alpha: 0.45),
+                                        ),
+                                        child: const Center(
+                                          child: SizedBox(
+                                            width: 20,
+                                            height: 20,
+                                            child: CircularProgressIndicator(
+                                              strokeWidth: 2.2,
+                                              color: Colors.white,
                                             ),
                                           ),
                                         ),
-                                    ],
-                                  ),
-                                ),
-                                Positioned(
-                                  bottom: 0,
-                                  right: 0,
-                                  child: Tooltip(
-                                    message: 'Change Profile Photo',
-                                    child: GestureDetector(
-                                      onTap: () =>
-                                          _showAvatarOptionsSheet(hasPhoto),
-                                      child: Container(
-                                        padding: const EdgeInsets.all(7),
-                                        decoration: BoxDecoration(
-                                          color: AppColors.primaryBlue,
-                                          shape: BoxShape.circle,
-                                          border: Border.all(
-                                            color: Colors.white,
-                                            width: 2,
-                                          ),
-                                        ),
-                                        child: const Icon(
-                                          Icons.camera_alt_rounded,
-                                          size: 14,
-                                          color: Colors.white,
-                                        ),
                                       ),
-                                    ),
-                                  ),
-                                ),
-                              ],
-                            );
-                          },
-                        ),
-                      ),
-                      const SizedBox(height: 14),
-
-                      Text(
-                        name,
-                        textAlign: TextAlign.center,
-                        style: GoogleFonts.poppins(
-                          fontSize: 20,
-                          fontWeight: FontWeight.bold,
-                          color: AppColors.deepNavy,
-                        ),
-                      ),
-                      if (degree.isNotEmpty || department.isNotEmpty) ...[
-                        const SizedBox(height: 3),
-                        Text(
-                          [
-                            if (degree.isNotEmpty) degree,
-                            if (department.isNotEmpty) department,
-                          ].join(' • '),
-                          textAlign: TextAlign.center,
-                          style: GoogleFonts.inter(
-                            fontSize: 13,
-                            color: AppColors.grayText,
-                          ),
-                        ),
-                      ],
-                      const SizedBox(height: 4),
-                      if (showEmail && email.isNotEmpty)
-                        Text(
-                          email,
-                          style: GoogleFonts.inter(
-                            fontSize: 12.5,
-                            color: AppColors.primaryBlue,
-                          ),
-                        )
-                      else if (!showEmail)
-                        Row(
-                          mainAxisSize: MainAxisSize.min,
-                          children: [
-                            const Icon(
-                              Icons.visibility_off_outlined,
-                              size: 13,
-                              color: AppColors.grayText,
-                            ),
-                            const SizedBox(width: 4),
-                            Flexible(
-                              child: Text(
-                                'Email hidden (Privacy Settings)',
-                                overflow: TextOverflow.ellipsis,
-                                style: GoogleFonts.inter(
-                                  fontSize: 12,
-                                  fontStyle: FontStyle.italic,
-                                  color: AppColors.grayText,
+                                  ],
                                 ),
                               ),
                             ),
-                          ],
-                        ),
-                      const SizedBox(height: 20),
+                            monogramBadgeOverlay: Tooltip(
+                              message: 'Change Profile Photo',
+                              child: GestureDetector(
+                                onTap: () => _showAvatarOptionsSheet(hasPhoto),
+                                child: Container(
+                                  padding: const EdgeInsets.all(6),
+                                  decoration: BoxDecoration(
+                                    color: AppColors.primaryBlue,
+                                    shape: BoxShape.circle,
+                                    border: Border.all(
+                                      color: Colors.white,
+                                      width: 2,
+                                    ),
+                                  ),
+                                  child: const Icon(
+                                    Icons.camera_alt_rounded,
+                                    size: 13,
+                                    color: Colors.white,
+                                  ),
+                                ),
+                              ),
+                            ),
+                            bottomContent: Container(
+                              padding: const EdgeInsets.symmetric(
+                                horizontal: 14,
+                                vertical: 10,
+                              ),
+                              decoration: BoxDecoration(
+                                color: Colors.white.withValues(alpha: 0.12),
+                                borderRadius: BorderRadius.circular(14),
+                                border: Border.all(
+                                  color: Colors.white.withValues(alpha: 0.16),
+                                ),
+                              ),
+                              child: Wrap(
+                                spacing: 14,
+                                runSpacing: 6,
+                                crossAxisAlignment: WrapCrossAlignment.center,
+                                children: [
+                                  ExecutiveHeroMicroStat(
+                                    icon: Icons.verified_outlined,
+                                    label: '$completedCount Projects',
+                                  ),
+                                  ExecutiveHeroMicroStat(
+                                    icon: Icons.workspace_premium_outlined,
+                                    label: '$certsCount Certificates',
+                                  ),
+                                  ExecutiveHeroMicroStat(
+                                    icon: Icons.star_outline_rounded,
+                                    label: 'Rating: $ratingDisplay',
+                                  ),
+                                ],
+                              ),
+                            ),
+                          );
+                        },
+                      ),
+                      const SizedBox(height: 16),
 
                       // Live Stats Row
                       Row(
@@ -620,48 +654,32 @@ class _StudentProfileScreenState extends State<StudentProfileScreen> {
                           ),
                         ],
                       ),
-                      const SizedBox(height: 22),
+                      const SizedBox(height: 18),
 
                       // Academic Profile Card (strictly NO Location row!)
-                      Container(
-                        width: double.infinity,
-                        padding: const EdgeInsets.all(16),
-                        decoration: BoxDecoration(
-                          color: AppColors.cardWhite,
-                          borderRadius: BorderRadius.circular(16),
-                          border: Border.all(color: AppColors.lightGray),
-                          boxShadow: AppColors.softShadow,
+                      ExecutiveSectionCard(
+                        title: 'Academic Profile',
+                        icon: Icons.school_outlined,
+                        accentColor: AppColors.primaryBlue,
+                        headerTrailing: IconButton(
+                          constraints: const BoxConstraints(),
+                          padding: EdgeInsets.zero,
+                          onPressed: _showEditProfileDialog,
+                          icon: const Icon(
+                            Icons.edit_outlined,
+                            size: 18,
+                            color: AppColors.primaryBlue,
+                          ),
                         ),
                         child: Column(
                           crossAxisAlignment: CrossAxisAlignment.start,
                           children: [
-                            Row(
-                              mainAxisAlignment: MainAxisAlignment.spaceBetween,
-                              children: [
-                                Expanded(
-                                  child: Text(
-                                    'Academic Profile',
-                                    style: GoogleFonts.poppins(
-                                      fontSize: 14.5,
-                                      fontWeight: FontWeight.bold,
-                                      color: AppColors.deepNavy,
-                                    ),
-                                  ),
-                                ),
-                                IconButton(
-                                  constraints: const BoxConstraints(),
-                                  padding: EdgeInsets.zero,
-                                  onPressed: _showEditProfileDialog,
-                                  icon: const Icon(Icons.edit_outlined,
-                                      size: 17, color: AppColors.primaryBlue),
-                                ),
-                              ],
-                            ),
-                            const SizedBox(height: 10),
                             _buildInfoRow(
                               Icons.school_outlined,
                               'Institute',
-                              university.isNotEmpty ? university : 'Not specified',
+                              university.isNotEmpty
+                                  ? university
+                                  : 'Not specified',
                             ),
                             if (semester.isNotEmpty ||
                                 (cgpaVal != null && cgpaVal > 0)) ...[
@@ -670,7 +688,8 @@ class _StudentProfileScreenState extends State<StudentProfileScreen> {
                                 Icons.menu_book_outlined,
                                 'Academic Progress',
                                 [
-                                  if (semester.isNotEmpty) 'Semester $semester',
+                                  if (semester.isNotEmpty)
+                                    'Semester $semester',
                                   if (cgpaVal != null && cgpaVal > 0)
                                     'CGPA ${cgpaVal.toStringAsFixed(2)}',
                                 ].join(' • '),
@@ -683,18 +702,21 @@ class _StudentProfileScreenState extends State<StudentProfileScreen> {
                             ],
                             if (portfolioUrl.isNotEmpty) ...[
                               const SizedBox(height: 8),
-                              _buildInfoRow(Icons.link_rounded, 'Portfolio / GitHub',
-                                  portfolioUrl),
+                              _buildInfoRow(
+                                Icons.link_rounded,
+                                'Portfolio / GitHub',
+                                portfolioUrl,
+                              ),
                             ],
                             const SizedBox(height: 12),
                             const Divider(
-                                color: AppColors.lightGray, height: 1),
+                                color: AppColors.borderLight, height: 1),
                             const SizedBox(height: 12),
                             Text(
                               'About / Bio',
                               style: GoogleFonts.poppins(
                                 fontSize: 13,
-                                fontWeight: FontWeight.bold,
+                                fontWeight: FontWeight.w700,
                                 color: AppColors.deepNavy,
                               ),
                             ),
@@ -717,79 +739,48 @@ class _StudentProfileScreenState extends State<StudentProfileScreen> {
                           ],
                         ),
                       ),
-                      const SizedBox(height: 20),
+                      const SizedBox(height: 18),
 
                       // Skills & Expertise Card
-                      Container(
-                        width: double.infinity,
-                        padding: const EdgeInsets.all(16),
-                        decoration: BoxDecoration(
-                          color: AppColors.cardWhite,
-                          borderRadius: BorderRadius.circular(16),
-                          border: Border.all(color: AppColors.lightGray),
-                          boxShadow: AppColors.softShadow,
-                        ),
-                        child: Column(
-                          crossAxisAlignment: CrossAxisAlignment.start,
-                          children: [
-                            Row(
-                              mainAxisAlignment: MainAxisAlignment.spaceBetween,
-                              children: [
-                                Expanded(
-                                  child: Wrap(
-                                    spacing: 8,
-                                    runSpacing: 4,
-                                    crossAxisAlignment:
-                                        WrapCrossAlignment.center,
-                                    children: [
-                                      Text(
-                                        'Skills & Expertise',
-                                        style: GoogleFonts.poppins(
-                                          fontSize: 14.5,
-                                          fontWeight: FontWeight.bold,
-                                          color: AppColors.deepNavy,
-                                        ),
-                                      ),
-                                      Container(
-                                        padding: const EdgeInsets.symmetric(
-                                            horizontal: 8, vertical: 2),
-                                        decoration: BoxDecoration(
-                                          color: publicPortfolio
-                                              ? AppColors.lightAqua
-                                              : AppColors.surfaceAlt,
-                                          borderRadius:
-                                              BorderRadius.circular(6),
-                                        ),
-                                        child: Text(
-                                          publicPortfolio ? 'Public' : 'Private',
-                                          style: GoogleFonts.inter(
-                                            fontSize: 10.5,
-                                            fontWeight: FontWeight.w600,
-                                            color: publicPortfolio
-                                                ? AppColors.teal
-                                                : AppColors.grayText,
-                                          ),
-                                        ),
-                                      ),
-                                    ],
-                                  ),
-                                ),
-                                IconButton(
-                                  constraints: const BoxConstraints(),
-                                  padding: EdgeInsets.zero,
-                                  tooltip: 'Add Skill',
-                                  icon: const Icon(
-                                    Icons.add_circle_outline_rounded,
-                                    size: 21,
-                                    color: AppColors.primaryBlue,
-                                  ),
-                                  onPressed: _showAddSkillDialog,
-                                ),
-                              ],
+                      ExecutiveSectionCard(
+                        title: 'Skills & Expertise',
+                        icon: Icons.bolt_rounded,
+                        accentColor: AppColors.teal,
+                        titleBadge: Container(
+                          padding: const EdgeInsets.symmetric(
+                            horizontal: 8,
+                            vertical: 2,
+                          ),
+                          decoration: BoxDecoration(
+                            color: publicPortfolio
+                                ? AppColors.lightAqua
+                                : AppColors.surfaceAlt,
+                            borderRadius: BorderRadius.circular(6),
+                          ),
+                          child: Text(
+                            publicPortfolio ? 'Public' : 'Private',
+                            style: GoogleFonts.inter(
+                              fontSize: 10.5,
+                              fontWeight: FontWeight.w600,
+                              color: publicPortfolio
+                                  ? AppColors.teal
+                                  : AppColors.grayText,
                             ),
-                            const SizedBox(height: 10),
-                            if (skills.isEmpty)
-                              Text(
+                          ),
+                        ),
+                        headerTrailing: IconButton(
+                          constraints: const BoxConstraints(),
+                          padding: EdgeInsets.zero,
+                          tooltip: 'Add Skill',
+                          icon: const Icon(
+                            Icons.add_circle_outline_rounded,
+                            size: 21,
+                            color: AppColors.primaryBlue,
+                          ),
+                          onPressed: _showAddSkillDialog,
+                        ),
+                        child: skills.isEmpty
+                            ? Text(
                                 'No skills added yet. Tap + to highlight your technical competencies.',
                                 style: GoogleFonts.inter(
                                   fontSize: 12.5,
@@ -797,8 +788,7 @@ class _StudentProfileScreenState extends State<StudentProfileScreen> {
                                   color: AppColors.grayText,
                                 ),
                               )
-                            else
-                              Wrap(
+                            : Wrap(
                                 spacing: 8,
                                 runSpacing: 8,
                                 children: skills.map((skill) {
@@ -811,8 +801,10 @@ class _StudentProfileScreenState extends State<StudentProfileScreen> {
                                       horizontal: 8,
                                       vertical: 2,
                                     ),
-                                    labelPadding:
-                                        const EdgeInsets.only(left: 4, right: 2),
+                                    labelPadding: const EdgeInsets.only(
+                                      left: 4,
+                                      right: 2,
+                                    ),
                                     shape: RoundedRectangleBorder(
                                       borderRadius: BorderRadius.circular(10),
                                     ),
@@ -839,19 +831,15 @@ class _StudentProfileScreenState extends State<StudentProfileScreen> {
                                   );
                                 }).toList(),
                               ),
-                          ],
-                        ),
                       ),
-                      const SizedBox(height: 20),
+                      const SizedBox(height: 18),
 
-                      // Shortcuts Card
-                      Container(
-                        decoration: BoxDecoration(
-                          color: AppColors.cardWhite,
-                          borderRadius: BorderRadius.circular(16),
-                          border: Border.all(color: AppColors.lightGray),
-                          boxShadow: AppColors.softShadow,
-                        ),
+                      // Workspace Shortcuts Card
+                      ExecutiveSectionCard(
+                        title: 'Workspace Shortcuts',
+                        icon: Icons.dashboard_customize_outlined,
+                        accentColor: AppColors.indigoAccent,
+                        padding: const EdgeInsets.fromLTRB(18, 18, 18, 8),
                         child: Column(
                           children: [
                             _buildMenuItem(
@@ -861,9 +849,10 @@ class _StudentProfileScreenState extends State<StudentProfileScreen> {
                               const Color(0xFFD97706),
                             ),
                             const Divider(
-                                height: 1,
-                                indent: 56,
-                                color: AppColors.lightGray),
+                              height: 1,
+                              indent: 50,
+                              color: AppColors.borderLight,
+                            ),
                             _buildMenuItem(
                               Icons.workspace_premium_rounded,
                               'My Certificates',
@@ -878,9 +867,10 @@ class _StudentProfileScreenState extends State<StudentProfileScreen> {
                               AppColors.teal,
                             ),
                             const Divider(
-                                height: 1,
-                                indent: 56,
-                                color: AppColors.lightGray),
+                              height: 1,
+                              indent: 50,
+                              color: AppColors.borderLight,
+                            ),
                             _buildMenuItem(
                               Icons.bookmark_rounded,
                               'Saved Projects (${AppDataService.instance.getSavedProjects().length})',
@@ -896,9 +886,10 @@ class _StudentProfileScreenState extends State<StudentProfileScreen> {
                               AppColors.primaryBlue,
                             ),
                             const Divider(
-                                height: 1,
-                                indent: 56,
-                                color: AppColors.lightGray),
+                              height: 1,
+                              indent: 50,
+                              color: AppColors.borderLight,
+                            ),
                             _buildMenuItem(
                               Icons.chat_bubble_outline_rounded,
                               'Messages with Companies',

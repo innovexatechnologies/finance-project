@@ -5,6 +5,7 @@ import 'package:link_vibe/core/services/app_data_service.dart';
 import 'package:link_vibe/core/services/share_service.dart';
 import 'package:link_vibe/core/services/supabase_helper.dart';
 import 'package:link_vibe/core/widgets/app_empty_state.dart';
+import 'package:link_vibe/core/widgets/executive_ui.dart';
 import 'package:link_vibe/feature/student/project_details/presentation/screens/student_project_details_screen.dart';
 
 class SavedProjectsScreen extends StatelessWidget {
@@ -14,12 +15,9 @@ class SavedProjectsScreen extends StatelessWidget {
   Widget build(BuildContext context) {
     return Scaffold(
       backgroundColor: AppColors.background,
-      appBar: AppBar(
-        title: const Text('Saved Projects'),
-        leading: IconButton(
-          icon: const Icon(Icons.arrow_back_ios_new_rounded, size: 20),
-          onPressed: () => Navigator.pop(context),
-        ),
+      appBar: const ExecutiveAppBar(
+        title: 'Saved Projects',
+        subtitle: 'Bookmarked Opportunities',
       ),
       body: ListenableBuilder(
         listenable: AppDataService.instance,

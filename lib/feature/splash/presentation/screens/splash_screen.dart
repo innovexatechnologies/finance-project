@@ -33,18 +33,18 @@ class _SplashScreenState extends State<SplashScreen>
     super.initState();
     _animController = AnimationController(
       vsync: this,
-      duration: const Duration(milliseconds: 950),
+      duration: const Duration(milliseconds: 520),
     );
     _fadeAnimation = CurvedAnimation(
       parent: _animController,
       curve: Curves.easeIn,
     );
-    _scaleAnimation = Tween<double>(begin: 0.88, end: 1.0).animate(
+    _scaleAnimation = Tween<double>(begin: 0.92, end: 1.0).animate(
       CurvedAnimation(parent: _animController, curve: Curves.easeOutBack),
     );
     _animController.forward();
 
-    _autoLoginTimer = Timer(const Duration(milliseconds: 900), () {
+    _autoLoginTimer = Timer(const Duration(milliseconds: 220), () {
       if (!mounted) return;
       if (SupabaseHelper.pendingEmailVerification ||
           SupabaseHelper.pendingPasswordRecovery ||
@@ -70,9 +70,9 @@ class _SplashScreenState extends State<SplashScreen>
 
     try {
       final supabase = SupabaseHelper.clientOrNull;
-      if (supabase != null && supabase.auth.currentUser != null) {
-        final role = AppDataService.instance.userRole.toLowerCase();
+      final role = AppDataService.instance.userRole.toLowerCase();
 
+      if (supabase != null && supabase.auth.currentUser != null) {
         if (role == 'admin') {
           await AppDataService.instance.syncFromSupabase(forceRefresh: true);
           final restoredAdmin = await AdminAuthService()
@@ -88,8 +88,13 @@ class _SplashScreenState extends State<SplashScreen>
             return;
           }
         } else if (role == 'company') {
-          await CompanyProfileService.loadAllCompanyPanelData();
+          CompanyProfileService.hydrateFromLocalCache();
+          unawaited(CompanyProfileService.loadAllCompanyPanelData());
+        } else {
+          unawaited(AppDataService.instance.syncFromSupabase(forceRefresh: true));
         }
+      } else if (role == 'company') {
+        CompanyProfileService.hydrateFromLocalCache();
       }
     } catch (_) {
       // Proceed cleanly with hydrated session state

@@ -5,8 +5,10 @@ import 'package:flutter_test/flutter_test.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 import 'package:supabase_flutter/supabase_flutter.dart';
 import 'package:link_vibe/core/services/app_data_service.dart';
+import 'package:link_vibe/core/services/share_service.dart';
 import 'package:link_vibe/core/services/supabase_helper.dart';
 import 'package:link_vibe/core/theme/app_theme.dart';
+import 'package:link_vibe/core/widgets/executive_ui.dart';
 import 'package:link_vibe/core/widgets/skillbridge_logo.dart';
 import 'package:link_vibe/core/widgets/student_avatar.dart';
 import 'package:link_vibe/feature/admin/presentation/screens/admin_dashboard_screen.dart';
@@ -15,7 +17,12 @@ import 'package:link_vibe/feature/auth/presentation/screens/email_verification_s
 import 'package:link_vibe/feature/auth/presentation/screens/login_screen.dart';
 import 'package:link_vibe/feature/auth/presentation/screens/reset_password_screen.dart';
 import 'package:link_vibe/feature/auth/presentation/screens/signup_screen.dart';
+import 'package:link_vibe/feature/company/models/company_profile_model.dart';
+import 'package:link_vibe/feature/company/models/project_model.dart';
 import 'package:link_vibe/feature/company/presentation/screens/company_dashboard.dart';
+import 'package:link_vibe/feature/company/presentation/screens/company_main_nav.dart';
+import 'package:link_vibe/feature/company/services/company_profile_service.dart';
+import 'package:link_vibe/feature/company/services/company_project_service.dart';
 import 'package:link_vibe/feature/splash/presentation/screens/splash_screen.dart';
 import 'package:link_vibe/feature/student/certificates/presentation/screens/certificates_screen.dart';
 import 'package:link_vibe/feature/student/chat/presentation/screens/chat_list_screen.dart';
@@ -882,5 +889,183 @@ void main() {
       expect(find.textContaining('CampusConnect'), findsNothing);
       expect(tester.takeException(), isNull);
     });
+
+    test(
+      'ShareService includes clickable links alongside details for projects, certificates, and student profiles',
+      () {
+        final projectMsg = ShareService.buildProjectShareText({
+          'id': 'proj-101',
+          'title': 'Flutter Mobile App',
+          'company': 'Acme Labs',
+          'workMode': 'Remote',
+          'duration': '4 Weeks',
+        });
+        expect(projectMsg, contains('Flutter Mobile App'));
+        expect(projectMsg, contains('Acme Labs'));
+        expect(
+          projectMsg,
+          contains('https://skillbridge.app/projects/proj-101'),
+        );
+
+        final certMsg = ShareService.buildCertificateShareText({
+          'id': 'CERT-999',
+          'title': 'Excellence Certificate',
+          'project': 'Cloud API',
+          'issuer': 'Acme Labs',
+          'verificationUrl': 'https://verify.acme.io/cert/999',
+        });
+        expect(certMsg, contains('Excellence Certificate'));
+        expect(certMsg, contains('https://verify.acme.io/cert/999'));
+
+        final fallbackCertLink = ShareService.buildCertificateShareLink({
+          'id': 'SB-2026-1',
+        });
+        expect(
+          fallbackCertLink,
+          'https://skillbridge.app/verify/certificate/SB-2026-1',
+        );
+
+        final profileMsg = ShareService.buildStudentProfileShareText({
+          'userId': 'stu-42',
+          'name': 'Ali Raza',
+          'university': 'NUST',
+          'portfolioUrl': 'github.com/aliraza',
+        }, skills: ['Flutter', 'Dart']);
+        expect(profileMsg, contains('Ali Raza'));
+        expect(profileMsg, contains('https://github.com/aliraza'));
+        expect(profileMsg, contains('https://skillbridge.app/students/stu-42'));
+      },
+    );
+
+    test(
+      'CompanyProfileService caches workspace snapshot cleanly and markConversationRead persists read IDs',
+      () async {
+        await AppDataService.instance.saveAuthSession(
+          role: 'Company',
+          email: 'hr@fastcloud.io',
+          name: 'FastCloud Labs',
+          userId: 'comp-user-1',
+        );
+
+        CompanyProfileService().currentProfileNotifier.value =
+            const CompanyProfileModel(
+          id: 'comp-row-1',
+          companyName: 'FastCloud Labs',
+          industry: 'Cloud Services',
+          description: 'Building fast platforms',
+          officialEmail: 'hr@fastcloud.io',
+          websiteUrl: 'https://fastcloud.io',
+          contactPersonName: 'Sara',
+          phoneNumber: '03001234567',
+          city: 'Lahore',
+          completeAddress: 'Gulberg',
+          logoInitial: 'FL',
+          isVerified: true,
+          lastUpdated: 'Just now',
+        );
+        CompanyProjectService().projectsNotifier.value = [
+          ProjectModel(
+            id: 'p-1',
+            title: 'AI Analytics Dashboard',
+            category: 'Development',
+            description: 'Metrics',
+            requirements: 'Dart',
+            skillsRequired: ['Flutter'],
+            deliverables: 'App',
+            deadline: 'Dec 2026',
+            projectType: 'Remote',
+            openings: 2,
+            additionalInstructions: '',
+            companyName: 'FastCloud Labs',
+            companyId: 'comp-row-1',
+            status: 'Open',
+            duration: '4 weeks',
+            budget: 'Paid',
+          ),
+        ];
+
+        await CompanyProfileService.persistLocalCache();
+        CompanyProfileService().reset();
+        CompanyProjectService().reset();
+        expect(CompanyProfileService().currentProfile.companyName, isEmpty);
+        expect(CompanyProjectService().allProjects, isEmpty);
+
+        CompanyProfileService.hydrateFromLocalCache();
+        expect(
+          CompanyProfileService().currentProfile.companyName,
+          'FastCloud Labs',
+        );
+        expect(CompanyProjectService().allProjects.length, 1);
+        expect(CompanyProfileService.hasLoadedWorkspace, isTrue);
+
+        // Verify unread message markConversationRead zeroes unread & persists read IDs across init
+        SharedPreferences.setMockInitialValues({
+          'cc_is_logged_in_v1': true,
+          'cc_user_id_v1': 'comp-user-1',
+          'cc_chat_conversations_v1':
+              '[{"id":"conv_1","peerUserId":"stu-1","company":"Ali Student","supervisor":"Ali Student","projectTitle":"AI Analytics","lastMessage":"Hello!","time":"1m ago","unread":2,"messages":[{"id":"m1","isMe":false,"sender":"Ali Student","text":"Hi","time":"2m ago"},{"id":"m2","isMe":false,"sender":"Ali Student","text":"Hello!","time":"1m ago"}]}]',
+        });
+        await AppDataService.instance.init();
+        expect(
+          AppDataService.instance.getConversation('conv_1')?['unread'],
+          2,
+        );
+        await AppDataService.instance.markConversationRead('conv_1');
+        expect(
+          AppDataService.instance.getConversation('conv_1')?['unread'],
+          0,
+        );
+
+        await AppDataService.instance.init();
+        expect(
+          AppDataService.instance.getConversation('conv_1')?['unread'],
+          0,
+        );
+      },
+    );
+
+    testWidgets(
+      'CompanyDashboardScreen renders immediately without blocking sync spinner across tab navigation, and Student executive UI renders cleanly',
+      (tester) async {
+        tester.view.physicalSize = const Size(412, 915);
+        tester.view.devicePixelRatio = 1.0;
+        addTearDown(() => tester.view.resetPhysicalSize());
+
+        await tester.pumpWidget(const MaterialApp(home: CompanyMainNav()));
+        await tester.pump(const Duration(milliseconds: 50));
+
+        expect(find.byType(CompanyDashboardScreen), findsOneWidget);
+        expect(
+          find.text('Synchronizing Corporate Workspace...'),
+          findsNothing,
+        );
+
+        await tester.tap(find.text('Projects'));
+        await tester.pumpAndSettle();
+        await tester.tap(find.text('Home'));
+        await tester.pumpAndSettle();
+
+        expect(
+          find.text('Synchronizing Corporate Workspace...'),
+          findsNothing,
+        );
+        expect(find.text('Workspace Overview'), findsOneWidget);
+        expect(tester.takeException(), isNull);
+
+        await tester.pumpWidget(
+          const MaterialApp(
+            key: ValueKey('student_exec_nav'),
+            home: StudentMainNav(),
+          ),
+        );
+        await tester.pumpAndSettle();
+        expect(find.byType(ExecutiveHeroBanner), findsOneWidget);
+        expect(find.byType(ExecutiveStatCard), findsNWidgets(4));
+        expect(find.text('Workspace Overview'), findsOneWidget);
+        expect(find.byTooltip('Messages'), findsOneWidget);
+        expect(find.byTooltip('Open Workspace Menu'), findsOneWidget);
+        expect(tester.takeException(), isNull);
+      },
+    );
   });
 }

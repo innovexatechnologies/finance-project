@@ -680,9 +680,20 @@ CREATE POLICY "Certificates Authenticated Manage" ON public.certificates FOR ALL
   USING (true)
   WITH CHECK (true);
 
-CREATE POLICY "Messages Participant Access" ON public.messages FOR ALL TO authenticated
-  USING (auth.uid() = sender_id OR auth.uid() = receiver_id OR public.is_admin())
+DROP POLICY IF EXISTS "Messages Participant Access" ON public.messages;
+DROP POLICY IF EXISTS "Messages Participant Select" ON public.messages;
+DROP POLICY IF EXISTS "Messages Sender Insert" ON public.messages;
+DROP POLICY IF EXISTS "Messages Participant Update" ON public.messages;
+DROP POLICY IF EXISTS "Messages Participant Delete" ON public.messages;
+CREATE POLICY "Messages Participant Select" ON public.messages FOR SELECT TO authenticated
+  USING (auth.uid() = sender_id OR auth.uid() = receiver_id OR public.is_admin());
+CREATE POLICY "Messages Sender Insert" ON public.messages FOR INSERT TO authenticated
   WITH CHECK (auth.uid() = sender_id OR public.is_admin());
+CREATE POLICY "Messages Participant Update" ON public.messages FOR UPDATE TO authenticated
+  USING (auth.uid() = sender_id OR auth.uid() = receiver_id OR public.is_admin())
+  WITH CHECK (auth.uid() = sender_id OR auth.uid() = receiver_id OR public.is_admin());
+CREATE POLICY "Messages Participant Delete" ON public.messages FOR DELETE TO authenticated
+  USING (auth.uid() = sender_id OR public.is_admin());
 
 CREATE POLICY "Notifications User Access" ON public.notifications FOR SELECT TO authenticated
   USING (auth.uid() = user_id OR public.is_admin());

@@ -45,7 +45,7 @@ class _CompanyDashboardScreenState extends State<CompanyDashboardScreen> {
   final _applicantService = CompanyApplicantService();
   final _assignmentService = CompanyAssignmentService();
 
-  bool _isLoading = true;
+  bool _isLoading = false;
   String? _errorMessage;
 
   bool get _drawerOpen => widget.isDrawerOpen;
@@ -53,31 +53,30 @@ class _CompanyDashboardScreenState extends State<CompanyDashboardScreen> {
   @override
   void initState() {
     super.initState();
-    _loadDashboardData();
+    CompanyProfileService.hydrateFromLocalCache();
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      if (mounted) _loadDashboardData();
+    });
   }
 
-  Future<void> _loadDashboardData() async {
-    if (mounted) {
+  Future<void> _loadDashboardData({bool blockingLoader = false}) async {
+    if (blockingLoader && mounted) {
       setState(() {
         _isLoading = true;
         _errorMessage = null;
       });
+    } else if (_errorMessage != null && mounted) {
+      setState(() => _errorMessage = null);
     }
 
     try {
       await CompanyProfileService.loadAllCompanyPanelData();
-      if (mounted) {
-        setState(() {
-          _isLoading = false;
-        });
+      if (mounted && _isLoading) {
+        setState(() => _isLoading = false);
       }
-    } catch (e) {
-      if (mounted) {
-        setState(() {
-          _isLoading = false;
-          _errorMessage =
-              'Unable to synchronize corporate workspace. Pull to retry.';
-        });
+    } catch (_) {
+      if (mounted && _isLoading) {
+        setState(() => _isLoading = false);
       }
     }
   }

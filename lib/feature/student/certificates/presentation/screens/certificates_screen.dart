@@ -7,6 +7,7 @@ import 'package:link_vibe/core/services/download_service.dart';
 import 'package:link_vibe/core/services/share_service.dart';
 import 'package:link_vibe/core/services/supabase_helper.dart';
 import 'package:link_vibe/core/widgets/app_empty_state.dart';
+import 'package:link_vibe/core/widgets/executive_ui.dart';
 
 class CertificatesScreen extends StatelessWidget {
   const CertificatesScreen({super.key});
@@ -283,20 +284,16 @@ class CertificatesScreen extends StatelessWidget {
   Widget build(BuildContext context) {
     return Scaffold(
       backgroundColor: AppColors.background,
-      appBar: AppBar(
-        title: const Text('My Certificates'),
-        leading: IconButton(
-          icon: const Icon(Icons.arrow_back_ios_new_rounded, size: 20),
-          onPressed: () => Navigator.pop(context),
-        ),
+      appBar: ExecutiveAppBar(
+        title: 'My Certificates',
+        subtitle: 'Verified Digital Credentials',
         actions: [
-          IconButton(
+          ExecutiveHeaderIconButton(
             tooltip: 'Sync Certificates',
-            icon: const Icon(Icons.refresh_rounded),
+            icon: Icons.refresh_rounded,
             onPressed: () =>
                 AppDataService.instance.syncFromSupabase(forceRefresh: true),
           ),
-          const SizedBox(width: 4),
         ],
       ),
       body: ListenableBuilder(

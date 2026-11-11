@@ -51,6 +51,9 @@ class AppDataService extends ChangeNotifier {
   List<Map<String, dynamic>> _conversations = [];
   List<Map<String, dynamic>> _supportTickets = [];
   Map<String, Map<String, dynamic>> _userAccounts = {};
+  final Set<String> _locallyReadMessageIds = <String>{};
+  String? _loadedReadIdsUserId;
+  String? _activeConversationId;
 
   static const Map<String, bool> _defaultPrivacySettings = {
     'profileVisibility': true,
@@ -83,6 +86,78 @@ class AppDataService extends ChangeNotifier {
   static const _kPendingAuthFlow = 'cc_pending_auth_flow_v1';
   static const _kPendingAuthEmail = 'cc_pending_auth_email_v1';
   static const _kPendingAuthRole = 'cc_pending_auth_role_v1';
+  static const _kReadMessageIdsPrefix = 'cc_read_msg_ids_v1_';
+  static const _kCompanyPanelCachePrefix = 'cc_company_panel_cache_v1_';
+
+  void setActiveConversation(String? conversationId) {
+    _activeConversationId = conversationId;
+  }
+
+  String _scopeId([String? explicitUserId]) {
+    final uid = (explicitUserId ?? _userId).trim();
+    if (uid.isNotEmpty) return uid;
+    final supaId = SupabaseHelper.currentUserId?.trim() ?? '';
+    return supaId.isNotEmpty ? supaId : 'local';
+  }
+
+  void _ensureReadIdsLoaded([String? userId]) {
+    final uid = _scopeId(userId);
+    if (_loadedReadIdsUserId == uid || _prefs == null) return;
+    _loadedReadIdsUserId = uid;
+    _locallyReadMessageIds.clear();
+    final raw = _prefs!.getString('$_kReadMessageIdsPrefix$uid');
+    if (raw != null && raw.isNotEmpty) {
+      try {
+        final decoded = jsonDecode(raw);
+        if (decoded is List) {
+          _locallyReadMessageIds.addAll(decoded.map((e) => e.toString()));
+        }
+      } catch (_) {}
+    }
+  }
+
+  Future<void> _persistReadMessageIds([String? userId]) async {
+    if (_prefs == null) return;
+    final uid = _scopeId(userId);
+    final list = _locallyReadMessageIds.length > 500
+        ? _locallyReadMessageIds
+            .skip(_locallyReadMessageIds.length - 500)
+            .toList()
+        : _locallyReadMessageIds.toList();
+    await _prefs!.setString('$_kReadMessageIdsPrefix$uid', jsonEncode(list));
+  }
+
+  Future<void> saveCompanyPanelCache(Map<String, dynamic> cacheData) async {
+    if (_prefs == null) return;
+    final uid = _scopeId();
+    try {
+      await _prefs!.setString(
+        '$_kCompanyPanelCachePrefix$uid',
+        jsonEncode(cacheData),
+      );
+    } catch (e) {
+      debugPrint('Error saving company panel cache: $e');
+    }
+  }
+
+  Map<String, dynamic>? loadCompanyPanelCache([String? userId]) {
+    if (_prefs == null) return null;
+    final uid = _scopeId(userId);
+    final raw = _prefs!.getString('$_kCompanyPanelCachePrefix$uid');
+    if (raw == null || raw.isEmpty) return null;
+    try {
+      return Map<String, dynamic>.from(jsonDecode(raw) as Map);
+    } catch (_) {
+      return null;
+    }
+  }
+
+  Future<void> clearCompanyPanelCache([String? userId]) async {
+    if (_prefs == null) return;
+    final uid = _scopeId(userId);
+    await _prefs!.remove('$_kCompanyPanelCachePrefix$uid');
+    await _prefs!.remove('${_kCompanyPanelCachePrefix}local');
+  }
 
   bool get isSyncing => _isSyncing;
   String? get lastSyncError => _lastSyncError;
@@ -101,6 +176,8 @@ class AppDataService extends ChangeNotifier {
     _userEmail = _prefs!.getString(_kUserEmail) ?? '';
     _userName = _prefs!.getString(_kUserName) ?? '';
     _userId = _prefs!.getString(_kUserId) ?? '';
+    _loadedReadIdsUserId = null;
+    _ensureReadIdsLoaded(_userId);
 
     final savedFlow = _prefs!.getString(_kPendingAuthFlow);
     if (savedFlow != null && savedFlow.isNotEmpty) {
@@ -600,15 +677,18 @@ class AppDataService extends ChangeNotifier {
 
         // 8. Messages grouped into conversations
         try {
+          _ensureReadIdsLoaded(user.id);
           final msgRows = await supabase
               .from('messages')
               .select()
               .or('sender_id.eq.${user.id},receiver_id.eq.${user.id}')
               .order('created_at', ascending: true);
 
+          final List<String> autoMarkReadIds = [];
           final Map<String, Map<String, dynamic>> convMap = {};
           for (final raw in msgRows) {
             final m = Map<String, dynamic>.from(raw);
+            final msgId = m['id']?.toString() ?? '';
             final senderId = m['sender_id']?.toString() ?? '';
             final receiverId = m['receiver_id']?.toString() ?? '';
             final isMe = senderId == user.id;
@@ -653,7 +733,7 @@ class AppDataService extends ChangeNotifier {
             final msgs = entry['messages'] as List<Map<String, dynamic>>;
 
             msgs.add({
-              'id': m['id']?.toString() ?? '',
+              'id': msgId,
               'isMe': isMe,
               'sender': isMe ? 'Me' : supervisorName,
               'text': text,
@@ -661,9 +741,30 @@ class AppDataService extends ChangeNotifier {
             });
             entry['lastMessage'] = text;
             entry['time'] = relTime;
-            if (!isMe && m['is_read'] != true) {
+
+            final isOpenThread =
+                _activeConversationId != null && _activeConversationId == convId;
+            final isLocallyRead =
+                msgId.isNotEmpty && _locallyReadMessageIds.contains(msgId);
+            if (!isMe && m['is_read'] != true && isOpenThread) {
+              if (msgId.isNotEmpty) {
+                _locallyReadMessageIds.add(msgId);
+                if (SupabaseHelper.isUuid(msgId)) autoMarkReadIds.add(msgId);
+              }
+            } else if (!isMe && m['is_read'] != true && !isLocallyRead) {
               entry['unread'] = (entry['unread'] as int) + 1;
             }
+          }
+
+          if (autoMarkReadIds.isNotEmpty) {
+            await _persistReadMessageIds(user.id);
+            try {
+              await supabase
+                  .from('messages')
+                  .update({'is_read': true})
+                  .inFilter('id', autoMarkReadIds)
+                  .eq('receiver_id', user.id);
+            } catch (_) {}
           }
 
           _conversations = convMap.values.toList().reversed.toList();
@@ -1493,7 +1594,30 @@ class AppDataService extends ChangeNotifier {
       (c) => c['id'] == conversationId,
       orElse: () => {},
     );
-    if (conv.isNotEmpty && ((conv['unread'] as int? ?? 0) > 0)) {
+    if (conv.isEmpty) return;
+
+    final supabase = SupabaseHelper.clientOrNull;
+    final user = supabase?.auth.currentUser;
+    _ensureReadIdsLoaded(user?.id);
+
+    final rawMsgs = conv['messages'] as List? ?? [];
+    final incomingUuids = <String>[];
+    var addedAnyReadId = false;
+
+    for (final raw in rawMsgs) {
+      if (raw is! Map) continue;
+      if (raw['isMe'] == true) continue;
+      final mid = raw['id']?.toString().trim() ?? '';
+      if (mid.isNotEmpty && _locallyReadMessageIds.add(mid)) {
+        addedAnyReadId = true;
+      }
+      if (SupabaseHelper.isUuid(mid)) {
+        incomingUuids.add(mid);
+      }
+    }
+
+    final hadUnread = (conv['unread'] as int? ?? 0) > 0;
+    if (hadUnread || addedAnyReadId) {
       conv['unread'] = 0;
       _safeNotifyListeners();
       if (_prefs != null) {
@@ -1502,15 +1626,35 @@ class AppDataService extends ChangeNotifier {
           jsonEncode(_conversations),
         );
       }
+      await _persistReadMessageIds(user?.id);
+    }
 
-      final supabase = SupabaseHelper.clientOrNull;
-      final user = supabase?.auth.currentUser;
-      if (supabase != null && user != null) {
+    if (supabase != null && user != null && (hadUnread || addedAnyReadId)) {
+      try {
+        await supabase
+            .from('messages')
+            .update({'is_read': true})
+            .eq('conversation_id', conversationId)
+            .eq('receiver_id', user.id);
+      } catch (_) {}
+
+      final peerId = conv['peerUserId']?.toString().trim() ?? '';
+      if (SupabaseHelper.isUuid(peerId)) {
         try {
           await supabase
               .from('messages')
               .update({'is_read': true})
-              .eq('conversation_id', conversationId)
+              .eq('sender_id', peerId)
+              .eq('receiver_id', user.id);
+        } catch (_) {}
+      }
+
+      if (incomingUuids.isNotEmpty) {
+        try {
+          await supabase
+              .from('messages')
+              .update({'is_read': true})
+              .inFilter('id', incomingUuids)
               .eq('receiver_id', user.id);
         } catch (_) {}
       }
@@ -1720,6 +1864,7 @@ class AppDataService extends ChangeNotifier {
 
   /// Clears all user-scoped state & preferences so switching accounts never leaks data.
   Future<void> clearAuthSession() async {
+    final previousUid = _scopeId();
     _isLoggedIn = false;
     _isSyncing = false;
     _lastSyncError = null;
@@ -1727,7 +1872,12 @@ class AppDataService extends ChangeNotifier {
     _userEmail = '';
     _userName = '';
     _userId = '';
+    _activeConversationId = null;
+    _loadedReadIdsUserId = null;
+    _locallyReadMessageIds.clear();
     SupabaseHelper.clearAuthFlags();
+
+    await clearCompanyPanelCache(previousUid);
 
     _savedProjects = [];
     _applications = [];

@@ -8,6 +8,7 @@ import 'core/services/supabase_helper.dart';
 import 'core/theme/app_theme.dart';
 import 'feature/auth/presentation/screens/email_verification_screen.dart';
 import 'feature/auth/presentation/screens/reset_password_screen.dart';
+import 'feature/company/services/company_profile_service.dart';
 import 'feature/splash/presentation/screens/splash_screen.dart';
 
 StreamSubscription<AuthState>? _bootAuthSub;
@@ -89,6 +90,10 @@ void main() async {
   }
 
   await AppDataService.instance.init();
+  if (AppDataService.instance.isLoggedIn &&
+      AppDataService.instance.userRole.toLowerCase() == 'company') {
+    CompanyProfileService.hydrateFromLocalCache();
+  }
 
   if (initialWebParams.isNotEmpty) {
     final errDesc = initialWebParams['error_description'] ??

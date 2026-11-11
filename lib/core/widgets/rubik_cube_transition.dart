@@ -24,14 +24,11 @@ class _RubikCubeFace extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    if (angleY == 0.0 && offsetX == 0.0 && shadeAlpha == 0.0) {
-      return IgnorePointer(ignoring: blockTouches, child: child);
-    }
-
-    final isEdgeHidden = angleY.abs() >= (math.pi / 2) - 0.015;
+    final isIdentity = angleY == 0.0 && offsetX == 0.0 && shadeAlpha == 0.0;
+    final isEdgeHidden = !isIdentity && angleY.abs() >= (math.pi / 2) - 0.015;
     final safeAngle = angleY.clamp(-(math.pi / 2) + 0.02, (math.pi / 2) - 0.02);
     final matrix = Matrix4.identity();
-    if (safeAngle != 0) {
+    if (!isIdentity && safeAngle != 0) {
       matrix
         ..setEntry(3, 2, 0.0014)
         ..rotateY(safeAngle);
@@ -45,7 +42,7 @@ class _RubikCubeFace extends StatelessWidget {
       child: IgnorePointer(
         ignoring: blockTouches,
         child: Transform.translate(
-          offset: Offset(offsetX, 0),
+          offset: isIdentity ? Offset.zero : Offset(offsetX, 0),
           child: Transform(
             alignment: alignment,
             transform: matrix,

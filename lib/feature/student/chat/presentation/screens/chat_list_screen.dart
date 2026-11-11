@@ -4,6 +4,7 @@ import 'package:link_vibe/core/constants/app_colors.dart';
 import 'package:link_vibe/core/services/app_data_service.dart';
 import 'package:link_vibe/core/services/supabase_helper.dart';
 import 'package:link_vibe/core/widgets/app_empty_state.dart';
+import 'package:link_vibe/core/widgets/executive_ui.dart';
 
 class ChatListScreen extends StatefulWidget {
   const ChatListScreen({super.key});
@@ -165,29 +166,24 @@ class _ChatListScreenState extends State<ChatListScreen> {
   Widget build(BuildContext context) {
     return Scaffold(
       backgroundColor: AppColors.background,
-      appBar: AppBar(
-        title: const Text('Messages'),
-        automaticallyImplyLeading: false,
-        leading: Navigator.canPop(context)
-            ? IconButton(
-                icon: const Icon(Icons.arrow_back_ios_new_rounded, size: 20),
-                onPressed: () => Navigator.pop(context),
-              )
-            : null,
+      appBar: ExecutiveAppBar(
+        title: 'Messages',
+        subtitle: 'Company & Project Threads',
+        showLeading: Navigator.canPop(context),
         actions: [
-          IconButton(
+          ExecutiveHeaderIconButton(
             tooltip: 'Sync Messages',
-            icon: const Icon(Icons.refresh_rounded),
+            icon: Icons.refresh_rounded,
             onPressed: () =>
                 AppDataService.instance.syncFromSupabase(forceRefresh: true),
           ),
-          IconButton(
-            tooltip: 'New Message',
-            icon: const Icon(Icons.add_comment_outlined,
-                color: AppColors.primaryBlue),
+          const SizedBox(width: 8),
+          ExecutiveHeaderPillButton(
+            label: 'New',
+            icon: Icons.add_comment_rounded,
+            filled: true,
             onPressed: _showNewMessageDialog,
           ),
-          const SizedBox(width: 4),
         ],
       ),
       body: ListenableBuilder(
@@ -395,12 +391,15 @@ class _ChatDetailScreenState extends State<_ChatDetailScreen> {
   @override
   void initState() {
     super.initState();
+    AppDataService.instance.setActiveConversation(widget.conversationId);
     AppDataService.instance.markConversationRead(widget.conversationId);
     WidgetsBinding.instance.addPostFrameCallback((_) => _scrollToBottom());
   }
 
   @override
   void dispose() {
+    AppDataService.instance.setActiveConversation(null);
+    AppDataService.instance.markConversationRead(widget.conversationId);
     _messageController.dispose();
     _scrollController.dispose();
     super.dispose();
@@ -455,29 +454,26 @@ class _ChatDetailScreenState extends State<_ChatDetailScreen> {
 
         return Scaffold(
           backgroundColor: AppColors.background,
-          appBar: AppBar(
-            leading: IconButton(
-              icon: const Icon(Icons.arrow_back_ios_new_rounded, size: 20),
-              onPressed: () => Navigator.pop(context),
-            ),
-            title: Column(
-              crossAxisAlignment: CrossAxisAlignment.start,
-              children: [
-                Text(
-                  companyName,
+          appBar: ExecutiveAppBar(
+            title: companyName,
+            subtitle: supervisor,
+            leadingBadge: Container(
+              width: 38,
+              height: 38,
+              decoration: BoxDecoration(
+                gradient: AppColors.brandGradient,
+                borderRadius: BorderRadius.circular(11),
+              ),
+              child: Center(
+                child: Text(
+                  SupabaseHelper.initialsFor(companyName, fallback: 'CO'),
                   style: GoogleFonts.poppins(
-                    fontSize: 16,
-                    fontWeight: FontWeight.bold,
+                    fontSize: 12.5,
+                    fontWeight: FontWeight.w700,
+                    color: Colors.white,
                   ),
                 ),
-                Text(
-                  supervisor,
-                  style: GoogleFonts.inter(
-                    fontSize: 11,
-                    color: AppColors.grayText,
-                  ),
-                ),
-              ],
+              ),
             ),
           ),
           body: Column(
