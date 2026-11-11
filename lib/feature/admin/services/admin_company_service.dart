@@ -19,6 +19,9 @@ class AdminCompanyService {
   List<AdminCompanyModel> get allCompanies => companiesNotifier.value;
 
   int get totalCount => companiesNotifier.value.length;
+  int get activeAccountCount => companiesNotifier.value
+      .where((c) => c.accountStatus == CompanyAccountState.active)
+      .length;
   int get verifiedCount => companiesNotifier.value
       .where((c) => c.verificationStatus == CompanyVerificationState.verified)
       .length;
@@ -683,12 +686,12 @@ class AdminCompanyService {
   String exportCompaniesCsv(List<AdminCompanyModel> companies) {
     final buffer = StringBuffer();
     buffer.writeln(
-      'ID,Company Name,Email,Industry,City,Address,Registration Number,Verification Status,Account Status,Registration Date,Projects Count',
+      'ID,Company Name,Email,Industry,City,Address,Registration Number,Account Status,Registration Date,Projects Count',
     );
 
     for (final c in companies) {
       buffer.writeln(
-        '${c.id},"${c.companyName}","${c.officialEmail}","${c.industry}","${c.city}","${c.completeAddress}","${c.registrationNumber}",${c.verificationStatus.name},${c.accountStatus.name},${c.registrationDate},${c.postedProjectsCount}',
+        '${c.id},"${c.companyName}","${c.officialEmail}","${c.industry}","${c.city}","${c.completeAddress}","${c.registrationNumber}",${c.accountStatus.name},${c.registrationDate},${c.postedProjectsCount}',
       );
     }
     return buffer.toString();

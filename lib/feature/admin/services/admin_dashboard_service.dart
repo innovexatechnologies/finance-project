@@ -133,7 +133,6 @@ class AdminDashboardService {
   PlatformStatsModel _calculateStats(String dateRange) {
     final allStudents = AdminStudentService().allStudents;
     final allCompanies = AdminCompanyService().allCompanies;
-    final allVerifications = AdminVerificationService().allVerifications;
     final allProjects = AdminProjectService().allProjects;
     final allApps = AdminApplicationMonitoringService().allApplications;
 
@@ -163,10 +162,6 @@ class AdminDashboardService {
     final completedProjectsList = filteredProjects
         .where((p) => p.status == AdminProjectStatus.completed)
         .toList();
-
-    final pendingCompanyVerifs = allVerifications
-        .where((v) => v.status == VerificationStatus.pending)
-        .length;
 
     final pendingReports = allApps
         .where((a) =>
@@ -198,7 +193,7 @@ class AdminDashboardService {
     return PlatformStatsModel(
       totalStudents: filteredStudents.length,
       totalCompanies: filteredCompanies.length,
-      pendingVerifications: pendingCompanyVerifs,
+      pendingVerifications: 0,
       totalProjects: totalProjCount,
       activeProjects: activeProjectsList.length,
       completedProjects: completedProjectsList.length,
@@ -286,28 +281,21 @@ class AdminDashboardService {
   List<AdminActivityItem> _buildLiveActivities() {
     final List<({DateTime time, AdminActivityItem item})> entries = [];
 
-    for (final v in AdminVerificationService().allVerifications.take(4)) {
-      final cMatch = AdminCompanyService()
-          .allCompanies
-          .where((c) => c.id == v.companyId)
-          .toList();
-      final dt =
-          cMatch.isNotEmpty ? cMatch.first.registrationDateTime : DateTime.now();
+    for (final c in AdminCompanyService().allCompanies.take(4)) {
       entries.add((
-        time: dt,
+        time: c.registrationDateTime,
         item: AdminActivityItem(
-          id: 'verif_${v.companyId}',
-          type: ActivityType.verificationSubmission,
-          title: 'Company Verification',
-          description: v.status == VerificationStatus.pending
-              ? '${v.companyName} submitted verification documents for review.'
-              : '${v.companyName} verification status: ${v.status.name}.',
-          timeAgo: v.submittedAt,
-          actorName: v.companyName,
+          id: 'comp_${c.id}',
+          type: ActivityType.companyRegistration,
+          title: 'Company Registration',
+          description:
+              '${c.companyName}${c.industry.isNotEmpty ? " (${c.industry})" : ""} joined SkillBridge.',
+          timeAgo: c.registrationDate,
+          actorName: c.companyName,
           actorRole: 'Corporate Partner',
-          badgeText: v.status == VerificationStatus.pending
-              ? 'Pending Review'
-              : v.status.name.toUpperCase(),
+          badgeText: c.accountStatus == CompanyAccountState.suspended
+              ? 'Suspended'
+              : 'Active Company',
         ),
       ));
     }
