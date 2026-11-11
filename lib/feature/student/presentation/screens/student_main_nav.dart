@@ -3,6 +3,7 @@ import 'package:flutter/services.dart';
 import 'package:google_fonts/google_fonts.dart';
 import 'package:link_vibe/core/constants/app_colors.dart';
 import 'package:link_vibe/core/services/app_data_service.dart';
+import 'package:link_vibe/core/services/deep_link_service.dart';
 import 'package:link_vibe/core/widgets/student_avatar.dart';
 import 'package:link_vibe/feature/admin/services/admin_auth_service.dart';
 import 'package:link_vibe/feature/auth/presentation/screens/login_screen.dart';
@@ -37,6 +38,11 @@ class _StudentMainNavState extends State<StudentMainNav> {
     _currentIndex = widget.initialIndex;
     _tabHistory.clear();
     _tabHistory.add(widget.initialIndex);
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      if (mounted) {
+        DeepLinkService.instance.markWorkspaceReadyAndConsume();
+      }
+    });
   }
 
   void _onTabChange(int index) {

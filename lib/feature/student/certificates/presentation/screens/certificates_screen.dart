@@ -12,7 +12,9 @@ import 'package:link_vibe/core/widgets/executive_ui.dart';
 class CertificatesScreen extends StatelessWidget {
   const CertificatesScreen({super.key});
 
-  String _resolveStudentName() {
+  static String _resolveStudentName({Map<String, dynamic>? cert}) {
+    final certStudent = cert?['studentName']?.toString().trim() ?? '';
+    if (certStudent.isNotEmpty) return certStudent;
     final pName =
         AppDataService.instance.getProfile()['name']?.toString().trim() ?? '';
     if (pName.isNotEmpty) return pName;
@@ -23,8 +25,41 @@ class CertificatesScreen extends StatelessWidget {
         'Student';
   }
 
-  Future<void> _openVerificationUrl(BuildContext context, String rawUrl) async {
-    final uri = Uri.tryParse(rawUrl.trim());
+  static Future<void> _verifyCredentialInApp(
+    BuildContext context,
+    Map<String, dynamic> cert,
+    String rawUrl,
+  ) async {
+    final trimmed = rawUrl.trim();
+    final lower = trimmed.toLowerCase();
+    final isInAppCredential = trimmed.isEmpty ||
+        lower.startsWith('${ShareService.appScheme}://') ||
+        lower.contains('skillbridge.edu.pk') ||
+        lower.contains('skillbridge.app');
+
+    if (isInAppCredential) {
+      final status = (cert['status']?.toString().trim() ?? 'valid').toLowerCase();
+      final certId = cert['id']?.toString() ?? 'SB-CERT';
+      final isRevoked = status == 'revoked';
+      if (!context.mounted) return;
+      ScaffoldMessenger.of(context)
+        ..hideCurrentSnackBar()
+        ..showSnackBar(
+          SnackBar(
+            content: Text(
+              isRevoked
+                  ? 'Credential $certId has been revoked by issuing authority.'
+                  : 'Verified SkillBridge Credential ($certId) — Authentic & Active.',
+            ),
+            backgroundColor:
+                isRevoked ? AppColors.statusClosed : AppColors.statusOpen,
+            behavior: SnackBarBehavior.floating,
+          ),
+        );
+      return;
+    }
+
+    final uri = Uri.tryParse(trimmed);
     if (uri == null ||
         !await launchUrl(uri, mode: LaunchMode.externalApplication)) {
       if (!context.mounted) return;
@@ -34,7 +69,10 @@ class CertificatesScreen extends StatelessWidget {
     }
   }
 
-  void _showCertificateDialog(BuildContext context, Map<String, dynamic> cert) {
+  static void showCertificateDialog(
+    BuildContext context,
+    Map<String, dynamic> cert,
+  ) {
     final title = cert['title']?.toString() ?? 'Certificate of Completion';
     final project = cert['project']?.toString() ?? 'Corporate Project';
     final issuer = cert['issuer']?.toString() ?? 'SkillBridge Partner';
@@ -44,7 +82,7 @@ class CertificatesScreen extends StatelessWidget {
     final recommendation = cert['recommendation']?.toString().trim() ?? '';
     final hash = cert['hash']?.toString().trim() ?? '';
     final verificationUrl = cert['verificationUrl']?.toString().trim() ?? '';
-    final studentName = _resolveStudentName();
+    final studentName = _resolveStudentName(cert: cert);
 
     showDialog(
       context: context,
@@ -220,12 +258,15 @@ class CertificatesScreen extends StatelessWidget {
                     ),
                   ),
                 ],
-                if (verificationUrl.isNotEmpty)
+                if (verificationUrl.isNotEmpty || hash.isNotEmpty)
                   TextButton.icon(
-                    onPressed: () =>
-                        _openVerificationUrl(context, verificationUrl),
+                    onPressed: () => _verifyCredentialInApp(
+                      context,
+                      cert,
+                      verificationUrl,
+                    ),
                     icon: const Icon(Icons.verified_user_outlined, size: 15),
-                    label: const Text('Verify Credential Online'),
+                    label: const Text('Verify Credential'),
                   ),
                 const SizedBox(height: 16),
                 Wrap(
@@ -342,7 +383,7 @@ class CertificatesScreen extends StatelessWidget {
                             child: InkWell(
                               borderRadius: BorderRadius.circular(18),
                               onTap: () =>
-                                  _showCertificateDialog(context, cert),
+                                  showCertificateDialog(context, cert),
                               child: Container(
                                 padding: const EdgeInsets.all(20),
                                 decoration: BoxDecoration(

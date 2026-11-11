@@ -5,6 +5,7 @@ import 'package:flutter_test/flutter_test.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 import 'package:supabase_flutter/supabase_flutter.dart';
 import 'package:link_vibe/core/services/app_data_service.dart';
+import 'package:link_vibe/core/services/deep_link_service.dart';
 import 'package:link_vibe/core/services/share_service.dart';
 import 'package:link_vibe/core/services/supabase_helper.dart';
 import 'package:link_vibe/core/theme/app_theme.dart';
@@ -28,11 +29,15 @@ import 'package:link_vibe/feature/company/services/company_assignment_service.da
 import 'package:link_vibe/feature/company/services/company_profile_service.dart';
 import 'package:link_vibe/feature/company/services/company_project_service.dart';
 import 'package:link_vibe/feature/splash/presentation/screens/splash_screen.dart';
+import 'package:link_vibe/feature/student/applications/presentation/screens/my_applications_screen.dart';
 import 'package:link_vibe/feature/student/certificates/presentation/screens/certificates_screen.dart';
+import 'package:link_vibe/feature/student/explore/presentation/screens/explore_projects_screen.dart';
 import 'package:link_vibe/feature/student/feedback/presentation/screens/feedback_screen.dart';
 import 'package:link_vibe/feature/student/home/presentation/screens/student_home_screen.dart';
 import 'package:link_vibe/feature/student/my_projects/presentation/screens/my_projects_screen.dart';
 import 'package:link_vibe/feature/student/presentation/screens/student_main_nav.dart';
+import 'package:link_vibe/feature/student/profile/presentation/screens/student_profile_screen.dart';
+import 'package:link_vibe/feature/student/project_details/presentation/screens/student_project_details_screen.dart';
 import 'package:link_vibe/feature/student/settings/presentation/screens/change_password_screen.dart';
 import 'package:link_vibe/feature/student/settings/presentation/screens/contact_support_screen.dart';
 import 'package:link_vibe/feature/student/settings/presentation/screens/settings_screen.dart';
@@ -44,6 +49,7 @@ void main() {
 
   setUp(() async {
     SharedPreferences.setMockInitialValues({});
+    DeepLinkService.instance.resetForTest();
     await AppDataService.instance.init();
   });
 
@@ -830,7 +836,7 @@ void main() {
     });
 
     test(
-      'ShareService includes clickable links alongside details for projects, certificates, and student profiles',
+      'ShareService generates in-app SkillBridge deep links for projects, applications, and certificates without external GoDaddy domains',
       () {
         final projectMsg = ShareService.buildProjectShareText({
           'id': 'proj-101',
@@ -838,41 +844,73 @@ void main() {
           'company': 'Acme Labs',
           'workMode': 'Remote',
           'duration': '4 Weeks',
+          'websiteUrl': 'https://skillbridge.app/external',
         });
         expect(projectMsg, contains('Flutter Mobile App'));
         expect(projectMsg, contains('Acme Labs'));
+        expect(projectMsg, contains('skillbridge://project/proj-101'));
+        expect(projectMsg, isNot(contains('skillbridge.app')));
+
+        final appMsg = ShareService.buildApplicationShareText({
+          'id': 'app-77',
+          'projectId': 'proj-101',
+          'title': 'Flutter Mobile App',
+          'company': 'Acme Labs',
+          'status': 'Pending',
+          'timelineStep': 1,
+        });
+        expect(appMsg, contains('Flutter Mobile App'));
+        expect(appMsg, contains('Pending'));
         expect(
-          projectMsg,
-          contains('https://skillbridge.app/projects/proj-101'),
+          appMsg,
+          contains('skillbridge://application/app-77?projectId=proj-101'),
         );
+        expect(appMsg, isNot(contains('skillbridge.app')));
 
         final certMsg = ShareService.buildCertificateShareText({
           'id': 'CERT-999',
           'title': 'Excellence Certificate',
           'project': 'Cloud API',
           'issuer': 'Acme Labs',
-          'verificationUrl': 'https://verify.acme.io/cert/999',
+          'verificationUrl': 'https://skillbridge.app/cert/999',
         });
         expect(certMsg, contains('Excellence Certificate'));
-        expect(certMsg, contains('https://verify.acme.io/cert/999'));
+        expect(certMsg, contains('skillbridge://certificate/CERT-999'));
+        expect(certMsg, isNot(contains('skillbridge.app')));
 
         final fallbackCertLink = ShareService.buildCertificateShareLink({
           'id': 'SB-2026-1',
         });
         expect(
           fallbackCertLink,
-          'https://skillbridge.app/verify/certificate/SB-2026-1',
+          'skillbridge://certificate/SB-2026-1',
         );
 
-        final profileMsg = ShareService.buildStudentProfileShareText({
-          'userId': 'stu-42',
-          'name': 'Ali Raza',
-          'university': 'NUST',
-          'portfolioUrl': 'github.com/aliraza',
-        }, skills: ['Flutter', 'Dart']);
-        expect(profileMsg, contains('Ali Raza'));
-        expect(profileMsg, contains('https://github.com/aliraza'));
-        expect(profileMsg, contains('https://skillbridge.app/students/stu-42'));
+        final parsedProj = DeepLinkService.parseUri(
+          Uri.parse('skillbridge://project/proj-101'),
+        );
+        expect(parsedProj?.type, AppLinkType.project);
+        expect(parsedProj?.id, 'proj-101');
+
+        final parsedApp = DeepLinkService.parseUri(
+          Uri.parse('skillbridge://application/app-77?projectId=proj-101'),
+        );
+        expect(parsedApp?.type, AppLinkType.application);
+        expect(parsedApp?.id, 'app-77');
+        expect(parsedApp?.projectId, 'proj-101');
+
+        final parsedCert = DeepLinkService.parseUri(
+          Uri.parse('skillbridge://certificate/CERT-999'),
+        );
+        expect(parsedCert?.type, AppLinkType.certificate);
+        expect(parsedCert?.id, 'CERT-999');
+
+        expect(
+          DeepLinkService.parseUri(
+            Uri.parse('io.supabase.campusconnect://login-callback?code=abc'),
+          ),
+          isNull,
+        );
       },
     );
 
@@ -1207,6 +1245,138 @@ void main() {
           ),
           findsOneWidget,
         );
+        expect(tester.takeException(), isNull);
+      },
+    );
+
+    testWidgets(
+      'Share buttons are removed from StudentHomeScreen & StudentProfileScreen, present on Projects/Applications/Certificates, and deep links open directly in-app',
+      (tester) async {
+        tester.view.physicalSize = const Size(412, 915);
+        tester.view.devicePixelRatio = 1.0;
+        addTearDown(() => tester.view.resetPhysicalSize());
+
+        SharedPreferences.setMockInitialValues({
+          'cc_is_logged_in_v1': true,
+          'cc_user_role_v1': 'Student',
+          'cc_user_id_v1': 'stu-dl-1',
+          'cc_user_name_v1': 'Hina Khan',
+          'cc_custom_projects_v1':
+              '[{"id":"proj-dl-1","title":"Deep Link Mobile App","company":"Acme Labs","category":"Development","duration":"4 Weeks","workMode":"Remote","status":"Open","stipend":"PKR 25,000"}]',
+          'cc_applications_v1':
+              '[{"id":"app-dl-1","projectId":"proj-dl-1","title":"Deep Link Mobile App","company":"Acme Labs","status":"Pending","appliedDate":"Today","timelineStep":1}]',
+          'cc_certificates_v1':
+              '[{"id":"CERT-DL-1","title":"Completion Certificate","project":"Deep Link Mobile App","issuer":"Acme Labs","date":"2026","status":"valid","verificationUrl":"https://skillbridge.edu.pk/verify/CERT-DL-1"}]',
+        });
+        await AppDataService.instance.init();
+
+        // 1. StudentHomeScreen must NOT have Share button even with open projects
+        await tester.pumpWidget(
+          MaterialApp(
+            key: const ValueKey('dl_home'),
+            theme: AppTheme.lightTheme,
+            home: const StudentHomeScreen(),
+          ),
+        );
+        await tester.pumpAndSettle();
+        expect(find.text('Deep Link Mobile App'), findsOneWidget);
+        expect(find.byTooltip('Share Project'), findsNothing);
+        expect(find.byIcon(Icons.share_outlined), findsNothing);
+
+        // 2. StudentProfileScreen must NOT have Share Profile button
+        await tester.pumpWidget(
+          MaterialApp(
+            key: const ValueKey('dl_profile'),
+            theme: AppTheme.lightTheme,
+            home: const StudentProfileScreen(),
+          ),
+        );
+        await tester.pumpAndSettle();
+        expect(find.byTooltip('Share Profile'), findsNothing);
+        expect(find.byIcon(Icons.share_outlined), findsNothing);
+
+        // 3. ExploreProjectsScreen has Share button
+        await tester.pumpWidget(
+          MaterialApp(
+            key: const ValueKey('dl_explore'),
+            theme: AppTheme.lightTheme,
+            home: const ExploreProjectsScreen(),
+          ),
+        );
+        await tester.pumpAndSettle();
+        expect(find.byTooltip('Share Project'), findsOneWidget);
+
+        // 4. MyApplicationsScreen has Share button
+        await tester.pumpWidget(
+          MaterialApp(
+            key: const ValueKey('dl_apps'),
+            theme: AppTheme.lightTheme,
+            home: const MyApplicationsScreen(),
+          ),
+        );
+        await tester.pumpAndSettle();
+        expect(find.byTooltip('Share Application'), findsOneWidget);
+
+        // 5. CertificatesScreen has Share button
+        await tester.pumpWidget(
+          MaterialApp(
+            key: const ValueKey('dl_certs'),
+            theme: AppTheme.lightTheme,
+            home: const CertificatesScreen(),
+          ),
+        );
+        await tester.pumpAndSettle();
+        expect(find.byIcon(Icons.share_outlined), findsOneWidget);
+
+        // 6. Opening shared deep links navigates cleanly inside the app
+        DeepLinkService.instance.attachNavigatorKey(MyApp.navigatorKey);
+        await tester.pumpWidget(
+          MaterialApp(
+            key: const ValueKey('dl_main_nav'),
+            navigatorKey: MyApp.navigatorKey,
+            theme: AppTheme.lightTheme,
+            home: const StudentMainNav(),
+          ),
+        );
+        await tester.pumpAndSettle();
+        await DeepLinkService.instance.markWorkspaceReadyAndConsume();
+
+        // Project link opens StudentProjectDetailsScreen in-app
+        final projOpened = await DeepLinkService.instance.openUri(
+          Uri.parse('skillbridge://project/proj-dl-1'),
+        );
+        expect(projOpened, isTrue);
+        await tester.pumpAndSettle();
+        final detailsFinder = find.byType(StudentProjectDetailsScreen);
+        expect(detailsFinder, findsOneWidget);
+        expect(
+          find.descendant(
+            of: detailsFinder,
+            matching: find.text('Deep Link Mobile App'),
+          ),
+          findsOneWidget,
+        );
+        Navigator.of(MyApp.navigatorKey.currentContext!).pop();
+        await tester.pumpAndSettle();
+
+        // Application link opens Application Detail Sheet in-app
+        final appOpened = await DeepLinkService.instance.openUri(
+          Uri.parse('skillbridge://application/app-dl-1?projectId=proj-dl-1'),
+        );
+        expect(appOpened, isTrue);
+        await tester.pumpAndSettle();
+        expect(find.text('View Project'), findsOneWidget);
+        Navigator.of(MyApp.navigatorKey.currentContext!).pop();
+        await tester.pumpAndSettle();
+
+        // Certificate link opens Verified Certificate Dialog in-app
+        final certOpened = await DeepLinkService.instance.openUri(
+          Uri.parse('skillbridge://certificate/CERT-DL-1'),
+        );
+        expect(certOpened, isTrue);
+        await tester.pumpAndSettle();
+        expect(find.text('Completion Certificate'), findsOneWidget);
+        expect(find.textContaining('CERT-DL-1'), findsOneWidget);
         expect(tester.takeException(), isNull);
       },
     );

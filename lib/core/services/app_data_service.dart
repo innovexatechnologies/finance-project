@@ -580,6 +580,7 @@ class AppDataService extends ChangeNotifier {
               return {
                 'id': c['certificate_id']?.toString() ?? c['id']?.toString() ?? '',
                 'dbId': c['id']?.toString() ?? '',
+                'studentName': c['student_name']?.toString() ?? '',
                 'title': c['certificate_title']?.toString() ??
                     'Certificate of Project Completion',
                 'project': c['project_title']?.toString() ?? 'Corporate Sprint',

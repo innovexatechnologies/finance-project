@@ -3,7 +3,6 @@ import 'package:google_fonts/google_fonts.dart';
 import 'package:link_vibe/core/constants/app_colors.dart';
 import 'package:image_picker/image_picker.dart';
 import 'package:link_vibe/core/services/app_data_service.dart';
-import 'package:link_vibe/core/services/share_service.dart';
 import 'package:link_vibe/core/widgets/executive_ui.dart';
 import 'package:link_vibe/core/widgets/student_avatar.dart';
 import 'package:link_vibe/core/services/supabase_helper.dart';
@@ -393,19 +392,6 @@ class _StudentProfileScreenState extends State<StudentProfileScreen> {
               ),
             ),
             actions: [
-              ExecutiveHeaderIconButton(
-                tooltip: 'Share Profile',
-                icon: Icons.share_outlined,
-                iconColor: AppColors.primaryBlue,
-                onPressed: () {
-                  ShareService.shareStudentProfile(
-                    context: context,
-                    profile: profile,
-                    skills: skills,
-                  );
-                },
-              ),
-              const SizedBox(width: 8),
               ExecutiveHeaderIconButton(
                 tooltip: 'Edit Profile',
                 icon: Icons.edit_outlined,

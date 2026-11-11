@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 import 'package:flutter_dotenv/flutter_dotenv.dart';
 import 'package:supabase_flutter/supabase_flutter.dart';
 import 'core/services/app_data_service.dart';
+import 'core/services/deep_link_service.dart';
 import 'core/services/supabase_helper.dart';
 import 'core/theme/app_theme.dart';
 import 'feature/company/services/company_profile_service.dart';
@@ -51,6 +52,8 @@ void main() async {
     CompanyProfileService.hydrateFromLocalCache();
   }
 
+  await DeepLinkService.instance.init(navigatorKey: MyApp.navigatorKey);
+
   runApp(const MyApp());
 }
 
@@ -64,6 +67,7 @@ class MyApp extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
+    DeepLinkService.instance.attachNavigatorKey(navigatorKey);
     return MaterialApp(
       navigatorKey: navigatorKey,
       title: 'SkillBridge — Student-Corporate Bridge',

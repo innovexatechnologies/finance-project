@@ -2,7 +2,6 @@ import 'package:flutter/material.dart';
 import 'package:google_fonts/google_fonts.dart';
 import 'package:link_vibe/core/constants/app_colors.dart';
 import 'package:link_vibe/core/services/app_data_service.dart';
-import 'package:link_vibe/core/services/share_service.dart';
 import 'package:link_vibe/core/services/supabase_helper.dart';
 import 'package:link_vibe/core/widgets/app_empty_state.dart';
 import 'package:link_vibe/core/widgets/executive_ui.dart';
@@ -859,22 +858,6 @@ class _StudentHomeScreenState extends State<StudentHomeScreen> {
                 const SizedBox(width: 6),
                 StatusBadge(label: status),
                 const SizedBox(width: 4),
-                IconButton(
-                  constraints: const BoxConstraints(),
-                  padding: const EdgeInsets.all(6),
-                  tooltip: 'Share Project',
-                  icon: const Icon(
-                    Icons.share_outlined,
-                    size: 19,
-                    color: AppColors.grayText,
-                  ),
-                  onPressed: () {
-                    ShareService.shareProject(
-                      context: context,
-                      project: project,
-                    );
-                  },
-                ),
                 IconButton(
                   constraints: const BoxConstraints(),
                   padding: const EdgeInsets.all(6),

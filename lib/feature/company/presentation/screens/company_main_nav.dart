@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:google_fonts/google_fonts.dart';
 import 'package:link_vibe/core/constants/app_colors.dart';
+import 'package:link_vibe/core/services/deep_link_service.dart';
 import 'package:link_vibe/core/services/supabase_helper.dart';
 import 'package:link_vibe/feature/auth/presentation/screens/login_screen.dart';
 import 'package:link_vibe/feature/company/models/applicant_model.dart';
@@ -47,6 +48,11 @@ class _CompanyMainNavState extends State<CompanyMainNav> {
     _currentIndex = widget.initialIndex;
     _tabHistory.clear();
     _tabHistory.add(widget.initialIndex);
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      if (mounted) {
+        DeepLinkService.instance.markWorkspaceReadyAndConsume();
+      }
+    });
   }
 
   void _onTabChange(int index) {

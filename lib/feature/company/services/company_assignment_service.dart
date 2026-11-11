@@ -1,5 +1,6 @@
 import 'dart:math';
 import 'package:flutter/foundation.dart';
+import 'package:link_vibe/core/services/share_service.dart';
 import 'package:link_vibe/core/services/supabase_helper.dart';
 import 'package:link_vibe/feature/company/models/assignment_model.dart';
 import 'package:link_vibe/feature/company/models/project_model.dart';
@@ -331,7 +332,9 @@ class CompanyAssignmentService {
               'status': 'valid',
               'cryptographic_hash':
                   'sha256:${hashInput.hashCode.toRadixString(16).padLeft(12, '0')}',
-              'verification_url': 'https://skillbridge.edu.pk/verify/$certCode',
+              'verification_url': ShareService.buildCertificateShareLink({
+                'id': certCode,
+              }),
             });
           }
         }

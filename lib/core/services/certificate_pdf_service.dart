@@ -155,7 +155,7 @@ class CertificatePdfService {
                           ),
                           pw.SizedBox(height: 2),
                           pw.Text(
-                            'Verified Portal: skillbridge.edu.pk/verify',
+                            'Verified SkillBridge Credential ($certId)',
                             style: pw.TextStyle(
                               fontSize: 8,
                               color: teal,
