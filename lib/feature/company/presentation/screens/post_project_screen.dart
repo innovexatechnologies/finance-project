@@ -239,6 +239,35 @@ class _PostProjectScreenState extends State<PostProjectScreen> {
     ];
   }
 
+  IconData _getCategoryIcon(String category) {
+    final lower = category.toLowerCase();
+    if (lower.contains('mobile') || lower.contains('flutter')) {
+      return Icons.phone_iphone_rounded;
+    }
+    if (lower.contains('web')) {
+      return Icons.language_rounded;
+    }
+    if (lower.contains('ai') || lower.contains('machine') || lower.contains('data')) {
+      return Icons.psychology_outlined;
+    }
+    if (lower.contains('ui') || lower.contains('ux') || lower.contains('design')) {
+      return Icons.palette_outlined;
+    }
+    if (lower.contains('cyber') || lower.contains('security')) {
+      return Icons.shield_outlined;
+    }
+    if (lower.contains('cloud') || lower.contains('devops')) {
+      return Icons.cloud_queue_rounded;
+    }
+    if (lower.contains('iot') || lower.contains('embedded')) {
+      return Icons.memory_rounded;
+    }
+    if (lower.contains('block')) {
+      return Icons.hub_rounded;
+    }
+    return Icons.category_outlined;
+  }
+
   bool get _isEditMode => widget.existingProject != null;
 
   @override
@@ -307,7 +336,17 @@ class _PostProjectScreenState extends State<PostProjectScreen> {
             colorScheme: const ColorScheme.light(
               primary: AppColors.primaryBlue,
               onPrimary: Colors.white,
+              surface: Colors.white,
               onSurface: AppColors.deepNavy,
+            ),
+            datePickerTheme: DatePickerThemeData(
+              backgroundColor: Colors.white,
+              surfaceTintColor: Colors.transparent,
+              headerBackgroundColor: AppColors.deepNavy,
+              headerForegroundColor: Colors.white,
+              shape: RoundedRectangleBorder(
+                borderRadius: BorderRadius.circular(20),
+              ),
             ),
           ),
           child: child!,
@@ -411,11 +450,11 @@ class _PostProjectScreenState extends State<PostProjectScreen> {
           backgroundColor: AppColors.primaryBlue,
         ),
       );
-      if (Navigator.canPop(context)) {
-        Navigator.pop(context, true);
-      } else {
+      if (widget.onTabChange != null) {
         _resetForm();
-        widget.onTabChange?.call(1);
+        widget.onTabChange!(1);
+      } else if (Navigator.canPop(context)) {
+        Navigator.pop(context, true);
       }
     } catch (e) {
       if (!mounted) return;
@@ -465,10 +504,27 @@ class _PostProjectScreenState extends State<PostProjectScreen> {
       context: context,
       builder: (ctx) {
         return AlertDialog(
+          shape: RoundedRectangleBorder(
+            borderRadius: BorderRadius.circular(20),
+          ),
+          titlePadding: const EdgeInsets.fromLTRB(22, 22, 22, 10),
+          contentPadding: const EdgeInsets.fromLTRB(22, 0, 22, 18),
+          actionsPadding: const EdgeInsets.fromLTRB(16, 0, 16, 16),
           title: Row(
             children: [
-              const Icon(Icons.campaign_rounded, color: AppColors.primaryBlue),
-              const SizedBox(width: 8),
+              Container(
+                padding: const EdgeInsets.all(9),
+                decoration: BoxDecoration(
+                  color: AppColors.lightAqua,
+                  borderRadius: BorderRadius.circular(11),
+                ),
+                child: const Icon(
+                  Icons.rocket_launch_rounded,
+                  color: AppColors.primaryBlue,
+                  size: 20,
+                ),
+              ),
+              const SizedBox(width: 12),
               Expanded(
                 child: Text(
                   _isEditMode ? 'Update Project?' : 'Publish Project?',
@@ -485,7 +541,11 @@ class _PostProjectScreenState extends State<PostProjectScreen> {
             _isEditMode
                 ? 'Save updates to "${_titleController.text.trim()}" and keep it open for university candidates?'
                 : 'Publish "${_titleController.text.trim()}" to the live CampusConnect catalog for verified university students?',
-            style: GoogleFonts.inter(fontSize: 13.5, height: 1.45),
+            style: GoogleFonts.inter(
+              fontSize: 13.5,
+              color: AppColors.grayText,
+              height: 1.5,
+            ),
           ),
           actions: [
             TextButton(
@@ -528,11 +588,11 @@ class _PostProjectScreenState extends State<PostProjectScreen> {
         ),
       );
 
-      if (Navigator.canPop(context)) {
-        Navigator.pop(context, true);
-      } else {
+      if (widget.onTabChange != null) {
         _resetForm();
-        widget.onTabChange?.call(1);
+        widget.onTabChange!(1);
+      } else if (Navigator.canPop(context)) {
+        Navigator.pop(context, true);
       }
     } catch (e) {
       if (!mounted) return;
@@ -568,85 +628,196 @@ class _PostProjectScreenState extends State<PostProjectScreen> {
 
   @override
   Widget build(BuildContext context) {
+    final canPopModal =
+        widget.onTabChange == null && Navigator.canPop(context);
+
     return Scaffold(
       backgroundColor: AppColors.background,
       appBar: AppBar(
-        title: Text(_isEditMode ? 'Edit Project Scope' : 'Post New Challenge'),
+        automaticallyImplyLeading: false,
+        titleSpacing: canPopModal ? 0 : 16,
+        backgroundColor: Colors.white,
+        surfaceTintColor: Colors.transparent,
+        elevation: 0,
+        leading: canPopModal
+            ? IconButton(
+                icon: const Icon(
+                  Icons.arrow_back_ios_new_rounded,
+                  size: 18,
+                  color: AppColors.deepNavy,
+                ),
+                onPressed: () => Navigator.pop(context),
+              )
+            : null,
+        title: Row(
+          children: [
+            Container(
+              padding: const EdgeInsets.all(8),
+              decoration: BoxDecoration(
+                gradient: AppColors.brandGradient,
+                borderRadius: BorderRadius.circular(10),
+              ),
+              child: Icon(
+                _isEditMode
+                    ? Icons.edit_note_rounded
+                    : Icons.post_add_rounded,
+                color: Colors.white,
+                size: 19,
+              ),
+            ),
+            const SizedBox(width: 10),
+            Expanded(
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  Text(
+                    _isEditMode ? 'Edit Project Scope' : 'Post New Challenge',
+                    maxLines: 1,
+                    overflow: TextOverflow.ellipsis,
+                    style: GoogleFonts.poppins(
+                      fontSize: 16,
+                      fontWeight: FontWeight.w700,
+                      color: AppColors.deepNavy,
+                      height: 1.15,
+                    ),
+                  ),
+                  Text(
+                    'Corporate Challenge Builder',
+                    maxLines: 1,
+                    overflow: TextOverflow.ellipsis,
+                    style: GoogleFonts.inter(
+                      fontSize: 11,
+                      color: AppColors.grayText,
+                      fontWeight: FontWeight.w500,
+                    ),
+                  ),
+                ],
+              ),
+            ),
+          ],
+        ),
         actions: [
           if (!_isEditMode || widget.existingProject?.status == 'Draft')
-            TextButton(
-              onPressed:
-                  _isSavingDraft || _isPublishing ? null : _handleSaveDraft,
-              child: _isSavingDraft
-                  ? const SizedBox(
-                      width: 16,
-                      height: 16,
-                      child: CircularProgressIndicator(strokeWidth: 2),
-                    )
-                  : const Text('Save Draft'),
+            Padding(
+              padding: const EdgeInsets.only(right: 12),
+              child: TextButton.icon(
+                style: TextButton.styleFrom(
+                  backgroundColor: AppColors.surfaceAlt,
+                  foregroundColor: AppColors.deepNavy,
+                  padding: const EdgeInsets.symmetric(
+                    horizontal: 12,
+                    vertical: 8,
+                  ),
+                  shape: RoundedRectangleBorder(
+                    borderRadius: BorderRadius.circular(20),
+                  ),
+                ),
+                onPressed:
+                    _isSavingDraft || _isPublishing ? null : _handleSaveDraft,
+                icon: _isSavingDraft
+                    ? const SizedBox(
+                        width: 14,
+                        height: 14,
+                        child: CircularProgressIndicator(strokeWidth: 2),
+                      )
+                    : const Icon(
+                        Icons.bookmark_border_rounded,
+                        size: 16,
+                        color: AppColors.primaryBlue,
+                      ),
+                label: Text(
+                  'Save Draft',
+                  style: GoogleFonts.inter(
+                    fontSize: 12,
+                    fontWeight: FontWeight.w700,
+                  ),
+                ),
+              ),
             ),
-          const SizedBox(width: 8),
         ],
+        bottom: const PreferredSize(
+          preferredSize: Size.fromHeight(1),
+          child: Divider(height: 1, color: AppColors.lightGray),
+        ),
       ),
       body: Form(
         key: _formKey,
         child: ListView(
-          padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 20),
+          padding: const EdgeInsets.fromLTRB(16, 18, 16, 32),
           children: [
-            _buildHeaderInstructions(),
-            const SizedBox(height: 18),
-            _buildSectionCard(
-              title: 'Core Project Information',
-              icon: Icons.title_rounded,
-              children: [
-                _buildTitleField(),
-                const SizedBox(height: 16),
-                _buildCategoryDropdown(),
-                const SizedBox(height: 16),
-                _buildProjectTypeSelector(),
-                const SizedBox(height: 16),
-                _buildOpeningsField(),
-              ],
+            Center(
+              child: ConstrainedBox(
+                constraints: const BoxConstraints(maxWidth: 760),
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.stretch,
+                  children: [
+                    _buildHeaderInstructions(),
+                    const SizedBox(height: 18),
+                    _buildSectionCard(
+                      step: '01',
+                      title: 'Core Project Information',
+                      subtitle: 'Define challenge identity, domain & capacity',
+                      icon: Icons.layers_outlined,
+                      children: [
+                        _buildTitleField(),
+                        const SizedBox(height: 16),
+                        _buildCategoryDropdown(),
+                        const SizedBox(height: 18),
+                        _buildProjectTypeSelector(),
+                        const SizedBox(height: 18),
+                        _buildOpeningsField(),
+                      ],
+                    ),
+                    const SizedBox(height: 18),
+                    _buildSectionCard(
+                      step: '02',
+                      title: 'Project Scope & Eligibility',
+                      subtitle: 'Outline business context and student criteria',
+                      icon: Icons.description_outlined,
+                      children: [
+                        _buildDescriptionField(),
+                        const SizedBox(height: 16),
+                        _buildRequirementsField(),
+                      ],
+                    ),
+                    const SizedBox(height: 18),
+                    _buildSectionCard(
+                      step: '03',
+                      title: 'Required Skills & Tech Stack',
+                      subtitle: 'Curated tools matching your selected category',
+                      icon: Icons.code_rounded,
+                      children: [
+                        _buildSkillsSelector(),
+                      ],
+                    ),
+                    const SizedBox(height: 18),
+                    _buildSectionCard(
+                      step: '04',
+                      title: 'Deliverables & Submission Deadline',
+                      subtitle: 'Set clear milestones and submission window',
+                      icon: Icons.event_available_rounded,
+                      children: [
+                        _buildDeliverablesField(),
+                        const SizedBox(height: 18),
+                        _buildDeadlinePicker(),
+                      ],
+                    ),
+                    const SizedBox(height: 18),
+                    _buildSectionCard(
+                      step: '05',
+                      title: 'Additional Guidelines (Optional)',
+                      subtitle: 'Mentor sync rules or technical standards',
+                      icon: Icons.speaker_notes_outlined,
+                      children: [
+                        _buildAdditionalInstructionsField(),
+                      ],
+                    ),
+                    const SizedBox(height: 24),
+                    _buildBottomActionButtons(),
+                  ],
+                ),
+              ),
             ),
-            const SizedBox(height: 18),
-            _buildSectionCard(
-              title: 'Project Scope & Eligibility',
-              icon: Icons.description_outlined,
-              children: [
-                _buildDescriptionField(),
-                const SizedBox(height: 16),
-                _buildRequirementsField(),
-              ],
-            ),
-            const SizedBox(height: 18),
-            _buildSectionCard(
-              title: 'Required Skills & Tech Stack',
-              icon: Icons.code_rounded,
-              children: [
-                _buildSkillsSelector(),
-              ],
-            ),
-            const SizedBox(height: 18),
-            _buildSectionCard(
-              title: 'Deliverables & Submission Deadline',
-              icon: Icons.event_available_rounded,
-              children: [
-                _buildDeliverablesField(),
-                const SizedBox(height: 16),
-                _buildDeadlinePicker(),
-              ],
-            ),
-            const SizedBox(height: 18),
-            _buildSectionCard(
-              title: 'Additional Guidelines (Optional)',
-              icon: Icons.speaker_notes_outlined,
-              children: [
-                _buildAdditionalInstructionsField(),
-              ],
-            ),
-            const SizedBox(height: 28),
-            _buildBottomActionButtons(),
-            const SizedBox(height: 24),
           ],
         ),
       ),
@@ -654,61 +825,138 @@ class _PostProjectScreenState extends State<PostProjectScreen> {
   }
 
   Widget _buildHeaderInstructions() {
-    return Container(
-      padding: const EdgeInsets.all(16),
-      decoration: BoxDecoration(
-        color: AppColors.lightAqua.withValues(alpha: 0.65),
-        borderRadius: BorderRadius.circular(14),
-        border:
-            Border.all(color: AppColors.primaryBlue.withValues(alpha: 0.25)),
-      ),
-      child: Row(
-        crossAxisAlignment: CrossAxisAlignment.start,
-        children: [
-          const Icon(Icons.info_outline_rounded,
-              color: AppColors.primaryBlue, size: 22),
-          const SizedBox(width: 12),
-          Expanded(
-            child: Column(
-              crossAxisAlignment: CrossAxisAlignment.start,
-              children: [
-                Text(
-                  _isEditMode
-                      ? 'Update Challenge Specifications'
-                      : 'Create Industry Project Challenge',
-                  style: GoogleFonts.poppins(
-                    fontSize: 14,
-                    fontWeight: FontWeight.w700,
-                    color: AppColors.deepNavy,
-                  ),
-                ),
-                const SizedBox(height: 4),
-                Text(
-                  'Define clear deliverables, prerequisites, and skills so eligible university students can submit focused proposals.',
-                  style: GoogleFonts.inter(
-                    fontSize: 12.5,
-                    color: AppColors.grayText,
-                    height: 1.4,
-                  ),
-                ),
-              ],
+    return ClipRRect(
+      borderRadius: BorderRadius.circular(20),
+      child: Container(
+        decoration: BoxDecoration(
+          gradient: AppColors.brandGradient,
+          boxShadow: [
+            BoxShadow(
+              color: AppColors.deepNavy.withValues(alpha: 0.16),
+              blurRadius: 20,
+              offset: const Offset(0, 8),
             ),
-          ),
-        ],
+          ],
+        ),
+        child: Stack(
+          children: [
+            Positioned(
+              right: -28,
+              top: -32,
+              child: Container(
+                width: 120,
+                height: 120,
+                decoration: BoxDecoration(
+                  shape: BoxShape.circle,
+                  color: Colors.white.withValues(alpha: 0.07),
+                ),
+              ),
+            ),
+            Positioned(
+              right: 26,
+              bottom: -44,
+              child: Container(
+                width: 96,
+                height: 96,
+                decoration: BoxDecoration(
+                  shape: BoxShape.circle,
+                  color: AppColors.teal.withValues(alpha: 0.16),
+                ),
+              ),
+            ),
+            Padding(
+              padding: const EdgeInsets.all(20),
+              child: Row(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  Container(
+                    padding: const EdgeInsets.all(11),
+                    decoration: BoxDecoration(
+                      color: Colors.white.withValues(alpha: 0.14),
+                      borderRadius: BorderRadius.circular(14),
+                      border: Border.all(
+                        color: Colors.white.withValues(alpha: 0.22),
+                      ),
+                    ),
+                    child: Icon(
+                      _isEditMode
+                          ? Icons.tune_rounded
+                          : Icons.auto_awesome_rounded,
+                      color: Colors.white,
+                      size: 22,
+                    ),
+                  ),
+                  const SizedBox(width: 14),
+                  Expanded(
+                    child: Column(
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      children: [
+                        Container(
+                          padding: const EdgeInsets.symmetric(
+                            horizontal: 8,
+                            vertical: 3,
+                          ),
+                          decoration: BoxDecoration(
+                            color: Colors.white.withValues(alpha: 0.15),
+                            borderRadius: BorderRadius.circular(20),
+                          ),
+                          child: Text(
+                            _isEditMode
+                                ? 'EDIT SPECIFICATIONS'
+                                : 'NEW OPPORTUNITY',
+                            style: GoogleFonts.inter(
+                              fontSize: 10,
+                              fontWeight: FontWeight.w700,
+                              letterSpacing: 0.8,
+                              color: AppColors.lightAqua,
+                            ),
+                          ),
+                        ),
+                        const SizedBox(height: 8),
+                        Text(
+                          _isEditMode
+                              ? 'Update Challenge Specifications'
+                              : 'Create Industry Project Challenge',
+                          style: GoogleFonts.poppins(
+                            fontSize: 16,
+                            fontWeight: FontWeight.w700,
+                            color: Colors.white,
+                            height: 1.2,
+                          ),
+                        ),
+                        const SizedBox(height: 5),
+                        Text(
+                          'Define clear deliverables, prerequisites, and skills so eligible university students can submit focused proposals.',
+                          style: GoogleFonts.inter(
+                            fontSize: 12.5,
+                            color: Colors.white.withValues(alpha: 0.86),
+                            height: 1.45,
+                          ),
+                        ),
+                      ],
+                    ),
+                  ),
+                ],
+              ),
+            ),
+          ],
+        ),
       ),
     );
   }
 
   Widget _buildSectionCard({
+    required String step,
     required String title,
+    required String subtitle,
     required IconData icon,
     required List<Widget> children,
   }) {
     return Container(
-      padding: const EdgeInsets.all(18),
+      padding: const EdgeInsets.all(20),
       decoration: BoxDecoration(
         color: Colors.white,
-        borderRadius: BorderRadius.circular(16),
+        borderRadius: BorderRadius.circular(18),
         border: Border.all(color: AppColors.lightGray),
         boxShadow: AppColors.softShadow,
       ),
@@ -717,25 +965,107 @@ class _PostProjectScreenState extends State<PostProjectScreen> {
         children: [
           Row(
             children: [
-              Icon(icon, color: AppColors.primaryBlue, size: 20),
-              const SizedBox(width: 8),
+              Container(
+                width: 38,
+                height: 38,
+                decoration: BoxDecoration(
+                  color: AppColors.lightAqua.withValues(alpha: 0.85),
+                  borderRadius: BorderRadius.circular(11),
+                ),
+                child: Icon(icon, color: AppColors.primaryBlue, size: 20),
+              ),
+              const SizedBox(width: 12),
               Expanded(
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    Text(
+                      title,
+                      style: GoogleFonts.poppins(
+                        fontSize: 15,
+                        fontWeight: FontWeight.w700,
+                        color: AppColors.deepNavy,
+                        height: 1.2,
+                      ),
+                    ),
+                    const SizedBox(height: 2),
+                    Text(
+                      subtitle,
+                      style: GoogleFonts.inter(
+                        fontSize: 11.5,
+                        color: AppColors.grayText,
+                        fontWeight: FontWeight.w500,
+                      ),
+                    ),
+                  ],
+                ),
+              ),
+              const SizedBox(width: 8),
+              Container(
+                padding: const EdgeInsets.symmetric(
+                  horizontal: 9,
+                  vertical: 4,
+                ),
+                decoration: BoxDecoration(
+                  color: AppColors.surfaceAlt,
+                  borderRadius: BorderRadius.circular(20),
+                  border: Border.all(color: AppColors.lightGray),
+                ),
                 child: Text(
-                  title,
+                  step,
                   style: GoogleFonts.poppins(
-                    fontSize: 15,
+                    fontSize: 11,
                     fontWeight: FontWeight.w700,
-                    color: AppColors.deepNavy,
+                    color: AppColors.primaryBlue,
                   ),
                 ),
               ),
             ],
           ),
-          const SizedBox(height: 10),
-          const Divider(),
           const SizedBox(height: 14),
+          const Divider(color: AppColors.borderLight, height: 1),
+          const SizedBox(height: 16),
           ...children,
         ],
+      ),
+    );
+  }
+
+  InputDecoration _fieldDecoration({
+    required String labelText,
+    required String hintText,
+    IconData? prefixIcon,
+    bool alignLabelWithHint = false,
+  }) {
+    return InputDecoration(
+      labelText: labelText,
+      hintText: hintText,
+      alignLabelWithHint: alignLabelWithHint,
+      filled: true,
+      fillColor: AppColors.background,
+      prefixIcon: prefixIcon != null
+          ? Icon(prefixIcon, size: 19, color: AppColors.grayText)
+          : null,
+      contentPadding: const EdgeInsets.symmetric(horizontal: 16, vertical: 15),
+      border: OutlineInputBorder(
+        borderRadius: BorderRadius.circular(12),
+        borderSide: const BorderSide(color: AppColors.lightGray),
+      ),
+      enabledBorder: OutlineInputBorder(
+        borderRadius: BorderRadius.circular(12),
+        borderSide: const BorderSide(color: AppColors.lightGray),
+      ),
+      focusedBorder: OutlineInputBorder(
+        borderRadius: BorderRadius.circular(12),
+        borderSide: const BorderSide(color: AppColors.primaryBlue, width: 1.6),
+      ),
+      errorBorder: OutlineInputBorder(
+        borderRadius: BorderRadius.circular(12),
+        borderSide: const BorderSide(color: AppColors.statusClosed, width: 1.2),
+      ),
+      focusedErrorBorder: OutlineInputBorder(
+        borderRadius: BorderRadius.circular(12),
+        borderSide: const BorderSide(color: AppColors.statusClosed, width: 1.6),
       ),
     );
   }
@@ -743,6 +1073,11 @@ class _PostProjectScreenState extends State<PostProjectScreen> {
   Widget _buildTitleField() {
     return TextFormField(
       controller: _titleController,
+      style: GoogleFonts.inter(
+        fontSize: 14,
+        fontWeight: FontWeight.w500,
+        color: AppColors.darkText,
+      ),
       validator: (val) {
         if (val == null || val.trim().isEmpty) {
           return 'Project title is required';
@@ -752,10 +1087,10 @@ class _PostProjectScreenState extends State<PostProjectScreen> {
         }
         return null;
       },
-      decoration: const InputDecoration(
+      decoration: _fieldDecoration(
         labelText: 'Project Title *',
         hintText: 'e.g. Mobile Inventory & Telemetry Portal',
-        prefixIcon: Icon(Icons.work_outline_rounded, size: 18),
+        prefixIcon: Icons.work_outline_rounded,
       ),
     );
   }
@@ -764,15 +1099,81 @@ class _PostProjectScreenState extends State<PostProjectScreen> {
     return DropdownButtonFormField<String>(
       key: ValueKey(_selectedCategory),
       initialValue: _selectedCategory,
-      decoration: const InputDecoration(
-        labelText: 'Project Category *',
-        prefixIcon: Icon(Icons.category_outlined, size: 18),
+      isExpanded: true,
+      dropdownColor: Colors.white,
+      elevation: 6,
+      borderRadius: BorderRadius.circular(14),
+      icon: const Icon(
+        Icons.keyboard_arrow_down_rounded,
+        color: AppColors.primaryBlue,
       ),
+      decoration: _fieldDecoration(
+        labelText: 'Project Category *',
+        hintText: 'Choose category',
+        prefixIcon: _getCategoryIcon(_selectedCategory),
+      ),
+      selectedItemBuilder: (context) {
+        return _categories
+            .map(
+              (cat) => Align(
+                alignment: Alignment.centerLeft,
+                child: Text(
+                  cat,
+                  maxLines: 1,
+                  overflow: TextOverflow.ellipsis,
+                  style: GoogleFonts.inter(
+                    fontSize: 13.5,
+                    fontWeight: FontWeight.w600,
+                    color: AppColors.deepNavy,
+                  ),
+                ),
+              ),
+            )
+            .toList();
+      },
       items: _categories
-          .map((cat) => DropdownMenuItem(
-                value: cat,
-                child: Text(cat, style: const TextStyle(fontSize: 13.5)),
-              ))
+          .map(
+            (cat) => DropdownMenuItem(
+              value: cat,
+              child: Row(
+                children: [
+                  Container(
+                    padding: const EdgeInsets.all(6),
+                    decoration: BoxDecoration(
+                      color: cat == _selectedCategory
+                          ? AppColors.lightAqua
+                          : AppColors.surfaceAlt,
+                      borderRadius: BorderRadius.circular(8),
+                    ),
+                    child: Icon(
+                      _getCategoryIcon(cat),
+                      size: 16,
+                      color: cat == _selectedCategory
+                          ? AppColors.primaryBlue
+                          : AppColors.grayText,
+                    ),
+                  ),
+                  const SizedBox(width: 10),
+                  Expanded(
+                    child: Text(
+                      cat,
+                      maxLines: 1,
+                      overflow: TextOverflow.ellipsis,
+                      style: GoogleFonts.inter(
+                        fontSize: 13.5,
+                        fontWeight: cat == _selectedCategory
+                            ? FontWeight.w700
+                            : FontWeight.w500,
+                        color: cat == _selectedCategory
+                            ? AppColors.primaryBlue
+                            : AppColors.darkText,
+                      ),
+                    ),
+                  ),
+                ],
+              ),
+            ),
+          )
           .toList(),
       onChanged: (val) {
         if (val != null && val != _selectedCategory) {
@@ -791,6 +1192,17 @@ class _PostProjectScreenState extends State<PostProjectScreen> {
   }
 
   Widget _buildProjectTypeSelector() {
+    IconData modeIcon(String type) {
+      switch (type) {
+        case 'Remote':
+          return Icons.laptop_mac_rounded;
+        case 'On-site':
+          return Icons.apartment_rounded;
+        default:
+          return Icons.sync_alt_rounded;
+      }
+    }
+
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
@@ -802,36 +1214,74 @@ class _PostProjectScreenState extends State<PostProjectScreen> {
             color: AppColors.deepNavy,
           ),
         ),
-        const SizedBox(height: 8),
+        const SizedBox(height: 10),
         Row(
-          children: _projectTypes.map((type) {
+          children: _projectTypes.asMap().entries.map((entry) {
+            final idx = entry.key;
+            final type = entry.value;
             final isSelected = _selectedProjectType == type;
+
             return Expanded(
-              child: GestureDetector(
-                onTap: () => setState(() => _selectedProjectType = type),
-                child: Container(
-                  margin: const EdgeInsets.symmetric(horizontal: 4),
-                  padding: const EdgeInsets.symmetric(vertical: 11),
-                  decoration: BoxDecoration(
-                    color: isSelected
-                        ? AppColors.primaryBlue
-                        : AppColors.surfaceAlt,
-                    borderRadius: BorderRadius.circular(10),
-                    border: Border.all(
-                      color: isSelected
-                          ? AppColors.primaryBlue
-                          : AppColors.lightGray,
+              child: Padding(
+                padding: EdgeInsets.only(
+                  left: idx == 0 ? 0 : 4,
+                  right: idx == _projectTypes.length - 1 ? 0 : 4,
+                ),
+                child: InkWell(
+                  onTap: () => setState(() => _selectedProjectType = type),
+                  borderRadius: BorderRadius.circular(12),
+                  child: AnimatedContainer(
+                    duration: const Duration(milliseconds: 180),
+                    padding: const EdgeInsets.symmetric(
+                      vertical: 12,
+                      horizontal: 8,
                     ),
-                  ),
-                  child: Center(
-                    child: Text(
-                      type,
-                      style: GoogleFonts.inter(
-                        fontSize: 13,
-                        fontWeight: FontWeight.w700,
-                        color:
-                            isSelected ? Colors.white : AppColors.darkText,
+                    decoration: BoxDecoration(
+                      gradient: isSelected ? AppColors.brandGradient : null,
+                      color: isSelected ? null : AppColors.background,
+                      borderRadius: BorderRadius.circular(12),
+                      border: Border.all(
+                        color: isSelected
+                            ? Colors.transparent
+                            : AppColors.lightGray,
                       ),
+                      boxShadow: isSelected
+                          ? [
+                              BoxShadow(
+                                color: AppColors.primaryBlue
+                                    .withValues(alpha: 0.25),
+                                blurRadius: 10,
+                                offset: const Offset(0, 4),
+                              ),
+                            ]
+                          : null,
+                    ),
+                    child: Row(
+                      mainAxisAlignment: MainAxisAlignment.center,
+                      children: [
+                        Icon(
+                          modeIcon(type),
+                          size: 16,
+                          color: isSelected
+                              ? Colors.white
+                              : AppColors.grayText,
+                        ),
+                        const SizedBox(width: 6),
+                        Flexible(
+                          child: Text(
+                            type,
+                            maxLines: 1,
+                            overflow: TextOverflow.ellipsis,
+                            style: GoogleFonts.inter(
+                              fontSize: 13,
+                              fontWeight: FontWeight.w700,
+                              color: isSelected
+                                  ? Colors.white
+                                  : AppColors.darkText,
+                            ),
+                          ),
+                        ),
+                      ],
                     ),
                   ),
                 ),
@@ -847,6 +1297,11 @@ class _PostProjectScreenState extends State<PostProjectScreen> {
     return TextFormField(
       controller: _openingsController,
       keyboardType: TextInputType.number,
+      style: GoogleFonts.inter(
+        fontSize: 14,
+        fontWeight: FontWeight.w600,
+        color: AppColors.deepNavy,
+      ),
       validator: (val) {
         if (val == null || val.trim().isEmpty) {
           return 'Number of student openings is required';
@@ -857,10 +1312,10 @@ class _PostProjectScreenState extends State<PostProjectScreen> {
         }
         return null;
       },
-      decoration: const InputDecoration(
+      decoration: _fieldDecoration(
         labelText: 'Number of Student Openings *',
         hintText: 'e.g. 2',
-        prefixIcon: Icon(Icons.people_outline_rounded, size: 18),
+        prefixIcon: Icons.people_outline_rounded,
       ),
     );
   }
@@ -869,6 +1324,7 @@ class _PostProjectScreenState extends State<PostProjectScreen> {
     return TextFormField(
       controller: _descriptionController,
       maxLines: 4,
+      style: GoogleFonts.inter(fontSize: 13.5, height: 1.45),
       validator: (val) {
         if (val == null || val.trim().isEmpty) {
           return 'Project description is required';
@@ -878,7 +1334,7 @@ class _PostProjectScreenState extends State<PostProjectScreen> {
         }
         return null;
       },
-      decoration: const InputDecoration(
+      decoration: _fieldDecoration(
         labelText: 'Project Description & Objectives *',
         hintText:
             'Detail the problem statement, product context, and expected engineering outcomes...',
@@ -891,13 +1347,14 @@ class _PostProjectScreenState extends State<PostProjectScreen> {
     return TextFormField(
       controller: _requirementsController,
       maxLines: 3,
+      style: GoogleFonts.inter(fontSize: 13.5, height: 1.45),
       validator: (val) {
         if (val == null || val.trim().isEmpty) {
           return 'Project prerequisites are required';
         }
         return null;
       },
-      decoration: const InputDecoration(
+      decoration: _fieldDecoration(
         labelText: 'Student Prerequisites & Requirements *',
         hintText:
             'e.g. Final-year CS/SE student familiar with Git workflow and REST APIs...',
@@ -915,99 +1372,252 @@ class _PostProjectScreenState extends State<PostProjectScreen> {
         Row(
           children: [
             Expanded(
+              child: Container(
+                padding: const EdgeInsets.symmetric(
+                  horizontal: 10,
+                  vertical: 6,
+                ),
+                decoration: BoxDecoration(
+                  color: AppColors.surfaceAlt,
+                  borderRadius: BorderRadius.circular(10),
+                  border: Border.all(color: AppColors.lightGray),
+                ),
+                child: Row(
+                  mainAxisSize: MainAxisSize.min,
+                  children: [
+                    Icon(
+                      _getCategoryIcon(_selectedCategory),
+                      size: 15,
+                      color: AppColors.primaryBlue,
+                    ),
+                    const SizedBox(width: 6),
+                    Expanded(
+                      child: Text(
+                        _selectedCategory,
+                        maxLines: 1,
+                        overflow: TextOverflow.ellipsis,
+                        style: GoogleFonts.inter(
+                          fontSize: 12,
+                          fontWeight: FontWeight.w700,
+                          color: AppColors.deepNavy,
+                        ),
+                      ),
+                    ),
+                  ],
+                ),
+              ),
+            ),
+            const SizedBox(width: 8),
+            Container(
+              padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 6),
+              decoration: BoxDecoration(
+                color: _selectedSkills.isNotEmpty
+                    ? AppColors.successBg
+                    : AppColors.surfaceAlt,
+                borderRadius: BorderRadius.circular(20),
+              ),
               child: Text(
-                'Select Skills for $_selectedCategory:',
+                '${_selectedSkills.length} selected',
                 style: GoogleFonts.inter(
-                  fontSize: 13,
-                  fontWeight: FontWeight.w600,
-                  color: AppColors.darkText,
+                  fontSize: 11.5,
+                  fontWeight: FontWeight.w700,
+                  color: _selectedSkills.isNotEmpty
+                      ? AppColors.statusOpen
+                      : AppColors.grayText,
                 ),
               ),
             ),
           ],
         ),
-        const SizedBox(height: 10),
+        const SizedBox(height: 12),
         Wrap(
           spacing: 8,
           runSpacing: 8,
           children: categorySkills.map((skill) {
             final isSelected = _selectedSkills.contains(skill);
-            return FilterChip(
-              label: Text(skill),
-              selected: isSelected,
-              selectedColor: AppColors.lightAqua,
-              checkmarkColor: AppColors.primaryBlue,
-              labelStyle: GoogleFonts.inter(
-                color: isSelected ? AppColors.primaryBlue : AppColors.darkText,
-                fontWeight: isSelected ? FontWeight.w700 : FontWeight.w500,
-                fontSize: 12.5,
-              ),
-              shape: RoundedRectangleBorder(
-                borderRadius: BorderRadius.circular(8),
-                side: BorderSide(
-                  color:
-                      isSelected ? AppColors.primaryBlue : AppColors.lightGray,
+            return InkWell(
+              onTap: () => _toggleSkill(skill),
+              borderRadius: BorderRadius.circular(10),
+              child: AnimatedContainer(
+                duration: const Duration(milliseconds: 160),
+                padding: const EdgeInsets.symmetric(
+                  horizontal: 12,
+                  vertical: 8,
+                ),
+                decoration: BoxDecoration(
+                  color: isSelected
+                      ? AppColors.lightAqua
+                      : AppColors.background,
+                  borderRadius: BorderRadius.circular(10),
+                  border: Border.all(
+                    color: isSelected
+                        ? AppColors.primaryBlue
+                        : AppColors.lightGray,
+                    width: isSelected ? 1.4 : 1,
+                  ),
+                ),
+                child: Row(
+                  mainAxisSize: MainAxisSize.min,
+                  children: [
+                    if (isSelected) ...[
+                      const Icon(
+                        Icons.check_circle_rounded,
+                        size: 14,
+                        color: AppColors.primaryBlue,
+                      ),
+                      const SizedBox(width: 6),
+                    ],
+                    Text(
+                      skill,
+                      style: GoogleFonts.inter(
+                        color: isSelected
+                            ? AppColors.primaryBlue
+                            : AppColors.darkText,
+                        fontWeight:
+                            isSelected ? FontWeight.w700 : FontWeight.w500,
+                        fontSize: 12.5,
+                      ),
+                    ),
+                  ],
                 ),
               ),
-              onSelected: (_) => _toggleSkill(skill),
             );
           }).toList(),
         ),
-        const SizedBox(height: 14),
+        const SizedBox(height: 16),
         Row(
           children: [
             Expanded(
-              child: TextFormField(
-                controller: _customSkillController,
-                style: GoogleFonts.inter(fontSize: 13),
-                decoration: const InputDecoration(
-                  hintText: 'Add custom skill (e.g. GraphQL)',
-                  contentPadding:
-                      EdgeInsets.symmetric(horizontal: 12, vertical: 10),
+              child: SizedBox(
+                height: 48,
+                child: TextFormField(
+                  controller: _customSkillController,
+                  style: GoogleFonts.inter(fontSize: 13),
+                  decoration: InputDecoration(
+                    hintText: 'Add custom skill (e.g. GraphQL)',
+                    filled: true,
+                    fillColor: AppColors.background,
+                    contentPadding: const EdgeInsets.symmetric(
+                      horizontal: 14,
+                      vertical: 12,
+                    ),
+                    border: OutlineInputBorder(
+                      borderRadius: BorderRadius.circular(12),
+                      borderSide: const BorderSide(color: AppColors.lightGray),
+                    ),
+                    enabledBorder: OutlineInputBorder(
+                      borderRadius: BorderRadius.circular(12),
+                      borderSide: const BorderSide(color: AppColors.lightGray),
+                    ),
+                    focusedBorder: OutlineInputBorder(
+                      borderRadius: BorderRadius.circular(12),
+                      borderSide: const BorderSide(
+                        color: AppColors.primaryBlue,
+                        width: 1.5,
+                      ),
+                    ),
+                  ),
+                  onFieldSubmitted: (_) => _addCustomSkill(),
                 ),
-                onFieldSubmitted: (_) => _addCustomSkill(),
               ),
             ),
             const SizedBox(width: 8),
-            ElevatedButton.icon(
-              style: ElevatedButton.styleFrom(
-                backgroundColor: AppColors.teal,
-                padding:
-                    const EdgeInsets.symmetric(horizontal: 14, vertical: 12),
+            SizedBox(
+              height: 48,
+              child: ElevatedButton.icon(
+                style: ElevatedButton.styleFrom(
+                  backgroundColor: AppColors.deepNavy,
+                  foregroundColor: Colors.white,
+                  elevation: 0,
+                  padding: const EdgeInsets.symmetric(horizontal: 16),
+                  shape: RoundedRectangleBorder(
+                    borderRadius: BorderRadius.circular(12),
+                  ),
+                ),
+                onPressed: _addCustomSkill,
+                icon: const Icon(Icons.add_rounded, size: 18),
+                label: Text(
+                  'Add',
+                  style: GoogleFonts.inter(
+                    fontSize: 13,
+                    fontWeight: FontWeight.w700,
+                  ),
+                ),
               ),
-              onPressed: _addCustomSkill,
-              icon: const Icon(Icons.add_rounded, size: 17),
-              label: const Text('Add'),
             ),
           ],
         ),
         if (_selectedSkills.isNotEmpty) ...[
-          const SizedBox(height: 12),
-          Text(
-            'Selected Skills (${_selectedSkills.length}):',
-            style: GoogleFonts.inter(
-              fontSize: 12,
-              fontWeight: FontWeight.w700,
-              color: AppColors.deepNavy,
+          const SizedBox(height: 14),
+          Container(
+            width: double.infinity,
+            padding: const EdgeInsets.all(12),
+            decoration: BoxDecoration(
+              color: AppColors.background,
+              borderRadius: BorderRadius.circular(12),
+              border: Border.all(color: AppColors.lightGray),
             ),
-          ),
-          const SizedBox(height: 6),
-          Wrap(
-            spacing: 6,
-            runSpacing: 6,
-            children: _selectedSkills.map((s) {
-              return Chip(
-                label: Text(s),
-                deleteIcon: const Icon(Icons.close, size: 14),
-                onDeleted: () => _toggleSkill(s),
-                backgroundColor: AppColors.lightAqua,
-                labelStyle: GoogleFonts.inter(
-                  color: AppColors.primaryBlue,
-                  fontWeight: FontWeight.w700,
-                  fontSize: 11.5,
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Text(
+                  'Selected Tech Stack (${_selectedSkills.length})',
+                  style: GoogleFonts.inter(
+                    fontSize: 11.5,
+                    fontWeight: FontWeight.w700,
+                    color: AppColors.grayText,
+                  ),
                 ),
-              );
-            }).toList(),
+                const SizedBox(height: 8),
+                Wrap(
+                  spacing: 6,
+                  runSpacing: 6,
+                  children: _selectedSkills.map((s) {
+                    return Container(
+                      padding: const EdgeInsets.only(
+                        left: 10,
+                        right: 6,
+                        top: 5,
+                        bottom: 5,
+                      ),
+                      decoration: BoxDecoration(
+                        color: Colors.white,
+                        borderRadius: BorderRadius.circular(8),
+                        border: Border.all(
+                          color: AppColors.primaryBlue.withValues(alpha: 0.35),
+                        ),
+                      ),
+                      child: Row(
+                        mainAxisSize: MainAxisSize.min,
+                        children: [
+                          Text(
+                            s,
+                            style: GoogleFonts.inter(
+                              color: AppColors.deepNavy,
+                              fontWeight: FontWeight.w600,
+                              fontSize: 11.5,
+                            ),
+                          ),
+                          const SizedBox(width: 4),
+                          InkWell(
+                            onTap: () => _toggleSkill(s),
+                            borderRadius: BorderRadius.circular(10),
+                            child: const Padding(
+                              padding: EdgeInsets.all(2),
+                              child: Icon(
+                                Icons.close_rounded,
+                                size: 13,
+                                color: AppColors.grayText,
+                              ),
+                            ),
+                          ),
+                        ],
+                      ),
+                    );
+                  }).toList(),
+                ),
+              ],
+            ),
           ),
         ],
       ],
@@ -1018,13 +1628,14 @@ class _PostProjectScreenState extends State<PostProjectScreen> {
     return TextFormField(
       controller: _deliverablesController,
       maxLines: 3,
+      style: GoogleFonts.inter(fontSize: 13.5, height: 1.45),
       validator: (val) {
         if (val == null || val.trim().isEmpty) {
           return 'Expected deliverables are required';
         }
         return null;
       },
-      decoration: const InputDecoration(
+      decoration: _fieldDecoration(
         labelText: 'Expected Deliverables *',
         hintText:
             'e.g. Clean GitHub repository, test suite, documentation, and demo video...',
@@ -1037,6 +1648,10 @@ class _PostProjectScreenState extends State<PostProjectScreen> {
     final dateString = _selectedDeadline != null
         ? '${_selectedDeadline!.day.toString().padLeft(2, '0')} / ${_selectedDeadline!.month.toString().padLeft(2, '0')} / ${_selectedDeadline!.year}'
         : 'Choose a date';
+
+    final int? daysLeft = _selectedDeadline != null
+        ? _selectedDeadline!.difference(DateTime.now()).inDays + 1
+        : null;
 
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
@@ -1052,38 +1667,70 @@ class _PostProjectScreenState extends State<PostProjectScreen> {
         const SizedBox(height: 8),
         InkWell(
           onTap: _pickDeadline,
-          borderRadius: BorderRadius.circular(12),
+          borderRadius: BorderRadius.circular(14),
           child: Container(
-            padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 13),
+            padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 12),
             decoration: BoxDecoration(
-              color: Colors.white,
-              borderRadius: BorderRadius.circular(12),
+              color: AppColors.background,
+              borderRadius: BorderRadius.circular(14),
               border: Border.all(color: AppColors.lightGray),
             ),
             child: Row(
-              mainAxisAlignment: MainAxisAlignment.spaceBetween,
               children: [
-                Row(
-                  children: [
-                    const Icon(Icons.calendar_month_rounded,
-                        color: AppColors.primaryBlue, size: 20),
-                    const SizedBox(width: 10),
-                    Text(
-                      dateString,
-                      style: GoogleFonts.poppins(
-                        fontSize: 14,
-                        fontWeight: FontWeight.w600,
-                        color: AppColors.deepNavy,
-                      ),
-                    ),
-                  ],
-                ),
-                Text(
-                  'Change Date',
-                  style: GoogleFonts.inter(
-                    fontSize: 12.5,
-                    fontWeight: FontWeight.w700,
+                Container(
+                  padding: const EdgeInsets.all(9),
+                  decoration: BoxDecoration(
+                    color: AppColors.lightAqua,
+                    borderRadius: BorderRadius.circular(10),
+                  ),
+                  child: const Icon(
+                    Icons.calendar_month_rounded,
                     color: AppColors.primaryBlue,
+                    size: 19,
+                  ),
+                ),
+                const SizedBox(width: 12),
+                Expanded(
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      Text(
+                        dateString,
+                        style: GoogleFonts.poppins(
+                          fontSize: 14.5,
+                          fontWeight: FontWeight.w700,
+                          color: AppColors.deepNavy,
+                        ),
+                      ),
+                      if (daysLeft != null && daysLeft > 0)
+                        Text(
+                          '$daysLeft days remaining from today',
+                          style: GoogleFonts.inter(
+                            fontSize: 11.5,
+                            color: AppColors.grayText,
+                            fontWeight: FontWeight.w500,
+                          ),
+                        ),
+                    ],
+                  ),
+                ),
+                Container(
+                  padding: const EdgeInsets.symmetric(
+                    horizontal: 12,
+                    vertical: 7,
+                  ),
+                  decoration: BoxDecoration(
+                    color: Colors.white,
+                    borderRadius: BorderRadius.circular(10),
+                    border: Border.all(color: AppColors.lightGray),
+                  ),
+                  child: Text(
+                    'Change Date',
+                    style: GoogleFonts.inter(
+                      fontSize: 12,
+                      fontWeight: FontWeight.w700,
+                      color: AppColors.primaryBlue,
+                    ),
                   ),
                 ),
               ],
@@ -1098,7 +1745,8 @@ class _PostProjectScreenState extends State<PostProjectScreen> {
     return TextFormField(
       controller: _instructionsController,
       maxLines: 2,
-      decoration: const InputDecoration(
+      style: GoogleFonts.inter(fontSize: 13.5, height: 1.45),
+      decoration: _fieldDecoration(
         labelText: 'Additional Instructions (Optional)',
         hintText:
             'e.g. Weekly mentor sync cadence, coding conventions, or preferred university focus...',
@@ -1112,34 +1760,100 @@ class _PostProjectScreenState extends State<PostProjectScreen> {
       children: [
         if (!_isEditMode || widget.existingProject?.status == 'Draft') ...[
           Expanded(
-            flex: 1,
-            child: OutlinedButton(
-              onPressed:
-                  _isSavingDraft || _isPublishing ? null : _handleSaveDraft,
-              child: const Text('Save Draft'),
+            flex: 2,
+            child: SizedBox(
+              height: 52,
+              child: OutlinedButton.icon(
+                style: OutlinedButton.styleFrom(
+                  backgroundColor: Colors.white,
+                  foregroundColor: AppColors.deepNavy,
+                  side: const BorderSide(color: AppColors.lightGray, width: 1.2),
+                  shape: RoundedRectangleBorder(
+                    borderRadius: BorderRadius.circular(14),
+                  ),
+                ),
+                onPressed:
+                    _isSavingDraft || _isPublishing ? null : _handleSaveDraft,
+                icon: _isSavingDraft
+                    ? const SizedBox(
+                        width: 16,
+                        height: 16,
+                        child: CircularProgressIndicator(strokeWidth: 2),
+                      )
+                    : const Icon(Icons.bookmark_border_rounded, size: 18),
+                label: Text(
+                  'Save Draft',
+                  style: GoogleFonts.poppins(
+                    fontSize: 14,
+                    fontWeight: FontWeight.w600,
+                  ),
+                ),
+              ),
             ),
           ),
           const SizedBox(width: 12),
         ],
         Expanded(
-          flex: 2,
-          child: ElevatedButton.icon(
-            onPressed:
-                _isPublishing || _isSavingDraft ? null : _confirmAndPublish,
-            icon: _isPublishing
-                ? const SizedBox(
-                    width: 18,
-                    height: 18,
-                    child: CircularProgressIndicator(
-                      color: Colors.white,
-                      strokeWidth: 2,
+          flex: 3,
+          child: Container(
+            height: 52,
+            decoration: BoxDecoration(
+              gradient: _isPublishing || _isSavingDraft
+                  ? null
+                  : AppColors.brandGradient,
+              color: _isPublishing || _isSavingDraft
+                  ? AppColors.grayText.withValues(alpha: 0.4)
+                  : null,
+              borderRadius: BorderRadius.circular(14),
+              boxShadow: _isPublishing || _isSavingDraft
+                  ? null
+                  : [
+                      BoxShadow(
+                        color: AppColors.primaryBlue.withValues(alpha: 0.28),
+                        blurRadius: 14,
+                        offset: const Offset(0, 6),
+                      ),
+                    ],
+            ),
+            child: Material(
+              color: Colors.transparent,
+              child: InkWell(
+                borderRadius: BorderRadius.circular(14),
+                onTap: _isPublishing || _isSavingDraft
+                    ? null
+                    : _confirmAndPublish,
+                child: Row(
+                  mainAxisAlignment: MainAxisAlignment.center,
+                  children: [
+                    if (_isPublishing)
+                      const SizedBox(
+                        width: 18,
+                        height: 18,
+                        child: CircularProgressIndicator(
+                          color: Colors.white,
+                          strokeWidth: 2,
+                        ),
+                      )
+                    else
+                      const Icon(
+                        Icons.rocket_launch_rounded,
+                        color: Colors.white,
+                        size: 18,
+                      ),
+                    const SizedBox(width: 8),
+                    Text(
+                      _isPublishing
+                          ? 'Saving...'
+                          : (_isEditMode ? 'Update Project' : 'Publish Project'),
+                      style: GoogleFonts.poppins(
+                        fontSize: 14.5,
+                        fontWeight: FontWeight.w700,
+                        color: Colors.white,
+                      ),
                     ),
-                  )
-                : const Icon(Icons.rocket_launch_rounded, size: 18),
-            label: Text(
-              _isPublishing
-                  ? 'Saving...'
-                  : (_isEditMode ? 'Update Project' : 'Publish Project'),
+                  ],
+                ),
+              ),
             ),
           ),
         ),
