@@ -1095,6 +1095,8 @@ DECLARE
   admin_pass  TEXT := 'Admin@SkillBridge2026!';
   col_name TEXT;
 BEGIN
+  PERFORM set_config('search_path', 'public, auth, extensions', true);
+
   SELECT instance_id INTO detected_instance_id
   FROM auth.users
   WHERE instance_id IS NOT NULL
@@ -1105,6 +1107,9 @@ BEGIN
   );
 
   SELECT id INTO existing_uid FROM auth.users WHERE lower(email) = admin_email LIMIT 1;
+  IF existing_uid IS NULL THEN
+    SELECT id INTO existing_uid FROM auth.users WHERE lower(email) = 'admin@campusconnect.edu.pk' LIMIT 1;
+  END IF;
   IF existing_uid IS NULL THEN
     SELECT id INTO existing_uid FROM auth.users WHERE id = admin_uid LIMIT 1;
   END IF;
@@ -1222,7 +1227,10 @@ BEGIN
           'email_verified', true,
           'phone_verified', false
         ),
-        provider_id = COALESCE(NULLIF(provider_id, ''), existing_uid::text),
+        provider_id = CASE
+          WHEN COALESCE(provider_id, '') = '' OR lower(provider_id) LIKE '%@%' THEN existing_uid::text
+          ELSE provider_id
+        END,
         updated_at = now()
     WHERE user_id = existing_uid AND provider = 'email';
   END IF;
