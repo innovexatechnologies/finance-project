@@ -6,6 +6,7 @@ import 'package:link_vibe/core/widgets/status_badge.dart';
 import 'package:link_vibe/feature/company/models/project_model.dart';
 import 'package:link_vibe/feature/company/services/company_profile_service.dart';
 import 'package:link_vibe/feature/company/services/company_project_service.dart';
+
 import 'applicants_screen.dart';
 import 'company_project_detail_screen.dart';
 import 'post_project_screen.dart';
@@ -73,9 +74,7 @@ class _CompanyProjectsListScreenState extends State<CompanyProjectsListScreen> {
     }
     final result = await Navigator.push(
       context,
-      MaterialPageRoute(
-        builder: (context) => const PostProjectScreen(),
-      ),
+      MaterialPageRoute(builder: (context) => const PostProjectScreen()),
     );
     if (!mounted) return;
     if (result == true) {
@@ -144,7 +143,9 @@ class _CompanyProjectsListScreenState extends State<CompanyProjectsListScreen> {
   }
 
   Future<void> _confirmStatusChange(
-      ProjectModel project, String newStatus) async {
+    ProjectModel project,
+    String newStatus,
+  ) async {
     final isClose = newStatus == 'Closed';
     final actionName = isClose ? 'Close Project' : 'Cancel Project';
 
@@ -184,8 +185,9 @@ class _CompanyProjectsListScreenState extends State<CompanyProjectsListScreen> {
             ),
             ElevatedButton(
               style: ElevatedButton.styleFrom(
-                backgroundColor:
-                    isClose ? AppColors.deepNavy : AppColors.statusClosed,
+                backgroundColor: isClose
+                    ? AppColors.deepNavy
+                    : AppColors.statusClosed,
                 foregroundColor: Colors.white,
               ),
               onPressed: () => Navigator.pop(ctx, true),
@@ -202,8 +204,9 @@ class _CompanyProjectsListScreenState extends State<CompanyProjectsListScreen> {
       ScaffoldMessenger.of(context).showSnackBar(
         SnackBar(
           content: Text('Project status updated to "$newStatus".'),
-          backgroundColor:
-              isClose ? AppColors.deepNavy : AppColors.statusClosed,
+          backgroundColor: isClose
+              ? AppColors.deepNavy
+              : AppColors.statusClosed,
         ),
       );
     }
@@ -219,8 +222,10 @@ class _CompanyProjectsListScreenState extends State<CompanyProjectsListScreen> {
         title: const Text('Company Projects'),
         actions: [
           IconButton(
-            icon: const Icon(Icons.add_circle_outline_rounded,
-                color: AppColors.primaryBlue),
+            icon: const Icon(
+              Icons.add_circle_outline_rounded,
+              color: AppColors.primaryBlue,
+            ),
             tooltip: 'Post New Project',
             onPressed: _navigateToPostProject,
           ),
@@ -241,18 +246,23 @@ class _CompanyProjectsListScreenState extends State<CompanyProjectsListScreen> {
         valueListenable: _projectService.projectsNotifier,
         builder: (context, allProjects, _) {
           final companyProjects = allProjects
-              .where((p) =>
-                  company.id.isEmpty ||
-                  p.companyId.isEmpty ||
-                  p.companyId == company.id)
+              .where(
+                (p) =>
+                    company.id.isEmpty ||
+                    p.companyId.isEmpty ||
+                    p.companyId == company.id,
+              )
               .toList();
 
           final statusFiltered = _selectedStatus == 'All'
               ? companyProjects
               : companyProjects
-                  .where((p) =>
-                      p.status.toLowerCase() == _selectedStatus.toLowerCase())
-                  .toList();
+                    .where(
+                      (p) =>
+                          p.status.toLowerCase() ==
+                          _selectedStatus.toLowerCase(),
+                    )
+                    .toList();
 
           final displayedProjects = _searchQuery.isEmpty
               ? statusFiltered
@@ -260,7 +270,8 @@ class _CompanyProjectsListScreenState extends State<CompanyProjectsListScreen> {
                   return p.title.toLowerCase().contains(_searchQuery) ||
                       p.category.toLowerCase().contains(_searchQuery) ||
                       p.skillsRequired.any(
-                          (s) => s.toLowerCase().contains(_searchQuery));
+                        (s) => s.toLowerCase().contains(_searchQuery),
+                      );
                 }).toList();
 
           return Column(
@@ -275,8 +286,11 @@ class _CompanyProjectsListScreenState extends State<CompanyProjectsListScreen> {
                       style: GoogleFonts.inter(fontSize: 14),
                       decoration: InputDecoration(
                         hintText: 'Search by title, category, or skill...',
-                        prefixIcon: const Icon(Icons.search_rounded,
-                            color: AppColors.primaryBlue, size: 20),
+                        prefixIcon: const Icon(
+                          Icons.search_rounded,
+                          color: AppColors.primaryBlue,
+                          size: 20,
+                        ),
                         suffixIcon: _searchQuery.isNotEmpty
                             ? IconButton(
                                 icon: const Icon(Icons.clear_rounded, size: 18),
@@ -299,10 +313,12 @@ class _CompanyProjectsListScreenState extends State<CompanyProjectsListScreen> {
                           final count = status == 'All'
                               ? companyProjects.length
                               : companyProjects
-                                  .where((p) =>
-                                      p.status.toLowerCase() ==
-                                      status.toLowerCase())
-                                  .length;
+                                    .where(
+                                      (p) =>
+                                          p.status.toLowerCase() ==
+                                          status.toLowerCase(),
+                                    )
+                                    .length;
 
                           return ChoiceChip(
                             label: Text('$status ($count)'),
@@ -397,7 +413,9 @@ class _CompanyProjectsListScreenState extends State<CompanyProjectsListScreen> {
                     Flexible(
                       child: Container(
                         padding: const EdgeInsets.symmetric(
-                            horizontal: 9, vertical: 4),
+                          horizontal: 9,
+                          vertical: 4,
+                        ),
                         decoration: BoxDecoration(
                           color: AppColors.lightAqua,
                           borderRadius: BorderRadius.circular(8),
@@ -447,8 +465,11 @@ class _CompanyProjectsListScreenState extends State<CompanyProjectsListScreen> {
                     Row(
                       mainAxisSize: MainAxisSize.min,
                       children: [
-                        const Icon(Icons.event_outlined,
-                            size: 14, color: AppColors.grayText),
+                        const Icon(
+                          Icons.event_outlined,
+                          size: 14,
+                          color: AppColors.grayText,
+                        ),
                         const SizedBox(width: 4),
                         Text(
                           'Deadline: ${project.deadline}',
@@ -462,8 +483,11 @@ class _CompanyProjectsListScreenState extends State<CompanyProjectsListScreen> {
                     Row(
                       mainAxisSize: MainAxisSize.min,
                       children: [
-                        const Icon(Icons.apartment_outlined,
-                            size: 14, color: AppColors.grayText),
+                        const Icon(
+                          Icons.apartment_outlined,
+                          size: 14,
+                          color: AppColors.grayText,
+                        ),
                         const SizedBox(width: 4),
                         Text(
                           '${project.projectType} • ${project.openings} seat(s)',
@@ -487,7 +511,9 @@ class _CompanyProjectsListScreenState extends State<CompanyProjectsListScreen> {
                       borderRadius: BorderRadius.circular(8),
                       child: Container(
                         padding: const EdgeInsets.symmetric(
-                            horizontal: 10, vertical: 6),
+                          horizontal: 10,
+                          vertical: 6,
+                        ),
                         decoration: BoxDecoration(
                           color: project.applicantsCount > 0
                               ? AppColors.lightAqua
@@ -522,8 +548,11 @@ class _CompanyProjectsListScreenState extends State<CompanyProjectsListScreen> {
                       children: [
                         if (canCloseOrCancel || isDraft)
                           PopupMenuButton<String>(
-                            icon: const Icon(Icons.more_vert_rounded,
-                                size: 20, color: AppColors.grayText),
+                            icon: const Icon(
+                              Icons.more_vert_rounded,
+                              size: 20,
+                              color: AppColors.grayText,
+                            ),
                             tooltip: 'Options',
                             onSelected: (val) {
                               if (val == 'Close') {
@@ -532,7 +561,9 @@ class _CompanyProjectsListScreenState extends State<CompanyProjectsListScreen> {
                                 _confirmStatusChange(project, 'Cancelled');
                               } else if (val == 'PublishDraft') {
                                 _projectService.updateProjectStatus(
-                                    project.id, 'Open');
+                                  project.id,
+                                  'Open',
+                                );
                                 ScaffoldMessenger.of(context).showSnackBar(
                                   const SnackBar(
                                     content: Text('Draft project published.'),
@@ -553,8 +584,9 @@ class _CompanyProjectsListScreenState extends State<CompanyProjectsListScreen> {
                                   value: 'DeleteDraft',
                                   child: Text(
                                     'Delete Draft',
-                                    style:
-                                        TextStyle(color: AppColors.statusClosed),
+                                    style: TextStyle(
+                                      color: AppColors.statusClosed,
+                                    ),
                                   ),
                                 ),
                               ],
@@ -567,8 +599,9 @@ class _CompanyProjectsListScreenState extends State<CompanyProjectsListScreen> {
                                   value: 'Cancel',
                                   child: Text(
                                     'Cancel Project',
-                                    style:
-                                        TextStyle(color: AppColors.statusClosed),
+                                    style: TextStyle(
+                                      color: AppColors.statusClosed,
+                                    ),
                                   ),
                                 ),
                               ],
@@ -577,7 +610,9 @@ class _CompanyProjectsListScreenState extends State<CompanyProjectsListScreen> {
                         ElevatedButton(
                           style: ElevatedButton.styleFrom(
                             padding: const EdgeInsets.symmetric(
-                                horizontal: 14, vertical: 9),
+                              horizontal: 14,
+                              vertical: 9,
+                            ),
                           ),
                           onPressed: () => _openProjectDetails(project),
                           child: const Text(
@@ -602,8 +637,7 @@ class _CompanyProjectsListScreenState extends State<CompanyProjectsListScreen> {
       return AppEmptyState(
         icon: Icons.folder_off_outlined,
         title: 'No Projects Posted Yet',
-        subtitle:
-            'Your organization has not created any student challenge listings yet. Post a project to start receiving applications.',
+        subtitle: 'Your organization has not created any student challenge listings yet. Post a project to start receiving applications.',
         actionLabel: 'Post First Project',
         actionIcon: Icons.add_rounded,
         onAction: _navigateToPostProject,

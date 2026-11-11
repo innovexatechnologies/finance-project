@@ -52,23 +52,192 @@ class _PostProjectScreenState extends State<PostProjectScreen> {
 
   final List<String> _projectTypes = ['Remote', 'On-site', 'Hybrid'];
 
-  final List<String> _availableSkills = [
-    'Flutter',
-    'Dart',
-    'React',
-    'Python',
-    'Node.js',
-    'Figma',
-    'FastAPI',
-    'SQL',
-    'Git',
-    'Docker',
-    'TypeScript',
-    'Firebase',
-    'REST API',
-  ];
+  static const Map<String, List<String>> _categorySkillsMap = {
+    'Mobile App Development': [
+      'Flutter',
+      'Dart',
+      'React Native',
+      'Kotlin',
+      'Swift',
+      'Android SDK',
+      'iOS / Xcode',
+      'Firebase',
+      'SQLite / Hive',
+      'REST API',
+      'GraphQL',
+      'Provider / Bloc',
+      'Git',
+    ],
+    'Web Development': [
+      'React',
+      'Next.js',
+      'TypeScript',
+      'JavaScript',
+      'Node.js',
+      'Express.js',
+      'HTML5 / CSS3',
+      'Tailwind CSS',
+      'PostgreSQL',
+      'MongoDB',
+      'FastAPI',
+      'Django',
+      'REST API',
+      'Git',
+    ],
+    'AI / Machine Learning & Data': [
+      'Python',
+      'TensorFlow',
+      'PyTorch',
+      'Scikit-learn',
+      'Pandas',
+      'NumPy',
+      'OpenAI / LLMs',
+      'LangChain',
+      'Computer Vision',
+      'NLP',
+      'SQL',
+      'FastAPI',
+      'Jupyter',
+      'Git',
+    ],
+    'UI/UX Design & Prototyping': [
+      'Figma',
+      'Adobe XD',
+      'Sketch',
+      'Wireframing',
+      'Prototyping',
+      'Design Systems',
+      'User Research',
+      'Auto Layout',
+      'Responsive Design',
+      'Micro-interactions',
+      'Usability Testing',
+      'Adobe Illustrator',
+    ],
+    'Cybersecurity & Ethical Hacking': [
+      'Penetration Testing',
+      'OWASP Top 10',
+      'Kali Linux',
+      'Burp Suite',
+      'Wireshark',
+      'Nmap',
+      'Metasploit',
+      'Network Security',
+      'Vulnerability Assessment',
+      'Cryptography',
+      'SIEM / SOC',
+      'Python',
+      'Linux',
+    ],
+    'Cloud & DevOps Engineering': [
+      'AWS',
+      'Microsoft Azure',
+      'Google Cloud (GCP)',
+      'Docker',
+      'Kubernetes',
+      'CI/CD Pipelines',
+      'GitHub Actions',
+      'Terraform',
+      'Linux',
+      'Nginx',
+      'Bash Scripting',
+      'Prometheus / Grafana',
+      'Git',
+    ],
+    'IoT & Embedded Systems': [
+      'C / C++',
+      'Embedded C',
+      'Arduino',
+      'ESP32 / ESP8266',
+      'Raspberry Pi',
+      'MQTT',
+      'PCB Design',
+      'RTOS',
+      'Sensors & Actuators',
+      'I2C / SPI / UART',
+      'BLE / Wi-Fi',
+      'Python',
+      'Git',
+    ],
+    'Blockchain & Distributed Systems': [
+      'Solidity',
+      'Ethereum',
+      'Smart Contracts',
+      'Web3.js / Ethers.js',
+      'Hardhat / Foundry',
+      'Rust',
+      'IPFS',
+      'DeFi Protocols',
+      'Hyperledger',
+      'Cryptography',
+      'Node.js',
+      'React',
+      'Git',
+    ],
+  };
 
   final List<String> _selectedSkills = [];
+  final Set<String> _customSkills = {};
+
+  List<String> _getSkillsForCategory(String category) {
+    final exact = _categorySkillsMap[category];
+    if (exact != null) return exact;
+
+    final lower = category.toLowerCase();
+    if (lower.contains('mobile') ||
+        lower.contains('android') ||
+        lower.contains('ios') ||
+        lower.contains('flutter')) {
+      return _categorySkillsMap['Mobile App Development']!;
+    }
+    if (lower.contains('web') ||
+        lower.contains('frontend') ||
+        lower.contains('backend') ||
+        lower.contains('full stack')) {
+      return _categorySkillsMap['Web Development']!;
+    }
+    if (lower.contains('ai') ||
+        lower.contains('machine learning') ||
+        lower.contains('data')) {
+      return _categorySkillsMap['AI / Machine Learning & Data']!;
+    }
+    if (lower.contains('ui') ||
+        lower.contains('ux') ||
+        lower.contains('design')) {
+      return _categorySkillsMap['UI/UX Design & Prototyping']!;
+    }
+    if (lower.contains('cyber') ||
+        lower.contains('security') ||
+        lower.contains('hack')) {
+      return _categorySkillsMap['Cybersecurity & Ethical Hacking']!;
+    }
+    if (lower.contains('cloud') ||
+        lower.contains('devops') ||
+        lower.contains('infra')) {
+      return _categorySkillsMap['Cloud & DevOps Engineering']!;
+    }
+    if (lower.contains('iot') ||
+        lower.contains('embedded') ||
+        lower.contains('hardware')) {
+      return _categorySkillsMap['IoT & Embedded Systems']!;
+    }
+    if (lower.contains('block') ||
+        lower.contains('web3') ||
+        lower.contains('crypto')) {
+      return _categorySkillsMap['Blockchain & Distributed Systems']!;
+    }
+
+    return const [
+      'Git',
+      'REST API',
+      'SQL',
+      'Python',
+      'JavaScript',
+      'TypeScript',
+      'Docker',
+      'Figma',
+    ];
+  }
 
   bool get _isEditMode => widget.existingProject != null;
 
@@ -93,6 +262,12 @@ class _PostProjectScreenState extends State<PostProjectScreen> {
         _selectedProjectType = existing.projectType;
       }
       _selectedSkills.addAll(existing.skillsRequired);
+      final presetForCategory = _getSkillsForCategory(_selectedCategory);
+      for (final skill in existing.skillsRequired) {
+        if (!presetForCategory.contains(skill)) {
+          _customSkills.add(skill);
+        }
+      }
       _selectedDeadline =
           DateTime.tryParse(existing.deadline) ??
           DateTime.now().add(const Duration(days: 21));
@@ -149,18 +324,25 @@ class _PostProjectScreenState extends State<PostProjectScreen> {
 
   void _addCustomSkill() {
     final text = _customSkillController.text.trim();
-    if (text.isNotEmpty && !_selectedSkills.contains(text)) {
-      setState(() {
+    if (text.isEmpty) return;
+
+    final alreadySelected = _selectedSkills.any(
+      (s) => s.toLowerCase() == text.toLowerCase(),
+    );
+    setState(() {
+      if (!alreadySelected) {
+        _customSkills.add(text);
         _selectedSkills.add(text);
-        _customSkillController.clear();
-      });
-    }
+      }
+      _customSkillController.clear();
+    });
   }
 
   void _toggleSkill(String skill) {
     setState(() {
       if (_selectedSkills.contains(skill)) {
         _selectedSkills.remove(skill);
+        _customSkills.remove(skill);
       } else {
         _selectedSkills.add(skill);
       }
@@ -376,9 +558,10 @@ class _PostProjectScreenState extends State<PostProjectScreen> {
     if (mounted) {
       setState(() {
         _selectedSkills.clear();
+        _customSkills.clear();
         _selectedCategory = 'Mobile App Development';
         _selectedProjectType = 'Remote';
-        _selectedDeadline = null;
+        _selectedDeadline = DateTime.now().add(const Duration(days: 21));
       });
     }
   }
@@ -579,6 +762,7 @@ class _PostProjectScreenState extends State<PostProjectScreen> {
 
   Widget _buildCategoryDropdown() {
     return DropdownButtonFormField<String>(
+      key: ValueKey(_selectedCategory),
       initialValue: _selectedCategory,
       decoration: const InputDecoration(
         labelText: 'Project Category *',
@@ -591,8 +775,16 @@ class _PostProjectScreenState extends State<PostProjectScreen> {
               ))
           .toList(),
       onChanged: (val) {
-        if (val != null) {
-          setState(() => _selectedCategory = val);
+        if (val != null && val != _selectedCategory) {
+          final nextCategorySkills = _getSkillsForCategory(val);
+          setState(() {
+            _selectedCategory = val;
+            _selectedSkills.removeWhere(
+              (skill) =>
+                  !_customSkills.contains(skill) &&
+                  !nextCategorySkills.contains(skill),
+            );
+          });
         }
       },
     );
@@ -715,22 +907,30 @@ class _PostProjectScreenState extends State<PostProjectScreen> {
   }
 
   Widget _buildSkillsSelector() {
+    final categorySkills = _getSkillsForCategory(_selectedCategory);
+
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
-        Text(
-          'Select Required Skills (Tap to toggle):',
-          style: GoogleFonts.inter(
-            fontSize: 13,
-            fontWeight: FontWeight.w600,
-            color: AppColors.darkText,
-          ),
+        Row(
+          children: [
+            Expanded(
+              child: Text(
+                'Select Skills for $_selectedCategory:',
+                style: GoogleFonts.inter(
+                  fontSize: 13,
+                  fontWeight: FontWeight.w600,
+                  color: AppColors.darkText,
+                ),
+              ),
+            ),
+          ],
         ),
         const SizedBox(height: 10),
         Wrap(
           spacing: 8,
           runSpacing: 8,
-          children: _availableSkills.map((skill) {
+          children: categorySkills.map((skill) {
             final isSelected = _selectedSkills.contains(skill);
             return FilterChip(
               label: Text(skill),
