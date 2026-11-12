@@ -1693,13 +1693,43 @@ void main() {
         if (screen is ReportsAnalyticsScreen) {
           expect(find.text('Refresh'), findsNothing);
           expect(find.text('Export CSV'), findsNothing);
-          expect(find.text('Record Window:'), findsNothing);
-          expect(find.text('Last 7 Days'), findsNothing);
-          expect(find.text('Last 30 Days'), findsNothing);
-          expect(find.text('This Quarter'), findsNothing);
-          expect(find.text('This Year'), findsNothing);
+          expect(find.text('Today'), findsOneWidget);
+          expect(find.text('This Week'), findsOneWidget);
+          expect(find.text('This Month'), findsOneWidget);
+          expect(find.text('Last Month'), findsOneWidget);
+          expect(find.text('This Year'), findsOneWidget);
+          expect(find.text('Custom Range'), findsOneWidget);
+          expect(find.text('Generate Report'), findsOneWidget);
+          expect(find.text('Total Projects'), findsOneWidget);
         }
       }
     });
+
+    testWidgets(
+      'ReportsAnalyticsScreen fits mobile layouts and shows filters',
+      (tester) async {
+        for (final size in const [Size(320, 568), Size(412, 915)]) {
+          await pumpAndVerifyScreen(
+            tester,
+            screen: const ReportsAnalyticsScreen(),
+            size: size,
+          );
+
+          expect(find.text('Overall Statistics'), findsOneWidget);
+          expect(find.text('Date Range Filter'), findsOneWidget);
+          expect(find.text('Date-wise Statistics'), findsOneWidget);
+          expect(find.text('Today'), findsOneWidget);
+          expect(find.text('This Week'), findsOneWidget);
+          expect(find.text('This Month'), findsOneWidget);
+          expect(find.text('Last Month'), findsOneWidget);
+          expect(find.text('This Year'), findsOneWidget);
+          expect(find.text('Custom Range'), findsOneWidget);
+          expect(find.text('Generate Report'), findsOneWidget);
+          expect(find.text('Refresh'), findsNothing);
+          expect(find.text('Export CSV'), findsNothing);
+          expect(tester.takeException(), isNull);
+        }
+      },
+    );
   });
 }
