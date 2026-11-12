@@ -243,9 +243,24 @@ ALTER TABLE public.projects ADD COLUMN IF NOT EXISTS created_at TIMESTAMPTZ DEFA
 ALTER TABLE public.projects ADD COLUMN IF NOT EXISTS updated_at TIMESTAMPTZ DEFAULT timezone('utc'::text, now());
 
 ALTER TABLE public.projects DROP CONSTRAINT IF EXISTS projects_status_check;
+ALTER TABLE public.projects ALTER COLUMN company_id DROP NOT NULL;
+ALTER TABLE public.projects ALTER COLUMN posted_by DROP NOT NULL;
+ALTER TABLE public.projects ALTER COLUMN user_id DROP NOT NULL;
+ALTER TABLE public.projects ALTER COLUMN title DROP NOT NULL;
+ALTER TABLE public.projects ALTER COLUMN stipend DROP NOT NULL;
+ALTER TABLE public.projects ALTER COLUMN budget DROP NOT NULL;
 
 UPDATE public.projects SET posted_by = user_id WHERE posted_by IS NULL AND user_id IS NOT NULL;
 UPDATE public.projects SET user_id = posted_by WHERE user_id IS NULL AND posted_by IS NOT NULL;
+
+-- Automatically link orphan projects to their respective company or first registered company
+UPDATE public.projects p
+SET
+  company_id = COALESCE(p.company_id, (SELECT c.id FROM public.companies c WHERE c.user_id = p.posted_by LIMIT 1), (SELECT c.id FROM public.companies c LIMIT 1)),
+  posted_by = COALESCE(p.posted_by, (SELECT c.user_id FROM public.companies c WHERE c.id = p.company_id LIMIT 1), (SELECT c.user_id FROM public.companies c LIMIT 1)),
+  user_id = COALESCE(p.user_id, p.posted_by, (SELECT c.user_id FROM public.companies c LIMIT 1)),
+  company_name = COALESCE(NULLIF(p.company_name, ''), (SELECT c.company_name FROM public.companies c WHERE c.id = p.company_id LIMIT 1), (SELECT c.company_name FROM public.companies c LIMIT 1), 'Partner Company')
+WHERE p.company_id IS NULL OR p.posted_by IS NULL OR p.user_id IS NULL OR p.company_name IS NULL OR p.company_name = '';
 
 -- ----------------------------------------------------------------------------
 -- 6. APPLICATIONS & SUBMITTED WORK TABLE
@@ -327,10 +342,19 @@ ALTER TABLE public.applications ADD COLUMN IF NOT EXISTS name TEXT;
 ALTER TABLE public.applications ALTER COLUMN name DROP NOT NULL;
 ALTER TABLE public.applications ADD COLUMN IF NOT EXISTS email TEXT;
 ALTER TABLE public.applications ALTER COLUMN email DROP NOT NULL;
+ALTER TABLE public.applications ALTER COLUMN student_name DROP NOT NULL;
+ALTER TABLE public.applications ALTER COLUMN student_email DROP NOT NULL;
+ALTER TABLE public.applications ALTER COLUMN cover_letter DROP NOT NULL;
+ALTER TABLE public.applications ALTER COLUMN portfolio_link DROP NOT NULL;
+ALTER TABLE public.applications ALTER COLUMN resume_link DROP NOT NULL;
 ALTER TABLE public.applications DROP CONSTRAINT IF EXISTS applications_status_check;
 
 UPDATE public.applications SET student_id = user_id WHERE student_id IS NULL AND user_id IS NOT NULL;
 UPDATE public.applications SET user_id = student_id WHERE user_id IS NULL AND student_id IS NOT NULL;
+UPDATE public.applications SET name = student_name WHERE name IS NULL AND student_name IS NOT NULL;
+UPDATE public.applications SET student_name = name WHERE student_name IS NULL AND name IS NOT NULL;
+UPDATE public.applications SET email = student_email WHERE email IS NULL AND student_email IS NOT NULL;
+UPDATE public.applications SET student_email = email WHERE student_email IS NULL AND email IS NOT NULL;
 
 -- A private, server-authoritative record of company selections.
 CREATE TABLE IF NOT EXISTS public.project_assignments (

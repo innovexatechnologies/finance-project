@@ -462,7 +462,7 @@ class _PostProjectScreenState extends State<PostProjectScreen> {
       setState(() => _isSavingDraft = false);
       ScaffoldMessenger.of(context).showSnackBar(
         SnackBar(
-          content: Text('Could not save draft: $e'),
+          content: Text(SupabaseHelper.friendlyError(e)),
           backgroundColor: AppColors.statusClosed,
         ),
       );
@@ -599,7 +599,7 @@ class _PostProjectScreenState extends State<PostProjectScreen> {
       setState(() => _isPublishing = false);
       ScaffoldMessenger.of(context).showSnackBar(
         SnackBar(
-          content: Text('Failed to publish project: $e'),
+          content: Text(SupabaseHelper.friendlyError(e)),
           backgroundColor: AppColors.statusClosed,
         ),
       );

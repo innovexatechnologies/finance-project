@@ -111,13 +111,14 @@ class _CompanyProjectsListScreenState extends State<CompanyProjectsListScreen> {
     );
   }
 
-  Future<void> _confirmDeleteDraft(ProjectModel project) async {
+  Future<void> _confirmDeleteProject(ProjectModel project) async {
+    final isDraft = project.status.toLowerCase() == 'draft';
     final confirmed = await showDialog<bool>(
       context: context,
       builder: (ctx) => AlertDialog(
-        title: const Text('Delete Draft Listing?'),
+        title: Text(isDraft ? 'Delete Draft Listing?' : 'Delete Project?'),
         content: Text(
-          'Are you sure you want to permanently remove draft "${project.title}"?',
+          'Are you sure you want to permanently remove "${project.title}"? This action cannot be undone.',
         ),
         actions: [
           TextButton(
@@ -130,7 +131,7 @@ class _CompanyProjectsListScreenState extends State<CompanyProjectsListScreen> {
               foregroundColor: Colors.white,
             ),
             onPressed: () => Navigator.pop(ctx, true),
-            child: const Text('Delete Draft'),
+            child: Text(isDraft ? 'Delete Draft' : 'Delete Project'),
           ),
         ],
       ),
@@ -140,8 +141,8 @@ class _CompanyProjectsListScreenState extends State<CompanyProjectsListScreen> {
       await _projectService.deleteProject(project.id);
       if (!mounted) return;
       ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(
-          content: Text('Draft project removed.'),
+        SnackBar(
+          content: Text(isDraft ? 'Draft project removed.' : 'Project deleted successfully.'),
           backgroundColor: AppColors.deepNavy,
         ),
       );
@@ -321,14 +322,17 @@ class _CompanyProjectsListScreenState extends State<CompanyProjectsListScreen> {
       body: ValueListenableBuilder<List<ProjectModel>>(
         valueListenable: _projectService.projectsNotifier,
         builder: (context, allProjects, _) {
-          final companyProjects = allProjects
-              .where(
-                (p) =>
-                    company.id.isEmpty ||
-                    p.companyId.isEmpty ||
-                    p.companyId == company.id,
-              )
-              .toList();
+          final companyProjects = allProjects.where((p) {
+            if (company.id.isEmpty) return true;
+            if (p.companyId.isEmpty) return true;
+            if (p.companyId == company.id) return true;
+            if (company.companyName.trim().isNotEmpty &&
+                p.companyName.trim().toLowerCase() ==
+                    company.companyName.trim().toLowerCase()) {
+              return true;
+            }
+            return false;
+          }).toList();
 
           final paymentFiltered = companyProjects
               .where((project) => project.paymentSent == _showPaidProjects)
@@ -991,8 +995,9 @@ class _CompanyProjectsListScreenState extends State<CompanyProjectsListScreen> {
                                       backgroundColor: AppColors.statusOpen,
                                     ),
                                   );
-                                } else if (val == 'DeleteDraft') {
-                                  _confirmDeleteDraft(project);
+                                } else if (val == 'DeleteDraft' ||
+                                    val == 'DeleteProject') {
+                                  _confirmDeleteProject(project);
                                 }
                               },
                               itemBuilder: (ctx) => [
@@ -1066,6 +1071,27 @@ class _CompanyProjectsListScreenState extends State<CompanyProjectsListScreen> {
                                     ),
                                   ),
                                 ],
+                                if (!isDraft)
+                                  const PopupMenuItem(
+                                    value: 'DeleteProject',
+                                    child: Row(
+                                      children: [
+                                        Icon(
+                                          Icons.delete_outline_rounded,
+                                          size: 18,
+                                          color: AppColors.statusClosed,
+                                        ),
+                                        SizedBox(width: 10),
+                                        Text(
+                                          'Delete Project',
+                                          style: TextStyle(
+                                            color: AppColors.statusClosed,
+                                            fontWeight: FontWeight.w600,
+                                          ),
+                                        ),
+                                      ],
+                                    ),
+                                  ),
                               ],
                             ),
                           ],

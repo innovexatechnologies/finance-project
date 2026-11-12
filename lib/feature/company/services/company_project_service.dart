@@ -1,4 +1,5 @@
 import 'package:flutter/foundation.dart';
+import 'package:link_vibe/core/services/app_data_service.dart';
 import 'package:link_vibe/core/services/supabase_helper.dart';
 import 'package:link_vibe/feature/company/models/project_model.dart';
 import 'package:link_vibe/feature/company/services/company_profile_service.dart';
@@ -31,15 +32,42 @@ class CompanyProjectService {
 
     try {
       final profile = CompanyProfileService().currentProfile;
-      final filterClause = SupabaseHelper.isUuid(profile.id)
-          ? 'posted_by.eq.${user.id},user_id.eq.${user.id},company_id.eq.${profile.id}'
-          : 'posted_by.eq.${user.id},user_id.eq.${user.id}';
+      final List<String> orParts = [
+        'posted_by.eq.${user.id}',
+        'user_id.eq.${user.id}',
+      ];
+      if (SupabaseHelper.isUuid(profile.id)) {
+        orParts.add('company_id.eq.${profile.id}');
+      }
+      if (profile.companyName.trim().isNotEmpty) {
+        orParts.add('company_name.eq.${profile.companyName.trim()}');
+      }
 
-      final rows = await supabase
+      var rows = await supabase
           .from('projects')
           .select()
-          .or(filterClause)
+          .or(orParts.join(','))
           .order('created_at', ascending: false);
+
+      if (rows.isEmpty) {
+        final allRows = await supabase
+            .from('projects')
+            .select()
+            .order('created_at', ascending: false);
+        rows = allRows.where((r) {
+          final pBy = r['posted_by']?.toString() ?? '';
+          final uId = r['user_id']?.toString() ?? '';
+          final cId = r['company_id']?.toString() ?? '';
+          final cName =
+              r['company_name']?.toString().toLowerCase().trim() ?? '';
+          final profileName = profile.companyName.toLowerCase().trim();
+          return pBy == user.id ||
+              uId == user.id ||
+              (profile.id.isNotEmpty && cId == profile.id) ||
+              (profileName.isNotEmpty && cName == profileName) ||
+              (pBy.isEmpty && cId.isEmpty);
+        }).toList();
+      }
 
       final projectIds = rows
           .map((r) => r['id']?.toString() ?? '')
@@ -142,10 +170,29 @@ class CompanyProjectService {
         : (profile.companyName.isNotEmpty
               ? profile.companyName
               : 'Company Partner');
-    final companyId = project.companyId.isNotEmpty
+    var companyId = project.companyId.isNotEmpty
         ? project.companyId
         : profile.id;
 
+    final supabase = SupabaseHelper.clientOrNull;
+    final user = supabase?.auth.currentUser;
+
+    if (supabase != null && user != null && !SupabaseHelper.isUuid(companyId)) {
+      try {
+        final cRow = await supabase
+            .from('companies')
+            .select('id')
+            .eq('user_id', user.id)
+            .limit(1)
+            .maybeSingle();
+        if (cRow != null &&
+            SupabaseHelper.isUuid(cRow['id']?.toString() ?? '')) {
+          companyId = cRow['id'].toString();
+        }
+      } catch (_) {}
+    }
+
+    final nowIso = DateTime.now().toIso8601String();
     final savedProject = project.copyWith(
       id: cleanId,
       openings: 1,
@@ -154,10 +201,7 @@ class CompanyProjectService {
       createdAt: 'Just now',
     );
 
-    final supabase = SupabaseHelper.clientOrNull;
-    final user = supabase?.auth.currentUser;
     if (supabase != null && user != null) {
-      final nowIso = DateTime.now().toIso8601String();
       await supabase.from('projects').insert({
         'id': cleanId,
         if (SupabaseHelper.isUuid(companyId)) 'company_id': companyId,
@@ -190,6 +234,33 @@ class CompanyProjectService {
     final updatedList = List<ProjectModel>.from(projectsNotifier.value);
     updatedList.insert(0, savedProject);
     projectsNotifier.value = updatedList;
+
+    // Keep AppDataService synchronized for immediate student visibility
+    AppDataService.instance.addProjectLocally({
+      'id': cleanId,
+      'title': savedProject.title,
+      'company': companyName,
+      'companyId': companyId,
+      'companyUserId': user?.id ?? '',
+      'category': savedProject.category,
+      'duration': savedProject.duration,
+      'workMode': savedProject.projectType,
+      'deadline': savedProject.deadline,
+      'status': savedProject.status,
+      'stipend': savedProject.budget.isNotEmpty
+          ? savedProject.budget
+          : 'Academic Credit / Verified Certificate',
+      'budget': savedProject.budget,
+      'description': savedProject.description,
+      'requirements': savedProject.requirements,
+      'deliverables': savedProject.deliverables,
+      'additionalInstructions': savedProject.additionalInstructions,
+      'openings': 1,
+      'skills': savedProject.skillsRequired,
+      'createdAt': nowIso,
+    });
+
+    await CompanyProfileService.persistLocalCache();
   }
 
   Future<void> updateProject(ProjectModel project) async {
@@ -297,12 +368,19 @@ class CompanyProjectService {
     final supabase = SupabaseHelper.clientOrNull;
     final user = supabase?.auth.currentUser;
     if (supabase != null && user != null && SupabaseHelper.isUuid(projectId)) {
-      await supabase.from('projects').delete().eq('id', projectId);
+      try {
+        await supabase.from('projects').delete().eq('id', projectId);
+      } catch (e) {
+        debugPrint('CompanyProjectService deleteProject error: $e');
+      }
     }
 
     projectsNotifier.value = projectsNotifier.value
         .where((p) => p.id != projectId)
         .toList();
+
+    AppDataService.instance.removeProjectLocal(projectId);
+    await CompanyProfileService.persistLocalCache();
   }
 
   List<ProjectModel> getOpenProjectsForStudents() {

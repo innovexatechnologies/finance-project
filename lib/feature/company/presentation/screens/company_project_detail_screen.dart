@@ -97,6 +97,44 @@ class _CompanyProjectDetailScreenState
     }
   }
 
+  Future<void> _confirmDeleteProject(ProjectModel project) async {
+    final confirmed = await showDialog<bool>(
+      context: context,
+      builder: (ctx) => AlertDialog(
+        title: const Text('Delete Project?'),
+        content: Text(
+          'Are you sure you want to permanently delete "${project.title}"? This action cannot be undone.',
+        ),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.pop(ctx, false),
+            child: const Text('Cancel'),
+          ),
+          ElevatedButton(
+            style: ElevatedButton.styleFrom(
+              backgroundColor: AppColors.statusClosed,
+              foregroundColor: Colors.white,
+            ),
+            onPressed: () => Navigator.pop(ctx, true),
+            child: const Text('Delete Project'),
+          ),
+        ],
+      ),
+    );
+
+    if (confirmed == true) {
+      await _projectService.deleteProject(project.id);
+      if (!mounted) return;
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(
+          content: Text('Project deleted successfully.'),
+          backgroundColor: AppColors.deepNavy,
+        ),
+      );
+      Navigator.pop(context);
+    }
+  }
+
   Future<void> _handleEditProject(ProjectModel project) async {
     final hasAssignedStudent = project.assignedStudent != null &&
         project.assignedStudent!.trim().isNotEmpty;
@@ -291,6 +329,8 @@ class _CompanyProjectDetailScreenState
                     _navigateToApplicants(project);
                   } else if (val == 'AssignedStudents') {
                     _navigateToAssignedStudents(project);
+                  } else if (val == 'Delete') {
+                    _confirmDeleteProject(project);
                   } else if (val == 'PublishDraft') {
                     _projectService.updateProjectStatus(project.id, 'Open');
                     ScaffoldMessenger.of(context).showSnackBar(
@@ -371,6 +411,23 @@ class _CompanyProjectDetailScreenState
                       ),
                     ),
                   ],
+                  const PopupMenuItem(
+                    value: 'Delete',
+                    child: Row(
+                      children: [
+                        Icon(Icons.delete_outline_rounded,
+                            size: 18, color: AppColors.statusClosed),
+                        SizedBox(width: 8),
+                        Text(
+                          'Delete Project',
+                          style: TextStyle(
+                            color: AppColors.statusClosed,
+                            fontWeight: FontWeight.w600,
+                          ),
+                        ),
+                      ],
+                    ),
+                  ),
                 ],
               ),
               const SizedBox(width: 4),

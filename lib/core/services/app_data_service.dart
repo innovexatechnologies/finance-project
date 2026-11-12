@@ -1157,6 +1157,24 @@ class AppDataService extends ChangeNotifier {
     }
   }
 
+  void addProjectLocally(Map<String, dynamic> project) {
+    final id = project['id']?.toString() ?? '';
+    _projects.removeWhere((p) => (p['id']?.toString() ?? '') == id);
+    _projects.insert(0, Map<String, dynamic>.from(project));
+    _safeNotifyListeners();
+    if (_prefs != null) {
+      _prefs!.setString(_kCustomProjects, jsonEncode(_projects));
+    }
+  }
+
+  void removeProjectLocal(String projectId) {
+    _projects.removeWhere((p) => (p['id']?.toString() ?? '') == projectId);
+    _safeNotifyListeners();
+    if (_prefs != null) {
+      _prefs!.setString(_kCustomProjects, jsonEncode(_projects));
+    }
+  }
+
   // ===========================================================================
   // WORK SUBMISSIONS
   // ===========================================================================
