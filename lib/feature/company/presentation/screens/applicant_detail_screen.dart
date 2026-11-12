@@ -8,6 +8,7 @@ import 'package:link_vibe/feature/company/models/applicant_model.dart';
 import 'package:link_vibe/feature/company/models/project_model.dart';
 import 'package:link_vibe/feature/company/services/company_applicant_service.dart';
 import 'package:link_vibe/feature/company/services/company_project_service.dart';
+import 'package:link_vibe/feature/company/presentation/widgets/assigned_student_payment_details_card.dart';
 import 'package:url_launcher/url_launcher.dart';
 
 class ApplicantDetailScreen extends StatefulWidget {
@@ -41,6 +42,16 @@ class _ApplicantDetailScreenState extends State<ApplicantDetailScreen> {
       if (p.id == projectId) return p;
     }
     return null;
+  }
+
+  bool _isAssignedStatus(String status) {
+    return const {
+      'Accepted',
+      'In Progress',
+      'Revision Requested',
+      'Under Review',
+      'Completed',
+    }.contains(status.trim());
   }
 
   Future<void> _openExternalUrl(String rawUrl, String label) async {
@@ -90,45 +101,6 @@ class _ApplicantDetailScreenState extends State<ApplicantDetailScreen> {
 
   Future<void> _handleAccept(ApplicantModel applicant) async {
     final project = _findProject(applicant.projectId);
-    final openings = project?.openings ?? 1;
-    final acceptedCount =
-        _applicantService.getAcceptedCount(applicant.projectId);
-
-    if (acceptedCount >= openings && applicant.status != 'Accepted') {
-      if (!mounted) return;
-      showDialog<void>(
-        context: context,
-        builder: (ctx) => AlertDialog(
-          shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(18)),
-          title: Row(
-            children: [
-              const Icon(Icons.warning_amber_rounded,
-                  color: AppColors.statusPending),
-              const SizedBox(width: 8),
-              Text(
-                'Openings Full',
-                style: GoogleFonts.poppins(
-                  fontSize: 17,
-                  fontWeight: FontWeight.w700,
-                ),
-              ),
-            ],
-          ),
-          content: Text(
-            'All $openings student opening(s) for "${project?.title ?? applicant.projectTitle}" are already filled.\n\nTo accept additional candidates, edit student openings in project settings.',
-            style: GoogleFonts.inter(fontSize: 13.5, height: 1.45),
-          ),
-          actions: [
-            TextButton(
-              onPressed: () => Navigator.pop(ctx),
-              child: const Text('OK'),
-            ),
-          ],
-        ),
-      );
-      return;
-    }
-
     final confirm = await showDialog<bool>(
       context: context,
       builder: (ctx) => AlertDialog(
@@ -183,6 +155,15 @@ class _ApplicantDetailScreenState extends State<ApplicantDetailScreen> {
               '${applicant.name} has been accepted and assigned to the project.',
             ),
             backgroundColor: AppColors.statusOpen,
+            behavior: SnackBarBehavior.floating,
+          ),
+        );
+      } else if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(
+            content: Text(
+              'Could not assign this student. Refresh and try again.',
+            ),
             behavior: SnackBarBehavior.floating,
           ),
         );
@@ -323,6 +304,13 @@ class _ApplicantDetailScreenState extends State<ApplicantDetailScreen> {
                 if (applicant.bio.trim().isNotEmpty) ...[
                   const SizedBox(height: 16),
                   _buildBioCard(applicant),
+                ],
+                if (_isAssignedStatus(applicant.status)) ...[
+                  const SizedBox(height: 16),
+                  AssignedStudentPaymentDetailsCard(
+                    key: ValueKey(applicant.id),
+                    applicationId: applicant.id,
+                  ),
                 ],
                 const SizedBox(height: 20),
                 if (canDecide)
@@ -793,7 +781,7 @@ class _ApplicantDetailScreenState extends State<ApplicantDetailScreen> {
   }
 
   Widget _buildStatusFooter(ApplicantModel applicant) {
-    final isAccepted = applicant.status == 'Accepted';
+    final isAccepted = _isAssignedStatus(applicant.status);
     return Container(
       width: double.infinity,
       padding: const EdgeInsets.all(16),

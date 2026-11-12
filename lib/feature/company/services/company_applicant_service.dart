@@ -296,6 +296,8 @@ class CompanyApplicantService {
 
     final targetApplicant = currentList[targetIndex];
     final projectService = CompanyProjectService();
+    final supabase = SupabaseHelper.clientOrNull;
+    final user = supabase?.auth.currentUser;
 
     ProjectModel? matchedProject;
     for (final p in projectService.allProjects) {
@@ -306,15 +308,34 @@ class CompanyApplicantService {
     }
 
     if (newStatus == 'Accepted') {
-      final openings = matchedProject?.openings ?? 1;
-      final acceptedCount = getAcceptedCount(targetApplicant.projectId);
-      if (acceptedCount >= openings && targetApplicant.status != 'Accepted') {
-        return false;
+      if ((supabase == null || user == null) &&
+          targetApplicant.status != 'Accepted') {
+        final openings = matchedProject?.openings ?? 1;
+        if (getAcceptedCount(targetApplicant.projectId) >= openings) {
+          return false;
+        }
       }
 
       final assignedLabel = targetApplicant.university.isNotEmpty
           ? '${targetApplicant.name} (${targetApplicant.university})'
           : targetApplicant.name;
+
+      if (supabase != null && user != null) {
+        if (!SupabaseHelper.isUuid(applicantId)) return false;
+        try {
+          await supabase.rpc(
+            'assign_applicant_to_project',
+            params: {
+              'p_application_id': applicantId,
+              'p_confirm_existing': false,
+            },
+          );
+        } catch (e) {
+          debugPrint('CompanyApplicantService assignment failed: $e');
+          return false;
+        }
+      }
+
       if (matchedProject != null) {
         await projectService.updateProjectStatus(
           matchedProject.id,
@@ -323,19 +344,17 @@ class CompanyApplicantService {
           progress: 0.15,
         );
       }
-    }
-
-    final supabase = SupabaseHelper.clientOrNull;
-    final user = supabase?.auth.currentUser;
-    if (supabase != null &&
+    } else if (supabase != null &&
         user != null &&
         SupabaseHelper.isUuid(applicantId)) {
       try {
-        await supabase.from('applications').update({
-          'status': newStatus,
-          if (newStatus == 'Accepted') 'progress': 0.15,
-          'updated_at': DateTime.now().toIso8601String(),
-        }).eq('id', applicantId);
+        await supabase
+            .from('applications')
+            .update({
+              'status': newStatus,
+              'updated_at': DateTime.now().toIso8601String(),
+            })
+            .eq('id', applicantId);
       } catch (e) {
         debugPrint('CompanyApplicantService updateApplicantStatus error: $e');
       }

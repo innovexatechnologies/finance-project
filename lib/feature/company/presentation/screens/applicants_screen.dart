@@ -95,24 +95,6 @@ class _ApplicantsScreenState extends State<ApplicantsScreen> {
 
   Future<void> _updateStatus(ApplicantModel applicant, String newStatus) async {
     if (newStatus == 'Accepted') {
-      final project = _findProject(_projectService.allProjects, applicant.projectId);
-      final openings = project?.openings ?? 1;
-      final acceptedCount =
-          _applicantService.getAcceptedCount(applicant.projectId);
-      if (acceptedCount >= openings && applicant.status != 'Accepted') {
-        if (!mounted) return;
-        ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(
-            content: Text(
-              'All $openings opening(s) for "${applicant.projectTitle}" are already filled.',
-            ),
-            backgroundColor: AppColors.statusPending,
-            behavior: SnackBarBehavior.floating,
-          ),
-        );
-        return;
-      }
-
       final confirmed = await showDialog<bool>(
         context: context,
         builder: (ctx) => AlertDialog(
@@ -202,6 +184,15 @@ class _ApplicantsScreenState extends State<ApplicantsScreen> {
         SnackBar(
           content: Text('${applicant.name} marked as $newStatus.'),
           backgroundColor: StatusBadge.colorForStatus(newStatus),
+          behavior: SnackBarBehavior.floating,
+        ),
+      );
+    } else {
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(
+          content: Text(newStatus == 'Accepted'
+              ? 'Could not assign this student. Refresh and try again.'
+              : 'Could not update this application. Please try again.'),
           behavior: SnackBarBehavior.floating,
         ),
       );
