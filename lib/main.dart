@@ -11,12 +11,16 @@ import 'feature/splash/presentation/screens/splash_screen.dart';
 void main() async {
   WidgetsFlutterBinding.ensureInitialized();
 
-  // Safely load .env and initialize Supabase if credentials are configured
-  try {
-    await dotenv.load(fileName: ".env");
-  } catch (e) {
-    debugPrint('Notice: .env asset load fallback ($e).');
-  }
+  dotenv.loadFromString(
+    isOptional: true,
+    mergeWith: const {
+      'SUPABASE_URL': String.fromEnvironment('SUPABASE_URL'),
+      'SUPABASE_ANON_KEY': String.fromEnvironment('SUPABASE_ANON_KEY'),
+      'SUPABASE_PUBLISHABLE_KEY': String.fromEnvironment(
+        'SUPABASE_PUBLISHABLE_KEY',
+      ),
+    },
+  );
 
   final supabaseUrl = (dotenv.env['SUPABASE_URL'] ?? '').trim().replaceAll(
     RegExp(r'/+$'),

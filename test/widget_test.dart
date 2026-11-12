@@ -212,32 +212,32 @@ void main() {
         expect(msg, contains('internet connection'));
         expect(SupabaseHelper.isInteractiveAuthInProgress, isFalse);
 
-        SupabaseHelper.beginInteractiveAuth();
-        expect(SupabaseHelper.isInteractiveAuthInProgress, isTrue);
-        SupabaseHelper.endInteractiveAuth();
-        expect(SupabaseHelper.isInteractiveAuthInProgress, isFalse);
-        SupabaseHelper.clearAuthFlags();
+      SupabaseHelper.beginInteractiveAuth();
+      expect(SupabaseHelper.isInteractiveAuthInProgress, isTrue);
+      SupabaseHelper.endInteractiveAuth();
+      expect(SupabaseHelper.isInteractiveAuthInProgress, isFalse);
+      SupabaseHelper.clearAuthFlags();
 
-        const weakPassErr = AuthApiException(
-          'Password should be at least 6 characters',
-          statusCode: '422',
-          code: 'weak_password',
-        );
-        expect(SupabaseHelper.isWeakPasswordError(weakPassErr), isTrue);
+      const weakPassErr = AuthApiException(
+        'Password should be at least 6 characters',
+        statusCode: '422',
+        code: 'weak_password',
+      );
+      expect(SupabaseHelper.isWeakPasswordError(weakPassErr), isTrue);
 
-        const rateLimitErr = AuthApiException(
-          'email rate limit exceeded',
-          statusCode: '429',
-          code: 'over_email_send_rate_limit',
-        );
-        expect(SupabaseHelper.isEmailRateLimitError(rateLimitErr), isTrue);
+      const rateLimitErr = AuthApiException(
+        'email rate limit exceeded',
+        statusCode: '429',
+        code: 'over_email_send_rate_limit',
+      );
+      expect(SupabaseHelper.isEmailRateLimitError(rateLimitErr), isTrue);
 
-        const unconfirmedErr = AuthApiException(
-          'Email not confirmed',
-          statusCode: '400',
-          code: 'email_not_confirmed',
-        );
-        expect(SupabaseHelper.isEmailNotConfirmedError(unconfirmedErr), isTrue);
+      const unconfirmedErr = AuthApiException(
+        'Email not confirmed',
+        statusCode: '400',
+        code: 'email_not_confirmed',
+      );
+      expect(SupabaseHelper.isEmailNotConfirmedError(unconfirmedErr), isTrue);
 
         const alreadyErr = AuthApiException(
           'User already registered',
@@ -895,48 +895,48 @@ void main() {
           userId: 'comp-user-1',
         );
 
-        CompanyProfileService().currentProfileNotifier.value =
-            const CompanyProfileModel(
-          id: 'comp-row-1',
-          companyName: 'FastCloud Labs',
-          industry: 'Cloud Services',
-          description: 'Building fast platforms',
-          officialEmail: 'hr@fastcloud.io',
-          websiteUrl: 'https://fastcloud.io',
-          contactPersonName: 'Sara',
-          phoneNumber: '03001234567',
-          city: 'Lahore',
-          completeAddress: 'Gulberg',
-          logoInitial: 'FL',
-          isVerified: true,
-          lastUpdated: 'Just now',
-        );
-        CompanyProjectService().projectsNotifier.value = [
-          ProjectModel(
-            id: 'p-1',
-            title: 'AI Analytics Dashboard',
-            category: 'Development',
-            description: 'Metrics',
-            requirements: 'Dart',
-            skillsRequired: ['Flutter'],
-            deliverables: 'App',
-            deadline: 'Dec 2026',
-            projectType: 'Remote',
-            openings: 2,
-            additionalInstructions: '',
+      CompanyProfileService().currentProfileNotifier.value =
+          const CompanyProfileModel(
+            id: 'comp-row-1',
             companyName: 'FastCloud Labs',
-            companyId: 'comp-row-1',
-            status: 'Open',
-            duration: '4 weeks',
-            budget: 'Paid',
-          ),
-        ];
+            industry: 'Cloud Services',
+            description: 'Building fast platforms',
+            officialEmail: 'hr@fastcloud.io',
+            websiteUrl: 'https://fastcloud.io',
+            contactPersonName: 'Sara',
+            phoneNumber: '03001234567',
+            city: 'Lahore',
+            completeAddress: 'Gulberg',
+            logoInitial: 'FL',
+            isVerified: true,
+            lastUpdated: 'Just now',
+          );
+      CompanyProjectService().projectsNotifier.value = [
+        ProjectModel(
+          id: 'p-1',
+          title: 'AI Analytics Dashboard',
+          category: 'Development',
+          description: 'Metrics',
+          requirements: 'Dart',
+          skillsRequired: ['Flutter'],
+          deliverables: 'App',
+          deadline: 'Dec 2026',
+          projectType: 'Remote',
+          openings: 2,
+          additionalInstructions: '',
+          companyName: 'FastCloud Labs',
+          companyId: 'comp-row-1',
+          status: 'Open',
+          duration: '4 weeks',
+          budget: 'Paid',
+        ),
+      ];
 
-        await CompanyProfileService.persistLocalCache();
-        CompanyProfileService().reset();
-        CompanyProjectService().reset();
-        expect(CompanyProfileService().currentProfile.companyName, isEmpty);
-        expect(CompanyProjectService().allProjects, isEmpty);
+      await CompanyProfileService.persistLocalCache();
+      CompanyProfileService().reset();
+      CompanyProjectService().reset();
+      expect(CompanyProfileService().currentProfile.companyName, isEmpty);
+      expect(CompanyProjectService().allProjects, isEmpty);
 
         CompanyProfileService.hydrateFromLocalCache();
         expect(
@@ -956,20 +956,20 @@ void main() {
 
         CompanyProfileService().currentProfileNotifier.value =
             const CompanyProfileModel(
-          id: 'comp-nav-1',
-          companyName: 'FastCloud Labs',
-          industry: 'Cloud Services',
-          description: 'Cloud Systems',
-          officialEmail: 'hr@fastcloud.io',
-          websiteUrl: 'https://fastcloud.io',
-          contactPersonName: 'Sara',
-          phoneNumber: '03001234567',
-          city: 'Lahore',
-          completeAddress: 'Gulberg',
-          logoInitial: 'FL',
-          isVerified: true,
-          lastUpdated: 'Just now',
-        );
+              id: 'comp-nav-1',
+              companyName: 'FastCloud Labs',
+              industry: 'Cloud Services',
+              description: 'Cloud Systems',
+              officialEmail: 'hr@fastcloud.io',
+              websiteUrl: 'https://fastcloud.io',
+              contactPersonName: 'Sara',
+              phoneNumber: '03001234567',
+              city: 'Lahore',
+              completeAddress: 'Gulberg',
+              logoInitial: 'FL',
+              isVerified: true,
+              lastUpdated: 'Just now',
+            );
         CompanyProjectService().projectsNotifier.value = [
           ProjectModel(
             id: 'proj-nav-1',
@@ -1341,83 +1341,83 @@ void main() {
         final settings = AdminSettingsService();
         settings.reset();
 
-        final authOk = await authService.login(
-          email: 'admin@skillbridge.edu.pk',
-          password: 'Admin@SkillBridge2026!',
-        );
-        expect(authOk.success, isTrue);
-        expect(authOk.admin?.email, 'admin@skillbridge.edu.pk');
+      final authOk = await authService.login(
+        email: 'admin@skillbridge.edu.pk',
+        password: 'Admin@SkillBridge2026!',
+      );
+      expect(authOk.success, isTrue);
+      expect(authOk.admin?.email, 'admin@skillbridge.edu.pk');
 
-        final catAdded = await settings.addCategory(
-          name: 'FinTech Systems',
-          description: 'Financial technology sprints',
-          color: AppColors.primary,
-          adminEmail: 'admin@skillbridge.edu.pk',
-        );
-        expect(catAdded, isTrue);
-        expect(settings.categoriesNotifier.value.length, 1);
+      final catAdded = await settings.addCategory(
+        name: 'FinTech Systems',
+        description: 'Financial technology sprints',
+        color: AppColors.primary,
+        adminEmail: 'admin@skillbridge.edu.pk',
+      );
+      expect(catAdded, isTrue);
+      expect(settings.categoriesNotifier.value.length, 1);
 
-        final skillAdded = await settings.addSkill(
-          name: 'PostgreSQL RLS',
-          categoryName: 'FinTech Systems',
-          adminEmail: 'admin@skillbridge.edu.pk',
-        );
-        expect(skillAdded, isTrue);
-        expect(settings.skillsNotifier.value.length, 1);
+      final skillAdded = await settings.addSkill(
+        name: 'PostgreSQL RLS',
+        categoryName: 'FinTech Systems',
+        adminEmail: 'admin@skillbridge.edu.pk',
+      );
+      expect(skillAdded, isTrue);
+      expect(settings.skillsNotifier.value.length, 1);
 
-        final uniAdded = await settings.addUniversity(
-          name: 'NUST Islamabad',
-          shortName: 'NUST',
-          city: 'Islamabad',
-          province: 'ICT',
-          domain: 'nust.edu.pk',
-          adminEmail: 'admin@skillbridge.edu.pk',
-        );
-        expect(uniAdded, isTrue);
-        expect(settings.universitiesNotifier.value.length, 1);
+      final uniAdded = await settings.addUniversity(
+        name: 'NUST Islamabad',
+        shortName: 'NUST',
+        city: 'Islamabad',
+        province: 'ICT',
+        domain: 'nust.edu.pk',
+        adminEmail: 'admin@skillbridge.edu.pk',
+      );
+      expect(uniAdded, isTrue);
+      expect(settings.universitiesNotifier.value.length, 1);
 
-        final policyCreated = await settings.createPolicy(
-          policyKey: 'data_governance',
-          title: 'Data Governance Policy',
-          content: 'All data stored safely in Supabase.',
-          adminEmail: 'admin@skillbridge.edu.pk',
-        );
-        expect(policyCreated, isTrue);
-        final policyUpdated = await settings.updatePolicy(
-          policyKey: 'data_governance',
-          title: 'Data Governance Policy',
-          content: 'Updated policy rules.',
-          changeSummary: 'Clarified RLS rules',
-          adminEmail: 'admin@skillbridge.edu.pk',
-        );
-        expect(policyUpdated, isTrue);
-        expect(settings.policiesNotifier.value.first.version, 'v1.1');
+      final policyCreated = await settings.createPolicy(
+        policyKey: 'data_governance',
+        title: 'Data Governance Policy',
+        content: 'All data stored safely in Supabase.',
+        adminEmail: 'admin@skillbridge.edu.pk',
+      );
+      expect(policyCreated, isTrue);
+      final policyUpdated = await settings.updatePolicy(
+        policyKey: 'data_governance',
+        title: 'Data Governance Policy',
+        content: 'Updated policy rules.',
+        changeSummary: 'Clarified RLS rules',
+        adminEmail: 'admin@skillbridge.edu.pk',
+      );
+      expect(policyUpdated, isTrue);
+      expect(settings.policiesNotifier.value.first.version, 'v1.1');
 
-        final provisioned = await settings.provisionAdminAccount(
-          fullName: 'Ops Admin',
-          email: 'ops@skillbridge.edu.pk',
-          password: 'OpsPassword123',
-          role: 'OPERATIONS_ADMIN',
-          roleDisplayName: 'Operations Administrator',
-          department: 'Operations',
-          permissions: const ['manage_categories'],
-          adminEmail: 'admin@skillbridge.edu.pk',
-        );
-        expect(provisioned, isTrue);
-        final opsAdmin = settings.adminsNotifier.value.firstWhere(
-          (a) => a.email == 'ops@skillbridge.edu.pk',
-        );
-        final toggled = await settings.toggleAdminActive(
-          opsAdmin.id,
-          'admin@skillbridge.edu.pk',
-        );
-        expect(toggled, isTrue);
-        expect(
-          settings.adminsNotifier.value
-              .firstWhere((a) => a.email == 'ops@skillbridge.edu.pk')
-              .isActive,
-          isFalse,
-        );
+      final provisioned = await settings.provisionAdminAccount(
+        fullName: 'Ops Admin',
+        email: 'ops@skillbridge.edu.pk',
+        password: 'OpsPassword123',
+        role: 'OPERATIONS_ADMIN',
+        roleDisplayName: 'Operations Administrator',
+        department: 'Operations',
+        permissions: const ['manage_categories'],
+        adminEmail: 'admin@skillbridge.edu.pk',
+      );
+      expect(provisioned, isTrue);
+      final opsAdmin = settings.adminsNotifier.value.firstWhere(
+        (a) => a.email == 'ops@skillbridge.edu.pk',
+      );
+      final toggled = await settings.toggleAdminActive(
+        opsAdmin.id,
+        'admin@skillbridge.edu.pk',
+      );
+      expect(toggled, isTrue);
+      expect(
+        settings.adminsNotifier.value
+            .firstWhere((a) => a.email == 'ops@skillbridge.edu.pk')
+            .isActive,
+        isFalse,
+      );
 
         await authService.logout();
         expect(authService.isAuthenticated, isFalse);
@@ -1432,80 +1432,126 @@ void main() {
         studService.reset();
         projService.reset();
 
-        const synthUid = '11111111-1111-4111-8111-111111111111';
-        compService.companiesNotifier.value = [
-          AdminCompanyModel(
-            id: synthUid,
-            userId: synthUid,
-            companyName: 'Synthesized Corp',
-            logoInitial: 'SC',
-            officialEmail: 'corp@example.com',
-            isEmailVerified: true,
-            industry: 'Software',
-            city: 'Lahore',
-            completeAddress: 'Lahore',
-            contactPersonName: 'Ali',
-            phoneNumber: '03000000000',
-            websiteUrl: 'https://example.com',
-            description: 'Corp',
-            registrationNumber: 'REG-1',
-            verificationStatus: CompanyVerificationState.pending,
-            accountStatus: CompanyAccountState.active,
-            registrationDate: '2026-11-11',
-            registrationDateTime: DateTime(2026, 11, 11),
-            evidenceFileName: '',
-            evidenceFileType: 'SECP Registration',
-            evidenceFileSize: '',
-            auditHistory: const [],
-          ),
-        ];
+      const synthUid = '11111111-1111-4111-8111-111111111111';
+      compService.companiesNotifier.value = [
+        AdminCompanyModel(
+          id: synthUid,
+          userId: synthUid,
+          companyName: 'Synthesized Corp',
+          logoInitial: 'SC',
+          officialEmail: 'corp@example.com',
+          isEmailVerified: true,
+          industry: 'Software',
+          city: 'Lahore',
+          completeAddress: 'Lahore',
+          contactPersonName: 'Ali',
+          phoneNumber: '03000000000',
+          websiteUrl: 'https://example.com',
+          description: 'Corp',
+          registrationNumber: 'REG-1',
+          verificationStatus: CompanyVerificationState.pending,
+          accountStatus: CompanyAccountState.active,
+          registrationDate: '2026-11-11',
+          registrationDateTime: DateTime(2026, 11, 11),
+          evidenceFileName: '',
+          evidenceFileType: 'SECP Registration',
+          evidenceFileSize: '',
+          auditHistory: const [],
+        ),
+      ];
 
-        final compApproved = await compService.approveCompanyVerification(
+      final compApproved = await compService.approveCompanyVerification(
+        companyId: synthUid,
+        adminName: 'Executive Administrator',
+      );
+      expect(compApproved, isTrue);
+      expect(
+        compService.companiesNotifier.value.first.verificationStatus,
+        CompanyVerificationState.verified,
+      );
+
+      studService.studentsNotifier.value = [
+        AdminStudentModel(
+          id: synthUid,
+          userId: synthUid,
+          name: 'Ayesha Student',
+          email: 'ayesha@example.edu.pk',
+          avatarInitial: 'AS',
+          university: 'FAST',
+          department: 'CS',
+          degree: 'BS',
+          semester: '6th',
+          cgpa: 3.7,
+          skills: const ['Flutter'],
+          verificationStatus: StudentVerificationStatus.pending,
+          accountStatus: StudentAccountStatus.active,
+          registrationDate: '2026-11-11',
+          registrationDateTime: DateTime(2026, 11, 11),
+          verificationDocumentName: '',
+          verificationDocumentType: 'Transcript',
+          verificationDocumentSize: '',
+          portfolioUrl: '',
+          githubUrl: '',
+          bio: '',
+          auditHistory: const [],
+        ),
+      ];
+
+      final studApproved = await studService.approveStudentVerification(
+        studentId: synthUid,
+        adminName: 'Executive Administrator',
+      );
+      expect(studApproved, isTrue);
+      expect(
+        studService.studentsNotifier.value.first.verificationStatus,
+        StudentVerificationStatus.verified,
+      );
+
+      const projUid = '22222222-2222-4222-8222-222222222222';
+      projService.projectsNotifier.value = [
+        AdminProjectModel(
+          id: projUid,
+          title: 'AI Analytics Engine',
           companyId: synthUid,
-          adminName: 'Executive Administrator',
-        );
-        expect(compApproved, isTrue);
-        expect(
-          compService.companiesNotifier.value.first.verificationStatus,
-          CompanyVerificationState.verified,
-        );
+          companyName: 'Synthesized Corp',
+          category: 'AI',
+          description: 'Build engine',
+          requirements: 'Dart',
+          skillsRequired: const ['Dart'],
+          deliverables: 'App',
+          deadline: '2026-12-31',
+          deadlineDateTime: DateTime(2026, 12, 31),
+          projectType: 'Sprint',
+          duration: '4 Weeks',
+          openings: 2,
+          additionalInstructions: '',
+          applicantsCount: 0,
+          status: AdminProjectStatus.pendingReview,
+          publicationStatus: AdminPublicationStatus.pendingModeration,
+          createdAt: '2026-11-11',
+          createdDateTime: DateTime(2026, 11, 11),
+          moderationHistory: const [],
+        ),
+      ];
 
-        studService.studentsNotifier.value = [
-          AdminStudentModel(
-            id: synthUid,
-            userId: synthUid,
-            name: 'Ayesha Student',
-            email: 'ayesha@example.edu.pk',
-            avatarInitial: 'AS',
-            university: 'FAST',
-            department: 'CS',
-            degree: 'BS',
-            semester: '6th',
-            cgpa: 3.7,
-            skills: const ['Flutter'],
-            verificationStatus: StudentVerificationStatus.pending,
-            accountStatus: StudentAccountStatus.active,
-            registrationDate: '2026-11-11',
-            registrationDateTime: DateTime(2026, 11, 11),
-            verificationDocumentName: '',
-            verificationDocumentType: 'Transcript',
-            verificationDocumentSize: '',
-            portfolioUrl: '',
-            githubUrl: '',
-            bio: '',
-            auditHistory: const [],
-          ),
-        ];
+      final moderatedCount = await projService.bulkModerateProjects(
+        projectIds: const [projUid],
+        newStatus: AdminProjectStatus.published,
+        moderatorName: 'Executive Administrator',
+      );
+      expect(moderatedCount, 1);
+      expect(
+        projService.projectsNotifier.value.first.status,
+        AdminProjectStatus.published,
+      );
+    });
 
-        final studApproved = await studService.approveStudentVerification(
-          studentId: synthUid,
-          adminName: 'Executive Administrator',
-        );
-        expect(studApproved, isTrue);
-        expect(
-          studService.studentsNotifier.value.first.verificationStatus,
-          StudentVerificationStatus.verified,
-        );
+    testWidgets('All primary Admin screens render cleanly without exceptions', (
+      tester,
+    ) async {
+      tester.view.physicalSize = const Size(1280, 800);
+      tester.view.devicePixelRatio = 1.0;
+      addTearDown(() => tester.view.resetPhysicalSize());
 
         const projUid = '22222222-2222-4222-8222-222222222222';
         projService.projectsNotifier.value = [
@@ -1553,18 +1599,18 @@ void main() {
         tester.view.devicePixelRatio = 1.0;
         addTearDown(() => tester.view.resetPhysicalSize());
 
-        for (final screen in const [
-          StudentManagementScreen(),
-          CompanyManagementScreen(),
-          CompanyVerificationsScreen(),
-          ProjectManagementScreen(),
-          ApplicationMonitoringScreen(),
-          CertificateManagementScreen(),
-          ReportsAnalyticsScreen(),
-          AdminSettingsScreen(),
-        ]) {
-          await tester.pumpWidget(MaterialApp(home: screen));
-          await tester.pump(const Duration(milliseconds: 250));
+          expect(find.text('Overall Statistics'), findsOneWidget);
+          expect(find.text('Date Range Filter'), findsOneWidget);
+          expect(find.text('Date-wise Statistics'), findsOneWidget);
+          expect(find.text('Today'), findsOneWidget);
+          expect(find.text('This Week'), findsOneWidget);
+          expect(find.text('This Month'), findsOneWidget);
+          expect(find.text('Last Month'), findsOneWidget);
+          expect(find.text('This Year'), findsOneWidget);
+          expect(find.text('Custom Range'), findsOneWidget);
+          expect(find.text('Generate Report'), findsOneWidget);
+          expect(find.text('Refresh'), findsNothing);
+          expect(find.text('Export CSV'), findsNothing);
           expect(tester.takeException(), isNull);
         }
     });

@@ -69,9 +69,8 @@ flutter:
   # included in the application.
   uses-material-design: true
 
-  # Assets section for .env and brand assets
+  # Assets section for brand assets
   assets:
-    - .env
     - assets/skillbridge.png
 
   # An image asset can refer to one or more resolution-specific variants, see
