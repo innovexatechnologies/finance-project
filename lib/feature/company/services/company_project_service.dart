@@ -114,6 +114,7 @@ class CompanyProjectService {
           assignedStudent: computedAssigned,
           progress: (p['progress'] as num?)?.toDouble() ?? 0.0,
           createdAt: SupabaseHelper.formatRelativeTime(p['created_at']),
+          paymentSent: p['payment_sent'] == true,
         );
       }).toList();
 
@@ -147,9 +148,9 @@ class CompanyProjectService {
 
     final savedProject = project.copyWith(
       id: cleanId,
+      openings: 1,
       companyName: companyName,
       companyId: companyId,
-      openings: project.openings.clamp(1, 10),
       createdAt: 'Just now',
     );
 
@@ -172,7 +173,7 @@ class CompanyProjectService {
         'work_mode': savedProject.projectType,
         'duration': savedProject.duration,
         'deadline': savedProject.deadline,
-        'openings': savedProject.openings,
+        'openings': 1,
         'skills': savedProject.skillsRequired,
         'stipend': savedProject.budget.isNotEmpty
             ? savedProject.budget
@@ -180,6 +181,7 @@ class CompanyProjectService {
         'budget': savedProject.budget,
         'status': savedProject.status,
         'progress': savedProject.progress,
+        'payment_sent': savedProject.paymentSent,
         'created_at': nowIso,
         'updated_at': nowIso,
       });
@@ -191,31 +193,34 @@ class CompanyProjectService {
   }
 
   Future<void> updateProject(ProjectModel project) async {
+    final normalizedProject = project.copyWith(openings: 1);
     final supabase = SupabaseHelper.clientOrNull;
     final user = supabase?.auth.currentUser;
-    if (supabase != null && user != null && SupabaseHelper.isUuid(project.id)) {
+    if (supabase != null &&
+        user != null &&
+        SupabaseHelper.isUuid(normalizedProject.id)) {
       await supabase
           .from('projects')
           .update({
-            'title': project.title,
-            'category': project.category,
-            'description': project.description,
-            'requirements': project.requirements,
-            'deliverables': project.deliverables,
-            'additional_instructions': project.additionalInstructions,
-            'work_mode': project.projectType,
-            'duration': project.duration,
-            'deadline': project.deadline,
-            'openings': project.openings.clamp(1, 10),
-            'skills': project.skillsRequired,
-            'status': project.status,
+            'title': normalizedProject.title,
+            'category': normalizedProject.category,
+            'description': normalizedProject.description,
+            'requirements': normalizedProject.requirements,
+            'deliverables': normalizedProject.deliverables,
+            'additional_instructions': normalizedProject.additionalInstructions,
+            'work_mode': normalizedProject.projectType,
+            'duration': normalizedProject.duration,
+            'deadline': normalizedProject.deadline,
+            'openings': 1,
+            'skills': normalizedProject.skillsRequired,
+            'status': normalizedProject.status,
             'updated_at': DateTime.now().toIso8601String(),
           })
-          .eq('id', project.id);
+          .eq('id', normalizedProject.id);
     }
 
     projectsNotifier.value = projectsNotifier.value
-        .map((p) => p.id == project.id ? project : p)
+        .map((p) => p.id == normalizedProject.id ? normalizedProject : p)
         .toList();
   }
 
@@ -256,6 +261,30 @@ class CompanyProjectService {
       }
       return p;
     }).toList();
+  }
+
+  Future<void> markProjectPaymentSent(String projectId) async {
+    final supabase = SupabaseHelper.clientOrNull;
+    final user = supabase?.auth.currentUser;
+    if (supabase == null || user == null) {
+      throw StateError('A signed-in company account is required.');
+    }
+    if (!SupabaseHelper.isUuid(projectId)) {
+      throw ArgumentError.value(projectId, 'projectId', 'Must be a UUID.');
+    }
+
+    await supabase.rpc(
+      'mark_project_payment_sent',
+      params: {'p_project_id': projectId},
+    );
+
+    projectsNotifier.value = projectsNotifier.value
+        .map(
+          (project) => project.id == projectId
+              ? project.copyWith(paymentSent: true)
+              : project,
+        )
+        .toList();
   }
 
   void updateApplicantCount(String projectId, int count) {

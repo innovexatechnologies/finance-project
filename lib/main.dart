@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_dotenv/flutter_dotenv.dart';
 import 'package:supabase_flutter/supabase_flutter.dart';
+
 import 'core/services/app_data_service.dart';
 import 'core/services/deep_link_service.dart';
 import 'core/services/supabase_helper.dart';
@@ -11,16 +12,21 @@ import 'feature/splash/presentation/screens/splash_screen.dart';
 void main() async {
   WidgetsFlutterBinding.ensureInitialized();
 
-  // Safely load .env and initialize Supabase if credentials are configured
-  try {
-    await dotenv.load(fileName: ".env");
-  } catch (e) {
-    debugPrint('Notice: .env asset load fallback ($e).');
-  }
+  dotenv.loadFromString(
+    isOptional: true,
+    mergeWith: const {
+      'SUPABASE_URL': String.fromEnvironment('SUPABASE_URL'),
+      'SUPABASE_ANON_KEY': String.fromEnvironment('SUPABASE_ANON_KEY'),
+      'SUPABASE_PUBLISHABLE_KEY': String.fromEnvironment(
+        'SUPABASE_PUBLISHABLE_KEY',
+      ),
+    },
+  );
 
-  final supabaseUrl = (dotenv.env['SUPABASE_URL'] ?? '')
-      .trim()
-      .replaceAll(RegExp(r'/+$'), '');
+  final supabaseUrl = (dotenv.env['SUPABASE_URL'] ?? '').trim().replaceAll(
+    RegExp(r'/+$'),
+    '',
+  );
   final anonKey = (dotenv.env['SUPABASE_ANON_KEY'] ?? '').trim();
   final publishableKey = (dotenv.env['SUPABASE_PUBLISHABLE_KEY'] ?? '').trim();
   final supabaseKey = anonKey.isNotEmpty ? anonKey : publishableKey;
