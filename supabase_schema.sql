@@ -207,6 +207,7 @@ CREATE TABLE IF NOT EXISTS public.projects (
   status TEXT DEFAULT 'Open',
   assigned_student TEXT,
   progress DOUBLE PRECISION DEFAULT 0.0,
+  payment_sent BOOLEAN NOT NULL DEFAULT FALSE,
   attachment_url TEXT,
   moderation_reason TEXT,
   moderator_name TEXT,
@@ -234,6 +235,7 @@ ALTER TABLE public.projects ADD COLUMN IF NOT EXISTS budget TEXT DEFAULT '';
 ALTER TABLE public.projects ADD COLUMN IF NOT EXISTS status TEXT DEFAULT 'Open';
 ALTER TABLE public.projects ADD COLUMN IF NOT EXISTS assigned_student TEXT;
 ALTER TABLE public.projects ADD COLUMN IF NOT EXISTS progress DOUBLE PRECISION DEFAULT 0.0;
+ALTER TABLE public.projects ADD COLUMN IF NOT EXISTS payment_sent BOOLEAN NOT NULL DEFAULT FALSE;
 ALTER TABLE public.projects ADD COLUMN IF NOT EXISTS attachment_url TEXT;
 ALTER TABLE public.projects ADD COLUMN IF NOT EXISTS moderation_reason TEXT;
 ALTER TABLE public.projects ADD COLUMN IF NOT EXISTS moderator_name TEXT;
@@ -1258,6 +1260,52 @@ $$;
 REVOKE ALL ON FUNCTION public.get_assigned_student_payment_details(UUID)
   FROM PUBLIC, anon;
 GRANT EXECUTE ON FUNCTION public.get_assigned_student_payment_details(UUID)
+  TO authenticated;
+
+CREATE OR REPLACE FUNCTION public.mark_project_payment_sent(
+  p_project_id UUID
+)
+RETURNS VOID
+LANGUAGE plpgsql
+SECURITY DEFINER
+SET search_path = pg_catalog
+AS $$
+BEGIN
+  IF auth.uid() IS NULL OR NOT EXISTS (
+    SELECT 1 FROM public.profiles pr
+    WHERE pr.id = auth.uid()
+      AND lower(BTRIM(pr.user_type)) = 'company'
+  ) THEN
+    RAISE EXCEPTION 'Only company accounts can mark project payments sent.';
+  END IF;
+
+  UPDATE public.projects p
+  SET payment_sent = TRUE,
+      updated_at = timezone('utc'::text, now())
+  WHERE p.id = p_project_id
+    AND (
+      p.posted_by = auth.uid()
+      OR p.user_id = auth.uid()
+      OR EXISTS (
+        SELECT 1 FROM public.companies c
+        WHERE c.id = p.company_id
+          AND c.user_id = auth.uid()
+      )
+    )
+    AND EXISTS (
+      SELECT 1 FROM public.project_assignments pa
+      WHERE pa.project_id = p.id
+    );
+
+  IF NOT FOUND THEN
+    RAISE EXCEPTION 'Project not found, unauthorized, or no student is assigned.';
+  END IF;
+END;
+$$;
+
+REVOKE ALL ON FUNCTION public.mark_project_payment_sent(UUID)
+  FROM PUBLIC, anon;
+GRANT EXECUTE ON FUNCTION public.mark_project_payment_sent(UUID)
   TO authenticated;
 
 CREATE POLICY "Projects Public View" ON public.projects FOR SELECT USING (true);

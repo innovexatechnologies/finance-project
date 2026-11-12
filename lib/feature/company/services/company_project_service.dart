@@ -114,6 +114,7 @@ class CompanyProjectService {
           assignedStudent: computedAssigned,
           progress: (p['progress'] as num?)?.toDouble() ?? 0.0,
           createdAt: SupabaseHelper.formatRelativeTime(p['created_at']),
+          paymentSent: p['payment_sent'] == true,
         );
       }).toList();
 
@@ -179,6 +180,7 @@ class CompanyProjectService {
         'budget': savedProject.budget,
         'status': savedProject.status,
         'progress': savedProject.progress,
+        'payment_sent': savedProject.paymentSent,
         'created_at': nowIso,
         'updated_at': nowIso,
       });
@@ -255,6 +257,30 @@ class CompanyProjectService {
       }
       return p;
     }).toList();
+  }
+
+  Future<void> markProjectPaymentSent(String projectId) async {
+    final supabase = SupabaseHelper.clientOrNull;
+    final user = supabase?.auth.currentUser;
+    if (supabase == null || user == null) {
+      throw StateError('A signed-in company account is required.');
+    }
+    if (!SupabaseHelper.isUuid(projectId)) {
+      throw ArgumentError.value(projectId, 'projectId', 'Must be a UUID.');
+    }
+
+    await supabase.rpc(
+      'mark_project_payment_sent',
+      params: {'p_project_id': projectId},
+    );
+
+    projectsNotifier.value = projectsNotifier.value
+        .map(
+          (project) => project.id == projectId
+              ? project.copyWith(paymentSent: true)
+              : project,
+        )
+        .toList();
   }
 
   void updateApplicantCount(String projectId, int count) {

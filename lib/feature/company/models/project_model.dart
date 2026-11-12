@@ -19,6 +19,7 @@ class ProjectModel {
   final String? assignedStudent;
   final double progress;
   final String createdAt;
+  final bool paymentSent;
 
   ProjectModel({
     required this.id,
@@ -41,6 +42,7 @@ class ProjectModel {
     this.assignedStudent,
     this.progress = 0.0,
     this.createdAt = 'Just now',
+    this.paymentSent = false,
   });
 
   ProjectModel copyWith({
@@ -64,6 +66,7 @@ class ProjectModel {
     String? assignedStudent,
     double? progress,
     String? createdAt,
+    bool? paymentSent,
   }) {
     return ProjectModel(
       id: id ?? this.id,
@@ -87,6 +90,7 @@ class ProjectModel {
       assignedStudent: assignedStudent ?? this.assignedStudent,
       progress: progress ?? this.progress,
       createdAt: createdAt ?? this.createdAt,
+      paymentSent: paymentSent ?? this.paymentSent,
     );
   }
 
@@ -118,6 +122,7 @@ class ProjectModel {
       assignedStudent: json['assigned_student']?.toString(),
       progress: (json['progress'] as num?)?.toDouble() ?? 0.0,
       createdAt: (json['created_at'] ?? 'Recently').toString(),
+      paymentSent: json['payment_sent'] == true,
     );
   }
 
@@ -143,6 +148,7 @@ class ProjectModel {
       'assigned_student': assignedStudent,
       'progress': progress,
       'created_at': createdAt,
+      'payment_sent': paymentSent,
     };
   }
 }

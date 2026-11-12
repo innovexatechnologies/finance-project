@@ -418,6 +418,7 @@ class _PostProjectScreenState extends State<PostProjectScreen> {
       assignedStudent: existing?.assignedStudent,
       progress: existing?.progress ?? 0.0,
       createdAt: existing?.createdAt ?? 'Just now',
+      paymentSent: existing?.paymentSent ?? false,
     );
   }
 

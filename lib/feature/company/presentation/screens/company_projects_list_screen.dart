@@ -839,57 +839,56 @@ class _CompanyProjectsListScreenState extends State<CompanyProjectsListScreen> {
                   child: Column(
                     crossAxisAlignment: CrossAxisAlignment.start,
                     children: [
-                      Row(
+                      Wrap(
+                        crossAxisAlignment: WrapCrossAlignment.center,
+                        spacing: 8,
+                        runSpacing: 4,
                         children: [
-                          Expanded(
-                            child: Align(
-                              alignment: Alignment.centerLeft,
-                              child: Container(
-                                padding: const EdgeInsets.symmetric(
-                                  horizontal: 10,
-                                  vertical: 5,
+                          ConstrainedBox(
+                            constraints: const BoxConstraints(maxWidth: 160),
+                            child: Container(
+                              padding: const EdgeInsets.symmetric(
+                                horizontal: 10,
+                                vertical: 5,
+                              ),
+                              decoration: BoxDecoration(
+                                color: AppColors.lightAqua.withValues(
+                                  alpha: 0.7,
                                 ),
-                                decoration: BoxDecoration(
-                                  color: AppColors.lightAqua.withValues(
-                                    alpha: 0.7,
-                                  ),
-                                  borderRadius: BorderRadius.circular(9),
-                                  border: Border.all(
-                                    color: AppColors.primaryBlue.withValues(
-                                      alpha: 0.14,
-                                    ),
+                                borderRadius: BorderRadius.circular(9),
+                                border: Border.all(
+                                  color: AppColors.primaryBlue.withValues(
+                                    alpha: 0.14,
                                   ),
                                 ),
-                                child: Row(
-                                  mainAxisSize: MainAxisSize.min,
-                                  children: [
-                                    Icon(
-                                      _categoryIcon(project.category),
-                                      size: 13.5,
-                                      color: AppColors.primaryBlue,
-                                    ),
-                                    const SizedBox(width: 6),
-                                    Flexible(
-                                      child: Text(
-                                        project.category,
-                                        maxLines: 1,
-                                        overflow: TextOverflow.ellipsis,
-                                        style: GoogleFonts.inter(
-                                          color: AppColors.primaryBlue,
-                                          fontSize: 11.5,
-                                          fontWeight: FontWeight.w700,
-                                        ),
+                              ),
+                              child: Row(
+                                mainAxisSize: MainAxisSize.min,
+                                children: [
+                                  Icon(
+                                    _categoryIcon(project.category),
+                                    size: 13.5,
+                                    color: AppColors.primaryBlue,
+                                  ),
+                                  const SizedBox(width: 6),
+                                  Flexible(
+                                    child: Text(
+                                      project.category,
+                                      maxLines: 1,
+                                      overflow: TextOverflow.ellipsis,
+                                      style: GoogleFonts.inter(
+                                        color: AppColors.primaryBlue,
+                                        fontSize: 11.5,
+                                        fontWeight: FontWeight.w700,
                                       ),
                                     ),
-                                  ],
-                                ),
+                                  ),
+                                ],
                               ),
                             ),
                           ),
-                          const SizedBox(width: 8),
                           StatusBadge(label: project.status),
                           if (canCloseOrCancel || isDraft) ...[
-                            const SizedBox(width: 2),
                             PopupMenuButton<String>(
                               padding: EdgeInsets.zero,
                               constraints: const BoxConstraints(
@@ -1094,6 +1093,7 @@ class _CompanyProjectsListScreenState extends State<CompanyProjectsListScreen> {
                             icon: Icons.calendar_today_outlined,
                             label: 'Due ${project.deadline}',
                           ),
+                          _buildPaymentStatusChip(project.paymentSent),
                         ],
                       ),
                       const SizedBox(height: 14),
@@ -1233,6 +1233,40 @@ class _CompanyProjectsListScreenState extends State<CompanyProjectsListScreen> {
               fontSize: 12,
               fontWeight: FontWeight.w500,
               color: AppColors.darkText,
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+
+  Widget _buildPaymentStatusChip(bool paymentSent) {
+    final color =
+        paymentSent ? const Color(0xFF166534) : const Color(0xFF92400E);
+    final background =
+        paymentSent ? AppColors.successBg : AppColors.warningBg;
+    return Container(
+      padding: const EdgeInsets.symmetric(horizontal: 9, vertical: 5),
+      decoration: BoxDecoration(
+        color: background,
+        borderRadius: BorderRadius.circular(9),
+        border: Border.all(color: color.withValues(alpha: 0.2)),
+      ),
+      child: Row(
+        mainAxisSize: MainAxisSize.min,
+        children: [
+          Icon(
+            paymentSent ? Icons.check_circle_outline : Icons.pending_outlined,
+            size: 13.5,
+            color: color,
+          ),
+          const SizedBox(width: 5),
+          Text(
+            paymentSent ? 'Paid' : 'Payment Pending',
+            style: GoogleFonts.inter(
+              fontSize: 12,
+              fontWeight: FontWeight.w600,
+              color: color,
             ),
           ),
         ],
