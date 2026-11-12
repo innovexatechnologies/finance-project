@@ -1,6 +1,6 @@
 import 'dart:math';
+
 import 'package:flutter/foundation.dart';
-import 'package:link_vibe/core/services/share_service.dart';
 import 'package:link_vibe/core/services/supabase_helper.dart';
 import 'package:link_vibe/feature/company/models/assignment_model.dart';
 import 'package:link_vibe/feature/company/models/project_model.dart';
@@ -15,9 +15,9 @@ class CompanyAssignmentService {
   factory CompanyAssignmentService() => _instance;
 
   CompanyAssignmentService._internal() {
-    CompanyApplicantService()
-        .applicantsNotifier
-        .addListener(_syncWithAcceptedApplicants);
+    CompanyApplicantService().applicantsNotifier.addListener(
+      _syncWithAcceptedApplicants,
+    );
   }
 
   final ValueNotifier<List<AssignmentModel>> assignmentsNotifier =
@@ -79,13 +79,15 @@ class CompanyAssignmentService {
         final fileName = r['file_name']?.toString().trim() ?? '';
         final subNotes = r['submission_notes']?.toString().trim() ?? '';
         final subTitle = r['submission_title']?.toString().trim() ?? '';
-        final hasWorkSubmitted = workUrl.isNotEmpty ||
+        final hasWorkSubmitted =
+            workUrl.isNotEmpty ||
             fileName.isNotEmpty ||
             subNotes.isNotEmpty ||
             subTitle.isNotEmpty ||
             r['work_submitted_at'] != null;
 
-        final isAssignment = status == 'Accepted' ||
+        final isAssignment =
+            status == 'Accepted' ||
             status == 'In Progress' ||
             status == 'Revision Requested' ||
             status == 'Completed' ||
@@ -123,7 +125,9 @@ class CompanyAssignmentService {
           for (final item in rawHistory) {
             if (item is Map) {
               history.add(
-                SubmissionReviewRecord.fromJson(Map<String, dynamic>.from(item)),
+                SubmissionReviewRecord.fromJson(
+                  Map<String, dynamic>.from(item),
+                ),
               );
             }
           }
@@ -176,9 +180,8 @@ class CompanyAssignmentService {
             id: r['id']?.toString() ?? '',
             companyId: r['company_id']?.toString() ?? company.id,
             projectId: pid,
-            projectTitle: r['project_title']?.toString() ??
-                project?.title ??
-                'Project',
+            projectTitle:
+                r['project_title']?.toString() ?? project?.title ?? 'Project',
             projectCategory: project?.category ?? 'Development',
             projectStatus: projStatus,
             startDate: SupabaseHelper.formatDate(
@@ -190,12 +193,13 @@ class CompanyAssignmentService {
             studentName: studentName,
             studentUniversity: r['university']?.toString() ?? '',
             studentDegree: r['student_degree']?.toString() ?? '',
-            studentAvatarInitial:
-                SupabaseHelper.initialsFor(studentName, fallback: 'ST'),
-            progress: (r['progress'] as num?)?.toDouble() ??
-                (status == 'Completed'
-                    ? 1.0
-                    : (hasWorkSubmitted ? 0.85 : 0.2)),
+            studentAvatarInitial: SupabaseHelper.initialsFor(
+              studentName,
+              fallback: 'ST',
+            ),
+            progress:
+                (r['progress'] as num?)?.toDouble() ??
+                (status == 'Completed' ? 1.0 : (hasWorkSubmitted ? 0.85 : 0.2)),
             hasSubmission: hasWorkSubmitted,
             submissionStatus: uiSubmissionStatus,
             latestSubmission: latestSubmission,
@@ -238,8 +242,9 @@ class CompanyAssignmentService {
             ? 'Work deliverable approved with commendation.'
             : 'Revision requested. Please review mentor feedback.');
 
-    final history =
-        List<SubmissionReviewRecord>.from(currentSubmission.reviewHistory);
+    final history = List<SubmissionReviewRecord>.from(
+      currentSubmission.reviewHistory,
+    );
     history.insert(
       0,
       SubmissionReviewRecord(
@@ -282,13 +287,16 @@ class CompanyAssignmentService {
     if (supabase != null && user != null) {
       try {
         if (SupabaseHelper.isUuid(assignment.id)) {
-          await supabase.from('applications').update({
+          await supabase
+              .from('applications')
+              .update({
             'status': dbAppStatus,
             'company_feedback': cleanFeedback,
             'progress': newProgress,
             'review_history': history.map((h) => h.toJson()).toList(),
             'updated_at': DateTime.now().toIso8601String(),
-          }).eq('id', assignment.id);
+              })
+              .eq('id', assignment.id);
         }
 
         if (newStatus == 'Approved' &&
@@ -332,9 +340,6 @@ class CompanyAssignmentService {
               'status': 'valid',
               'cryptographic_hash':
                   'sha256:${hashInput.hashCode.toRadixString(16).padLeft(12, '0')}',
-              'verification_url': ShareService.buildCertificateShareLink({
-                'id': certCode,
-              }),
             });
           }
         }
@@ -359,8 +364,7 @@ class CompanyAssignmentService {
 
   void _syncWithAcceptedApplicants() {
     final company = CompanyProfileService().currentProfile;
-    final acceptedApplicants = CompanyApplicantService()
-        .allApplicants
+    final acceptedApplicants = CompanyApplicantService().allApplicants
         .where((a) => a.status == 'Accepted')
         .toList();
 

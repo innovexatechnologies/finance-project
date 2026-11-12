@@ -4,7 +4,6 @@ import 'package:flutter/material.dart';
 import 'package:google_fonts/google_fonts.dart';
 import 'package:link_vibe/core/constants/app_colors.dart';
 import 'package:link_vibe/core/services/app_data_service.dart';
-import 'package:link_vibe/core/services/deep_link_service.dart';
 import 'package:link_vibe/core/services/supabase_helper.dart';
 import 'package:link_vibe/core/widgets/skillbridge_logo.dart';
 import 'package:link_vibe/feature/admin/presentation/screens/admin_dashboard_screen.dart';
@@ -49,14 +48,6 @@ class _SplashScreenState extends State<SplashScreen>
       if (!mounted) return;
       if (AppDataService.instance.isLoggedIn) {
         _bootstrapAndNavigate();
-      } else if (DeepLinkService.instance.hasPendingLink) {
-        Navigator.pushReplacement(
-          context,
-          MaterialPageRoute(builder: (_) => const OnboardingScreen()),
-        );
-        WidgetsBinding.instance.addPostFrameCallback((_) {
-          DeepLinkService.instance.markWorkspaceReadyAndConsume();
-        });
       }
     });
   }
@@ -95,7 +86,9 @@ class _SplashScreenState extends State<SplashScreen>
           CompanyProfileService.hydrateFromLocalCache();
           unawaited(CompanyProfileService.loadAllCompanyPanelData());
         } else {
-          unawaited(AppDataService.instance.syncFromSupabase(forceRefresh: true));
+          unawaited(
+            AppDataService.instance.syncFromSupabase(forceRefresh: true),
+          );
         }
       } else if (role == 'company') {
         CompanyProfileService.hydrateFromLocalCache();
@@ -127,9 +120,6 @@ class _SplashScreenState extends State<SplashScreen>
         MaterialPageRoute(builder: (_) => const StudentMainNav()),
       );
     }
-    WidgetsBinding.instance.addPostFrameCallback((_) {
-      DeepLinkService.instance.markWorkspaceReadyAndConsume();
-    });
   }
 
   void _onGetStartedPressed() {
@@ -335,8 +325,8 @@ class _SplashScreenState extends State<SplashScreen>
                                 style: ElevatedButton.styleFrom(
                                   backgroundColor: Colors.white,
                                   foregroundColor: AppColors.deepNavy,
-                                  disabledBackgroundColor:
-                                      Colors.white.withValues(alpha: 0.94),
+                                  disabledBackgroundColor: Colors.white
+                                      .withValues(alpha: 0.94),
                                   disabledForegroundColor: AppColors.deepNavy,
                                   elevation: 4,
                                   shape: RoundedRectangleBorder(

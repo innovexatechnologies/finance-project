@@ -2,7 +2,6 @@ import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:google_fonts/google_fonts.dart';
 import 'package:link_vibe/core/constants/app_colors.dart';
-import 'package:link_vibe/core/services/deep_link_service.dart';
 import 'package:link_vibe/core/services/supabase_helper.dart';
 import 'package:link_vibe/feature/auth/presentation/screens/login_screen.dart';
 import 'package:link_vibe/feature/company/models/applicant_model.dart';
@@ -12,6 +11,7 @@ import 'package:link_vibe/feature/company/services/company_applicant_service.dar
 import 'package:link_vibe/feature/company/services/company_assignment_service.dart';
 import 'package:link_vibe/feature/company/services/company_profile_service.dart';
 import 'package:link_vibe/feature/company/services/company_settings_service.dart';
+
 import 'applicants_screen.dart';
 import 'assigned_projects_screen.dart';
 import 'company_dashboard.dart';
@@ -48,11 +48,6 @@ class _CompanyMainNavState extends State<CompanyMainNav> {
     _currentIndex = widget.initialIndex;
     _tabHistory.clear();
     _tabHistory.add(widget.initialIndex);
-    WidgetsBinding.instance.addPostFrameCallback((_) {
-      if (mounted) {
-        DeepLinkService.instance.markWorkspaceReadyAndConsume();
-      }
-    });
   }
 
   void _onTabChange(int index) {
@@ -108,10 +103,7 @@ class _CompanyMainNavState extends State<CompanyMainNav> {
     _closeDrawer();
     Future.delayed(const Duration(milliseconds: 140), () {
       if (!mounted) return;
-      Navigator.push(
-        context,
-        MaterialPageRoute(builder: (_) => screen),
-      );
+      Navigator.push(context, MaterialPageRoute(builder: (_) => screen));
     });
   }
 
@@ -334,7 +326,8 @@ class _CompanyMainNavState extends State<CompanyMainNav> {
       },
       child: Scaffold(
         key: _scaffoldKey,
-        endDrawerEnableOpenDragGesture: _currentIndex == 0 ||
+        endDrawerEnableOpenDragGesture:
+            _currentIndex == 0 ||
             _currentIndex == 1 ||
             _currentIndex == 3 ||
             _currentIndex == 4,
@@ -374,16 +367,20 @@ class _CompanyMainNavState extends State<CompanyMainNav> {
                         CompanyAssignmentService().assignmentsNotifier,
                     builder: (context, assignments, _) {
                       final pendingApplicants = applicants
-                          .where((a) =>
+                          .where(
+                            (a) =>
                               a.status == 'Pending' ||
-                              a.status == 'Under Review')
+                                a.status == 'Under Review',
+                          )
                           .length;
 
                       final pendingDeliverables = assignments
-                          .where((a) =>
+                          .where(
+                            (a) =>
                               a.hasSubmission &&
                               (a.submissionStatus == 'Pending Review' ||
-                                  a.submissionStatus == 'Submitted'))
+                                    a.submissionStatus == 'Submitted'),
+                          )
                           .length;
 
                       return BottomNavigationBar(
@@ -456,7 +453,8 @@ class _CompanyMainNavState extends State<CompanyMainNav> {
                                     : '$pendingDeliverables',
                               ),
                               child: const Icon(
-                                  Icons.assignment_turned_in_outlined),
+                                Icons.assignment_turned_in_outlined,
+                              ),
                             ),
                             activeIcon: Badge(
                               isLabelVisible: pendingDeliverables > 0,
@@ -466,7 +464,8 @@ class _CompanyMainNavState extends State<CompanyMainNav> {
                                     : '$pendingDeliverables',
                               ),
                               child: const Icon(
-                                  Icons.assignment_turned_in_rounded),
+                                Icons.assignment_turned_in_rounded,
+                              ),
                             ),
                             label: 'Deliverables',
                             tooltip: 'Deliverables',
@@ -496,16 +495,12 @@ class _CompanyMainNavState extends State<CompanyMainNav> {
         child: ValueListenableBuilder<CompanyProfileModel>(
                 valueListenable: _profileService.currentProfileNotifier,
                 builder: (_, profile, _) {
-                  final displayName =
-                      profile.companyName.trim().isNotEmpty
+            final displayName = profile.companyName.trim().isNotEmpty
                           ? profile.companyName.trim()
                           : 'Set Up Company Profile';
                   final initial = profile.logoInitial.trim().isNotEmpty
                       ? profile.logoInitial.trim()
-                      : SupabaseHelper.initialsFor(
-                          displayName,
-                          fallback: 'CO',
-                        );
+                : SupabaseHelper.initialsFor(displayName, fallback: 'CO');
                   final subtitle = profile.industry.trim().isNotEmpty
                       ? profile.industry.trim()
                       : (profile.officialEmail.trim().isNotEmpty
@@ -540,8 +535,7 @@ class _CompanyMainNavState extends State<CompanyMainNav> {
                                 const SizedBox(width: 11),
                                 Expanded(
                                   child: Column(
-                                    crossAxisAlignment:
-                                        CrossAxisAlignment.start,
+                          crossAxisAlignment: CrossAxisAlignment.start,
                                     children: [
                                       Text(
                                         displayName,
@@ -578,9 +572,7 @@ class _CompanyMainNavState extends State<CompanyMainNav> {
                                       height: 34,
                                       decoration: BoxDecoration(
                                         borderRadius: BorderRadius.circular(10),
-                                        border: Border.all(
-                                          color: AppColors.borderLight,
-                                        ),
+                              border: Border.all(color: AppColors.borderLight),
                                       ),
                                       child: const Icon(
                                         Icons.close_rounded,
@@ -593,10 +585,7 @@ class _CompanyMainNavState extends State<CompanyMainNav> {
                               ],
                             ),
                           ),
-                          const Divider(
-                            height: 1,
-                            color: AppColors.surfaceAlt,
-                          ),
+                const Divider(height: 1, color: AppColors.surfaceAlt),
                           Expanded(
                             child: SingleChildScrollView(
                               padding: const EdgeInsets.fromLTRB(10, 12, 10, 8),
@@ -607,27 +596,22 @@ class _CompanyMainNavState extends State<CompanyMainNav> {
                                     icon: Icons.business_outlined,
                                     accentColor: AppColors.deepNavy,
                                     title: 'Company Profile',
-                                    onTap: () => _openDrawerScreen(
-                                      const CompanyProfileScreen(),
-                                    ),
+                          onTap: () =>
+                              _openDrawerScreen(const CompanyProfileScreen()),
                                   ),
                                   const SizedBox(height: 4),
                                   _buildDrawerMenuRow(
                                     icon: Icons.settings_outlined,
                                     accentColor: AppColors.indigoAccent,
                                     title: 'Settings',
-                                    onTap: () => _openDrawerScreen(
-                                      const CompanySettingsScreen(),
-                                    ),
+                          onTap: () =>
+                              _openDrawerScreen(const CompanySettingsScreen()),
                                   ),
                                 ],
                               ),
                             ),
                           ),
-                          const Divider(
-                            height: 1,
-                            color: AppColors.surfaceAlt,
-                          ),
+                const Divider(height: 1, color: AppColors.surfaceAlt),
                           Padding(
                             padding: const EdgeInsets.fromLTRB(12, 10, 12, 12),
                             child: Column(
@@ -642,8 +626,7 @@ class _CompanyMainNavState extends State<CompanyMainNav> {
                                             color: AppColors.borderLight,
                                           ),
                                           shape: RoundedRectangleBorder(
-                                            borderRadius:
-                                                BorderRadius.circular(11),
+                                  borderRadius: BorderRadius.circular(11),
                                           ),
                                           padding: const EdgeInsets.symmetric(
                                             vertical: 10,
@@ -654,16 +637,12 @@ class _CompanyMainNavState extends State<CompanyMainNav> {
                                             ? const SizedBox(
                                                 width: 14,
                                                 height: 14,
-                                                child:
-                                                    CircularProgressIndicator(
+                                      child: CircularProgressIndicator(
                                                   strokeWidth: 2,
                                                   color: AppColors.primaryBlue,
                                                 ),
                                               )
-                                            : const Icon(
-                                                Icons.refresh_rounded,
-                                                size: 16,
-                                              ),
+                                  : const Icon(Icons.refresh_rounded, size: 16),
                                         label: Text(
                                           'Sync',
                                           maxLines: 1,
@@ -684,18 +663,14 @@ class _CompanyMainNavState extends State<CompanyMainNav> {
                                             color: AppColors.borderLight,
                                           ),
                                           shape: RoundedRectangleBorder(
-                                            borderRadius:
-                                                BorderRadius.circular(11),
+                                  borderRadius: BorderRadius.circular(11),
                                           ),
                                           padding: const EdgeInsets.symmetric(
                                             vertical: 10,
                                           ),
                                         ),
                                         onPressed: _confirmSignOut,
-                                        icon: const Icon(
-                                          Icons.logout_rounded,
-                                          size: 16,
-                                        ),
+                              icon: const Icon(Icons.logout_rounded, size: 16),
                                         label: Text(
                                           'Sign Out',
                                           maxLines: 1,
@@ -806,4 +781,3 @@ class _CompanyMainNavState extends State<CompanyMainNav> {
     );
   }
 }
-

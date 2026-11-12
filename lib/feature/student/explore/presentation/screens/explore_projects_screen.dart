@@ -72,8 +72,11 @@ class _ExploreProjectsScreenState extends State<ExploreProjectsScreen> {
             SnackBar(
               content: Row(
                 children: [
-                  const Icon(Icons.check_circle_rounded,
-                      color: Colors.white, size: 18),
+                  const Icon(
+                    Icons.check_circle_rounded,
+                    color: Colors.white,
+                    size: 18,
+                  ),
                   const SizedBox(width: 10),
                   Expanded(
                     child: Text(
@@ -128,7 +131,8 @@ class _ExploreProjectsScreenState extends State<ExploreProjectsScreen> {
         return false;
       }
 
-      final matchesCategory = _selectedCategory == 'All' ||
+      final matchesCategory =
+          _selectedCategory == 'All' ||
           (p['category']?.toString().toLowerCase() ==
               _selectedCategory.toLowerCase());
 
@@ -179,13 +183,6 @@ class _ExploreProjectsScreenState extends State<ExploreProjectsScreen> {
         ),
         actions: [
           ExecutiveHeaderIconButton(
-            tooltip: 'Open Shared Link',
-            icon: Icons.link_rounded,
-            iconColor: AppColors.primaryBlue,
-            onPressed: () => ShareService.showOpenSharedLinkDialog(context),
-          ),
-          const SizedBox(width: 8),
-          ExecutiveHeaderIconButton(
             tooltip: 'Refresh Live Catalog',
             icon: Icons.refresh_rounded,
             onPressed: _isLoading
@@ -203,7 +200,8 @@ class _ExploreProjectsScreenState extends State<ExploreProjectsScreen> {
           final allProjects = AppDataService.instance.getAllProjects();
           final categories = _buildCategories(allProjects);
           final filteredProjects = _getFilteredProjects();
-          final hasActiveFilters = _selectedCategory != 'All' ||
+          final hasActiveFilters =
+              _selectedCategory != 'All' ||
               _searchController.text.trim().isNotEmpty;
 
           return Center(
@@ -236,23 +234,6 @@ class _ExploreProjectsScreenState extends State<ExploreProjectsScreen> {
                               child: TextField(
                                 controller: _searchController,
                                 onChanged: (_) => setState(() {}),
-                                onSubmitted: (value) async {
-                                  final opener =
-                                      ShareService.deepLinkTextOpener;
-                                  if (opener != null &&
-                                      value.toLowerCase().contains(
-                                        '${ShareService.appScheme}://',
-                                      )) {
-                                    final opened = await opener(
-                                      value,
-                                      context: context,
-                                    );
-                                    if (opened && mounted) {
-                                      _searchController.clear();
-                                      setState(() {});
-                                    }
-                                  }
-                                },
                                 decoration: InputDecoration(
                                   hintText:
                                       'Search projects, companies, skills...',
@@ -373,14 +354,12 @@ class _ExploreProjectsScreenState extends State<ExploreProjectsScreen> {
                   Expanded(
                     child: RefreshIndicator(
                       color: AppColors.primaryBlue,
-                      onRefresh: () =>
-                          _refreshLiveCatalog(showFeedback: false),
+                      onRefresh: () => _refreshLiveCatalog(showFeedback: false),
                       child: _isLoading && filteredProjects.isEmpty
                           ? const Center(child: CircularProgressIndicator())
                           : filteredProjects.isEmpty
                               ? ListView(
-                                  physics:
-                                      const AlwaysScrollableScrollPhysics(),
+                              physics: const AlwaysScrollableScrollPhysics(),
                                   padding: const EdgeInsets.all(24),
                                   children: [
                                     const SizedBox(height: 36),
@@ -414,8 +393,7 @@ class _ExploreProjectsScreenState extends State<ExploreProjectsScreen> {
                                   ],
                                 )
                               : ListView.builder(
-                                  physics:
-                                      const AlwaysScrollableScrollPhysics(),
+                              physics: const AlwaysScrollableScrollPhysics(),
                                   padding: const EdgeInsets.all(16),
                                   itemCount: filteredProjects.length,
                                   itemBuilder: (context, index) {
@@ -553,7 +531,8 @@ class _ExploreProjectsScreenState extends State<ExploreProjectsScreen> {
               ),
               const SizedBox(height: 12),
 
-              if ((project['description']?.toString().trim() ?? '').isNotEmpty)
+                if ((project['description']?.toString().trim() ?? '')
+                    .isNotEmpty)
                 Padding(
                   padding: const EdgeInsets.only(bottom: 12),
                   child: Text(
@@ -575,7 +554,9 @@ class _ExploreProjectsScreenState extends State<ExploreProjectsScreen> {
                   children: skills.take(5).map((s) {
                     return Container(
                       padding: const EdgeInsets.symmetric(
-                          horizontal: 9, vertical: 4),
+                          horizontal: 9,
+                          vertical: 4,
+                        ),
                       decoration: BoxDecoration(
                         color: AppColors.surfaceAlt,
                         borderRadius: BorderRadius.circular(8),
@@ -647,12 +628,16 @@ class _ExploreProjectsScreenState extends State<ExploreProjectsScreen> {
                   IconButton(
                     constraints: const BoxConstraints(),
                     padding: const EdgeInsets.all(6),
-                    tooltip: isBookmarked ? 'Remove Bookmark' : 'Save Project',
+                      tooltip: isBookmarked
+                          ? 'Remove Bookmark'
+                          : 'Save Project',
                     icon: Icon(
                       isBookmarked
                           ? Icons.bookmark_rounded
                           : Icons.bookmark_border_rounded,
-                      color: isBookmarked ? AppColors.teal : AppColors.grayText,
+                        color: isBookmarked
+                            ? AppColors.teal
+                            : AppColors.grayText,
                       size: 22,
                     ),
                     onPressed: () {

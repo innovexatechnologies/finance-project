@@ -1,4 +1,5 @@
 import 'dart:typed_data';
+
 import 'package:flutter_test/flutter_test.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 import 'package:link_vibe/core/services/app_data_service.dart';
@@ -27,14 +28,24 @@ void main() {
     // Save project
     await AppDataService.instance.toggleSaveProject(testProject);
     expect(AppDataService.instance.isProjectSaved('test_proj_99'), isTrue);
-    expect(AppDataService.instance.getSavedProjects().any((p) => p['id'] == 'test_proj_99'), isTrue);
+    expect(
+      AppDataService.instance.getSavedProjects().any(
+        (p) => p['id'] == 'test_proj_99',
+      ),
+      isTrue,
+    );
 
     // SIMULATE APP CLOSE & REOPEN
     await AppDataService.instance.init();
 
     // Must still be saved!
     expect(AppDataService.instance.isProjectSaved('test_proj_99'), isTrue);
-    expect(AppDataService.instance.getSavedProjects().any((p) => p['id'] == 'test_proj_99'), isTrue);
+    expect(
+      AppDataService.instance.getSavedProjects().any(
+        (p) => p['id'] == 'test_proj_99',
+      ),
+      isTrue,
+    );
 
     // Remove from saved
     await AppDataService.instance.removeSavedProject('test_proj_99');
@@ -56,21 +67,42 @@ void main() {
 
     await AppDataService.instance.addApplication(
       project: testProject,
-      coverMessage: 'I have 2 years of graphic design and content creation experience.',
+      coverMessage:
+          'I have 2 years of graphic design and content creation experience.',
       skills: 'Canva, Social Media, Copywriting',
       availability: '15 hrs/week',
       portfolioLink: 'https://behance.net/test',
     );
 
     expect(AppDataService.instance.hasApplied('seed_2'), isTrue);
-    expect(AppDataService.instance.totalApplicationsCount, equals(initialCount + 1));
+    expect(
+      AppDataService.instance.totalApplicationsCount,
+      equals(initialCount + 1),
+    );
+
+    final duplicate = await AppDataService.instance.addApplication(
+      project: testProject,
+      coverMessage: 'A second application should not be created.',
+      skills: 'Canva',
+      availability: '15 hrs/week',
+    );
+    expect(duplicate, isFalse);
+    expect(
+      AppDataService.instance.totalApplicationsCount,
+      equals(initialCount + 1),
+    );
 
     // SIMULATE APP CLOSE & REOPEN
     await AppDataService.instance.init();
 
     expect(AppDataService.instance.hasApplied('seed_2'), isTrue);
-    expect(AppDataService.instance.totalApplicationsCount, equals(initialCount + 1));
-    final app = AppDataService.instance.getApplications().firstWhere((a) => a['projectId'] == 'seed_2');
+    expect(
+      AppDataService.instance.totalApplicationsCount,
+      equals(initialCount + 1),
+    );
+    final app = AppDataService.instance.getApplications().firstWhere(
+      (a) => a['projectId'] == 'seed_2',
+    );
     expect(app['company'], equals('Meta'));
     expect(app['coverMessage'], contains('graphic design'));
   });
@@ -104,7 +136,8 @@ void main() {
 
     await AppDataService.instance.addProject({
       'title': 'Full-Stack GraphQL API',
-      'description': 'Develop scalable backend GraphQL services with subscriptions.',
+      'description':
+          'Develop scalable backend GraphQL services with subscriptions.',
       'stipend': '35-50K',
       'company': 'InnovateTech',
       'category': 'Development',
@@ -113,13 +146,21 @@ void main() {
       'status': 'Open',
     });
 
-    expect(AppDataService.instance.getAllProjects().length, equals(initialCount + 1));
+    expect(
+      AppDataService.instance.getAllProjects().length,
+      equals(initialCount + 1),
+    );
 
     // SIMULATE APP CLOSE & REOPEN
     await AppDataService.instance.init();
 
-    expect(AppDataService.instance.getAllProjects().length, equals(initialCount + 1));
-    final proj = AppDataService.instance.getAllProjects().firstWhere((p) => p['title'] == 'Full-Stack GraphQL API');
+    expect(
+      AppDataService.instance.getAllProjects().length,
+      equals(initialCount + 1),
+    );
+    final proj = AppDataService.instance.getAllProjects().firstWhere(
+      (p) => p['title'] == 'Full-Stack GraphQL API',
+    );
     expect(proj['company'], equals('InnovateTech'));
     expect(proj['stipend'], equals('35-50K'));
   });
@@ -131,15 +172,30 @@ void main() {
       'bio': 'Senior Software Engineering Student specializing in Cloud & Mobile apps.',
     });
 
-    expect(AppDataService.instance.getSkills(), contains('Docker & Kubernetes'));
-    expect(AppDataService.instance.getProfile()['name'], equals('Rabia Student'));
+    expect(
+      AppDataService.instance.getSkills(),
+      contains('Docker & Kubernetes'),
+    );
+    expect(
+      AppDataService.instance.getProfile()['name'],
+      equals('Rabia Student'),
+    );
 
     // SIMULATE APP CLOSE & REOPEN
     await AppDataService.instance.init();
 
-    expect(AppDataService.instance.getSkills(), contains('Docker & Kubernetes'));
-    expect(AppDataService.instance.getProfile()['name'], equals('Rabia Student'));
-    expect(AppDataService.instance.getProfile()['bio'], contains('Senior Software Engineering Student'));
+    expect(
+      AppDataService.instance.getSkills(),
+      contains('Docker & Kubernetes'),
+    );
+    expect(
+      AppDataService.instance.getProfile()['name'],
+      equals('Rabia Student'),
+    );
+    expect(
+      AppDataService.instance.getProfile()['bio'],
+      contains('Senior Software Engineering Student'),
+    );
   });
 
   test('Persistent Auth Session & Auto-Login across app restarts', () async {
@@ -199,27 +255,38 @@ void main() {
       AppDataService.instance.getCertificates().length,
       equals(initialCertCount + 1),
     );
-    final newCert = AppDataService.instance
-        .getCertificates()
-        .firstWhere((c) => c['id'] == 'CC-TEST-999');
+    final newCert = AppDataService.instance.getCertificates().firstWhere(
+      (c) => c['id'] == 'CC-TEST-999',
+    );
     expect(newCert['title'], equals('AI Machine Learning Certificate'));
   });
 
   test('Persistent Privacy Settings across app restarts', () async {
     await AppDataService.instance.updatePrivacySetting('showPhone', true);
-    await AppDataService.instance.updatePrivacySetting('profileVisibility', false);
+    await AppDataService.instance.updatePrivacySetting(
+      'profileVisibility',
+      false,
+    );
 
     expect(AppDataService.instance.getPrivacySettings()['showPhone'], isTrue);
-    expect(AppDataService.instance.getPrivacySettings()['profileVisibility'], isFalse);
+    expect(
+      AppDataService.instance.getPrivacySettings()['profileVisibility'],
+      isFalse,
+    );
 
     // SIMULATE APP CLOSE & REOPEN
     await AppDataService.instance.init();
 
     expect(AppDataService.instance.getPrivacySettings()['showPhone'], isTrue);
-    expect(AppDataService.instance.getPrivacySettings()['profileVisibility'], isFalse);
+    expect(
+      AppDataService.instance.getPrivacySettings()['profileVisibility'],
+      isFalse,
+    );
   });
 
-  test('In-app short password & credential update persists across app restarts', () async {
+  test(
+    'In-app short password & credential update persists across app restarts',
+    () async {
     await AppDataService.instance.registerUserAccount(
       email: 'direct@skillbridge.pk',
       password: 'ab',
@@ -228,24 +295,37 @@ void main() {
       role: 'Student',
     );
     expect(
-      AppDataService.instance.verifyLocalCredentials('direct@skillbridge.pk', 'ab'),
+        AppDataService.instance.verifyLocalCredentials(
+          'direct@skillbridge.pk',
+          'ab',
+        ),
       isTrue,
     );
 
-    await AppDataService.instance.updateAccountPassword('direct@skillbridge.pk', '123');
+      await AppDataService.instance.updateAccountPassword(
+        'direct@skillbridge.pk',
+        '123',
+      );
 
     // SIMULATE APP CLOSE & REOPEN
     await AppDataService.instance.init();
 
     expect(
-      AppDataService.instance.verifyLocalCredentials('direct@skillbridge.pk', 'ab'),
+        AppDataService.instance.verifyLocalCredentials(
+          'direct@skillbridge.pk',
+          'ab',
+        ),
       isFalse,
     );
     expect(
-      AppDataService.instance.verifyLocalCredentials('direct@skillbridge.pk', '123'),
+        AppDataService.instance.verifyLocalCredentials(
+          'direct@skillbridge.pk',
+          '123',
+        ),
       isTrue,
     );
-  });
+    },
+  );
 
   test('Signup University and Profile Info Persistence', () async {
     await AppDataService.instance.saveAuthSession(
@@ -256,15 +336,27 @@ void main() {
     );
 
     expect(AppDataService.instance.getProfile()['name'], equals('Rabia Tariq'));
-    expect(AppDataService.instance.getProfile()['university'], equals('FAST NUCES Lahore'));
-    expect(AppDataService.instance.getProfile()['email'], equals('rabia.cs@nuces.edu.pk'));
+    expect(
+      AppDataService.instance.getProfile()['university'],
+      equals('FAST NUCES Lahore'),
+    );
+    expect(
+      AppDataService.instance.getProfile()['email'],
+      equals('rabia.cs@nuces.edu.pk'),
+    );
 
     // SIMULATE APP CLOSE & REOPEN
     await AppDataService.instance.init();
 
     expect(AppDataService.instance.getProfile()['name'], equals('Rabia Tariq'));
-    expect(AppDataService.instance.getProfile()['university'], equals('FAST NUCES Lahore'));
-    expect(AppDataService.instance.getProfile()['email'], equals('rabia.cs@nuces.edu.pk'));
+    expect(
+      AppDataService.instance.getProfile()['university'],
+      equals('FAST NUCES Lahore'),
+    );
+    expect(
+      AppDataService.instance.getProfile()['email'],
+      equals('rabia.cs@nuces.edu.pk'),
+    );
   });
 
   test('Support Ticket Submission and Persistence', () async {
@@ -275,34 +367,67 @@ void main() {
     );
 
     expect(AppDataService.instance.getSupportTickets(), isNotEmpty);
-    expect(AppDataService.instance.getSupportTickets().first['subject'], equals('Deliverable file failed to load'));
+    expect(
+      AppDataService.instance.getSupportTickets().first['subject'],
+      equals('Deliverable file failed to load'),
+    );
 
     // SIMULATE APP CLOSE & REOPEN
     await AppDataService.instance.init();
 
     expect(AppDataService.instance.getSupportTickets(), isNotEmpty);
-    expect(AppDataService.instance.getSupportTickets().first['subject'], equals('Deliverable file failed to load'));
+    expect(
+      AppDataService.instance.getSupportTickets().first['subject'],
+      equals('Deliverable file failed to load'),
+    );
   });
 
-  test('Privacy Settings Persistence (showEmail, showPhone, profileVisibility)', () async {
+  test(
+    'Privacy Settings Persistence (showEmail, showPhone, profileVisibility)',
+    () async {
     await AppDataService.instance.updatePrivacySetting('showEmail', false);
     await AppDataService.instance.updatePrivacySetting('showPhone', true);
-    await AppDataService.instance.updatePrivacySetting('profileVisibility', false);
-    await AppDataService.instance.updatePrivacySetting('publicPortfolio', false);
+      await AppDataService.instance.updatePrivacySetting(
+        'profileVisibility',
+        false,
+      );
+      await AppDataService.instance.updatePrivacySetting(
+        'publicPortfolio',
+        false,
+      );
 
-    expect(AppDataService.instance.getPrivacySettings()['showEmail'], isFalse);
+      expect(
+        AppDataService.instance.getPrivacySettings()['showEmail'],
+        isFalse,
+      );
     expect(AppDataService.instance.getPrivacySettings()['showPhone'], isTrue);
-    expect(AppDataService.instance.getPrivacySettings()['profileVisibility'], isFalse);
-    expect(AppDataService.instance.getPrivacySettings()['publicPortfolio'], isFalse);
+      expect(
+        AppDataService.instance.getPrivacySettings()['profileVisibility'],
+        isFalse,
+      );
+      expect(
+        AppDataService.instance.getPrivacySettings()['publicPortfolio'],
+        isFalse,
+      );
 
     // SIMULATE APP CLOSE & REOPEN
     await AppDataService.instance.init();
 
-    expect(AppDataService.instance.getPrivacySettings()['showEmail'], isFalse);
+      expect(
+        AppDataService.instance.getPrivacySettings()['showEmail'],
+        isFalse,
+      );
     expect(AppDataService.instance.getPrivacySettings()['showPhone'], isTrue);
-    expect(AppDataService.instance.getPrivacySettings()['profileVisibility'], isFalse);
-    expect(AppDataService.instance.getPrivacySettings()['publicPortfolio'], isFalse);
-  });
+      expect(
+        AppDataService.instance.getPrivacySettings()['profileVisibility'],
+        isFalse,
+      );
+      expect(
+        AppDataService.instance.getPrivacySettings()['publicPortfolio'],
+        isFalse,
+      );
+    },
+  );
 
   test('URL Validation for Apply Project & Submit Work Forms', () {
     bool isValidUrl(String? text) {
@@ -311,7 +436,8 @@ void main() {
       if (val.isEmpty || val.contains(' ')) return false;
 
       String normalized = val;
-      if (!normalized.startsWith('http://') && !normalized.startsWith('https://')) {
+      if (!normalized.startsWith('http://') &&
+          !normalized.startsWith('https://')) {
         normalized = 'https://$normalized';
       }
 
@@ -358,25 +484,53 @@ void main() {
     );
 
     // Verify local credentials work
-    expect(AppDataService.instance.verifyLocalCredentials('rabia.dev@punjab.edu.pk', 'password123'), isTrue);
-    expect(AppDataService.instance.verifyLocalCredentials('rabia.dev@punjab.edu.pk', 'wrongpass'), isFalse);
+    expect(
+      AppDataService.instance.verifyLocalCredentials(
+        'rabia.dev@punjab.edu.pk',
+        'password123',
+      ),
+      isTrue,
+    );
+    expect(
+      AppDataService.instance.verifyLocalCredentials(
+        'rabia.dev@punjab.edu.pk',
+        'wrongpass',
+      ),
+      isFalse,
+    );
 
     // Verify name and institute persisted
-    final acc = AppDataService.instance.findUserAccount('rabia.dev@punjab.edu.pk');
+    final acc = AppDataService.instance.findUserAccount(
+      'rabia.dev@punjab.edu.pk',
+    );
     expect(acc, isNotNull);
     expect(acc!['name'], equals('Rabia Tariq'));
     expect(acc['university'], equals('Punjab University College of IT'));
 
     expect(AppDataService.instance.userName, equals('Rabia Tariq'));
-    expect(AppDataService.instance.getProfile()['university'], equals('Punjab University College of IT'));
+    expect(
+      AppDataService.instance.getProfile()['university'],
+      equals('Punjab University College of IT'),
+    );
 
     // SIMULATE APP CLOSE & REOPEN
     await AppDataService.instance.init();
 
-    expect(AppDataService.instance.verifyLocalCredentials('rabia.dev@punjab.edu.pk', 'password123'), isTrue);
-    final reloadedAcc = AppDataService.instance.findUserAccount('rabia.dev@punjab.edu.pk');
+    expect(
+      AppDataService.instance.verifyLocalCredentials(
+        'rabia.dev@punjab.edu.pk',
+        'password123',
+      ),
+      isTrue,
+    );
+    final reloadedAcc = AppDataService.instance.findUserAccount(
+      'rabia.dev@punjab.edu.pk',
+    );
     expect(reloadedAcc!['name'], equals('Rabia Tariq'));
-    expect(reloadedAcc['university'], equals('Punjab University College of IT'));
+    expect(
+      reloadedAcc['university'],
+      equals('Punjab University College of IT'),
+    );
   });
 
   test('Password Reset & Immediate Login with New Password', () async {
@@ -388,28 +542,126 @@ void main() {
       role: 'Student',
     );
 
-    expect(AppDataService.instance.verifyLocalCredentials('student.test@campusconnect.pk', 'oldPassword1'), isTrue);
+    expect(
+      AppDataService.instance.verifyLocalCredentials(
+        'student.test@campusconnect.pk',
+        'oldPassword1',
+      ),
+      isTrue,
+    );
 
     // Reset / Update password
-    await AppDataService.instance.updateAccountPassword('student.test@campusconnect.pk', 'newStrongPass99');
+    await AppDataService.instance.updateAccountPassword(
+      'student.test@campusconnect.pk',
+      'newStrongPass99',
+    );
 
     // Old password must fail, new password must succeed!
-    expect(AppDataService.instance.verifyLocalCredentials('student.test@campusconnect.pk', 'oldPassword1'), isFalse);
-    expect(AppDataService.instance.verifyLocalCredentials('student.test@campusconnect.pk', 'newStrongPass99'), isTrue);
+    expect(
+      AppDataService.instance.verifyLocalCredentials(
+        'student.test@campusconnect.pk',
+        'oldPassword1',
+      ),
+      isFalse,
+    );
+    expect(
+      AppDataService.instance.verifyLocalCredentials(
+        'student.test@campusconnect.pk',
+        'newStrongPass99',
+      ),
+      isTrue,
+    );
 
     // SIMULATE APP CLOSE & REOPEN
     await AppDataService.instance.init();
 
-    expect(AppDataService.instance.verifyLocalCredentials('student.test@campusconnect.pk', 'newStrongPass99'), isTrue);
-    expect(AppDataService.instance.verifyLocalCredentials('student.test@campusconnect.pk', 'oldPassword1'), isFalse);
+    expect(
+      AppDataService.instance.verifyLocalCredentials(
+        'student.test@campusconnect.pk',
+        'newStrongPass99',
+      ),
+      isTrue,
+    );
+    expect(
+      AppDataService.instance.verifyLocalCredentials(
+        'student.test@campusconnect.pk',
+        'oldPassword1',
+      ),
+      isFalse,
+    );
   });
 
-  test('Student Avatar base64 persistence and removal across app restarts', () async {
+  test(
+    'Student Avatar base64 persistence and removal across app restarts',
+    () async {
     final samplePng = Uint8List.fromList([
-      137, 80, 78, 71, 13, 10, 26, 10, 0, 0, 0, 13, 73, 72, 68, 82,
-      0, 0, 0, 1, 0, 0, 0, 1, 8, 6, 0, 0, 0, 31, 21, 196, 137,
-      0, 0, 0, 10, 73, 68, 65, 84, 120, 156, 99, 0, 1, 0, 0, 5, 0, 1,
-      13, 10, 45, 180, 0, 0, 0, 0, 73, 69, 78, 68, 174, 66, 96, 130,
+        137,
+        80,
+        78,
+        71,
+        13,
+        10,
+        26,
+        10,
+        0,
+        0,
+        0,
+        13,
+        73,
+        72,
+        68,
+        82,
+        0,
+        0,
+        0,
+        1,
+        0,
+        0,
+        0,
+        1,
+        8,
+        6,
+        0,
+        0,
+        0,
+        31,
+        21,
+        196,
+        137,
+        0,
+        0,
+        0,
+        10,
+        73,
+        68,
+        65,
+        84,
+        120,
+        156,
+        99,
+        0,
+        1,
+        0,
+        0,
+        5,
+        0,
+        1,
+        13,
+        10,
+        45,
+        180,
+        0,
+        0,
+        0,
+        0,
+        73,
+        69,
+        78,
+        68,
+        174,
+        66,
+        96,
+        130,
     ]);
 
     await AppDataService.instance.updateStudentAvatar(
@@ -434,7 +686,8 @@ void main() {
 
     await AppDataService.instance.init();
     expect(AppDataService.instance.getProfile()['avatarBase64'], isNull);
-  });
+    },
+  );
 
   test('Same email can log out and re-login cleanly across restarts', () async {
     await AppDataService.instance.registerUserAccount(
@@ -474,4 +727,3 @@ void main() {
     expect(AppDataService.instance.userEmail, equals('sameuser@gmail.com'));
   });
 }
-

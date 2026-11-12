@@ -21,7 +21,9 @@ class CertificatesScreen extends StatelessWidget {
     if (AppDataService.instance.userName.trim().isNotEmpty) {
       return AppDataService.instance.userName.trim();
     }
-    return SupabaseHelper.currentUser?.userMetadata?['name']?.toString().trim() ??
+    return SupabaseHelper.currentUser?.userMetadata?['name']
+            ?.toString()
+            .trim() ??
         'Student';
   }
 
@@ -31,14 +33,10 @@ class CertificatesScreen extends StatelessWidget {
     String rawUrl,
   ) async {
     final trimmed = rawUrl.trim();
-    final lower = trimmed.toLowerCase();
-    final isInAppCredential = trimmed.isEmpty ||
-        lower.startsWith('${ShareService.appScheme}://') ||
-        lower.contains('skillbridge.edu.pk') ||
-        lower.contains('skillbridge.app');
 
-    if (isInAppCredential) {
-      final status = (cert['status']?.toString().trim() ?? 'valid').toLowerCase();
+    if (trimmed.isEmpty) {
+      final status = (cert['status']?.toString().trim() ?? 'valid')
+          .toLowerCase();
       final certId = cert['id']?.toString() ?? 'SB-CERT';
       final isRevoked = status == 'revoked';
       if (!context.mounted) return;
@@ -51,8 +49,9 @@ class CertificatesScreen extends StatelessWidget {
                   ? 'Credential $certId has been revoked by issuing authority.'
                   : 'Verified SkillBridge Credential ($certId) — Authentic & Active.',
             ),
-            backgroundColor:
-                isRevoked ? AppColors.statusClosed : AppColors.statusOpen,
+            backgroundColor: isRevoked
+                ? AppColors.statusClosed
+                : AppColors.statusOpen,
             behavior: SnackBarBehavior.floating,
           ),
         );
@@ -106,8 +105,10 @@ class CertificatesScreen extends StatelessWidget {
                   decoration: BoxDecoration(
                     shape: BoxShape.circle,
                     color: AppColors.warningBg,
-                    border:
-                        Border.all(color: const Color(0xFFF59E0B), width: 2),
+                    border: Border.all(
+                      color: const Color(0xFFF59E0B),
+                      width: 2,
+                    ),
                   ),
                   child: const Icon(
                     Icons.workspace_premium_rounded,
@@ -138,8 +139,10 @@ class CertificatesScreen extends StatelessWidget {
                 const SizedBox(height: 12),
                 Text(
                   'This certificate is awarded to',
-                  style:
-                      GoogleFonts.inter(fontSize: 12, color: AppColors.grayText),
+                  style: GoogleFonts.inter(
+                    fontSize: 12,
+                    color: AppColors.grayText,
+                  ),
                 ),
                 const SizedBox(height: 4),
                 Text(
@@ -154,8 +157,10 @@ class CertificatesScreen extends StatelessWidget {
                 const SizedBox(height: 8),
                 Text(
                   'for successful completion of',
-                  style:
-                      GoogleFonts.inter(fontSize: 12, color: AppColors.grayText),
+                  style: GoogleFonts.inter(
+                    fontSize: 12,
+                    color: AppColors.grayText,
+                  ),
                 ),
                 const SizedBox(height: 4),
                 Text(
@@ -170,8 +175,10 @@ class CertificatesScreen extends StatelessWidget {
                 if (rating != null && rating > 0) ...[
                   const SizedBox(height: 10),
                   Container(
-                    padding:
-                        const EdgeInsets.symmetric(horizontal: 10, vertical: 4),
+                    padding: const EdgeInsets.symmetric(
+                      horizontal: 10,
+                      vertical: 4,
+                    ),
                     decoration: BoxDecoration(
                       color: AppColors.warningBg,
                       borderRadius: BorderRadius.circular(20),
@@ -215,16 +222,23 @@ class CertificatesScreen extends StatelessWidget {
                       child: Column(
                         crossAxisAlignment: CrossAxisAlignment.start,
                         children: [
-                          Text('Issued By',
+                          Text(
+                            'Issued By',
                               style: GoogleFonts.inter(
-                                  fontSize: 10, color: AppColors.grayText)),
-                          Text(issuer,
+                              fontSize: 10,
+                              color: AppColors.grayText,
+                            ),
+                          ),
+                          Text(
+                            issuer,
                               maxLines: 1,
                               overflow: TextOverflow.ellipsis,
                               style: GoogleFonts.inter(
                                   fontSize: 11.5,
                                   fontWeight: FontWeight.bold,
-                                  color: AppColors.deepNavy)),
+                              color: AppColors.deepNavy,
+                            ),
+                          ),
                         ],
                       ),
                     ),
@@ -233,16 +247,23 @@ class CertificatesScreen extends StatelessWidget {
                       child: Column(
                         crossAxisAlignment: CrossAxisAlignment.end,
                         children: [
-                          Text('Date & Credential ID',
+                          Text(
+                            'Date & Credential ID',
                               style: GoogleFonts.inter(
-                                  fontSize: 10, color: AppColors.grayText)),
-                          Text('$date • $certId',
+                              fontSize: 10,
+                              color: AppColors.grayText,
+                            ),
+                          ),
+                          Text(
+                            '$date • $certId',
                               maxLines: 1,
                               overflow: TextOverflow.ellipsis,
                               style: GoogleFonts.inter(
                                   fontSize: 11,
                                   fontWeight: FontWeight.bold,
-                                  color: AppColors.deepNavy)),
+                              color: AppColors.deepNavy,
+                            ),
+                          ),
                         ],
                       ),
                     ),
@@ -260,11 +281,8 @@ class CertificatesScreen extends StatelessWidget {
                 ],
                 if (verificationUrl.isNotEmpty || hash.isNotEmpty)
                   TextButton.icon(
-                    onPressed: () => _verifyCredentialInApp(
-                      context,
-                      cert,
-                      verificationUrl,
-                    ),
+                    onPressed: () =>
+                        _verifyCredentialInApp(context, cert, verificationUrl),
                     icon: const Icon(Icons.verified_user_outlined, size: 15),
                     label: const Text('Verify Credential'),
                   ),
@@ -347,8 +365,9 @@ class CertificatesScreen extends StatelessWidget {
               constraints: const BoxConstraints(maxWidth: 820),
               child: RefreshIndicator(
                 color: AppColors.primaryBlue,
-                onRefresh: () => AppDataService.instance
-                    .syncFromSupabase(forceRefresh: true),
+                onRefresh: () => AppDataService.instance.syncFromSupabase(
+                  forceRefresh: true,
+                ),
                 child: certificates.isEmpty
                     ? ListView(
                         physics: const AlwaysScrollableScrollPhysics(),
@@ -358,8 +377,7 @@ class CertificatesScreen extends StatelessWidget {
                           AppEmptyState(
                             icon: Icons.military_tech_rounded,
                             title: 'No Certificates Earned Yet',
-                            subtitle:
-                                'Complete assigned corporate projects and receive final supervisor approval to unlock verifiable PDF certificates.',
+                            subtitle: 'Complete assigned corporate projects and receive final supervisor approval to unlock verifiable PDF certificates.',
                           ),
                         ],
                       )
@@ -382,8 +400,7 @@ class CertificatesScreen extends StatelessWidget {
                             ),
                             child: InkWell(
                               borderRadius: BorderRadius.circular(18),
-                              onTap: () =>
-                                  showCertificateDialog(context, cert),
+                              onTap: () => showCertificateDialog(context, cert),
                               child: Container(
                                 padding: const EdgeInsets.all(20),
                                 decoration: BoxDecoration(
@@ -393,8 +410,9 @@ class CertificatesScreen extends StatelessWidget {
                                     end: Alignment.bottomRight,
                                     colors: [
                                       Colors.white,
-                                      AppColors.lightAqua
-                                          .withValues(alpha: 0.28),
+                                      AppColors.lightAqua.withValues(
+                                        alpha: 0.28,
+                                      ),
                                     ],
                                   ),
                                 ),
@@ -480,9 +498,12 @@ class CertificatesScreen extends StatelessWidget {
                                           },
                                           icon: const Icon(
                                               Icons.download_rounded,
-                                              size: 15),
-                                          label: const Text('Download PDF',
-                                              style: TextStyle(fontSize: 12)),
+                                            size: 15,
+                                          ),
+                                          label: const Text(
+                                            'Download PDF',
+                                            style: TextStyle(fontSize: 12),
+                                          ),
                                         ),
                                         ElevatedButton.icon(
                                           style: ElevatedButton.styleFrom(
@@ -494,17 +515,19 @@ class CertificatesScreen extends StatelessWidget {
                                             ),
                                           ),
                                           onPressed: () {
-                                            DownloadService
-                                                .openCertificateDirectly(
+                                            DownloadService.openCertificateDirectly(
                                               context: context,
                                               certificate: cert,
                                             );
                                           },
                                           icon: const Icon(
                                               Icons.picture_as_pdf_rounded,
-                                              size: 15),
-                                          label: const Text('Open PDF',
-                                              style: TextStyle(fontSize: 12)),
+                                            size: 15,
+                                          ),
+                                          label: const Text(
+                                            'Open PDF',
+                                            style: TextStyle(fontSize: 12),
+                                          ),
                                         ),
                                         OutlinedButton.icon(
                                           style: OutlinedButton.styleFrom(
@@ -521,9 +544,12 @@ class CertificatesScreen extends StatelessWidget {
                                           },
                                           icon: const Icon(
                                               Icons.share_outlined,
-                                              size: 15),
-                                          label: const Text('Share',
-                                              style: TextStyle(fontSize: 12)),
+                                            size: 15,
+                                          ),
+                                          label: const Text(
+                                            'Share',
+                                            style: TextStyle(fontSize: 12),
+                                          ),
                                         ),
                                       ],
                                     ),
