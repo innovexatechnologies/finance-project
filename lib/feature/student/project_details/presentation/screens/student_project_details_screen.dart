@@ -8,10 +8,20 @@ import 'package:link_vibe/core/services/supabase_helper.dart';
 import 'package:link_vibe/core/widgets/status_badge.dart';
 import 'package:link_vibe/feature/student/apply/presentation/screens/apply_project_screen.dart';
 
-class StudentProjectDetailsScreen extends StatelessWidget {
+class StudentProjectDetailsScreen extends StatefulWidget {
   final Map<String, dynamic> project;
 
   const StudentProjectDetailsScreen({super.key, required this.project});
+
+  @override
+  State<StudentProjectDetailsScreen> createState() =>
+      _StudentProjectDetailsScreenState();
+}
+
+class _StudentProjectDetailsScreenState
+    extends State<StudentProjectDetailsScreen> {
+  bool _isSubmittingPaymentConfirmation = false;
+  String? _savedPaymentConfirmationStatus;
 
   List<String> _splitLines(String raw) {
     return raw
@@ -36,10 +46,74 @@ class StudentProjectDetailsScreen extends StatelessWidget {
     }
   }
 
+  Map<String, dynamic>? _findCurrentApplication(String projectId) {
+    final applications = AppDataService.instance.getApplications();
+    final applicationId =
+        widget.project['applicationId']?.toString() ?? '';
+    for (final application in applications) {
+      if (applicationId.isNotEmpty &&
+          (application['applicationId']?.toString() ??
+                  application['id']?.toString()) ==
+              applicationId) {
+        return application;
+      }
+    }
+    for (final application in applications) {
+      if (application['projectId']?.toString() == projectId &&
+          application['isAssignedProject'] == true) {
+        return application;
+      }
+    }
+    for (final application in applications) {
+      if (application['projectId']?.toString() == projectId) {
+        return application;
+      }
+    }
+    return null;
+  }
+
+  Future<void> _submitPaymentConfirmation({
+    required String projectId,
+    required bool received,
+  }) async {
+    if (_isSubmittingPaymentConfirmation) return;
+    setState(() => _isSubmittingPaymentConfirmation = true);
+    try {
+      final response = await AppDataService.instance.confirmProjectPayment(
+        projectId: projectId,
+        received: received,
+      );
+      if (!mounted) return;
+      setState(() => _savedPaymentConfirmationStatus = response);
+      ScaffoldMessenger.of(context)
+        ..hideCurrentSnackBar()
+        ..showSnackBar(
+          SnackBar(
+            content: Text('Payment response saved: $response.'),
+            backgroundColor: AppColors.statusOpen,
+          ),
+        );
+    } catch (error) {
+      debugPrint('Student payment confirmation failed: $error');
+      if (!mounted) return;
+      ScaffoldMessenger.of(context)
+        ..hideCurrentSnackBar()
+        ..showSnackBar(
+          const SnackBar(
+            content: Text('Could not save your payment response. Try again.'),
+            backgroundColor: AppColors.statusClosed,
+          ),
+        );
+    } finally {
+      if (mounted) setState(() => _isSubmittingPaymentConfirmation = false);
+    }
+  }
+
   @override
   Widget build(BuildContext context) {
-    final id = project['id']?.toString() ??
-        project['projectId']?.toString() ??
+    final project = widget.project;
+    final id = project['projectId']?.toString() ??
+        project['id']?.toString() ??
         '';
     final title = (project['title']?.toString().trim().isNotEmpty == true)
         ? project['title'].toString().trim()
@@ -82,6 +156,16 @@ class StudentProjectDetailsScreen extends StatelessWidget {
       builder: (context, _) {
         final isSaved = AppDataService.instance.isProjectSaved(id);
         final hasApplied = AppDataService.instance.hasApplied(id);
+        final currentApplication = _findCurrentApplication(id);
+        final paymentProject = currentApplication ?? project;
+        final isAssignedProject =
+            paymentProject['isAssignedProject'] == true;
+        final paymentStatusAvailable =
+            paymentProject['paymentStatusAvailable'] == true;
+        final paymentSent = paymentProject['paymentSent'] == true;
+        final paymentConfirmationStatus =
+            _savedPaymentConfirmationStatus ??
+                paymentProject['paymentConfirmationStatus']?.toString();
         final isClosed = status.toLowerCase() == 'closed' ||
             status.toLowerCase() == 'completed';
 
@@ -332,6 +416,17 @@ class StudentProjectDetailsScreen extends StatelessWidget {
                           ),
                           const SizedBox(height: 22),
 
+                          if (isAssignedProject) ...[
+                            _buildPaymentConfirmationSection(
+                              projectId: id,
+                              statusAvailable: paymentStatusAvailable,
+                              paymentSent: paymentSent,
+                              confirmationStatus:
+                                  paymentConfirmationStatus,
+                            ),
+                            const SizedBox(height: 18),
+                          ],
+
                           _buildSectionCard(
                             title: 'About this Project',
                             child: Text(
@@ -468,91 +563,241 @@ class StudentProjectDetailsScreen extends StatelessWidget {
               ),
             ],
           ),
-          bottomNavigationBar: SafeArea(
-            child: Container(
-              padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
-              decoration: const BoxDecoration(
-                color: AppColors.cardWhite,
-                border: Border(top: BorderSide(color: AppColors.lightGray)),
-              ),
-              child: Row(
-                children: [
-                  IconButton(
-                    tooltip: isSaved ? 'Remove Bookmark' : 'Save Project',
-                    icon: Icon(
-                      isSaved
-                          ? Icons.bookmark_rounded
-                          : Icons.bookmark_border_rounded,
-                      color: isSaved ? AppColors.teal : AppColors.grayText,
+          bottomNavigationBar: isAssignedProject
+              ? null
+              : SafeArea(
+                  child: Container(
+                    padding: const EdgeInsets.symmetric(
+                      horizontal: 16,
+                      vertical: 12,
                     ),
-                    onPressed: () {
-                      AppDataService.instance.toggleSaveProject(project);
-                    },
-                  ),
-                  const SizedBox(width: 8),
-                  Expanded(
-                    child: SizedBox(
-                      height: 48,
-                      child: ElevatedButton(
-                        style: ElevatedButton.styleFrom(
-                          backgroundColor: hasApplied
-                              ? AppColors.statusOpen
-                              : (isClosed
-                                  ? AppColors.grayText
-                                  : AppColors.primaryBlue),
-                          foregroundColor: Colors.white,
-                          shape: RoundedRectangleBorder(
-                            borderRadius: BorderRadius.circular(14),
-                          ),
-                        ),
-                        onPressed: isClosed && !hasApplied
-                            ? null
-                            : () {
-                                if (hasApplied) {
-                                  ScaffoldMessenger.of(context).showSnackBar(
-                                    const SnackBar(
-                                      content: Text(
-                                        'You have already applied! Check status in My Applications.',
-                                      ),
-                                    ),
-                                  );
-                                } else {
-                                  Navigator.push(
-                                    context,
-                                    MaterialPageRoute(
-                                      builder: (_) =>
-                                          ApplyProjectScreen(project: project),
-                                    ),
-                                  );
-                                }
-                              },
-                        child: Row(
-                          mainAxisAlignment: MainAxisAlignment.center,
-                          children: [
-                            Text(
-                              hasApplied
-                                  ? 'Applied ✓'
-                                  : (isClosed ? 'Closed' : 'Apply Now'),
-                              style: GoogleFonts.poppins(
-                                fontSize: 15,
-                                fontWeight: FontWeight.bold,
-                              ),
-                            ),
-                            if (!hasApplied && !isClosed) ...[
-                              const SizedBox(width: 6),
-                              const Icon(Icons.arrow_forward_rounded, size: 16),
-                            ],
-                          ],
-                        ),
+                    decoration: const BoxDecoration(
+                      color: AppColors.cardWhite,
+                      border: Border(
+                        top: BorderSide(color: AppColors.lightGray),
                       ),
                     ),
+                    child: Row(
+                      children: [
+                        IconButton(
+                          tooltip: isSaved ? 'Remove Bookmark' : 'Save Project',
+                          icon: Icon(
+                            isSaved
+                                ? Icons.bookmark_rounded
+                                : Icons.bookmark_border_rounded,
+                            color:
+                                isSaved ? AppColors.teal : AppColors.grayText,
+                          ),
+                          onPressed: () {
+                            AppDataService.instance.toggleSaveProject(project);
+                          },
+                        ),
+                        const SizedBox(width: 8),
+                        Expanded(
+                          child: SizedBox(
+                            height: 48,
+                            child: ElevatedButton(
+                              style: ElevatedButton.styleFrom(
+                                backgroundColor: hasApplied
+                                    ? AppColors.statusOpen
+                                    : (isClosed
+                                        ? AppColors.grayText
+                                        : AppColors.primaryBlue),
+                                foregroundColor: Colors.white,
+                                shape: RoundedRectangleBorder(
+                                  borderRadius: BorderRadius.circular(14),
+                                ),
+                              ),
+                              onPressed: isClosed && !hasApplied
+                                  ? null
+                                  : () {
+                                      if (hasApplied) {
+                                        ScaffoldMessenger.of(context)
+                                            .showSnackBar(
+                                          const SnackBar(
+                                            content: Text(
+                                              'You have already applied! Check status in My Applications.',
+                                            ),
+                                          ),
+                                        );
+                                      } else {
+                                        Navigator.push(
+                                          context,
+                                          MaterialPageRoute(
+                                            builder: (_) =>
+                                                ApplyProjectScreen(
+                                              project: project,
+                                            ),
+                                          ),
+                                        );
+                                      }
+                                    },
+                              child: Row(
+                                mainAxisAlignment: MainAxisAlignment.center,
+                                children: [
+                                  Text(
+                                    hasApplied
+                                        ? 'Applied ✓'
+                                        : (isClosed ? 'Closed' : 'Apply Now'),
+                                    style: GoogleFonts.poppins(
+                                      fontSize: 15,
+                                      fontWeight: FontWeight.bold,
+                                    ),
+                                  ),
+                                  if (!hasApplied && !isClosed) ...[
+                                    const SizedBox(width: 6),
+                                    const Icon(
+                                      Icons.arrow_forward_rounded,
+                                      size: 16,
+                                    ),
+                                  ],
+                                ],
+                              ),
+                            ),
+                          ),
+                        ),
+                      ],
+                    ),
                   ),
-                ],
-              ),
-            ),
-          ),
+                ),
         );
       },
+    );
+  }
+
+  Widget _buildPaymentConfirmationSection({
+    required String projectId,
+    required bool statusAvailable,
+    required bool paymentSent,
+    required String? confirmationStatus,
+  }) {
+    final hasConfirmation = confirmationStatus == 'Received' ||
+        confirmationStatus == 'Not Received';
+    final statusLabel = hasConfirmation
+        ? confirmationStatus!
+        : !statusAvailable
+            ? 'Payment status unavailable'
+            : paymentSent
+                ? 'Payment Sent'
+                : 'Payment Pending';
+    final statusColor = switch (statusLabel) {
+      'Received' => const Color(0xFF166534),
+      'Not Received' => AppColors.statusClosed,
+      'Payment Sent' => AppColors.primaryBlue,
+      'Payment Pending' => const Color(0xFF92400E),
+      _ => AppColors.grayText,
+    };
+    final statusBackground = switch (statusLabel) {
+      'Received' => AppColors.successBg,
+      'Not Received' => AppColors.errorBg,
+      'Payment Sent' => AppColors.lightAqua,
+      'Payment Pending' => AppColors.warningBg,
+      _ => AppColors.surfaceAlt,
+    };
+    final canRespond =
+        statusAvailable && paymentSent && !hasConfirmation;
+
+    return _buildSectionCard(
+      title: 'Payment Confirmation',
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.stretch,
+        children: [
+          Wrap(
+            alignment: WrapAlignment.spaceBetween,
+            crossAxisAlignment: WrapCrossAlignment.center,
+            spacing: 8,
+            runSpacing: 8,
+            children: [
+              Text(
+                'Status',
+                style: GoogleFonts.inter(
+                  fontSize: 13,
+                  fontWeight: FontWeight.w600,
+                  color: AppColors.darkText,
+                ),
+              ),
+              Container(
+                padding: const EdgeInsets.symmetric(
+                  horizontal: 10,
+                  vertical: 5,
+                ),
+                decoration: BoxDecoration(
+                  color: statusBackground,
+                  borderRadius: BorderRadius.circular(9),
+                ),
+                child: Text(
+                  statusLabel,
+                  maxLines: 1,
+                  overflow: TextOverflow.ellipsis,
+                  style: GoogleFonts.inter(
+                    color: statusColor,
+                    fontSize: 12,
+                    fontWeight: FontWeight.w700,
+                  ),
+                ),
+              ),
+            ],
+          ),
+          if (canRespond) ...[
+            const SizedBox(height: 12),
+            SizedBox(
+              width: double.infinity,
+              child: ElevatedButton.icon(
+                style: ElevatedButton.styleFrom(
+                  backgroundColor: AppColors.statusOpen,
+                  foregroundColor: Colors.white,
+                  padding: const EdgeInsets.symmetric(
+                    horizontal: 10,
+                    vertical: 12,
+                  ),
+                ),
+                onPressed: _isSubmittingPaymentConfirmation
+                    ? null
+                    : () => _submitPaymentConfirmation(
+                          projectId: projectId,
+                          received: true,
+                        ),
+                icon: _isSubmittingPaymentConfirmation
+                    ? const SizedBox(
+                        width: 18,
+                        height: 18,
+                        child: CircularProgressIndicator(strokeWidth: 2),
+                      )
+                    : const Icon(Icons.check_circle_outline, size: 18),
+                label: const Text(
+                  'Yes, Payment Received',
+                  maxLines: 2,
+                ),
+              ),
+            ),
+            const SizedBox(height: 8),
+            SizedBox(
+              width: double.infinity,
+              child: OutlinedButton.icon(
+                style: OutlinedButton.styleFrom(
+                  foregroundColor: AppColors.statusClosed,
+                  padding: const EdgeInsets.symmetric(
+                    horizontal: 10,
+                    vertical: 12,
+                  ),
+                  side: const BorderSide(color: AppColors.statusClosed),
+                ),
+                onPressed: _isSubmittingPaymentConfirmation
+                    ? null
+                    : () => _submitPaymentConfirmation(
+                          projectId: projectId,
+                          received: false,
+                        ),
+                icon: const Icon(Icons.cancel_outlined, size: 18),
+                label: const Text(
+                  'No, Payment Not Received',
+                  maxLines: 2,
+                ),
+              ),
+            ),
+          ],
+        ],
+      ),
     );
   }
 

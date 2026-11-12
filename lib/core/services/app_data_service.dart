@@ -475,6 +475,33 @@ class AppDataService extends ChangeNotifier {
                 .or('student_id.eq.${user.id},user_id.eq.${user.id}')
                 .order('submitted_at', ascending: false);
 
+            final Map<String, Map<String, dynamic>> paymentStatuses = {};
+            var paymentStatusAvailable = false;
+            if (_userRole.toLowerCase() == 'student') {
+              try {
+                final statusRows = await supabase.rpc(
+                  'get_student_assigned_project_payment_status',
+                );
+                if (statusRows is! List) {
+                  throw const FormatException(
+                    'Invalid assigned project payment status response.',
+                  );
+                }
+                for (final raw in statusRows) {
+                  if (raw is! Map) continue;
+                  final row = Map<String, dynamic>.from(raw);
+                  final projectId = row['project_id']?.toString() ?? '';
+                  if (projectId.isNotEmpty) {
+                    paymentStatuses[projectId] = row;
+                  }
+                }
+                paymentStatusAvailable = true;
+              } catch (e) {
+                debugPrint('Student project payment status load failed: $e');
+                _lastSyncError = e.toString();
+              }
+            }
+
             final List<Map<String, dynamic>> mappedApps = [];
             final Map<String, Map<String, dynamic>> mappedSubs = {};
 
@@ -509,9 +536,11 @@ class AppDataService extends ChangeNotifier {
               final company = row['company_name']?.toString() ??
                   matchingProject['company']?.toString() ??
                   'Company Partner';
+              final paymentStatus = paymentStatuses[projectId];
 
               mappedApps.add({
                 'id': row['id']?.toString() ?? '',
+                'applicationId': row['id']?.toString() ?? '',
                 'projectId': projectId,
                 'title': title,
                 'company': company,
@@ -526,6 +555,11 @@ class AppDataService extends ChangeNotifier {
                 'companyFeedback': feedback,
                 'progress': (row['progress'] as num?)?.toDouble() ?? 0.0,
                 'deadline': matchingProject['deadline']?.toString() ?? 'Flexible',
+                'isAssignedProject': paymentStatus != null,
+                'paymentStatusAvailable': paymentStatusAvailable,
+                'paymentSent': paymentStatus?['payment_sent'] == true,
+                'paymentConfirmationStatus':
+                    paymentStatus?['confirmation_status']?.toString(),
               });
 
               if (workUrl.isNotEmpty ||
@@ -759,6 +793,50 @@ class AppDataService extends ChangeNotifier {
 
   List<Map<String, dynamic>> getApplications() =>
       List.unmodifiable(_applications);
+
+  Future<String> confirmProjectPayment({
+    required String projectId,
+    required bool received,
+  }) async {
+    final supabase = SupabaseHelper.clientOrNull;
+    final user = supabase?.auth.currentUser;
+    if (supabase == null || user == null) {
+      throw StateError('A signed-in student account is required.');
+    }
+    if (!SupabaseHelper.isUuid(projectId)) {
+      throw ArgumentError.value(projectId, 'projectId', 'Must be a UUID.');
+    }
+
+    final result = await supabase.rpc(
+      'respond_to_project_payment',
+      params: {
+        'p_project_id': projectId,
+        'p_received': received,
+      },
+    );
+    final confirmationStatus = result?.toString() ?? '';
+    if (confirmationStatus != 'Received' &&
+        confirmationStatus != 'Not Received') {
+      throw const FormatException(
+        'The server returned an invalid payment confirmation status.',
+      );
+    }
+
+    _applications = _applications.map((application) {
+      if (application['projectId']?.toString() == projectId &&
+          application['isAssignedProject'] == true) {
+        return {
+          ...application,
+          'paymentConfirmationStatus': confirmationStatus,
+        };
+      }
+      return application;
+    }).toList();
+    _safeNotifyListeners();
+    await _prefs?.setString(_kApplications, jsonEncode(_applications));
+
+    return confirmationStatus;
+  }
 
   bool hasApplied(String projectId) {
     return _applications

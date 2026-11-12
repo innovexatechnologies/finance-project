@@ -95,7 +95,8 @@ class _MyProjectsScreenState extends State<MyProjectsScreen>
                 a['status'] == 'Under Review' ||
                 a['status'] == 'Revision Requested' ||
                 a['status'] == 'Accepted' ||
-                a['status'] == 'Shortlisted')
+                a['status'] == 'Shortlisted' ||
+                a['isAssignedProject'] == true)
             .toList();
 
         final completedList =
@@ -335,6 +336,7 @@ class _MyProjectsScreenState extends State<MyProjectsScreen>
                       ),
                     ],
                   ),
+                _buildPaymentStatusChip(_paymentStatusLabel(project)),
               ],
             ),
 
@@ -455,6 +457,56 @@ class _MyProjectsScreenState extends State<MyProjectsScreen>
               ],
             ),
           ],
+        ),
+      ),
+    );
+  }
+
+  String _paymentStatusLabel(Map<String, dynamic> project) {
+    if (project['paymentStatusAvailable'] != true) {
+      return 'Payment status unavailable';
+    }
+    if (project['isAssignedProject'] != true) return 'Payment Pending';
+
+    final confirmation =
+        project['paymentConfirmationStatus']?.toString();
+    if (confirmation == 'Received' || confirmation == 'Not Received') {
+      return confirmation!;
+    }
+    return project['paymentSent'] == true ? 'Payment Sent' : 'Payment Pending';
+  }
+
+  Widget _buildPaymentStatusChip(String label) {
+    final color = switch (label) {
+      'Received' => const Color(0xFF166534),
+      'Not Received' => AppColors.statusClosed,
+      'Payment Sent' => AppColors.primaryBlue,
+      'Payment Pending' => const Color(0xFF92400E),
+      _ => AppColors.grayText,
+    };
+    final background = switch (label) {
+      'Received' => AppColors.successBg,
+      'Not Received' => AppColors.errorBg,
+      'Payment Sent' => AppColors.lightAqua,
+      'Payment Pending' => AppColors.warningBg,
+      _ => AppColors.surfaceAlt,
+    };
+
+    return Container(
+      padding: const EdgeInsets.symmetric(horizontal: 9, vertical: 5),
+      decoration: BoxDecoration(
+        color: background,
+        borderRadius: BorderRadius.circular(9),
+        border: Border.all(color: color.withValues(alpha: 0.2)),
+      ),
+      child: Text(
+        label,
+        maxLines: 1,
+        overflow: TextOverflow.ellipsis,
+        style: GoogleFonts.inter(
+          fontSize: 11.5,
+          fontWeight: FontWeight.w600,
+          color: color,
         ),
       ),
     );

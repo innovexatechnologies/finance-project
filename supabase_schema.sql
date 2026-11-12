@@ -340,6 +340,15 @@ CREATE TABLE IF NOT EXISTS public.project_assignments (
 CREATE INDEX IF NOT EXISTS idx_project_assignments_project_id
   ON public.project_assignments (project_id);
 
+CREATE TABLE IF NOT EXISTS public.project_payment_confirmations (
+  project_id UUID NOT NULL REFERENCES public.projects(id) ON DELETE CASCADE,
+  student_id UUID NOT NULL REFERENCES auth.users(id) ON DELETE CASCADE,
+  confirmation_status TEXT NOT NULL
+    CHECK (confirmation_status IN ('Received', 'Not Received')),
+  confirmed_at TIMESTAMPTZ NOT NULL DEFAULT timezone('utc'::text, now()),
+  PRIMARY KEY (project_id, student_id)
+);
+
 -- ----------------------------------------------------------------------------
 -- 7. CERTIFICATES TABLE
 -- ----------------------------------------------------------------------------
@@ -963,6 +972,7 @@ ALTER TABLE public.companies ENABLE ROW LEVEL SECURITY;
 ALTER TABLE public.students ENABLE ROW LEVEL SECURITY;
 ALTER TABLE public.student_payment_methods ENABLE ROW LEVEL SECURITY;
 ALTER TABLE public.project_assignments ENABLE ROW LEVEL SECURITY;
+ALTER TABLE public.project_payment_confirmations ENABLE ROW LEVEL SECURITY;
 ALTER TABLE public.projects ENABLE ROW LEVEL SECURITY;
 ALTER TABLE public.applications ENABLE ROW LEVEL SECURITY;
 ALTER TABLE public.certificates ENABLE ROW LEVEL SECURITY;
@@ -1052,6 +1062,8 @@ USING (auth.uid() = user_id OR public.is_admin())
 WITH CHECK (auth.uid() = user_id OR public.is_admin());
 
 REVOKE ALL ON TABLE public.project_assignments FROM anon, PUBLIC, authenticated;
+REVOKE ALL ON TABLE public.project_payment_confirmations
+  FROM anon, PUBLIC, authenticated;
 
 CREATE OR REPLACE FUNCTION public.assign_applicant_to_project(
   p_application_id UUID,
@@ -1306,6 +1318,122 @@ $$;
 REVOKE ALL ON FUNCTION public.mark_project_payment_sent(UUID)
   FROM PUBLIC, anon;
 GRANT EXECUTE ON FUNCTION public.mark_project_payment_sent(UUID)
+  TO authenticated;
+
+CREATE OR REPLACE FUNCTION public.get_student_assigned_project_payment_status()
+RETURNS TABLE(
+  project_id UUID,
+  payment_sent BOOLEAN,
+  confirmation_status TEXT
+)
+LANGUAGE sql
+SECURITY DEFINER
+SET search_path = pg_catalog
+AS $$
+  SELECT DISTINCT
+    p.id,
+    p.payment_sent,
+    pc.confirmation_status
+  FROM public.project_assignments pa
+  JOIN public.projects p ON p.id = pa.project_id
+  LEFT JOIN public.project_payment_confirmations pc
+    ON pc.project_id = p.id
+   AND pc.student_id = auth.uid()
+  WHERE pa.student_id = auth.uid()
+    AND EXISTS (
+      SELECT 1 FROM public.profiles pr
+      WHERE pr.id = auth.uid()
+        AND lower(BTRIM(pr.user_type)) = 'student'
+    );
+$$;
+
+REVOKE ALL ON FUNCTION public.get_student_assigned_project_payment_status()
+  FROM PUBLIC, anon;
+GRANT EXECUTE ON FUNCTION public.get_student_assigned_project_payment_status()
+  TO authenticated;
+
+CREATE OR REPLACE FUNCTION public.respond_to_project_payment(
+  p_project_id UUID,
+  p_received BOOLEAN
+)
+RETURNS TEXT
+LANGUAGE plpgsql
+SECURITY DEFINER
+SET search_path = pg_catalog
+AS $$
+DECLARE
+  v_payment_sent BOOLEAN;
+  v_confirmation_status TEXT;
+BEGIN
+  IF auth.uid() IS NULL OR NOT EXISTS (
+    SELECT 1 FROM public.profiles pr
+    WHERE pr.id = auth.uid()
+      AND lower(BTRIM(pr.user_type)) = 'student'
+  ) THEN
+    RAISE EXCEPTION 'Only student accounts can confirm project payments.';
+  END IF;
+
+  SELECT p.payment_sent
+  INTO v_payment_sent
+  FROM public.projects p
+  WHERE p.id = p_project_id
+    AND EXISTS (
+      SELECT 1 FROM public.project_assignments pa
+      WHERE pa.project_id = p.id
+        AND pa.student_id = auth.uid()
+    )
+  FOR UPDATE;
+
+  IF NOT FOUND THEN
+    RAISE EXCEPTION 'Project not found or you are not assigned to it.';
+  END IF;
+
+  IF v_payment_sent IS NOT TRUE THEN
+    RAISE EXCEPTION 'The company has not marked this payment as sent.';
+  END IF;
+
+  IF p_received IS NULL THEN
+    RAISE EXCEPTION 'A payment received response is required.';
+  END IF;
+
+  SELECT pc.confirmation_status
+  INTO v_confirmation_status
+  FROM public.project_payment_confirmations pc
+  WHERE pc.project_id = p_project_id
+    AND pc.student_id = auth.uid();
+
+  IF FOUND THEN
+    RETURN v_confirmation_status;
+  END IF;
+
+  v_confirmation_status := CASE
+    WHEN p_received THEN 'Received'
+    ELSE 'Not Received'
+  END;
+
+  INSERT INTO public.project_payment_confirmations (
+    project_id,
+    student_id,
+    confirmation_status
+  )
+  VALUES (p_project_id, auth.uid(), v_confirmation_status)
+  ON CONFLICT (project_id, student_id) DO NOTHING;
+
+  IF NOT FOUND THEN
+    SELECT pc.confirmation_status
+    INTO v_confirmation_status
+    FROM public.project_payment_confirmations pc
+    WHERE pc.project_id = p_project_id
+      AND pc.student_id = auth.uid();
+  END IF;
+
+  RETURN v_confirmation_status;
+END;
+$$;
+
+REVOKE ALL ON FUNCTION public.respond_to_project_payment(UUID, BOOLEAN)
+  FROM PUBLIC, anon;
+GRANT EXECUTE ON FUNCTION public.respond_to_project_payment(UUID, BOOLEAN)
   TO authenticated;
 
 CREATE POLICY "Projects Public View" ON public.projects FOR SELECT USING (true);
