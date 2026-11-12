@@ -459,34 +459,24 @@ class AdminAnalyticsService {
     return items.take(10).toList();
   }
 
-  // 5. VERIFICATION ANALYTICS SUMMARY (strictly live counts)
+  // 5. VERIFICATION ANALYTICS SUMMARY (company verifications only)
   VerificationAnalyticsSummary getVerificationAnalytics() {
-    final sTotal = _studentService.totalCount;
-    final sVerified = _studentService.verifiedCount;
-    final sPending = _studentService.pendingCount;
-    final sRejected = _studentService.rejectedCount;
-
     final cTotal = _companyService.totalCount;
     final cVerified = _companyService.verifiedCount;
     final cPending = _companyService.pendingCount;
     final cRejected = _companyService.rejectedCount;
 
-    final totalReq = sTotal + cTotal;
-    final approved = sVerified + cVerified;
-    final pending = sPending + cPending;
-    final rejected = sRejected + cRejected;
-
     final double approvalRate =
-        totalReq > 0 ? (approved / totalReq) * 100.0 : 0.0;
+        cTotal > 0 ? (cVerified / cTotal) * 100.0 : 0.0;
 
     return VerificationAnalyticsSummary(
-      totalRequests: totalReq,
-      approvedCount: approved,
-      rejectedCount: rejected,
-      pendingCount: pending,
+      totalRequests: cTotal,
+      approvedCount: cVerified,
+      rejectedCount: cRejected,
+      pendingCount: cPending,
       approvalRatePercentage: double.parse(approvalRate.toStringAsFixed(1)),
       averageTurnaroundHours: 0.0,
-      studentVerificationsTotal: sTotal,
+      studentVerificationsTotal: 0,
       companyVerificationsTotal: cTotal,
     );
   }
@@ -518,10 +508,8 @@ class AdminAnalyticsService {
         ? double.parse(((appAccepted / appTotal) * 100.0).toStringAsFixed(1))
         : 0.0;
 
-    final double verifiedShare = (sTotal + cTotal) > 0
-        ? ((_studentService.verifiedCount + _companyService.verifiedCount) /
-                (sTotal + cTotal)) *
-            100.0
+    final double activeShare = (sTotal + cTotal) > 0
+        ? ((activeStudents + activeCompanies) / (sTotal + cTotal)) * 100.0
         : 0.0;
 
     return UserEngagementSummary(
@@ -535,7 +523,7 @@ class AdminAnalyticsService {
       pendingApplications: appPending,
       applicationAcceptanceRate: acceptanceRate,
       averageApplicationsPerProject: avgAppPerProject,
-      engagementIndex: double.parse(verifiedShare.toStringAsFixed(1)),
+      engagementIndex: double.parse(activeShare.toStringAsFixed(1)),
     );
   }
 

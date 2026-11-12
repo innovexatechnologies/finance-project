@@ -15,15 +15,6 @@ class AdminStudentService {
   List<AdminStudentModel> get allStudents => studentsNotifier.value;
 
   int get totalCount => studentsNotifier.value.length;
-  int get verifiedCount => studentsNotifier.value
-      .where((s) => s.verificationStatus == StudentVerificationStatus.verified)
-      .length;
-  int get pendingCount => studentsNotifier.value
-      .where((s) => s.verificationStatus == StudentVerificationStatus.pending)
-      .length;
-  int get rejectedCount => studentsNotifier.value
-      .where((s) => s.verificationStatus == StudentVerificationStatus.rejected)
-      .length;
   int get suspendedCount => studentsNotifier.value
       .where((s) => s.accountStatus == StudentAccountStatus.suspended)
       .length;
@@ -449,98 +440,6 @@ class AdminStudentService {
     return true;
   }
 
-  /// Reject student verification with mandatory reason.
-  Future<bool> rejectStudentVerification({
-    required String studentId,
-    required String reason,
-    required String adminName,
-  }) async {
-    final list = List<AdminStudentModel>.from(studentsNotifier.value);
-    final idx = list.indexWhere((s) => s.id == studentId || s.userId == studentId);
-    if (idx == -1) return false;
-
-    final student = list[idx];
-    final nowIso = DateTime.now().toIso8601String();
-    final persisted = await _persistStudentUpdate(
-      student,
-      studentFields: {
-        'verification_status': 'rejected',
-        'updated_at': nowIso,
-      },
-      profileFields: {
-        'is_verified': false,
-        'updated_at': nowIso,
-      },
-      auditAction: 'STUDENT_VERIFICATION_REJECTED',
-      auditDetails: reason.trim(),
-    );
-    if (!persisted.ok) return false;
-
-    final history = List<StudentAuditRecord>.from(student.auditHistory);
-    history.insert(
-      0,
-      StudentAuditRecord(
-        id: 'aud_${DateTime.now().millisecondsSinceEpoch}',
-        action: 'Verification Rejected',
-        adminName: adminName,
-        timestamp: 'Just now',
-        note: reason.trim(),
-      ),
-    );
-
-    list[idx] = student.copyWith(
-      id: persisted.resolvedId,
-      verificationStatus: StudentVerificationStatus.rejected,
-      auditHistory: history,
-    );
-    studentsNotifier.value = list;
-    return true;
-  }
-
-  /// Request document resubmission from a student.
-  Future<bool> requestDocumentResubmission({
-    required String studentId,
-    required String instructions,
-    required String adminName,
-  }) async {
-    final list = List<AdminStudentModel>.from(studentsNotifier.value);
-    final idx = list.indexWhere((s) => s.id == studentId || s.userId == studentId);
-    if (idx == -1) return false;
-
-    final student = list[idx];
-    final nowIso = DateTime.now().toIso8601String();
-    final persisted = await _persistStudentUpdate(
-      student,
-      studentFields: {
-        'verification_status': 'pending',
-        'updated_at': nowIso,
-      },
-      auditAction: 'STUDENT_DOCS_REQUESTED',
-      auditDetails: instructions.trim(),
-    );
-    if (!persisted.ok) return false;
-
-    final history = List<StudentAuditRecord>.from(student.auditHistory);
-    history.insert(
-      0,
-      StudentAuditRecord(
-        id: 'aud_${DateTime.now().millisecondsSinceEpoch}',
-        action: 'Resubmission Requested',
-        adminName: adminName,
-        timestamp: 'Just now',
-        note: instructions.trim(),
-      ),
-    );
-
-    list[idx] = student.copyWith(
-      id: persisted.resolvedId,
-      verificationStatus: StudentVerificationStatus.pending,
-      auditHistory: history,
-    );
-    studentsNotifier.value = list;
-    return true;
-  }
-
   /// Suspend student account with mandatory reason.
   Future<bool> suspendStudentAccount({
     required String studentId,
@@ -640,22 +539,6 @@ class AdminStudentService {
     return true;
   }
 
-  /// Bulk Approve multiple students sequentially against Supabase.
-  Future<int> bulkApproveStudents({
-    required List<String> studentIds,
-    required String adminName,
-  }) async {
-    int approvedCount = 0;
-    for (final id in studentIds) {
-      final ok = await approveStudentVerification(
-        studentId: id,
-        adminName: adminName,
-      );
-      if (ok) approvedCount++;
-    }
-    return approvedCount;
-  }
-
   Future<void> _writeAuditLog({
     required String action,
     required String target,
@@ -678,12 +561,12 @@ class AdminStudentService {
   String exportPermittedStudentsCsv(List<AdminStudentModel> students) {
     final buffer = StringBuffer();
     buffer.writeln(
-      'ID,Full Name,Email,University,Department,Degree,Semester,CGPA,Verification Status,Account Status,Registration Date',
+      'ID,Full Name,Email,University,Department,Degree,Semester,CGPA,Account Status,Registration Date',
     );
 
     for (final s in students) {
       buffer.writeln(
-        '${s.id},"${s.name}","${s.email}","${s.university}","${s.department}","${s.degree}","${s.semester}",${s.cgpa},${s.verificationStatus.name},${s.accountStatus.name},${s.registrationDate}',
+        '${s.id},"${s.name}","${s.email}","${s.university}","${s.department}","${s.degree}","${s.semester}",${s.cgpa},${s.accountStatus.name},${s.registrationDate}',
       );
     }
     return buffer.toString();
