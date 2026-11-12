@@ -973,14 +973,18 @@ USING (
         AND (
           auth.uid() = owner
           OR auth.uid()::text = (storage.foldername(name))[1]
+          OR name LIKE (auth.uid()::text || '/%')
+          OR name LIKE ('%' || auth.uid()::text || '%')
           OR public.is_admin()
           OR EXISTS (
             SELECT 1 FROM public.applications a
             JOIN public.projects p ON p.id = a.project_id
-            LEFT JOIN public.companies c ON c.id = p.company_id
+            LEFT JOIN public.companies c ON c.id = COALESCE(p.company_id, a.company_id)
             WHERE (
               a.student_id::text = (storage.foldername(name))[1]
               OR a.user_id::text = (storage.foldername(name))[1]
+              OR a.student_id = auth.uid()
+              OR a.user_id = auth.uid()
             )
               AND (p.posted_by = auth.uid() OR p.user_id = auth.uid() OR c.user_id = auth.uid())
           )
@@ -994,6 +998,8 @@ USING (
     AND (
       auth.uid() = owner
       OR auth.uid()::text = (storage.foldername(name))[1]
+      OR name LIKE (auth.uid()::text || '/%')
+      OR name LIKE ('%' || auth.uid()::text || '%')
       OR public.is_admin()
     )
   )
@@ -1007,7 +1013,9 @@ WITH CHECK (
     bucket_id = 'public-files'
     AND (
       auth.uid()::text = (storage.foldername(name))[1]
+      OR name LIKE (auth.uid()::text || '/%')
       OR name LIKE ('avatars/' || auth.uid()::text || '_%')
+      OR name LIKE ('logos/' || auth.uid()::text || '_%')
       OR public.is_admin()
     )
   )
@@ -1015,7 +1023,11 @@ WITH CHECK (
     bucket_id = 'student-docs'
     AND (
       auth.uid()::text = (storage.foldername(name))[1]
+      OR name LIKE (auth.uid()::text || '/%')
       OR name LIKE ('avatars/' || auth.uid()::text || '_%')
+      OR name LIKE ('resumes/' || auth.uid()::text || '_%')
+      OR name LIKE ('deliverables/' || auth.uid()::text || '_%')
+      OR name LIKE ('submissions/' || auth.uid()::text || '_%')
       OR public.is_admin()
     )
   )
@@ -1023,6 +1035,9 @@ WITH CHECK (
     bucket_id = 'company-assets'
     AND (
       auth.uid()::text = (storage.foldername(name))[1]
+      OR name LIKE (auth.uid()::text || '/%')
+      OR name LIKE ('evidence/' || auth.uid()::text || '_%')
+      OR name LIKE ('logos/' || auth.uid()::text || '_%')
       OR public.is_admin()
     )
   )
@@ -1031,6 +1046,7 @@ WITH CHECK (
     AND (
       public.is_admin()
       OR EXISTS (SELECT 1 FROM public.companies c WHERE c.user_id = auth.uid())
+      OR EXISTS (SELECT 1 FROM public.projects p WHERE p.posted_by = auth.uid() OR p.user_id = auth.uid())
     )
   )
 );
@@ -1038,13 +1054,28 @@ WITH CHECK (
 CREATE POLICY "Owner Storage Update"
 ON storage.objects FOR UPDATE
 TO authenticated
-USING (auth.uid() = owner OR public.is_admin())
-WITH CHECK (auth.uid() = owner OR public.is_admin());
+USING (
+  auth.uid() = owner
+  OR auth.uid()::text = (storage.foldername(name))[1]
+  OR name LIKE (auth.uid()::text || '/%')
+  OR public.is_admin()
+)
+WITH CHECK (
+  auth.uid() = owner
+  OR auth.uid()::text = (storage.foldername(name))[1]
+  OR name LIKE (auth.uid()::text || '/%')
+  OR public.is_admin()
+);
 
 CREATE POLICY "Owner Storage Delete"
 ON storage.objects FOR DELETE
 TO authenticated
-USING (auth.uid() = owner OR public.is_admin());
+USING (
+  auth.uid() = owner
+  OR auth.uid()::text = (storage.foldername(name))[1]
+  OR name LIKE (auth.uid()::text || '/%')
+  OR public.is_admin()
+);
 
 -- ----------------------------------------------------------------------------
 -- 15. TABLE ROW LEVEL SECURITY (RLS) POLICIES (HARDENED)

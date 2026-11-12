@@ -8,7 +8,7 @@ import 'package:link_vibe/feature/company/models/applicant_model.dart';
 import 'package:link_vibe/feature/company/models/project_model.dart';
 import 'package:link_vibe/feature/company/services/company_applicant_service.dart';
 import 'package:link_vibe/feature/company/services/company_project_service.dart';
-import 'package:url_launcher/url_launcher.dart';
+import 'package:link_vibe/core/services/cloud_storage_service.dart';
 
 class ApplicantDetailScreen extends StatefulWidget {
   final String applicantId;
@@ -44,28 +44,11 @@ class _ApplicantDetailScreenState extends State<ApplicantDetailScreen> {
   }
 
   Future<void> _openExternalUrl(String rawUrl, String label) async {
-    final trimmed = rawUrl.trim();
-    if (trimmed.isEmpty) return;
-    final normalized =
-        (trimmed.startsWith('http://') || trimmed.startsWith('https://'))
-            ? trimmed
-            : 'https://$trimmed';
-    final uri = Uri.tryParse(normalized);
-    if (uri != null) {
-      try {
-        final launched =
-            await launchUrl(uri, mode: LaunchMode.externalApplication);
-        if (launched) return;
-      } catch (_) {}
-    }
-
-    await Clipboard.setData(ClipboardData(text: trimmed));
-    if (!mounted) return;
-    ScaffoldMessenger.of(context).showSnackBar(
-      SnackBar(
-        content: Text('$label link copied to clipboard.'),
-        behavior: SnackBarBehavior.floating,
-      ),
+    await CloudStorageService.openUrl(
+      context,
+      rawUrl,
+      label: label,
+      copyFallback: true,
     );
   }
 

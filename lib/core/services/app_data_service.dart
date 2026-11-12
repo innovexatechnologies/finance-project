@@ -853,6 +853,7 @@ class AppDataService extends ChangeNotifier {
     required String skills,
     required String availability,
     String? portfolioLink,
+    String? resumeLink,
   }) async {
     final projectId = project['id']?.toString() ?? '';
     if (projectId.isNotEmpty && hasApplied(projectId)) return;
@@ -871,6 +872,9 @@ class AppDataService extends ChangeNotifier {
         project['company']?.toString() ?? project['company_name']?.toString() ?? 'Company';
     final projectTitle = project['title']?.toString() ?? 'Untitled Project';
     final companyUserId = project['companyUserId']?.toString() ?? '';
+    final effectiveResume = (resumeLink != null && resumeLink.trim().isNotEmpty)
+        ? resumeLink.trim()
+        : (_profile['resumeUrl']?.toString() ?? '');
 
     final newApp = {
       'id': appId,
@@ -885,6 +889,7 @@ class AppDataService extends ChangeNotifier {
       'skills': skills,
       'availability': availability,
       'portfolioLink': portfolioLink ?? '',
+      'resumeLink': effectiveResume,
       'companyFeedback': '',
       'progress': 0.0,
       'deadline': project['deadline']?.toString() ?? 'Flexible',
@@ -935,6 +940,9 @@ class AppDataService extends ChangeNotifier {
       final skillsList = SupabaseHelper.parseStringList(app['skills']);
       final projectId = project['id']?.toString();
       final companyId = project['companyId']?.toString();
+      final resumeLink = (app['resumeLink']?.toString().trim().isNotEmpty == true)
+          ? app['resumeLink'].toString().trim()
+          : (_profile['resumeUrl']?.toString().trim() ?? '');
 
       await supabase.from('applications').insert({
         'id': app['id'],
@@ -956,7 +964,7 @@ class AppDataService extends ChangeNotifier {
         'availability': app['availability'],
         'cover_letter': app['coverMessage'],
         'portfolio_link': app['portfolioLink'] ?? '',
-        'resume_link': _profile['resumeUrl']?.toString() ?? '',
+        'resume_link': resumeLink,
         'github_link': _profile['githubUrl']?.toString() ?? '',
         'status': 'Pending',
         'progress': 0.0,
@@ -1329,6 +1337,31 @@ class AppDataService extends ChangeNotifier {
         }).eq('id', user.id);
       } catch (e) {
         debugPrint('Supabase profile avatar remove warning: $e');
+      }
+    }
+  }
+
+  /// Updates the student's CV / Resume URL locally and in Supabase `students`.
+  Future<void> updateStudentResume(String resumeUrl) async {
+    final cleanUrl = resumeUrl.trim();
+    _profile['resumeUrl'] = cleanUrl;
+    _safeNotifyListeners();
+
+    if (_prefs != null) {
+      await _prefs!.setString(_kProfile, jsonEncode(_profile));
+    }
+
+    final supabase = SupabaseHelper.clientOrNull;
+    final user = supabase?.auth.currentUser;
+    if (supabase != null && user != null) {
+      try {
+        await supabase.from('students').update({
+          'resume_url': cleanUrl,
+          'verification_doc': cleanUrl,
+          'updated_at': DateTime.now().toIso8601String(),
+        }).eq('user_id', user.id);
+      } catch (e) {
+        debugPrint('Supabase student resume_url update warning: $e');
       }
     }
   }

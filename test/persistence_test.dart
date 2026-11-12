@@ -2,6 +2,7 @@ import 'dart:typed_data';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 import 'package:link_vibe/core/services/app_data_service.dart';
+import 'package:link_vibe/core/services/cloud_storage_service.dart';
 
 void main() {
   TestWidgetsFlutterBinding.ensureInitialized();
@@ -518,6 +519,36 @@ void main() {
     expect(
       AppDataService.instance.isProjectApplicationLimitReached(projId),
       isTrue,
+    );
+  });
+
+  test('CloudStorageService utilities and resume persistence work cleanly', () async {
+    expect(CloudStorageService.sanitizeFileName('my resume (1).pdf'), 'my_resume__1_.pdf');
+    expect(CloudStorageService.extensionFromName('archive.tar.gz'), 'gz');
+    expect(CloudStorageService.extensionFromName('document.pdf'), 'pdf');
+    expect(CloudStorageService.mimeTypeForExtension('pdf'), 'application/pdf');
+    expect(CloudStorageService.mimeTypeForExtension('zip'), 'application/zip');
+    expect(CloudStorageService.formatBytes(500), '500 B');
+    expect(CloudStorageService.formatBytes(1024 * 1024 * 2), '2.0 MB');
+
+    final loc = CloudStorageService.extractStorageLocation(
+      'https://xyz.supabase.co/storage/v1/object/public/student-docs/user1/resumes/12345_cv.pdf',
+    );
+    expect(loc, isNotNull);
+    expect(loc?.bucket, 'student-docs');
+    expect(loc?.objectPath, 'user1/resumes/12345_cv.pdf');
+
+    expect(
+      CloudStorageService.displayNameFromUrl(
+        'https://xyz.supabase.co/storage/v1/object/public/student-docs/user1/resumes/1700000000000_my_cv.pdf',
+      ),
+      'my_cv.pdf',
+    );
+
+    await AppDataService.instance.updateStudentResume('https://xyz.supabase.co/storage/v1/object/public/student-docs/cv.pdf');
+    expect(
+      AppDataService.instance.getProfile()['resumeUrl'],
+      'https://xyz.supabase.co/storage/v1/object/public/student-docs/cv.pdf',
     );
   });
 }

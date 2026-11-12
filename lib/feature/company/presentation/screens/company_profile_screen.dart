@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:google_fonts/google_fonts.dart';
 import 'package:link_vibe/core/constants/app_colors.dart';
+import 'package:link_vibe/core/services/cloud_storage_service.dart';
 import 'package:link_vibe/core/services/supabase_helper.dart';
 import 'package:link_vibe/feature/company/models/company_profile_model.dart';
 import 'package:link_vibe/feature/company/presentation/widgets/company_executive_app_bar.dart';
@@ -23,6 +24,7 @@ class _CompanyProfileScreenState extends State<CompanyProfileScreen> {
   final _profileService = CompanyProfileService();
 
   bool _isSaving = false;
+  bool _isUploadingLogo = false;
   bool _hasUnsavedChanges = false;
   int _formResetRevision = 0;
 
@@ -308,7 +310,73 @@ class _CompanyProfileScreenState extends State<CompanyProfileScreen> {
     }
   }
 
+  Future<void> _pickAndUploadLogo() async {
+    if (_isUploadingLogo) return;
+    setState(() => _isUploadingLogo = true);
+    try {
+      final res = await CloudStorageService.pickAndUploadImage(
+        bucket: 'public-files',
+        folder: 'logos',
+      );
+      if (res != null) {
+        final existing = _profileService.currentProfile;
+        final updated = existing.copyWith(logoUrl: res.url);
+        await _profileService.updateProfile(updated);
+        if (!mounted) return;
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(
+            content: Text('Company logo uploaded successfully.'),
+            backgroundColor: AppColors.statusOpen,
+            behavior: SnackBarBehavior.floating,
+          ),
+        );
+      }
+    } catch (e) {
+      if (!mounted) return;
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(
+          content: Text('Could not upload company logo: $e'),
+          backgroundColor: AppColors.statusClosed,
+          behavior: SnackBarBehavior.floating,
+        ),
+      );
+    } finally {
+      if (mounted) setState(() => _isUploadingLogo = false);
+    }
+  }
+
+  Future<void> _removeLogo() async {
+    final existing = _profileService.currentProfile;
+    final updated = CompanyProfileModel(
+      id: existing.id,
+      companyName: existing.companyName,
+      industry: existing.industry,
+      description: existing.description,
+      officialEmail: existing.officialEmail,
+      websiteUrl: existing.websiteUrl,
+      contactPersonName: existing.contactPersonName,
+      phoneNumber: existing.phoneNumber,
+      city: existing.city,
+      completeAddress: existing.completeAddress,
+      logoUrl: null,
+      logoInitial: existing.logoInitial,
+      isVerified: existing.isVerified,
+    );
+    await _profileService.updateProfile(updated);
+    if (!mounted) return;
+    ScaffoldMessenger.of(context).showSnackBar(
+      const SnackBar(
+        content: Text('Company logo removed.'),
+        backgroundColor: AppColors.statusOpen,
+        behavior: SnackBarBehavior.floating,
+      ),
+    );
+  }
+
   void _openLogoColorSheet() {
+    final current = _profileService.currentProfile;
+    final hasLogo = current.logoUrl != null && current.logoUrl!.trim().isNotEmpty;
+
     showModalBottomSheet(
       context: context,
       backgroundColor: Colors.white,
@@ -334,7 +402,7 @@ class _CompanyProfileScreenState extends State<CompanyProfileScreen> {
               ),
               const SizedBox(height: 16),
               Text(
-                'Monogram Accent Color',
+                'Organization Logo & Branding',
                 style: GoogleFonts.poppins(
                   fontSize: 17,
                   fontWeight: FontWeight.w700,
@@ -343,13 +411,88 @@ class _CompanyProfileScreenState extends State<CompanyProfileScreen> {
               ),
               const SizedBox(height: 4),
               Text(
-                'Your monogram "$_selectedLogoInitial" updates automatically from your company name.',
+                'Upload an official logo or choose your monogram accent color.',
                 style: GoogleFonts.inter(
                   fontSize: 13,
                   color: AppColors.grayText,
                 ),
               ),
-              const SizedBox(height: 18),
+              const SizedBox(height: 16),
+              ListTile(
+                contentPadding: EdgeInsets.zero,
+                leading: Container(
+                  padding: const EdgeInsets.all(9),
+                  decoration: BoxDecoration(
+                    color: AppColors.lightAqua,
+                    borderRadius: BorderRadius.circular(10),
+                  ),
+                  child: const Icon(
+                    Icons.add_photo_alternate_outlined,
+                    color: AppColors.primaryBlue,
+                    size: 20,
+                  ),
+                ),
+                title: Text(
+                  hasLogo ? 'Replace Company Logo' : 'Upload Company Logo',
+                  style: GoogleFonts.poppins(
+                    fontSize: 14,
+                    fontWeight: FontWeight.w600,
+                    color: AppColors.deepNavy,
+                  ),
+                ),
+                subtitle: Text(
+                  'Select PNG or JPG image for official project feeds',
+                  style: GoogleFonts.inter(fontSize: 12, color: AppColors.grayText),
+                ),
+                onTap: () {
+                  Navigator.pop(ctx);
+                  _pickAndUploadLogo();
+                },
+              ),
+              if (hasLogo) ...[
+                const Divider(),
+                ListTile(
+                  contentPadding: EdgeInsets.zero,
+                  leading: Container(
+                    padding: const EdgeInsets.all(9),
+                    decoration: BoxDecoration(
+                      color: AppColors.errorBg,
+                      borderRadius: BorderRadius.circular(10),
+                    ),
+                    child: const Icon(
+                      Icons.delete_outline_rounded,
+                      color: AppColors.statusClosed,
+                      size: 20,
+                    ),
+                  ),
+                  title: Text(
+                    'Remove Custom Logo',
+                    style: GoogleFonts.poppins(
+                      fontSize: 14,
+                      fontWeight: FontWeight.w600,
+                      color: AppColors.statusClosed,
+                    ),
+                  ),
+                  subtitle: Text(
+                    'Revert to corporate letter monogram',
+                    style: GoogleFonts.inter(fontSize: 12, color: AppColors.grayText),
+                  ),
+                  onTap: () {
+                    Navigator.pop(ctx);
+                    _removeLogo();
+                  },
+                ),
+              ],
+              const SizedBox(height: 14),
+              Text(
+                'Monogram Accent Color',
+                style: GoogleFonts.inter(
+                  fontSize: 12.5,
+                  fontWeight: FontWeight.w700,
+                  color: AppColors.deepNavy,
+                ),
+              ),
+              const SizedBox(height: 10),
               Wrap(
                 spacing: 12,
                 runSpacing: 12,
@@ -691,10 +834,49 @@ class _CompanyProfileScreenState extends State<CompanyProfileScreen> {
   }) {
     final completed = _completedFieldCount;
 
+    final hasLogo =
+        profile.logoUrl != null && profile.logoUrl!.trim().isNotEmpty;
+
     return CompanyHeroBanner(
       initial: _selectedLogoInitial,
       monogramColor: _selectedLogoColor,
       monogramTextOnWhite: false,
+      leadingVisual: hasLogo
+          ? Container(
+              width: 58,
+              height: 58,
+              decoration: BoxDecoration(
+                borderRadius: BorderRadius.circular(16),
+                color: Colors.white,
+                border: Border.all(
+                  color: Colors.white.withValues(alpha: 0.35),
+                  width: 1.5,
+                ),
+                boxShadow: [
+                  BoxShadow(
+                    color: Colors.black.withValues(alpha: 0.16),
+                    blurRadius: 10,
+                    offset: const Offset(0, 4),
+                  ),
+                ],
+              ),
+              clipBehavior: Clip.antiAlias,
+              child: Image.network(
+                profile.logoUrl!,
+                fit: BoxFit.cover,
+                errorBuilder: (_, _, _) => Center(
+                  child: Text(
+                    _selectedLogoInitial,
+                    style: GoogleFonts.poppins(
+                      color: AppColors.deepNavy,
+                      fontSize: 20,
+                      fontWeight: FontWeight.w800,
+                    ),
+                  ),
+                ),
+              ),
+            )
+          : null,
       title: displayName,
       subtitle: _selectedIndustry,
       secondaryLine: displayEmail.isNotEmpty ? displayEmail : null,
