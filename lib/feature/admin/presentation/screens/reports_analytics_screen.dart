@@ -1,7 +1,6 @@
 import 'dart:math' as math;
 
 import 'package:flutter/material.dart';
-import 'package:flutter/services.dart';
 import 'package:google_fonts/google_fonts.dart';
 import 'package:link_vibe/core/constants/app_colors.dart';
 import 'package:link_vibe/feature/admin/models/admin_analytics_model.dart';
@@ -31,9 +30,8 @@ class _ReportsAnalyticsScreenState extends State<ReportsAnalyticsScreen> {
   final AdminAuthService _authService = AdminAuthService();
   final GlobalKey<ScaffoldState> _scaffoldKey = GlobalKey<ScaffoldState>();
 
-  AnalyticsTimeframe _selectedTimeframe = AnalyticsTimeframe.allTime;
+  final AnalyticsTimeframe _selectedTimeframe = AnalyticsTimeframe.allTime;
   bool _isSidebarCollapsed = false;
-  bool _isRefreshing = false;
   bool _onlyActivityDays = false;
   bool _showAllLedgerDays = false;
 
@@ -48,27 +46,8 @@ class _ReportsAnalyticsScreenState extends State<ReportsAnalyticsScreen> {
   }
 
   Future<void> _silentInitialSync() async {
-    if (_isRefreshing || !mounted) return;
-    setState(() => _isRefreshing = true);
-    await _analyticsService.reloadAllAndRefresh();
-    if (mounted) {
-      setState(() => _isRefreshing = false);
-    }
-  }
-
-  Future<void> _handleRefresh() async {
-    if (_isRefreshing) return;
-    setState(() => _isRefreshing = true);
-    await _analyticsService.reloadAllAndRefresh();
     if (!mounted) return;
-    setState(() => _isRefreshing = false);
-    ScaffoldMessenger.of(context).showSnackBar(
-      const SnackBar(
-        content: Text('Daily analytics and platform records synced.'),
-        backgroundColor: AppColors.primary,
-        behavior: SnackBarBehavior.floating,
-      ),
-    );
+    await _analyticsService.reloadAllAndRefresh();
   }
 
   void _onRouteSelected(String routeId) {
@@ -160,7 +139,8 @@ class _ReportsAnalyticsScreenState extends State<ReportsAnalyticsScreen> {
                 AdminTopNavbar(
                   pageTitle: 'Reports and Analytics',
                   breadcrumb: 'Platform Analytics',
-                  onOpenDrawer: () => _scaffoldKey.currentState?.openEndDrawer(),
+                  onOpenDrawer: () =>
+                      _scaffoldKey.currentState?.openEndDrawer(),
                   onSignOut: _handleSignOut,
                 ),
                 Expanded(
@@ -180,51 +160,44 @@ class _ReportsAnalyticsScreenState extends State<ReportsAnalyticsScreen> {
                       final lastSynced =
                           _analyticsService.lastRefreshedNotifier.value;
 
-                      return RefreshIndicator(
-                        onRefresh: _handleRefresh,
-                        color: AppColors.primary,
-                        child: SingleChildScrollView(
-                          physics: const AlwaysScrollableScrollPhysics(),
-                          padding: EdgeInsets.all(isMobile ? 16 : 24),
-                          child: Column(
-                            crossAxisAlignment: CrossAxisAlignment.start,
-                            children: [
-                              _buildHeaderSection(
-                                isMobile: isMobile,
-                                totalStudents: totalStudents,
-                                totalCompanies: totalCompanies,
-                                totalProjects: totalProjects,
-                                lastSynced: lastSynced,
-                              ),
-                              const SizedBox(height: 16),
-                              _buildTimeframeStrip(),
-                              const SizedBox(height: 20),
-                              _buildKpiSummarySection(
-                                width: width,
-                                dailyRecords: dailyRecords,
-                                totalStudents: totalStudents,
-                                totalCompanies: totalCompanies,
-                              ),
-                              const SizedBox(height: 22),
-                              _buildDailyGraphsSection(
-                                width: width,
-                                dailyRecords: dailyRecords,
-                              ),
-                              const SizedBox(height: 22),
-                              _buildQuantityComparisonSection(
-                                width: width,
-                                dailyRecords: dailyRecords,
-                                totalStudents: totalStudents,
-                                totalCompanies: totalCompanies,
-                              ),
-                              const SizedBox(height: 22),
-                              _buildDailyLedgerSection(
-                                isMobile: isMobile,
-                                dailyRecords: dailyRecords,
-                              ),
-                              const SizedBox(height: 36),
-                            ],
-                          ),
+                      return SingleChildScrollView(
+                        padding: EdgeInsets.all(isMobile ? 16 : 24),
+                        child: Column(
+                          crossAxisAlignment: CrossAxisAlignment.start,
+                          children: [
+                            _buildHeaderSection(
+                              isMobile: isMobile,
+                              totalStudents: totalStudents,
+                              totalCompanies: totalCompanies,
+                              totalProjects: totalProjects,
+                              lastSynced: lastSynced,
+                            ),
+                            const SizedBox(height: 20),
+                            _buildKpiSummarySection(
+                              width: width,
+                              dailyRecords: dailyRecords,
+                              totalStudents: totalStudents,
+                              totalCompanies: totalCompanies,
+                            ),
+                            const SizedBox(height: 22),
+                            _buildDailyGraphsSection(
+                              width: width,
+                              dailyRecords: dailyRecords,
+                            ),
+                            const SizedBox(height: 22),
+                            _buildQuantityComparisonSection(
+                              width: width,
+                              dailyRecords: dailyRecords,
+                              totalStudents: totalStudents,
+                              totalCompanies: totalCompanies,
+                            ),
+                            const SizedBox(height: 22),
+                            _buildDailyLedgerSection(
+                              isMobile: isMobile,
+                              dailyRecords: dailyRecords,
+                            ),
+                            const SizedBox(height: 36),
+                          ],
                         ),
                       );
                     },
@@ -290,47 +263,6 @@ class _ReportsAnalyticsScreenState extends State<ReportsAnalyticsScreen> {
       ],
     );
 
-    final actionButtons = Wrap(
-      spacing: 10,
-      runSpacing: 10,
-      children: [
-        OutlinedButton.icon(
-          onPressed: _isRefreshing ? null : _handleRefresh,
-          icon: _isRefreshing
-              ? const SizedBox(
-                  width: 14,
-                  height: 14,
-                  child: CircularProgressIndicator(strokeWidth: 2),
-                )
-              : const Icon(Icons.refresh_rounded, size: 17),
-          label: Text(_isRefreshing ? 'Syncing...' : 'Refresh'),
-          style: OutlinedButton.styleFrom(
-            foregroundColor: AppColors.darkNavy,
-            side: const BorderSide(color: AppColors.border),
-            backgroundColor: AppColors.cardSurface,
-            padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 11),
-            shape: RoundedRectangleBorder(
-              borderRadius: BorderRadius.circular(10),
-            ),
-          ),
-        ),
-        ElevatedButton.icon(
-          onPressed: _showExportCsvModal,
-          icon: const Icon(Icons.download_rounded, size: 17),
-          label: const Text('Export CSV'),
-          style: ElevatedButton.styleFrom(
-            backgroundColor: AppColors.primary,
-            foregroundColor: Colors.white,
-            elevation: 0,
-            padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 11),
-            shape: RoundedRectangleBorder(
-              borderRadius: BorderRadius.circular(10),
-            ),
-          ),
-        ),
-      ],
-    );
-
     return Container(
       width: double.infinity,
       padding: EdgeInsets.all(isMobile ? 16 : 20),
@@ -346,88 +278,7 @@ class _ReportsAnalyticsScreenState extends State<ReportsAnalyticsScreen> {
           ),
         ],
       ),
-      child: isMobile
-          ? Column(
-              crossAxisAlignment: CrossAxisAlignment.start,
-              children: [
-                titleBlock,
-                const SizedBox(height: 14),
-                actionButtons,
-              ],
-            )
-          : Row(
-              crossAxisAlignment: CrossAxisAlignment.center,
-              children: [
-                Expanded(child: titleBlock),
-                const SizedBox(width: 16),
-                actionButtons,
-              ],
-            ),
-    );
-  }
-
-  Widget _buildTimeframeStrip() {
-    return Container(
-      width: double.infinity,
-      padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 10),
-      decoration: BoxDecoration(
-        color: AppColors.cardSurface,
-        borderRadius: BorderRadius.circular(12),
-        border: Border.all(color: AppColors.border),
-      ),
-      child: Wrap(
-        spacing: 8,
-        runSpacing: 8,
-        crossAxisAlignment: WrapCrossAlignment.center,
-        children: [
-          const Row(
-            mainAxisSize: MainAxisSize.min,
-            children: [
-              Icon(
-                Icons.calendar_today_rounded,
-                size: 15,
-                color: AppColors.textSecondary,
-              ),
-              SizedBox(width: 6),
-              Text(
-                'Record Window:',
-                style: TextStyle(
-                  fontSize: 12,
-                  fontWeight: FontWeight.w600,
-                  color: AppColors.textSecondary,
-                ),
-              ),
-            ],
-          ),
-          ...AnalyticsTimeframe.values.map((tf) {
-            final isSelected = _selectedTimeframe == tf;
-            return ChoiceChip(
-              label: Text(
-                tf.label,
-                style: TextStyle(
-                  fontSize: 12,
-                  fontWeight: isSelected ? FontWeight.w700 : FontWeight.w500,
-                  color: isSelected ? Colors.white : AppColors.textPrimary,
-                ),
-              ),
-              selected: isSelected,
-              selectedColor: AppColors.primary,
-              backgroundColor: AppColors.background,
-              side: BorderSide(
-                color: isSelected ? AppColors.primary : AppColors.border,
-              ),
-              showCheckmark: false,
-              visualDensity: VisualDensity.compact,
-              onSelected: (_) {
-                setState(() {
-                  _selectedTimeframe = tf;
-                  _showAllLedgerDays = false;
-                });
-              },
-            );
-          }),
-        ],
-      ),
+      child: titleBlock,
     );
   }
 
@@ -463,8 +314,9 @@ class _ReportsAnalyticsScreenState extends State<ReportsAnalyticsScreen> {
     DailyPlatformRecord? peakDay;
     for (final r in activeDays) {
       final score = r.studentCount + r.companyCount;
-      final peakScore =
-          peakDay == null ? -1 : peakDay.studentCount + peakDay.companyCount;
+      final peakScore = peakDay == null
+          ? -1
+          : peakDay.studentCount + peakDay.companyCount;
       if (score >= peakScore) {
         peakDay = r;
       }
@@ -475,8 +327,8 @@ class _ReportsAnalyticsScreenState extends State<ReportsAnalyticsScreen> {
     final comparisonSummary = diff > 0
         ? 'Students ahead by +$diff overall'
         : diff < 0
-            ? 'Companies ahead by +${diff.abs()} overall'
-            : 'Equal quantity overall';
+        ? 'Companies ahead by +${diff.abs()} overall'
+        : 'Equal quantity overall';
 
     final cards = [
       _buildKpiCard(
@@ -740,10 +592,7 @@ class _ReportsAnalyticsScreenState extends State<ReportsAnalyticsScreen> {
           const SizedBox(height: 14),
           _buildMiniMetricsStrip([
             _buildMiniMetric('Window Total', '$periodStudents'),
-            _buildMiniMetric(
-              'Avg / Day',
-              avgStudents.toStringAsFixed(1),
-            ),
+            _buildMiniMetric('Avg / Day', avgStudents.toStringAsFixed(1)),
             _buildMiniMetric('Peak Day', '$peakStudents'),
             _buildMiniMetric(
               'Active Days',
@@ -772,10 +621,7 @@ class _ReportsAnalyticsScreenState extends State<ReportsAnalyticsScreen> {
           const SizedBox(height: 14),
           _buildMiniMetricsStrip([
             _buildMiniMetric('Window Total', '$periodCompanies'),
-            _buildMiniMetric(
-              'Avg / Day',
-              avgCompanies.toStringAsFixed(1),
-            ),
+            _buildMiniMetric('Avg / Day', avgCompanies.toStringAsFixed(1)),
             _buildMiniMetric('Peak Day', '$peakCompanies'),
             _buildMiniMetric(
               'Active Days',
@@ -798,11 +644,7 @@ class _ReportsAnalyticsScreenState extends State<ReportsAnalyticsScreen> {
     }
 
     return Column(
-      children: [
-        studentCard,
-        const SizedBox(height: 18),
-        companyCard,
-      ],
+      children: [studentCard, const SizedBox(height: 18), companyCard],
     );
   }
 
@@ -813,12 +655,17 @@ class _ReportsAnalyticsScreenState extends State<ReportsAnalyticsScreen> {
     required int totalCompanies,
   }) {
     final int combinedTotal = totalStudents + totalCompanies;
-    final double studentShare =
-        combinedTotal == 0 ? 0.0 : (totalStudents / combinedTotal) * 100.0;
-    final double companyShare =
-        combinedTotal == 0 ? 0.0 : (totalCompanies / combinedTotal) * 100.0;
+    final double studentShare = combinedTotal == 0
+        ? 0.0
+        : (totalStudents / combinedTotal) * 100.0;
+    final double companyShare = combinedTotal == 0
+        ? 0.0
+        : (totalCompanies / combinedTotal) * 100.0;
     final int diff = totalStudents - totalCompanies;
-    final String ratioText = _formatQuantityRatio(totalStudents, totalCompanies);
+    final String ratioText = _formatQuantityRatio(
+      totalStudents,
+      totalCompanies,
+    );
 
     final int periodStudents = dailyRecords.fold(
       0,
@@ -851,8 +698,7 @@ class _ReportsAnalyticsScreenState extends State<ReportsAnalyticsScreen> {
 
     final ratioHeaderCard = _buildCardContainer(
       title: 'Students vs Companies Quantity Comparison',
-      subtitle:
-          'Direct head-to-head comparison of registered Student and Company quantities',
+      subtitle: 'Direct head-to-head comparison of registered Student and Company quantities',
       trailingBadge: 'Ratio $ratioText',
       trailingColor: AppColors.indigoAccent,
       child: Column(
@@ -940,8 +786,8 @@ class _ReportsAnalyticsScreenState extends State<ReportsAnalyticsScreen> {
                   diff > 0
                       ? 'Difference: +$diff more Students than Companies'
                       : diff < 0
-                          ? 'Difference: +${diff.abs()} more Companies than Students'
-                          : 'Difference: Equal quantities ($totalStudents each)',
+                      ? 'Difference: +${diff.abs()} more Companies than Students'
+                      : 'Difference: Equal quantities ($totalStudents each)',
                   style: const TextStyle(
                     fontSize: 11.5,
                     fontWeight: FontWeight.w700,
@@ -974,8 +820,7 @@ class _ReportsAnalyticsScreenState extends State<ReportsAnalyticsScreen> {
 
     final cumulativeGrowthChart = _buildCardContainer(
       title: 'Cumulative Quantity Growth Curve',
-      subtitle:
-          'Total Students vs Total Companies accumulated day by day',
+      subtitle: 'Total Students vs Total Companies accumulated day by day',
       trailingBadge: '$totalStudents / $totalCompanies Total',
       trailingColor: AppColors.success,
       child: BiLineChart(
@@ -1077,10 +922,7 @@ class _ReportsAnalyticsScreenState extends State<ReportsAnalyticsScreen> {
     );
   }
 
-  Widget _buildLegendBadge({
-    required Color color,
-    required String text,
-  }) {
+  Widget _buildLegendBadge({required Color color, required String text}) {
     return Row(
       mainAxisSize: MainAxisSize.min,
       children: [
@@ -1123,8 +965,7 @@ class _ReportsAnalyticsScreenState extends State<ReportsAnalyticsScreen> {
 
     return _buildCardContainer(
       title: 'Complete Day-by-Day Record Book',
-      subtitle:
-          'Every recorded day with Student arrivals, Company registrations, Projects created, and daily Student vs Company comparison',
+      subtitle: 'Every recorded day with Student arrivals, Company registrations, Projects created, and daily Student vs Company comparison',
       trailingBadge: '${filteredList.length} Days Listed',
       trailingColor: AppColors.darkNavy,
       child: Column(
@@ -1141,7 +982,9 @@ class _ReportsAnalyticsScreenState extends State<ReportsAnalyticsScreen> {
                 labelStyle: TextStyle(
                   fontSize: 12,
                   fontWeight: FontWeight.w600,
-                  color: !_onlyActivityDays ? Colors.white : AppColors.textPrimary,
+                  color: !_onlyActivityDays
+                      ? Colors.white
+                      : AppColors.textPrimary,
                 ),
                 showCheckmark: false,
                 visualDensity: VisualDensity.compact,
@@ -1159,7 +1002,9 @@ class _ReportsAnalyticsScreenState extends State<ReportsAnalyticsScreen> {
                 labelStyle: TextStyle(
                   fontSize: 12,
                   fontWeight: FontWeight.w600,
-                  color: _onlyActivityDays ? Colors.white : AppColors.textPrimary,
+                  color: _onlyActivityDays
+                      ? Colors.white
+                      : AppColors.textPrimary,
                 ),
                 showCheckmark: false,
                 visualDensity: VisualDensity.compact,
@@ -1326,7 +1171,10 @@ class _ReportsAnalyticsScreenState extends State<ReportsAnalyticsScreen> {
               const SizedBox(width: 8),
               Flexible(
                 child: Container(
-                  padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 3),
+                  padding: const EdgeInsets.symmetric(
+                    horizontal: 8,
+                    vertical: 3,
+                  ),
                   decoration: BoxDecoration(
                     color: compColor.withValues(alpha: 0.1),
                     borderRadius: BorderRadius.circular(20),
@@ -1442,10 +1290,7 @@ class _ReportsAnalyticsScreenState extends State<ReportsAnalyticsScreen> {
             cumulative,
             maxLines: 1,
             overflow: TextOverflow.ellipsis,
-            style: const TextStyle(
-              fontSize: 10,
-              color: AppColors.textMuted,
-            ),
+            style: const TextStyle(fontSize: 10, color: AppColors.textMuted),
           ),
         ],
       ),
@@ -1732,10 +1577,7 @@ class _ReportsAnalyticsScreenState extends State<ReportsAnalyticsScreen> {
           children: [
             SingleChildScrollView(
               scrollDirection: Axis.horizontal,
-              child: SizedBox(
-                width: neededWidth,
-                child: chart,
-              ),
+              child: SizedBox(width: neededWidth, child: chart),
             ),
             const SizedBox(height: 4),
             const Text(
@@ -1904,116 +1746,5 @@ class _ReportsAnalyticsScreenState extends State<ReportsAnalyticsScreen> {
     if (r.studentCount > r.companyCount) return AppColors.primary;
     if (r.companyCount > r.studentCount) return AppColors.accentTeal;
     return AppColors.indigoAccent;
-  }
-
-  void _showExportCsvModal() {
-    final csvData = _analyticsService.exportAnalyticsCsv(
-      _selectedTimeframe,
-      'All Categories',
-    );
-
-    showDialog(
-      context: context,
-      builder: (ctx) {
-        return Dialog(
-          shape: RoundedRectangleBorder(
-            borderRadius: BorderRadius.circular(16),
-          ),
-          child: ConstrainedBox(
-            constraints: const BoxConstraints(maxWidth: 700, maxHeight: 600),
-            child: Padding(
-              padding: const EdgeInsets.all(24),
-              child: Column(
-                crossAxisAlignment: CrossAxisAlignment.start,
-                children: [
-                  Row(
-                    children: [
-                      const Icon(
-                        Icons.download_for_offline_rounded,
-                        color: AppColors.primary,
-                        size: 24,
-                      ),
-                      const SizedBox(width: 10),
-                      Expanded(
-                        child: Text(
-                          'Export Platform Analytics (CSV)',
-                          style: GoogleFonts.poppins(
-                            fontSize: 16,
-                            fontWeight: FontWeight.bold,
-                          ),
-                        ),
-                      ),
-                      IconButton(
-                        icon: const Icon(Icons.close),
-                        onPressed: () => Navigator.pop(ctx),
-                      ),
-                    ],
-                  ),
-                  const SizedBox(height: 12),
-                  const Text(
-                    'The CSV output below contains day-by-day student and company registrations, comparison totals, and cohort breakdowns:',
-                    style: TextStyle(fontSize: 12, color: AppColors.textMuted),
-                  ),
-                  const SizedBox(height: 16),
-                  Expanded(
-                    child: Container(
-                      width: double.infinity,
-                      padding: const EdgeInsets.all(14),
-                      decoration: BoxDecoration(
-                        color: AppColors.background,
-                        borderRadius: BorderRadius.circular(8),
-                        border: Border.all(color: AppColors.border),
-                      ),
-                      child: SingleChildScrollView(
-                        child: Text(
-                          csvData,
-                          style: const TextStyle(
-                            fontFamily: 'monospace',
-                            fontSize: 11,
-                            color: AppColors.textPrimary,
-                          ),
-                        ),
-                      ),
-                    ),
-                  ),
-                  const SizedBox(height: 18),
-                  Row(
-                    mainAxisAlignment: MainAxisAlignment.end,
-                    children: [
-                      TextButton(
-                        onPressed: () => Navigator.pop(ctx),
-                        child: const Text('Close'),
-                      ),
-                      const SizedBox(width: 12),
-                      ElevatedButton.icon(
-                        onPressed: () {
-                          Clipboard.setData(ClipboardData(text: csvData));
-                          Navigator.pop(ctx);
-                          ScaffoldMessenger.of(context).showSnackBar(
-                            const SnackBar(
-                              content: Text(
-                                'CSV Data successfully copied to clipboard.',
-                              ),
-                              backgroundColor: AppColors.success,
-                              behavior: SnackBarBehavior.floating,
-                            ),
-                          );
-                        },
-                        icon: const Icon(Icons.copy_rounded, size: 16),
-                        label: const Text('Copy to Clipboard'),
-                        style: ElevatedButton.styleFrom(
-                          backgroundColor: AppColors.primary,
-                          foregroundColor: Colors.white,
-                        ),
-                      ),
-                    ],
-                  ),
-                ],
-              ),
-            ),
-          ),
-        );
-      },
-    );
   }
 }
