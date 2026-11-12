@@ -46,6 +46,7 @@ class _ApplicantsScreenState extends State<ApplicantsScreen> {
     'Under Review',
     'Shortlisted',
     'Accepted',
+    'Completed',
     'Rejected',
   ];
 
@@ -1166,9 +1167,21 @@ class _ApplicantsScreenState extends State<ApplicantsScreen> {
     );
   }
 
+  bool _isAssignedStatus(String status) {
+    final s = status.trim().toLowerCase();
+    return s == 'accepted' ||
+        s == 'in progress' ||
+        s == 'revision requested' ||
+        s == 'under review' ||
+        s == 'completed';
+  }
+
   Widget _buildApplicantCard(ApplicantModel applicant) {
-    final bool canDecide =
-        applicant.status != 'Accepted' && applicant.status != 'Rejected';
+    final statusLower = applicant.status.trim().toLowerCase();
+    final bool isAssigned = _isAssignedStatus(applicant.status);
+    final bool isRejected =
+        statusLower == 'rejected' || statusLower == 'withdrawn';
+    final bool canDecide = !isAssigned && !isRejected;
     final statusTone = StatusBadge.colorForStatus(applicant.status);
     final previewSkills = applicant.skills.take(4).toList();
     final remainingSkills = applicant.skills.length - previewSkills.length;
@@ -1556,6 +1569,85 @@ class _ApplicantsScreenState extends State<ApplicantsScreen> {
                               ),
                             ),
                           ],
+                        ),
+                      ] else if (isAssigned) ...[
+                        const SizedBox(height: 12),
+                        Container(
+                          width: double.infinity,
+                          padding: const EdgeInsets.symmetric(
+                            horizontal: 14,
+                            vertical: 9,
+                          ),
+                          decoration: BoxDecoration(
+                            color: applicant.status.toLowerCase() == 'completed'
+                                ? AppColors.statusOpen.withValues(alpha: 0.10)
+                                : AppColors.primaryBlue.withValues(alpha: 0.08),
+                            borderRadius: BorderRadius.circular(10),
+                            border: Border.all(
+                              color: applicant.status.toLowerCase() == 'completed'
+                                  ? AppColors.statusOpen.withValues(alpha: 0.25)
+                                  : AppColors.primaryBlue.withValues(alpha: 0.20),
+                            ),
+                          ),
+                          child: Row(
+                            mainAxisAlignment: MainAxisAlignment.center,
+                            children: [
+                              Icon(
+                                applicant.status.toLowerCase() == 'completed'
+                                    ? Icons.check_circle_rounded
+                                    : Icons.assignment_turned_in_rounded,
+                                size: 16,
+                                color: applicant.status.toLowerCase() == 'completed'
+                                    ? AppColors.statusOpen
+                                    : AppColors.primaryBlue,
+                              ),
+                              const SizedBox(width: 7),
+                              Text(
+                                applicant.status.toLowerCase() == 'completed'
+                                    ? 'Project Completed'
+                                    : 'Student Assigned • In Progress',
+                                style: GoogleFonts.poppins(
+                                  fontSize: 12.5,
+                                  fontWeight: FontWeight.w600,
+                                  color: applicant.status.toLowerCase() == 'completed'
+                                      ? AppColors.statusOpen
+                                      : AppColors.primaryBlue,
+                                ),
+                              ),
+                            ],
+                          ),
+                        ),
+                      ] else if (isRejected) ...[
+                        const SizedBox(height: 12),
+                        Container(
+                          width: double.infinity,
+                          padding: const EdgeInsets.symmetric(
+                            horizontal: 14,
+                            vertical: 9,
+                          ),
+                          decoration: BoxDecoration(
+                            color: AppColors.statusClosed.withValues(alpha: 0.08),
+                            borderRadius: BorderRadius.circular(10),
+                          ),
+                          child: Row(
+                            mainAxisAlignment: MainAxisAlignment.center,
+                            children: [
+                              const Icon(
+                                Icons.cancel_outlined,
+                                size: 16,
+                                color: AppColors.statusClosed,
+                              ),
+                              const SizedBox(width: 7),
+                              Text(
+                                'Application Declined',
+                                style: GoogleFonts.poppins(
+                                  fontSize: 12.5,
+                                  fontWeight: FontWeight.w600,
+                                  color: AppColors.statusClosed,
+                                ),
+                              ),
+                            ],
+                          ),
                         ),
                       ],
                     ],

@@ -2,6 +2,7 @@ import 'package:flutter/foundation.dart';
 import 'package:link_vibe/core/services/supabase_helper.dart';
 import 'package:link_vibe/feature/company/models/applicant_model.dart';
 import 'package:link_vibe/feature/company/models/project_model.dart';
+import 'package:link_vibe/feature/company/services/company_profile_service.dart';
 import 'package:link_vibe/feature/company/services/company_project_service.dart';
 
 class CompanyApplicantService {
@@ -316,6 +317,12 @@ class CompanyApplicantService {
     }
 
     if (newStatus == 'Accepted') {
+      if (targetApplicant.status == 'Accepted' ||
+          targetApplicant.status == 'Completed' ||
+          targetApplicant.status == 'In Progress') {
+        return true;
+      }
+
       if ((supabase == null || user == null) &&
           targetApplicant.status != 'Accepted') {
         final openings = matchedProject?.openings ?? 1;
@@ -339,8 +346,32 @@ class CompanyApplicantService {
             },
           );
         } catch (e) {
-          debugPrint('CompanyApplicantService assignment failed: $e');
-          return false;
+          debugPrint('CompanyApplicantService assignment failed, using direct update: $e');
+          try {
+            await supabase
+                .from('applications')
+                .update({
+                  'status': 'Accepted',
+                  'progress': 0.15,
+                  'updated_at': DateTime.now().toIso8601String(),
+                })
+                .eq('id', applicantId);
+
+            if (targetApplicant.projectId.isNotEmpty &&
+                SupabaseHelper.isUuid(targetApplicant.projectId)) {
+              await supabase
+                  .from('projects')
+                  .update({
+                    'status': 'In Progress',
+                    'assigned_student': assignedLabel,
+                    'progress': 0.15,
+                    'updated_at': DateTime.now().toIso8601String(),
+                  })
+                  .eq('id', targetApplicant.projectId);
+            }
+          } catch (e2) {
+            debugPrint('Direct assignment update fallback error: $e2');
+          }
         }
       }
 
@@ -379,6 +410,8 @@ class CompanyApplicantService {
       }
       return applicant;
     }).toList();
+
+    await CompanyProfileService.persistLocalCache();
     return true;
   }
 

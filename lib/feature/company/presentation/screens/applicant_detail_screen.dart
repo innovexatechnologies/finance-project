@@ -239,8 +239,10 @@ class _ApplicantDetailScreenState extends State<ApplicantDetailScreen> {
           );
         }
 
-        final bool canDecide =
-            applicant.status != 'Accepted' && applicant.status != 'Rejected';
+        final bool isAssigned = _isAssignedStatus(applicant.status);
+        final bool isDeclined = applicant.status == 'Rejected' ||
+            applicant.status == 'Withdrawn';
+        final bool canDecide = !isAssigned && !isDeclined;
         final bool isShortlisted = applicant.status == 'Shortlisted';
 
         return Scaffold(
@@ -765,6 +767,7 @@ class _ApplicantDetailScreenState extends State<ApplicantDetailScreen> {
 
   Widget _buildStatusFooter(ApplicantModel applicant) {
     final isAccepted = _isAssignedStatus(applicant.status);
+    final isCompleted = applicant.status.toLowerCase() == 'completed';
     return Container(
       width: double.infinity,
       padding: const EdgeInsets.all(16),
@@ -781,9 +784,11 @@ class _ApplicantDetailScreenState extends State<ApplicantDetailScreen> {
           const SizedBox(width: 10),
           Expanded(
             child: Text(
-              isAccepted
-                  ? '${applicant.name} has been accepted and assigned to "${applicant.projectTitle}".'
-                  : 'This application was declined.',
+              isCompleted
+                  ? '${applicant.name} has completed "${applicant.projectTitle}".'
+                  : (isAccepted
+                      ? '${applicant.name} has been accepted and assigned to "${applicant.projectTitle}".'
+                      : 'This application was declined.'),
               style: GoogleFonts.inter(
                 fontSize: 13,
                 fontWeight: FontWeight.w600,
