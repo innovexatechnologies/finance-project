@@ -36,6 +36,7 @@ class _CompanyProjectsListScreenState extends State<CompanyProjectsListScreen> {
   final _profileService = CompanyProfileService();
 
   late String _selectedStatus;
+  bool _showPaidProjects = false;
   final TextEditingController _searchController = TextEditingController();
   String _searchQuery = '';
 
@@ -329,9 +330,13 @@ class _CompanyProjectsListScreenState extends State<CompanyProjectsListScreen> {
               )
               .toList();
 
+          final paymentFiltered = companyProjects
+              .where((project) => project.paymentSent == _showPaidProjects)
+              .toList();
+
           final statusFiltered = _selectedStatus == 'All'
-              ? companyProjects
-              : companyProjects
+              ? paymentFiltered
+              : paymentFiltered
                     .where(
                       (p) =>
                           p.status.toLowerCase() ==
@@ -364,7 +369,9 @@ class _CompanyProjectsListScreenState extends State<CompanyProjectsListScreen> {
             (sum, p) => sum + p.applicantsCount,
           );
           final hasActiveFilters =
-              _selectedStatus != 'All' || _searchQuery.isNotEmpty;
+              _selectedStatus != 'All' ||
+              _searchQuery.isNotEmpty ||
+              _showPaidProjects;
 
           return Column(
             children: [
@@ -393,7 +400,8 @@ class _CompanyProjectsListScreenState extends State<CompanyProjectsListScreen> {
                               color: AppColors.darkText,
                             ),
                             decoration: InputDecoration(
-                              hintText: 'Search by title, category, or skill...',
+                              hintText:
+                                  'Search by title, category, or skill...',
                               hintStyle: GoogleFonts.inter(
                                 fontSize: 13.5,
                                 color: AppColors.textMuted,
@@ -438,6 +446,36 @@ class _CompanyProjectsListScreenState extends State<CompanyProjectsListScreen> {
                           ),
                         ),
                         Padding(
+                          padding: const EdgeInsets.fromLTRB(16, 0, 16, 10),
+                          child: Row(
+                            children: [
+                              Expanded(
+                                child: _buildPaymentFilter(
+                                  key: const Key(
+                                    'company-payment-filter-pending',
+                                  ),
+                                  label: 'Payment Pending',
+                                  isSelected: !_showPaidProjects,
+                                  onPressed: () {
+                                    setState(() => _showPaidProjects = false);
+                                  },
+                                ),
+                              ),
+                              const SizedBox(width: 8),
+                              Expanded(
+                                child: _buildPaymentFilter(
+                                  key: const Key('company-payment-filter-paid'),
+                                  label: 'Paid',
+                                  isSelected: _showPaidProjects,
+                                  onPressed: () {
+                                    setState(() => _showPaidProjects = true);
+                                  },
+                                ),
+                              ),
+                            ],
+                          ),
+                        ),
+                        Padding(
                           padding: const EdgeInsets.only(bottom: 12),
                           child: SizedBox(
                             height: 36,
@@ -454,8 +492,8 @@ class _CompanyProjectsListScreenState extends State<CompanyProjectsListScreen> {
                                 final status = _statusFilters[index];
                                 final isSelected = _selectedStatus == status;
                                 final count = status == 'All'
-                                    ? companyProjects.length
-                                    : companyProjects
+                                    ? paymentFiltered.length
+                                    : paymentFiltered
                                           .where(
                                             (p) =>
                                                 p.status.toLowerCase() ==
@@ -552,6 +590,7 @@ class _CompanyProjectsListScreenState extends State<CompanyProjectsListScreen> {
                                               onPressed: () {
                                                 setState(() {
                                                   _selectedStatus = 'All';
+                                                  _showPaidProjects = false;
                                                   _searchController.clear();
                                                 });
                                               },
@@ -598,6 +637,38 @@ class _CompanyProjectsListScreenState extends State<CompanyProjectsListScreen> {
             ],
           );
         },
+      ),
+    );
+  }
+
+  Widget _buildPaymentFilter({
+    required Key key,
+    required String label,
+    required bool isSelected,
+    required VoidCallback onPressed,
+  }) {
+    return SizedBox(
+      height: 40,
+      child: OutlinedButton(
+        key: key,
+        onPressed: onPressed,
+        style: OutlinedButton.styleFrom(
+          backgroundColor: isSelected ? AppColors.primaryBlue : Colors.white,
+          foregroundColor: isSelected ? Colors.white : AppColors.grayText,
+          side: BorderSide(
+            color: isSelected ? AppColors.primaryBlue : AppColors.borderLight,
+          ),
+          padding: const EdgeInsets.symmetric(horizontal: 8),
+          shape: RoundedRectangleBorder(
+            borderRadius: BorderRadius.circular(12),
+          ),
+        ),
+        child: Text(
+          label,
+          maxLines: 1,
+          overflow: TextOverflow.ellipsis,
+          style: GoogleFonts.inter(fontSize: 12, fontWeight: FontWeight.w600),
+        ),
       ),
     );
   }
@@ -1093,7 +1164,7 @@ class _CompanyProjectsListScreenState extends State<CompanyProjectsListScreen> {
                             icon: Icons.calendar_today_outlined,
                             label: 'Due ${project.deadline}',
                           ),
-                          _buildPaymentStatusChip(project.paymentSent),
+                          _buildPaymentStatusChip(project),
                         ],
                       ),
                       const SizedBox(height: 14),
@@ -1240,11 +1311,23 @@ class _CompanyProjectsListScreenState extends State<CompanyProjectsListScreen> {
     );
   }
 
-  Widget _buildPaymentStatusChip(bool paymentSent) {
-    final color =
-        paymentSent ? const Color(0xFF166534) : const Color(0xFF92400E);
-    final background =
-        paymentSent ? AppColors.successBg : AppColors.warningBg;
+  Widget _buildPaymentStatusChip(ProjectModel project) {
+    final isAssigned = project.assignedStudent?.trim().isNotEmpty == true;
+    final label = !isAssigned
+        ? 'Unassigned'
+        : project.paymentSent
+        ? 'Paid'
+        : 'Payment Pending';
+    final color = !isAssigned
+        ? AppColors.grayText
+        : project.paymentSent
+        ? const Color(0xFF166534)
+        : const Color(0xFF92400E);
+    final background = !isAssigned
+        ? AppColors.surfaceAlt
+        : project.paymentSent
+        ? AppColors.successBg
+        : AppColors.warningBg;
     return Container(
       padding: const EdgeInsets.symmetric(horizontal: 9, vertical: 5),
       decoration: BoxDecoration(
@@ -1256,13 +1339,17 @@ class _CompanyProjectsListScreenState extends State<CompanyProjectsListScreen> {
         mainAxisSize: MainAxisSize.min,
         children: [
           Icon(
-            paymentSent ? Icons.check_circle_outline : Icons.pending_outlined,
+            !isAssigned
+                ? Icons.person_outline_rounded
+                : project.paymentSent
+                ? Icons.check_circle_outline
+                : Icons.pending_outlined,
             size: 13.5,
             color: color,
           ),
           const SizedBox(width: 5),
           Text(
-            paymentSent ? 'Paid' : 'Payment Pending',
+            label,
             style: GoogleFonts.inter(
               fontSize: 12,
               fontWeight: FontWeight.w600,

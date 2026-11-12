@@ -148,6 +148,7 @@ class CompanyProjectService {
 
     final savedProject = project.copyWith(
       id: cleanId,
+      openings: 1,
       companyName: companyName,
       companyId: companyId,
       createdAt: 'Just now',
@@ -172,7 +173,7 @@ class CompanyProjectService {
         'work_mode': savedProject.projectType,
         'duration': savedProject.duration,
         'deadline': savedProject.deadline,
-        'openings': savedProject.openings,
+        'openings': 1,
         'skills': savedProject.skillsRequired,
         'stipend': savedProject.budget.isNotEmpty
             ? savedProject.budget
@@ -192,31 +193,34 @@ class CompanyProjectService {
   }
 
   Future<void> updateProject(ProjectModel project) async {
+    final normalizedProject = project.copyWith(openings: 1);
     final supabase = SupabaseHelper.clientOrNull;
     final user = supabase?.auth.currentUser;
-    if (supabase != null && user != null && SupabaseHelper.isUuid(project.id)) {
+    if (supabase != null &&
+        user != null &&
+        SupabaseHelper.isUuid(normalizedProject.id)) {
       await supabase
           .from('projects')
           .update({
-            'title': project.title,
-            'category': project.category,
-            'description': project.description,
-            'requirements': project.requirements,
-            'deliverables': project.deliverables,
-            'additional_instructions': project.additionalInstructions,
-            'work_mode': project.projectType,
-            'duration': project.duration,
-            'deadline': project.deadline,
-            'openings': project.openings,
-            'skills': project.skillsRequired,
-            'status': project.status,
+            'title': normalizedProject.title,
+            'category': normalizedProject.category,
+            'description': normalizedProject.description,
+            'requirements': normalizedProject.requirements,
+            'deliverables': normalizedProject.deliverables,
+            'additional_instructions': normalizedProject.additionalInstructions,
+            'work_mode': normalizedProject.projectType,
+            'duration': normalizedProject.duration,
+            'deadline': normalizedProject.deadline,
+            'openings': 1,
+            'skills': normalizedProject.skillsRequired,
+            'status': normalizedProject.status,
             'updated_at': DateTime.now().toIso8601String(),
           })
-          .eq('id', project.id);
+          .eq('id', normalizedProject.id);
     }
 
     projectsNotifier.value = projectsNotifier.value
-        .map((p) => p.id == project.id ? project : p)
+        .map((p) => p.id == normalizedProject.id ? normalizedProject : p)
         .toList();
   }
 

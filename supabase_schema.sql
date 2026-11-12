@@ -349,6 +349,44 @@ CREATE TABLE IF NOT EXISTS public.project_payment_confirmations (
   PRIMARY KEY (project_id, student_id)
 );
 
+DO $$
+BEGIN
+  IF EXISTS (
+    SELECT 1
+    FROM public.project_assignments
+    GROUP BY project_id
+    HAVING count(*) > 1
+  ) THEN
+    RAISE EXCEPTION
+      'Multiple assignments exist for a project. Reconcile them before applying the single-assignment constraint.';
+  END IF;
+
+END;
+$$;
+
+CREATE UNIQUE INDEX IF NOT EXISTS idx_project_assignments_one_per_project
+  ON public.project_assignments (project_id);
+
+UPDATE public.projects
+SET openings = 1
+WHERE openings IS DISTINCT FROM 1;
+
+ALTER TABLE public.projects
+  ALTER COLUMN openings SET DEFAULT 1,
+  ALTER COLUMN openings SET NOT NULL;
+ALTER TABLE public.projects
+  DROP CONSTRAINT IF EXISTS projects_single_assignment_opening_check;
+ALTER TABLE public.projects
+  ADD CONSTRAINT projects_single_assignment_opening_check CHECK (openings = 1);
+
+DELETE FROM public.project_payment_confirmations pc
+WHERE NOT EXISTS (
+  SELECT 1
+  FROM public.project_assignments pa
+  WHERE pa.project_id = pc.project_id
+    AND pa.student_id = pc.student_id
+);
+
 -- ----------------------------------------------------------------------------
 -- 7. CERTIFICATES TABLE
 -- ----------------------------------------------------------------------------
@@ -1084,8 +1122,7 @@ DECLARE
   v_student_name TEXT;
   v_university TEXT;
   v_application_status TEXT;
-  v_openings INTEGER;
-  v_assignment_count INTEGER;
+  v_payment_sent BOOLEAN;
   v_assigned_label TEXT;
 BEGIN
   IF auth.uid() IS NULL THEN
@@ -1120,7 +1157,7 @@ BEGIN
     p.company_id,
     p.posted_by,
     p.user_id,
-    p.openings,
+    p.payment_sent,
     a.student_id,
     a.user_id,
     a.student_name,
@@ -1131,7 +1168,7 @@ BEGIN
     v_project_company_id,
     v_project_owner,
     v_project_user_id,
-    v_openings,
+    v_payment_sent,
     v_student_id,
     v_user_id,
     v_student_name,
@@ -1161,11 +1198,38 @@ BEGIN
     RAISE EXCEPTION 'Application not found or you are not authorized to assign it.';
   END IF;
 
+  v_assigned_label := COALESCE(NULLIF(BTRIM(v_student_name), ''), 'Student');
+  IF NULLIF(BTRIM(v_university), '') IS NOT NULL THEN
+    v_assigned_label := v_assigned_label || ' (' || BTRIM(v_university) || ')';
+  END IF;
+
+  IF EXISTS (
+    SELECT 1 FROM public.project_assignments pa
+    WHERE pa.project_id = v_project_id
+      AND pa.application_id <> p_application_id
+  ) THEN
+    RAISE EXCEPTION 'This project already has an assigned student.';
+  END IF;
+
   IF EXISTS (
     SELECT 1 FROM public.project_assignments pa
     WHERE pa.application_id = p_application_id
   ) THEN
+    UPDATE public.applications
+    SET status = 'Rejected',
+        updated_at = timezone('utc'::text, now())
+    WHERE project_id = v_project_id
+      AND id <> p_application_id
+      AND status IS DISTINCT FROM 'Rejected';
+    UPDATE public.projects
+    SET assigned_student = v_assigned_label,
+        updated_at = timezone('utc'::text, now())
+    WHERE id = v_project_id;
     RETURN;
+  END IF;
+
+  IF v_payment_sent IS TRUE THEN
+    RAISE EXCEPTION 'A student cannot be assigned after payment is marked sent.';
   END IF;
 
   IF v_student_id IS NOT NULL
@@ -1199,15 +1263,6 @@ BEGIN
     RAISE EXCEPTION 'This application cannot be assigned in its current status.';
   END IF;
 
-  SELECT count(*)::INTEGER
-  INTO v_assignment_count
-  FROM public.project_assignments pa
-  WHERE pa.project_id = v_project_id;
-
-  IF v_assignment_count >= COALESCE(v_openings, 1) THEN
-    RAISE EXCEPTION 'All openings for this project have already been assigned.';
-  END IF;
-
   INSERT INTO public.project_assignments (
     application_id,
     project_id,
@@ -1222,18 +1277,24 @@ BEGIN
         updated_at = timezone('utc'::text, now())
     WHERE id = p_application_id;
 
-    v_assigned_label := COALESCE(NULLIF(BTRIM(v_student_name), ''), 'Student');
-    IF NULLIF(BTRIM(v_university), '') IS NOT NULL THEN
-      v_assigned_label := v_assigned_label || ' (' || BTRIM(v_university) || ')';
-    END IF;
-
     UPDATE public.projects
     SET status = 'In Progress',
-        assigned_student = v_assigned_label,
         progress = 0.15,
         updated_at = timezone('utc'::text, now())
     WHERE id = v_project_id;
   END IF;
+
+  UPDATE public.projects
+  SET assigned_student = v_assigned_label,
+      updated_at = timezone('utc'::text, now())
+  WHERE id = v_project_id;
+
+  UPDATE public.applications
+  SET status = 'Rejected',
+      updated_at = timezone('utc'::text, now())
+  WHERE project_id = v_project_id
+    AND id <> p_application_id
+    AND status IS DISTINCT FROM 'Rejected';
 END;
 $$;
 
@@ -1290,6 +1351,8 @@ BEGIN
   ) THEN
     RAISE EXCEPTION 'Only company accounts can mark project payments sent.';
   END IF;
+
+  PERFORM set_config('app.allow_project_payment_sent_update', 'on', true);
 
   UPDATE public.projects p
   SET payment_sent = TRUE,
@@ -1579,6 +1642,171 @@ BEGIN
   RETURN NEW;
 END;
 $$;
+
+CREATE OR REPLACE FUNCTION public.enforce_application_bid_rules()
+RETURNS TRIGGER
+LANGUAGE plpgsql
+SECURITY DEFINER
+SET search_path = pg_catalog
+AS $$
+DECLARE
+  v_project_status TEXT;
+  v_student_id UUID;
+  v_bid_count INTEGER;
+BEGIN
+  IF TG_OP <> 'INSERT' THEN
+    IF NEW.project_id IS DISTINCT FROM OLD.project_id
+      OR COALESCE(NEW.student_id, NEW.user_id)
+        IS DISTINCT FROM COALESCE(OLD.student_id, OLD.user_id)
+    THEN
+      RAISE EXCEPTION 'An application cannot be moved to another project or student.';
+    END IF;
+    RETURN NEW;
+  END IF;
+
+  v_student_id := COALESCE(NEW.student_id, NEW.user_id);
+  IF NEW.project_id IS NULL OR v_student_id IS NULL THEN
+    RAISE EXCEPTION 'A valid project and student are required to apply.';
+  END IF;
+
+  IF auth.uid() IS NOT NULL
+    AND NOT public.is_admin()
+    AND NOT EXISTS (
+      SELECT 1
+      FROM public.profiles pr
+      WHERE pr.id = auth.uid()
+        AND lower(BTRIM(pr.user_type)) = 'student'
+    )
+  THEN
+    RAISE EXCEPTION 'Only student accounts can apply to projects.';
+  END IF;
+
+  SELECT p.status
+  INTO v_project_status
+  FROM public.projects p
+  WHERE p.id = NEW.project_id
+  FOR UPDATE;
+
+  IF NOT FOUND THEN
+    RAISE EXCEPTION 'Project not found.';
+  END IF;
+
+  IF lower(BTRIM(COALESCE(v_project_status, ''))) NOT IN ('open', 'active') THEN
+    RAISE EXCEPTION 'This project is not accepting applications.';
+  END IF;
+
+  IF EXISTS (
+    SELECT 1
+    FROM public.project_assignments pa
+    WHERE pa.project_id = NEW.project_id
+  ) THEN
+    RAISE EXCEPTION 'This project already has an assigned student.';
+  END IF;
+
+  IF EXISTS (
+    SELECT 1
+    FROM public.applications a
+    WHERE a.project_id = NEW.project_id
+      AND COALESCE(a.student_id, a.user_id) = v_student_id
+  ) THEN
+    RAISE EXCEPTION 'You have already applied to this project.';
+  END IF;
+
+  SELECT count(*)::INTEGER
+  INTO v_bid_count
+  FROM public.applications a
+  WHERE a.project_id = NEW.project_id;
+
+  IF v_bid_count >= 10 THEN
+    RAISE EXCEPTION 'This project has reached the maximum of 10 applications.';
+  END IF;
+
+  RETURN NEW;
+END;
+$$;
+
+CREATE OR REPLACE FUNCTION public.enforce_application_assignment_status()
+RETURNS TRIGGER
+LANGUAGE plpgsql
+SECURITY DEFINER
+SET search_path = pg_catalog
+AS $$
+BEGIN
+  IF public.is_admin() THEN
+    RETURN NEW;
+  END IF;
+
+  IF TG_OP = 'INSERT' THEN
+    IF NEW.status IN ('Accepted', 'In Progress', 'Revision Requested', 'Completed') THEN
+      RAISE EXCEPTION 'This status requires an authoritative project assignment.';
+    END IF;
+    RETURN NEW;
+  END IF;
+
+  IF NEW.status IS NOT DISTINCT FROM OLD.status THEN
+    RETURN NEW;
+  END IF;
+
+  IF NEW.status IN ('Accepted', 'In Progress', 'Revision Requested', 'Completed')
+    AND NOT EXISTS (
+      SELECT 1
+      FROM public.project_assignments pa
+      WHERE pa.application_id = NEW.id
+        AND pa.project_id = NEW.project_id
+        AND pa.student_id = COALESCE(NEW.student_id, NEW.user_id)
+    )
+  THEN
+    RAISE EXCEPTION 'This status requires an authoritative project assignment.';
+  END IF;
+
+  IF EXISTS (
+    SELECT 1
+    FROM public.project_assignments pa
+    WHERE pa.application_id = NEW.id
+      AND pa.project_id = NEW.project_id
+  ) AND NEW.status IN ('Pending', 'Shortlisted', 'Rejected')
+  THEN
+    RAISE EXCEPTION 'An assigned application cannot be marked as unassigned.';
+  END IF;
+
+  RETURN NEW;
+END;
+$$;
+
+CREATE OR REPLACE FUNCTION public.guard_project_payment_sent_update()
+RETURNS TRIGGER
+LANGUAGE plpgsql
+SET search_path = pg_catalog
+AS $$
+BEGIN
+  IF NEW.payment_sent IS DISTINCT FROM OLD.payment_sent
+    AND current_setting('app.allow_project_payment_sent_update', true)
+      IS DISTINCT FROM 'on'
+  THEN
+    RAISE EXCEPTION 'Payment status must be changed through the authorized payment RPC.';
+  END IF;
+
+  RETURN NEW;
+END;
+$$;
+
+DROP TRIGGER IF EXISTS enforce_application_bid_rules ON public.applications;
+CREATE TRIGGER enforce_application_bid_rules
+BEFORE INSERT OR UPDATE OF project_id, student_id, user_id ON public.applications
+FOR EACH ROW
+EXECUTE FUNCTION public.enforce_application_bid_rules();
+
+DROP TRIGGER IF EXISTS enforce_application_assignment_status ON public.applications;
+CREATE TRIGGER enforce_application_assignment_status
+BEFORE INSERT OR UPDATE OF status ON public.applications
+FOR EACH ROW
+EXECUTE FUNCTION public.enforce_application_assignment_status();
+
+DROP TRIGGER IF EXISTS guard_project_payment_sent_update ON public.projects;
+CREATE TRIGGER guard_project_payment_sent_update
+BEFORE UPDATE OF payment_sent ON public.projects
+FOR EACH ROW
+EXECUTE FUNCTION public.guard_project_payment_sent_update();
 
 CREATE TRIGGER prevent_application_identity_insert
 BEFORE INSERT ON public.applications
