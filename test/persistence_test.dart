@@ -473,5 +473,52 @@ void main() {
     expect(AppDataService.instance.isLoggedIn, isTrue);
     expect(AppDataService.instance.userEmail, equals('sameuser@gmail.com'));
   });
+
+  test('Project application limit blocks applying when 10 students have applied',
+      () async {
+    expect(AppDataService.maxApplicationsPerProject, equals(10));
+    const projId = 'proj-cap-10';
+    final project = {
+      'id': projId,
+      'title': 'FinTech Ledger Audit',
+      'company': 'Systems Limited',
+      'openings': 5,
+    };
+
+    AppDataService.instance.setProjectApplicantsCountForTest(projId, 10);
+    expect(
+      AppDataService.instance.isProjectApplicationLimitReached(projId),
+      isTrue,
+    );
+
+    await expectLater(
+      () => AppDataService.instance.addApplication(
+        project: project,
+        coverMessage: 'Experienced Flutter & SQL engineer ready to deliver.',
+        skills: 'Flutter, SQL',
+        availability: '15-20 hrs/week',
+      ),
+      throwsException,
+    );
+    expect(AppDataService.instance.hasApplied(projId), isFalse);
+
+    AppDataService.instance.setProjectApplicantsCountForTest(projId, 9);
+    expect(
+      AppDataService.instance.isProjectApplicationLimitReached(projId),
+      isFalse,
+    );
+    await AppDataService.instance.addApplication(
+      project: project,
+      coverMessage: 'Experienced Flutter & SQL engineer ready to deliver.',
+      skills: 'Flutter, SQL',
+      availability: '15-20 hrs/week',
+    );
+    expect(AppDataService.instance.hasApplied(projId), isTrue);
+    expect(AppDataService.instance.getProjectApplicantsCount(projId), equals(10));
+    expect(
+      AppDataService.instance.isProjectApplicationLimitReached(projId),
+      isTrue,
+    );
+  });
 }
 

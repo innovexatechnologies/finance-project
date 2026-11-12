@@ -307,14 +307,16 @@ class CompanyAssignmentService {
             final certCode = 'CERT-${DateTime.now().year}-$randNum';
             final hashInput =
                 '$certCode:${assignment.studentId}:${assignment.projectId}';
+            final resolvedCompanyId = SupabaseHelper.isUuid(assignment.companyId)
+                ? assignment.companyId
+                : (SupabaseHelper.isUuid(profile.id) ? profile.id : null);
             await supabase.from('certificates').insert({
               'certificate_id': certCode,
               'student_id': assignment.studentId,
               'student_name': assignment.studentName,
               'student_university': assignment.studentUniversity,
               'student_degree': assignment.studentDegree,
-              if (SupabaseHelper.isUuid(assignment.companyId))
-                'company_id': assignment.companyId,
+              'company_id': ?resolvedCompanyId,
               'company_name': companyDisplay,
               if (SupabaseHelper.isUuid(assignment.projectId))
                 'project_id': assignment.projectId,

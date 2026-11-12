@@ -6,7 +6,12 @@ import 'package:link_vibe/core/services/app_data_service.dart';
 import 'package:link_vibe/core/services/supabase_helper.dart';
 import 'package:link_vibe/feature/auth/presentation/widgets/auth_form_helpers.dart';
 import 'package:link_vibe/feature/company/presentation/screens/company_main_nav.dart';
+import 'package:link_vibe/feature/company/services/company_applicant_service.dart';
+import 'package:link_vibe/feature/company/services/company_assignment_service.dart';
 import 'package:link_vibe/feature/company/services/company_profile_service.dart';
+import 'package:link_vibe/feature/company/services/company_project_service.dart';
+import 'package:link_vibe/feature/company/services/company_settings_service.dart';
+import 'package:link_vibe/feature/company/services/company_verification_service.dart';
 import 'package:link_vibe/feature/student/presentation/screens/student_main_nav.dart';
 import 'login_screen.dart';
 
@@ -92,8 +97,7 @@ class _SignupScreenState extends State<SignupScreen> {
             },
           );
         } on AuthException catch (signUpErr) {
-          if (SupabaseHelper.isEmailRateLimitError(signUpErr) ||
-              SupabaseHelper.isWeakPasswordError(signUpErr)) {
+          if (SupabaseHelper.isEmailRateLimitError(signUpErr)) {
             await SupabaseHelper.registerUserInApp(
               email: email,
               password: password,
@@ -115,7 +119,6 @@ class _SignupScreenState extends State<SignupScreen> {
 
         if (user != null && user.identities != null && user.identities!.isEmpty) {
           // Account already exists: attempt direct sign-in if credentials match
-          await SupabaseHelper.confirmUserEmailInApp(email);
           try {
             final existingSignIn = await supabase.auth.signInWithPassword(
               email: email,
@@ -138,14 +141,24 @@ class _SignupScreenState extends State<SignupScreen> {
         }
 
         if (session == null) {
-          // Auto-confirm and log user directly into their workspace without verification screens
-          await SupabaseHelper.confirmUserEmailInApp(email);
-          final loginResponse = await supabase.auth.signInWithPassword(
-            email: email,
-            password: password,
-          );
-          user = loginResponse.user ?? user;
-          session = loginResponse.session;
+          try {
+            final loginResponse = await supabase.auth.signInWithPassword(
+              email: email,
+              password: password,
+            );
+            user = loginResponse.user ?? user;
+            session = loginResponse.session;
+          } on AuthException catch (loginErr) {
+            if (SupabaseHelper.isEmailNotConfirmedError(loginErr)) {
+              if (!mounted) return;
+              setState(() {
+                _errorBanner =
+                    'Account created! Please check your email inbox to confirm your address before signing in.';
+              });
+              return;
+            }
+            rethrow;
+          }
         }
 
         // Session active: ensure profile + role-specific record exist cleanly
@@ -191,6 +204,17 @@ class _SignupScreenState extends State<SignupScreen> {
             });
           }
         }
+
+        if (AppDataService.instance.userId.isNotEmpty &&
+            AppDataService.instance.userId != user.id) {
+          await AppDataService.instance.clearAuthSession();
+        }
+        CompanyProfileService().reset();
+        CompanyVerificationService().reset();
+        CompanyProjectService().reset();
+        CompanyApplicantService().reset();
+        CompanyAssignmentService().reset();
+        CompanySettingsService().reset();
 
         await AppDataService.instance.saveAuthSession(
           role: _selectedRole,
@@ -570,8 +594,13 @@ class _SignupScreenState extends State<SignupScreen> {
                                 ),
                               ),
                               validator: (val) {
-                                if (val == null || val.trim().isEmpty) {
+                                final v = val?.trim() ?? '';
+                                if (v.isEmpty) {
                                   return 'Password is required';
+                                }
+                                if (SupabaseHelper.clientOrNull != null &&
+                                    v.length < 6) {
+                                  return 'Password must be at least 6 characters';
                                 }
                                 return null;
                               },

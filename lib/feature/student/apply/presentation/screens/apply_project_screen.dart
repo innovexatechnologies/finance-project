@@ -170,7 +170,7 @@ class _ApplyProjectScreenState extends State<ApplyProjectScreen> {
       if (!mounted) return;
       ScaffoldMessenger.of(context).showSnackBar(
         SnackBar(
-          content: Text('Error submitting application: $e'),
+          content: Text(SupabaseHelper.friendlyError(e)),
           backgroundColor: AppColors.statusClosed,
         ),
       );

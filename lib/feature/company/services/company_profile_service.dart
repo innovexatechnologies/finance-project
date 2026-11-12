@@ -183,7 +183,14 @@ class CompanyProfileService {
           .limit(1)
           .maybeSingle();
 
-      if (companyRow == null) {
+      final profileRole =
+          (profileRow?['user_type']?.toString() ??
+                  user.userMetadata?['user_type']?.toString() ??
+                  'Company')
+              .trim()
+              .toLowerCase();
+
+      if (companyRow == null && profileRole == 'company') {
         final fallbackName = (profileRow?['name']?.toString().trim().isNotEmpty == true)
             ? profileRow!['name'].toString().trim()
             : (user.userMetadata?['name']?.toString().trim() ??

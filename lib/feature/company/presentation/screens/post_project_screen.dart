@@ -1307,8 +1307,8 @@ class _PostProjectScreenState extends State<PostProjectScreen> {
           return 'Number of student openings is required';
         }
         final parsed = int.tryParse(val.trim());
-        if (parsed == null || parsed < 1 || parsed > 20) {
-          return 'Enter a valid number of openings (1 to 20)';
+        if (parsed == null || parsed < 1 || parsed > 10) {
+          return 'Enter a valid number of openings (1 to 10)';
         }
         return null;
       },

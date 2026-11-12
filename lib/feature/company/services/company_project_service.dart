@@ -149,6 +149,7 @@ class CompanyProjectService {
       id: cleanId,
       companyName: companyName,
       companyId: companyId,
+      openings: project.openings.clamp(1, 10),
       createdAt: 'Just now',
     );
 
@@ -205,7 +206,7 @@ class CompanyProjectService {
             'work_mode': project.projectType,
             'duration': project.duration,
             'deadline': project.deadline,
-            'openings': project.openings,
+            'openings': project.openings.clamp(1, 10),
             'skills': project.skillsRequired,
             'status': project.status,
             'updated_at': DateTime.now().toIso8601String(),

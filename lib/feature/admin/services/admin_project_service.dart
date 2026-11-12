@@ -47,6 +47,25 @@ class AdminProjectService {
           .select()
           .order('created_at', ascending: false);
 
+      final Map<String, String> companyNamesById = {};
+      final Map<String, String> companyNamesByUserId = {};
+      try {
+        final compRows = await supabase
+            .from('companies')
+            .select('id, user_id, company_name');
+        for (final raw in compRows) {
+          final c = Map<String, dynamic>.from(raw);
+          final cId = c['id']?.toString() ?? '';
+          final uId = c['user_id']?.toString() ?? '';
+          final cName = c['company_name']?.toString().trim() ?? '';
+          if (cName.isEmpty) continue;
+          if (cId.isNotEmpty) companyNamesById[cId] = cName;
+          if (uId.isNotEmpty) companyNamesByUserId[uId] = cName;
+        }
+      } catch (e) {
+        debugPrint('AdminProjectService company lookup skipped: $e');
+      }
+
       final Map<String, int> appCounts = {};
       try {
         final appRows =
@@ -108,15 +127,21 @@ class AdminProjectService {
                 ))
             .toList();
 
+        final rawCompId = row['company_id']?.toString() ?? '';
+        final rawPostedBy =
+            row['posted_by']?.toString() ?? row['user_id']?.toString() ?? '';
+        final dbCompName = row['company_name']?.toString().trim() ?? '';
+        final resolvedCompanyName =
+            companyNamesById[rawCompId] ??
+                companyNamesByUserId[rawPostedBy] ??
+                (dbCompName.isNotEmpty ? dbCompName : 'Corporate Partner');
+
         loaded.add(
           AdminProjectModel(
             id: id,
             title: title,
-            companyId: row['company_id']?.toString() ??
-                row['posted_by']?.toString() ??
-                row['user_id']?.toString() ??
-                '',
-            companyName: row['company_name']?.toString() ?? 'Corporate Partner',
+            companyId: rawCompId.isNotEmpty ? rawCompId : rawPostedBy,
+            companyName: resolvedCompanyName,
             category: row['category']?.toString() ?? 'Development',
             description: row['description']?.toString() ?? '',
             requirements: row['requirements']?.toString() ?? '',

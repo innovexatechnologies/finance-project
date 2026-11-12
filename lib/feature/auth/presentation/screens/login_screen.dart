@@ -9,7 +9,12 @@ import 'package:link_vibe/feature/admin/presentation/screens/admin_login_screen.
 import 'package:link_vibe/feature/auth/presentation/screens/reset_password_screen.dart';
 import 'package:link_vibe/feature/auth/presentation/widgets/auth_form_helpers.dart';
 import 'package:link_vibe/feature/company/presentation/screens/company_main_nav.dart';
+import 'package:link_vibe/feature/company/services/company_applicant_service.dart';
+import 'package:link_vibe/feature/company/services/company_assignment_service.dart';
 import 'package:link_vibe/feature/company/services/company_profile_service.dart';
+import 'package:link_vibe/feature/company/services/company_project_service.dart';
+import 'package:link_vibe/feature/company/services/company_settings_service.dart';
+import 'package:link_vibe/feature/company/services/company_verification_service.dart';
 import 'package:link_vibe/feature/student/presentation/screens/student_main_nav.dart';
 import 'signup_screen.dart';
 
@@ -77,23 +82,10 @@ class _LoginScreenState extends State<LoginScreen> {
       // 1. Real Supabase Cloud Authentication (when initialized)
       final supabase = SupabaseHelper.clientOrNull;
       if (supabase != null) {
-        AuthResponse authResponse;
-        try {
-          authResponse = await supabase.auth.signInWithPassword(
-            email: email,
-            password: password,
-          );
-        } on AuthException catch (loginErr) {
-          if (SupabaseHelper.isEmailNotConfirmedError(loginErr)) {
-            await SupabaseHelper.confirmUserEmailInApp(email);
-            authResponse = await supabase.auth.signInWithPassword(
-              email: email,
-              password: password,
-            );
-          } else {
-            rethrow;
-          }
-        }
+        final AuthResponse authResponse = await supabase.auth.signInWithPassword(
+          email: email,
+          password: password,
+        );
         final user = authResponse.user;
         if (user == null) {
           throw const AuthException('Unable to verify account credentials.');
@@ -154,7 +146,35 @@ class _LoginScreenState extends State<LoginScreen> {
           return;
         }
 
-        // Role-specific suspension checks (guarded against legacy schemas / duplicate rows)
+        final resolvedName =
+            (profileRow?['name']?.toString().trim().isNotEmpty == true)
+                ? profileRow!['name'].toString().trim()
+                : (user.userMetadata?['name']?.toString().trim().isNotEmpty ==
+                        true
+                    ? user.userMetadata!['name'].toString().trim()
+                    : (email.split('@').first));
+        final resolvedUni =
+            (profileRow?['university']?.toString().trim().isNotEmpty == true)
+                ? profileRow!['university'].toString().trim()
+                : (user.userMetadata?['university']?.toString().trim() ?? '');
+
+        // Ensure profile row exists in Supabase so Admin always sees this account
+        if (profileRow == null) {
+          try {
+            await supabase.from('profiles').upsert({
+              'id': user.id,
+              'name': resolvedName,
+              'email': user.email ?? email,
+              'user_type': actualRole,
+              'university': resolvedUni,
+              'account_status': 'active',
+            });
+          } catch (e) {
+            debugPrint('LoginScreen profile backfill warning: $e');
+          }
+        }
+
+        // Role-specific suspension checks & missing role-row healing
         if (actualRole == 'Student') {
           try {
             final stuRow = await supabase
@@ -163,9 +183,16 @@ class _LoginScreenState extends State<LoginScreen> {
                 .eq('user_id', user.id)
                 .limit(1)
                 .maybeSingle();
-            if ((stuRow?['account_status']?.toString().toLowerCase() ?? '') ==
+            if (stuRow == null) {
+              await supabase.from('students').insert({
+                'user_id': user.id,
+                'full_name': resolvedName,
+                'email': user.email ?? email,
+                'university': resolvedUni,
+              });
+            } else if ((stuRow['account_status']?.toString().toLowerCase() ?? '') ==
                 'suspended') {
-              final reason = stuRow?['suspension_reason']?.toString() ?? '';
+              final reason = stuRow['suspension_reason']?.toString() ?? '';
               await supabase.auth.signOut();
               if (!mounted) return;
               setState(() {
@@ -186,9 +213,21 @@ class _LoginScreenState extends State<LoginScreen> {
                 .eq('user_id', user.id)
                 .limit(1)
                 .maybeSingle();
-            if ((compRow?['account_status']?.toString().toLowerCase() ?? '') ==
+            if (compRow == null) {
+              await supabase.from('companies').insert({
+                'user_id': user.id,
+                'company_name': resolvedName,
+                'email': user.email ?? email,
+                'industry': resolvedUni.isNotEmpty
+                    ? resolvedUni
+                    : 'Software & Cloud Services',
+                'verification_status': 'not_submitted',
+                'logo_initial':
+                    SupabaseHelper.initialsFor(resolvedName, fallback: 'CO'),
+              });
+            } else if ((compRow['account_status']?.toString().toLowerCase() ?? '') ==
                 'suspended') {
-              final reason = compRow?['suspension_reason']?.toString() ?? '';
+              final reason = compRow['suspension_reason']?.toString() ?? '';
               await supabase.auth.signOut();
               if (!mounted) return;
               setState(() {
@@ -203,17 +242,17 @@ class _LoginScreenState extends State<LoginScreen> {
           }
         }
 
-        final resolvedName =
-            (profileRow?['name']?.toString().trim().isNotEmpty == true)
-                ? profileRow!['name'].toString().trim()
-                : (user.userMetadata?['name']?.toString().trim().isNotEmpty ==
-                        true
-                    ? user.userMetadata!['name'].toString().trim()
-                    : (email.split('@').first));
-        final resolvedUni =
-            (profileRow?['university']?.toString().trim().isNotEmpty == true)
-                ? profileRow!['university'].toString().trim()
-                : user.userMetadata?['university']?.toString();
+        // Clear any previous user's cached workspace before loading this account
+        if (AppDataService.instance.userId.isNotEmpty &&
+            AppDataService.instance.userId != user.id) {
+          await AppDataService.instance.clearAuthSession();
+        }
+        CompanyProfileService().reset();
+        CompanyVerificationService().reset();
+        CompanyProjectService().reset();
+        CompanyApplicantService().reset();
+        CompanyAssignmentService().reset();
+        CompanySettingsService().reset();
 
         await AppDataService.instance.saveAuthSession(
           role: actualRole,

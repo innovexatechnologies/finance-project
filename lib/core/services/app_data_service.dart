@@ -1,9 +1,11 @@
 import 'dart:convert';
+import 'dart:math';
 import 'package:flutter/foundation.dart';
 import 'package:flutter/scheduler.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 import 'package:supabase_flutter/supabase_flutter.dart' show FileOptions;
 import 'package:link_vibe/core/services/supabase_helper.dart';
+import 'package:link_vibe/feature/admin/services/admin_hash_util.dart';
 
 /// Central Persistent & Supabase-Synchronized Data Service for SkillBridge.
 class AppDataService extends ChangeNotifier {
@@ -41,9 +43,11 @@ class AppDataService extends ChangeNotifier {
   String? _lastSyncError;
 
   // Entity caches (empty until fetched from Supabase or created by user)
+  static const int maxApplicationsPerProject = 10;
   List<Map<String, dynamic>> _savedProjects = [];
   List<Map<String, dynamic>> _applications = [];
   List<Map<String, dynamic>> _projects = [];
+  final Map<String, int> _projectApplicantCounts = {};
   Map<String, Map<String, dynamic>> _workSubmissions = {};
   Map<String, dynamic> _profile = {};
   List<String> _skills = [];
@@ -339,6 +343,30 @@ class AppDataService extends ChangeNotifier {
         }
         _projects = mappedProjects;
         await _prefs?.setString(_kCustomProjects, jsonEncode(_projects));
+
+        // Fetch aggregate applicant counts per project (safe RPC, no PII exposed)
+        try {
+          final countRows = await supabase.rpc('get_project_applicant_counts');
+          if (countRows is List) {
+            for (final raw in countRows) {
+              if (raw is Map) {
+                final pid = raw['project_id']?.toString() ?? '';
+                final cnt = (raw['applicant_count'] as num?)?.toInt() ?? 0;
+                if (pid.isNotEmpty) {
+                  _projectApplicantCounts[pid] = cnt;
+                }
+              }
+            }
+            for (final p in _projects) {
+              final pid = p['id']?.toString() ?? '';
+              if (_projectApplicantCounts.containsKey(pid)) {
+                p['applicantsCount'] = _projectApplicantCounts[pid];
+              }
+            }
+          }
+        } catch (e) {
+          debugPrint('Applicant counts RPC skipped: $e');
+        }
       } catch (e) {
         debugPrint('Error fetching projects: $e');
         _lastSyncError = e.toString();
@@ -765,6 +793,60 @@ class AppDataService extends ChangeNotifier {
         .any((a) => a['projectId']?.toString() == projectId.toString());
   }
 
+  int getProjectApplicantsCount(String projectId) {
+    final pid = projectId.trim();
+    if (pid.isEmpty) return 0;
+    final fromMap = _projectApplicantCounts[pid];
+    if (fromMap != null) return fromMap;
+    for (final p in _projects) {
+      if (p['id']?.toString() == pid) {
+        final raw = p['applicantsCount'] ?? p['applicants_count'];
+        if (raw is num) return raw.toInt();
+        final parsed = int.tryParse(raw?.toString() ?? '');
+        if (parsed != null) return parsed;
+      }
+    }
+    return 0;
+  }
+
+  bool isProjectApplicationLimitReached(String projectId) {
+    return getProjectApplicantsCount(projectId) >= maxApplicationsPerProject;
+  }
+
+  @visibleForTesting
+  void setProjectApplicantsCountForTest(String projectId, int count) {
+    _projectApplicantCounts[projectId.trim()] = count;
+    _safeNotifyListeners();
+  }
+
+  Future<int> refreshProjectApplicantsCount(String projectId) async {
+    final pid = projectId.trim();
+    if (pid.isEmpty) return 0;
+    final supabase = SupabaseHelper.clientOrNull;
+    if (supabase != null && SupabaseHelper.isUuid(pid)) {
+      try {
+        final res = await supabase.rpc(
+          'get_project_applicant_count',
+          params: {'target_project_id': pid},
+        );
+        final cnt = (res is num)
+            ? res.toInt()
+            : (int.tryParse(res?.toString() ?? '') ?? getProjectApplicantsCount(pid));
+        _projectApplicantCounts[pid] = cnt;
+        for (final p in _projects) {
+          if (p['id']?.toString() == pid) {
+            p['applicantsCount'] = cnt;
+          }
+        }
+        _safeNotifyListeners();
+        return cnt;
+      } catch (e) {
+        debugPrint('refreshProjectApplicantsCount warning: $e');
+      }
+    }
+    return getProjectApplicantsCount(pid);
+  }
+
   Future<void> addApplication({
     required Map<String, dynamic> project,
     required String coverMessage,
@@ -774,6 +856,15 @@ class AppDataService extends ChangeNotifier {
   }) async {
     final projectId = project['id']?.toString() ?? '';
     if (projectId.isNotEmpty && hasApplied(projectId)) return;
+
+    if (projectId.isNotEmpty) {
+      final currentCount = await refreshProjectApplicantsCount(projectId);
+      if (currentCount >= maxApplicationsPerProject) {
+        throw Exception(
+          'Application limit reached: maximum $maxApplicationsPerProject students can apply to this project.',
+        );
+      }
+    }
 
     final appId = SupabaseHelper.generateUuid();
     final companyName =
@@ -799,14 +890,27 @@ class AppDataService extends ChangeNotifier {
       'deadline': project['deadline']?.toString() ?? 'Flexible',
     };
 
+    try {
+      await _pushApplicationToSupabase(newApp, project);
+    } catch (e) {
+      rethrow;
+    }
+
     _applications.insert(0, newApp);
+    if (projectId.isNotEmpty) {
+      _projectApplicantCounts[projectId] =
+          getProjectApplicantsCount(projectId) + 1;
+      for (final p in _projects) {
+        if (p['id']?.toString() == projectId) {
+          p['applicantsCount'] = _projectApplicantCounts[projectId];
+        }
+      }
+    }
     _safeNotifyListeners();
 
     if (_prefs != null) {
       await _prefs!.setString(_kApplications, jsonEncode(_applications));
     }
-
-    await _pushApplicationToSupabase(newApp, project);
   }
 
   Future<void> _pushApplicationToSupabase(
@@ -859,6 +963,7 @@ class AppDataService extends ChangeNotifier {
       });
     } catch (e) {
       debugPrint('Supabase application insert failed: $e');
+      rethrow;
     }
   }
 
@@ -1169,7 +1274,7 @@ class AppDataService extends ChangeNotifier {
         'avatars/${user.id}_${DateTime.now().millisecondsSinceEpoch}.$cleanExt';
 
     String? uploadedUrl;
-    for (final bucket in const ['student-docs', 'public-files']) {
+    for (final bucket in const ['public-files', 'student-docs']) {
       try {
         await supabase.storage.from(bucket).uploadBinary(
               fileName,
@@ -1407,6 +1512,12 @@ class AppDataService extends ChangeNotifier {
   // LOCAL OFFLINE USER REGISTRY (FOR UNIT TESTS / OFFLINE FORM PERSISTENCE)
   // ===========================================================================
 
+  String _generateLocalSalt() {
+    final rng = Random.secure();
+    final bytes = List<int>.generate(16, (_) => rng.nextInt(256));
+    return bytes.map((b) => b.toRadixString(16).padLeft(2, '0')).join();
+  }
+
   Future<void> registerUserAccount({
     required String email,
     required String password,
@@ -1418,10 +1529,13 @@ class AppDataService extends ChangeNotifier {
     final cleanName = name.trim();
     final cleanUni = university.trim();
     final cleanPass = password.trim();
+    final salt = _generateLocalSalt();
+    final passHash = AdminHashUtil.hashPassword(cleanPass, salt);
 
     _userAccounts[cleanEmail] = {
       'email': cleanEmail,
-      'password': cleanPass,
+      'passwordSalt': salt,
+      'passwordHash': passHash,
       'name': cleanName,
       'university': cleanUni,
       'role': role,
@@ -1456,22 +1570,47 @@ class AppDataService extends ChangeNotifier {
     final cleanPass = password.trim();
 
     final acc = _userAccounts[cleanEmail];
-    if (acc != null && acc['password'] == cleanPass) {
+    if (acc == null) return false;
+
+    final storedHash = acc['passwordHash']?.toString() ?? '';
+    final storedSalt = acc['passwordSalt']?.toString() ?? '';
+    if (storedHash.isNotEmpty && storedSalt.isNotEmpty) {
+      final candidate = AdminHashUtil.hashPassword(cleanPass, storedSalt);
+      return AdminHashUtil.secureCompare(candidate, storedHash);
+    }
+
+    // Legacy plaintext entry migration (only if upgrading old local storage)
+    final legacyPlain = acc['password']?.toString();
+    if (legacyPlain != null && AdminHashUtil.secureCompare(legacyPlain, cleanPass)) {
+      final salt = _generateLocalSalt();
+      acc['passwordSalt'] = salt;
+      acc['passwordHash'] = AdminHashUtil.hashPassword(cleanPass, salt);
+      acc.remove('password');
       return true;
     }
     return false;
   }
 
   Future<void> updateAccountPassword(String email, String newPassword) async {
+    // Do not persist user passwords locally when live Supabase Auth is active
+    if (SupabaseHelper.clientOrNull != null) {
+      return;
+    }
+
     final cleanEmail = email.trim().toLowerCase();
     final cleanPass = newPassword.trim();
+    final salt = _generateLocalSalt();
+    final passHash = AdminHashUtil.hashPassword(cleanPass, salt);
 
     if (_userAccounts.containsKey(cleanEmail)) {
-      _userAccounts[cleanEmail]!['password'] = cleanPass;
+      _userAccounts[cleanEmail]!.remove('password');
+      _userAccounts[cleanEmail]!['passwordSalt'] = salt;
+      _userAccounts[cleanEmail]!['passwordHash'] = passHash;
     } else {
       _userAccounts[cleanEmail] = {
         'email': cleanEmail,
-        'password': cleanPass,
+        'passwordSalt': salt,
+        'passwordHash': passHash,
         'name': _userName.isNotEmpty
             ? _userName
             : (_profile['name']?.toString() ?? 'Student'),

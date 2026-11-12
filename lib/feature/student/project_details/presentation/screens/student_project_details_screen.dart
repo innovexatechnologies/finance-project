@@ -8,10 +8,32 @@ import 'package:link_vibe/core/services/supabase_helper.dart';
 import 'package:link_vibe/core/widgets/status_badge.dart';
 import 'package:link_vibe/feature/student/apply/presentation/screens/apply_project_screen.dart';
 
-class StudentProjectDetailsScreen extends StatelessWidget {
+class StudentProjectDetailsScreen extends StatefulWidget {
   final Map<String, dynamic> project;
 
   const StudentProjectDetailsScreen({super.key, required this.project});
+
+  @override
+  State<StudentProjectDetailsScreen> createState() =>
+      _StudentProjectDetailsScreenState();
+}
+
+class _StudentProjectDetailsScreenState
+    extends State<StudentProjectDetailsScreen> {
+  @override
+  void initState() {
+    super.initState();
+    final id = widget.project['id']?.toString() ??
+        widget.project['projectId']?.toString() ??
+        '';
+    if (id.isNotEmpty) {
+      WidgetsBinding.instance.addPostFrameCallback((_) {
+        if (mounted) {
+          AppDataService.instance.refreshProjectApplicantsCount(id);
+        }
+      });
+    }
+  }
 
   List<String> _splitLines(String raw) {
     return raw
@@ -38,6 +60,7 @@ class StudentProjectDetailsScreen extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
+    final project = widget.project;
     final id = project['id']?.toString() ??
         project['projectId']?.toString() ??
         '';
@@ -82,8 +105,13 @@ class StudentProjectDetailsScreen extends StatelessWidget {
       builder: (context, _) {
         final isSaved = AppDataService.instance.isProjectSaved(id);
         final hasApplied = AppDataService.instance.hasApplied(id);
+        final applicantsCount =
+            AppDataService.instance.getProjectApplicantsCount(id);
+        final isApplicantsFull =
+            applicantsCount >= AppDataService.maxApplicationsPerProject;
         final isClosed = status.toLowerCase() == 'closed' ||
             status.toLowerCase() == 'completed';
+        final isApplyBlocked = (isClosed || isApplicantsFull) && !hasApplied;
 
         return Scaffold(
           backgroundColor: AppColors.background,
@@ -328,6 +356,15 @@ class StudentProjectDetailsScreen extends StatelessWidget {
                                   '$openings seat${openings == '1' ? '' : 's'}',
                                   AppColors.teal,
                                 ),
+                              _buildMetaBadge(
+                                Icons.how_to_reg_outlined,
+                                isApplicantsFull
+                                    ? 'Applicants: ${AppDataService.maxApplicationsPerProject}/${AppDataService.maxApplicationsPerProject} (Full)'
+                                    : 'Applicants: $applicantsCount/${AppDataService.maxApplicationsPerProject}',
+                                isApplicantsFull
+                                    ? AppColors.statusClosed
+                                    : AppColors.primaryBlue,
+                              ),
                             ],
                           ),
                           const SizedBox(height: 22),
@@ -497,7 +534,7 @@ class StudentProjectDetailsScreen extends StatelessWidget {
                         style: ElevatedButton.styleFrom(
                           backgroundColor: hasApplied
                               ? AppColors.statusOpen
-                              : (isClosed
+                              : (isApplyBlocked
                                   ? AppColors.grayText
                                   : AppColors.primaryBlue),
                           foregroundColor: Colors.white,
@@ -505,7 +542,7 @@ class StudentProjectDetailsScreen extends StatelessWidget {
                             borderRadius: BorderRadius.circular(14),
                           ),
                         ),
-                        onPressed: isClosed && !hasApplied
+                        onPressed: isApplyBlocked
                             ? null
                             : () {
                                 if (hasApplied) {
@@ -532,13 +569,19 @@ class StudentProjectDetailsScreen extends StatelessWidget {
                             Text(
                               hasApplied
                                   ? 'Applied ✓'
-                                  : (isClosed ? 'Closed' : 'Apply Now'),
+                                  : (isClosed
+                                      ? 'Closed'
+                                      : (isApplicantsFull
+                                          ? 'Applications Full (10/10)'
+                                          : 'Apply Now')),
                               style: GoogleFonts.poppins(
-                                fontSize: 15,
+                                fontSize: isApplicantsFull && !hasApplied
+                                    ? 13.5
+                                    : 15,
                                 fontWeight: FontWeight.bold,
                               ),
                             ),
-                            if (!hasApplied && !isClosed) ...[
+                            if (!hasApplied && !isApplyBlocked) ...[
                               const SizedBox(width: 6),
                               const Icon(Icons.arrow_forward_rounded, size: 16),
                             ],
