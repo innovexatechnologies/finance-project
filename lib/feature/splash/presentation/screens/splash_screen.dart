@@ -76,6 +76,16 @@ class _SplashScreenState extends State<SplashScreen>
       final supabase = SupabaseHelper.clientOrNull;
       final role = AppDataService.instance.userRole.toLowerCase();
 
+      if (supabase != null && supabase.auth.currentUser == null) {
+        await AppDataService.instance.clearAuthSession();
+        if (!mounted) return;
+        Navigator.pushReplacement(
+          context,
+          MaterialPageRoute(builder: (_) => const OnboardingScreen()),
+        );
+        return;
+      }
+
       if (supabase != null && supabase.auth.currentUser != null) {
         if (role == 'admin') {
           await AppDataService.instance.syncFromSupabase(forceRefresh: true);

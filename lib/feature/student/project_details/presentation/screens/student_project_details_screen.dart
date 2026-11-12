@@ -23,6 +23,21 @@ class _StudentProjectDetailsScreenState
   bool _isSubmittingPaymentConfirmation = false;
   String? _savedPaymentConfirmationStatus;
 
+  @override
+  void initState() {
+    super.initState();
+    final id = widget.project['id']?.toString() ??
+        widget.project['projectId']?.toString() ??
+        '';
+    if (id.isNotEmpty) {
+      WidgetsBinding.instance.addPostFrameCallback((_) {
+        if (mounted) {
+          AppDataService.instance.refreshProjectApplicantsCount(id);
+        }
+      });
+    }
+  }
+
   List<String> _splitLines(String raw) {
     return raw
         .split(RegExp(r'[\n;]'))
@@ -112,8 +127,8 @@ class _StudentProjectDetailsScreenState
   @override
   Widget build(BuildContext context) {
     final project = widget.project;
-    final id = project['projectId']?.toString() ??
-        project['id']?.toString() ??
+    final id = project['id']?.toString() ??
+        project['projectId']?.toString() ??
         '';
     final title = (project['title']?.toString().trim().isNotEmpty == true)
         ? project['title'].toString().trim()
@@ -156,6 +171,10 @@ class _StudentProjectDetailsScreenState
       builder: (context, _) {
         final isSaved = AppDataService.instance.isProjectSaved(id);
         final hasApplied = AppDataService.instance.hasApplied(id);
+        final applicantsCount =
+            AppDataService.instance.getProjectApplicantsCount(id);
+        final isApplicantsFull =
+            applicantsCount >= AppDataService.maxApplicationsPerProject;
         final currentApplication = _findCurrentApplication(id);
         final paymentProject = currentApplication ?? project;
         final isAssignedProject =
@@ -168,6 +187,7 @@ class _StudentProjectDetailsScreenState
                 paymentProject['paymentConfirmationStatus']?.toString();
         final isClosed = status.toLowerCase() == 'closed' ||
             status.toLowerCase() == 'completed';
+        final isApplyBlocked = (isClosed || isApplicantsFull) && !hasApplied;
 
         return Scaffold(
           backgroundColor: AppColors.background,
@@ -412,6 +432,15 @@ class _StudentProjectDetailsScreenState
                                   '$openings seat${openings == '1' ? '' : 's'}',
                                   AppColors.teal,
                                 ),
+                              _buildMetaBadge(
+                                Icons.how_to_reg_outlined,
+                                isApplicantsFull
+                                    ? 'Applicants: ${AppDataService.maxApplicationsPerProject}/${AppDataService.maxApplicationsPerProject} (Full)'
+                                    : 'Applicants: $applicantsCount/${AppDataService.maxApplicationsPerProject}',
+                                isApplicantsFull
+                                    ? AppColors.statusClosed
+                                    : AppColors.primaryBlue,
+                              ),
                             ],
                           ),
                           const SizedBox(height: 22),
@@ -600,7 +629,7 @@ class _StudentProjectDetailsScreenState
                               style: ElevatedButton.styleFrom(
                                 backgroundColor: hasApplied
                                     ? AppColors.statusOpen
-                                    : (isClosed
+                                    : (isApplyBlocked
                                         ? AppColors.grayText
                                         : AppColors.primaryBlue),
                                 foregroundColor: Colors.white,
@@ -608,7 +637,7 @@ class _StudentProjectDetailsScreenState
                                   borderRadius: BorderRadius.circular(14),
                                 ),
                               ),
-                              onPressed: isClosed && !hasApplied
+                              onPressed: isApplyBlocked
                                   ? null
                                   : () {
                                       if (hasApplied) {
@@ -638,13 +667,19 @@ class _StudentProjectDetailsScreenState
                                   Text(
                                     hasApplied
                                         ? 'Applied ✓'
-                                        : (isClosed ? 'Closed' : 'Apply Now'),
+                                        : (isClosed
+                                            ? 'Closed'
+                                            : (isApplicantsFull
+                                                ? 'Applications Full (10/10)'
+                                                : 'Apply Now')),
                                     style: GoogleFonts.poppins(
-                                      fontSize: 15,
+                                      fontSize: isApplicantsFull && !hasApplied
+                                          ? 13.5
+                                          : 15,
                                       fontWeight: FontWeight.bold,
                                     ),
                                   ),
-                                  if (!hasApplied && !isClosed) ...[
+                                  if (!hasApplied && !isApplyBlocked) ...[
                                     const SizedBox(width: 6),
                                     const Icon(
                                       Icons.arrow_forward_rounded,

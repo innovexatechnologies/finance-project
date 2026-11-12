@@ -3,6 +3,7 @@ import 'package:google_fonts/google_fonts.dart';
 import 'package:link_vibe/core/constants/app_colors.dart';
 import 'package:image_picker/image_picker.dart';
 import 'package:link_vibe/core/services/app_data_service.dart';
+import 'package:link_vibe/core/services/cloud_storage_service.dart';
 import 'package:link_vibe/core/widgets/executive_ui.dart';
 import 'package:link_vibe/core/widgets/student_avatar.dart';
 import 'package:link_vibe/core/services/supabase_helper.dart';
@@ -21,6 +22,42 @@ class StudentProfileScreen extends StatefulWidget {
 
 class _StudentProfileScreenState extends State<StudentProfileScreen> {
   bool _isUploadingPhoto = false;
+  bool _isUploadingResume = false;
+
+  Future<void> _pickAndUploadResume() async {
+    if (_isUploadingResume) return;
+    setState(() => _isUploadingResume = true);
+    try {
+      final res = await CloudStorageService.pickAndUploadFile(
+        bucket: 'student-docs',
+        folder: 'resumes',
+        dialogTitle: 'Select CV / Academic Resume (PDF or DOCX)',
+        allowedExtensions: ['pdf', 'doc', 'docx'],
+      );
+      if (res != null) {
+        await AppDataService.instance.updateStudentResume(res.url);
+        if (!mounted) return;
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(
+            content: Text('Uploaded resume: ${res.fileName} (${res.sizeLabel})'),
+            backgroundColor: AppColors.statusOpen,
+            behavior: SnackBarBehavior.floating,
+          ),
+        );
+      }
+    } catch (e) {
+      if (!mounted) return;
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(
+          content: Text('Could not upload resume: $e'),
+          backgroundColor: AppColors.statusClosed,
+          behavior: SnackBarBehavior.floating,
+        ),
+      );
+    } finally {
+      if (mounted) setState(() => _isUploadingResume = false);
+    }
+  }
 
   Future<void> _pickProfilePhoto() async {
     if (_isUploadingPhoto) return;
@@ -359,6 +396,7 @@ class _StudentProfileScreenState extends State<StudentProfileScreen> {
         final portfolioUrl = profile['portfolioUrl']?.toString().trim() ??
             profile['githubUrl']?.toString().trim() ??
             '';
+        final resumeUrl = profile['resumeUrl']?.toString().trim() ?? '';
         final bio = profile['bio']?.toString().trim() ?? '';
 
         final completedCount = AppDataService.instance.completedProjectsCount;
@@ -693,6 +731,52 @@ class _StudentProfileScreenState extends State<StudentProfileScreen> {
                                 portfolioUrl,
                               ),
                             ],
+                            const SizedBox(height: 10),
+                            Row(
+                              children: [
+                                Expanded(
+                                  child: _buildInfoRow(
+                                    Icons.description_outlined,
+                                    'CV / Resume',
+                                    resumeUrl.isNotEmpty
+                                        ? CloudStorageService.displayNameFromUrl(
+                                            resumeUrl,
+                                            fallback: 'Academic_Resume.pdf',
+                                          )
+                                        : 'Not uploaded yet',
+                                  ),
+                                ),
+                                if (resumeUrl.isNotEmpty)
+                                  TextButton(
+                                    onPressed: () => CloudStorageService.openUrl(
+                                      context,
+                                      resumeUrl,
+                                      label: 'Resume',
+                                    ),
+                                    child: const Text('View'),
+                                  ),
+                                TextButton.icon(
+                                  onPressed: _isUploadingResume
+                                      ? null
+                                      : _pickAndUploadResume,
+                                  icon: _isUploadingResume
+                                      ? const SizedBox(
+                                          width: 14,
+                                          height: 14,
+                                          child: CircularProgressIndicator(
+                                            strokeWidth: 2,
+                                          ),
+                                        )
+                                      : const Icon(
+                                          Icons.upload_file_rounded,
+                                          size: 16,
+                                        ),
+                                  label: Text(
+                                    resumeUrl.isNotEmpty ? 'Update' : 'Upload',
+                                  ),
+                                ),
+                              ],
+                            ),
                             const SizedBox(height: 12),
                             const Divider(
                                 color: AppColors.borderLight, height: 1),

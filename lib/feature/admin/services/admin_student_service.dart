@@ -44,17 +44,21 @@ class AdminStudentService {
           .select()
           .order('created_at', ascending: false);
 
-      // Enrich with profiles rows (handles students who haven't updated extended profile yet)
+      // Enrich with profiles rows (handles students who haven't updated extended profile yet
+      // and guards against role contamination from stale rows)
       final Map<String, Map<String, dynamic>> profilesById = {};
+      final Map<String, Map<String, dynamic>> allProfilesById = {};
       try {
-        final profRows = await supabase
-            .from('profiles')
-            .select()
-            .ilike('user_type', 'student');
+        final profRows = await supabase.from('profiles').select();
         for (final raw in profRows) {
           final p = Map<String, dynamic>.from(raw);
           final id = p['id']?.toString() ?? '';
-          if (id.isNotEmpty) profilesById[id] = p;
+          if (id.isEmpty) continue;
+          allProfilesById[id] = p;
+          final uType = (p['user_type']?.toString() ?? 'student').trim().toLowerCase();
+          if (uType == 'student' || uType.isEmpty) {
+            profilesById[id] = p;
+          }
         }
       } catch (e) {
         debugPrint('AdminStudentService profiles enrichment skipped: $e');
@@ -118,6 +122,11 @@ class AdminStudentService {
         final row = Map<String, dynamic>.from(raw);
         final id = row['id']?.toString() ?? '';
         final userId = row['user_id']?.toString();
+        final anyProf = userId != null ? allProfilesById[userId] : null;
+        final anyRole = (anyProf?['user_type']?.toString() ?? '').trim().toLowerCase();
+        if (anyRole == 'company' || anyRole == 'admin') {
+          continue;
+        }
         if (userId != null && userId.isNotEmpty) seenUserIds.add(userId);
         final profile = userId != null ? profilesById[userId] : null;
 

@@ -10,7 +10,7 @@ import 'package:link_vibe/feature/admin/presentation/widgets/admin_top_navbar.da
 import 'package:link_vibe/feature/admin/services/admin_auth_service.dart';
 import 'package:link_vibe/feature/admin/services/admin_settings_service.dart';
 import 'package:link_vibe/feature/admin/services/admin_student_service.dart';
-import 'package:url_launcher/url_launcher.dart';
+import 'package:link_vibe/core/services/cloud_storage_service.dart';
 
 /// Enterprise Student Management Screen (Screen 35)
 /// Features student registry overview, multi-tier filters, detailed profile inspection,
@@ -122,39 +122,12 @@ class _StudentManagementScreenState extends State<StudentManagementScreen> {
   }
 
   Future<void> _launchExternalUrl(String rawUrl) async {
-    final trimmed = rawUrl.trim();
-    if (trimmed.isEmpty) return;
-    final uri = Uri.tryParse(trimmed);
-    if (uri == null || !uri.hasScheme) {
-      if (!mounted) return;
-      ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(
-          content: Text('Invalid or incomplete document URL.'),
-          behavior: SnackBarBehavior.floating,
-        ),
-      );
-      return;
-    }
-    try {
-      final launched =
-          await launchUrl(uri, mode: LaunchMode.externalApplication);
-      if (!launched && mounted) {
-        ScaffoldMessenger.of(context).showSnackBar(
-          const SnackBar(
-            content: Text('Could not open the uploaded document.'),
-            behavior: SnackBarBehavior.floating,
-          ),
-        );
-      }
-    } catch (_) {
-      if (!mounted) return;
-      ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(
-          content: Text('Failed to launch document link.'),
-          behavior: SnackBarBehavior.floating,
-        ),
-      );
-    }
+    await CloudStorageService.openUrl(
+      context,
+      rawUrl,
+      label: 'Student Document',
+      copyFallback: false,
+    );
   }
 
   Future<void> _handleSignOut() async {

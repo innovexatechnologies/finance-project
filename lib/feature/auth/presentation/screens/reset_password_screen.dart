@@ -9,11 +9,13 @@ import 'package:link_vibe/feature/auth/presentation/screens/login_screen.dart';
 class ResetPasswordScreen extends StatefulWidget {
   final String initialEmail;
   final String? initialError;
+  final bool isRecoverySession;
 
   const ResetPasswordScreen({
     super.key,
     this.initialEmail = '',
     this.initialError,
+    this.isRecoverySession = false,
   });
 
   @override
@@ -30,13 +32,32 @@ class _ResetPasswordScreenState extends State<ResetPasswordScreen> {
   bool _obscureNew = true;
   bool _obscureConfirm = true;
   bool _isUpdated = false;
+  bool _linkSent = false;
   String? _errorBanner;
+  String? _infoBanner;
+
+  bool get _hasLiveSupabase => SupabaseHelper.clientOrNull != null;
+
+  bool get _isSignedInAsTarget {
+    final supabase = SupabaseHelper.clientOrNull;
+    final currentEmail =
+        supabase?.auth.currentUser?.email?.trim().toLowerCase() ?? '';
+    final enteredEmail = _emailCtrl.text.trim().toLowerCase();
+    return currentEmail.isNotEmpty && currentEmail == enteredEmail;
+  }
+
+  bool get _canSetPasswordDirectly =>
+      !_hasLiveSupabase || widget.isRecoverySession || _isSignedInAsTarget;
 
   @override
   void initState() {
     super.initState();
     _emailCtrl = TextEditingController(text: widget.initialEmail);
     _errorBanner = widget.initialError;
+    if (widget.isRecoverySession) {
+      _infoBanner =
+          'Email link verified. Enter your new password below to complete the reset.';
+    }
   }
 
   @override
@@ -47,47 +68,70 @@ class _ResetPasswordScreenState extends State<ResetPasswordScreen> {
     super.dispose();
   }
 
+  Future<void> _sendResetLink() async {
+    setState(() {
+      _errorBanner = null;
+      _infoBanner = null;
+    });
+    final email = _emailCtrl.text.trim().toLowerCase();
+    if (email.isEmpty || !email.contains('@')) {
+      setState(
+        () => _errorBanner = 'Please enter a valid email address first.',
+      );
+      return;
+    }
+
+    final supabase = SupabaseHelper.clientOrNull;
+    if (supabase == null) return;
+
+    setState(() => _isSaving = true);
+    try {
+      await supabase.auth.resetPasswordForEmail(
+        email,
+        redirectTo: 'io.supabase.campusconnect://login-callback',
+      );
+      if (!mounted) return;
+      setState(() {
+        _linkSent = true;
+        _infoBanner =
+            'Password reset link sent to $email. Open the link from your email inbox to set a new password in SkillBridge.';
+      });
+    } on AuthException catch (e) {
+      if (!mounted) return;
+      setState(() => _errorBanner = SupabaseHelper.friendlyError(e));
+    } catch (e) {
+      if (!mounted) return;
+      setState(() => _errorBanner = SupabaseHelper.friendlyError(e));
+    } finally {
+      if (mounted) setState(() => _isSaving = false);
+    }
+  }
+
   Future<void> _handleSubmit() async {
     setState(() {
       _errorBanner = null;
+      _infoBanner = null;
     });
+
+    final supabase = SupabaseHelper.clientOrNull;
+    if (supabase != null && !_canSetPasswordDirectly) {
+      await _sendResetLink();
+      return;
+    }
+
     if (!_formKey.currentState!.validate()) return;
 
-    final email = _emailCtrl.text.trim();
+    final email = _emailCtrl.text.trim().toLowerCase();
     final newPassword = _newPassCtrl.text.trim();
 
     setState(() => _isSaving = true);
     SupabaseHelper.beginInteractiveAuth();
 
     try {
-      final supabase = SupabaseHelper.clientOrNull;
       if (supabase != null) {
-        final current = supabase.auth.currentUser;
-        if (current != null &&
-            (current.email?.trim().toLowerCase() ?? '') ==
-                email.toLowerCase()) {
-          try {
-            await supabase.auth.updateUser(
-              UserAttributes(password: newPassword),
-            );
-          } on AuthException catch (e) {
-            if (SupabaseHelper.isWeakPasswordError(e)) {
-              await SupabaseHelper.resetPasswordInApp(
-                email: email,
-                newPassword: newPassword,
-              );
-            } else {
-              rethrow;
-            }
-          }
-        } else {
-          await SupabaseHelper.resetPasswordInApp(
-            email: email,
-            newPassword: newPassword,
-          );
-        }
-
-        await AppDataService.instance.updateAccountPassword(email, newPassword);
+        await supabase.auth.updateUser(
+          UserAttributes(password: newPassword),
+        );
       } else {
         final existing = AppDataService.instance.findUserAccount(email);
         if (existing == null) {
@@ -100,6 +144,9 @@ class _ResetPasswordScreenState extends State<ResetPasswordScreen> {
 
       if (!mounted) return;
       setState(() => _isUpdated = true);
+    } on AuthException catch (e) {
+      if (!mounted) return;
+      setState(() => _errorBanner = SupabaseHelper.friendlyError(e));
     } catch (e) {
       if (!mounted) return;
       setState(() => _errorBanner = SupabaseHelper.friendlyError(e));
@@ -209,6 +256,9 @@ class _ResetPasswordScreenState extends State<ResetPasswordScreen> {
   }
 
   Widget _buildFormView() {
+    final requiresEmailLink = _hasLiveSupabase && !_canSetPasswordDirectly;
+    final showPasswordFields = !requiresEmailLink;
+
     return Form(
       key: _formKey,
       child: Column(
@@ -242,7 +292,9 @@ class _ResetPasswordScreenState extends State<ResetPasswordScreen> {
                       ),
                     ),
                     Text(
-                      'Set a new password directly in the app',
+                      requiresEmailLink
+                          ? 'Verify via email link to reset your password'
+                          : 'Set a new password directly in the app',
                       style: GoogleFonts.inter(
                         fontSize: 12.5,
                         color: AppColors.grayText,
@@ -279,6 +331,29 @@ class _ResetPasswordScreenState extends State<ResetPasswordScreen> {
             const SizedBox(height: 14),
           ],
 
+          if (_infoBanner != null) ...[
+            Container(
+              width: double.infinity,
+              padding: const EdgeInsets.all(12),
+              decoration: BoxDecoration(
+                color: AppColors.successBg,
+                borderRadius: BorderRadius.circular(12),
+                border: Border.all(
+                  color: AppColors.statusOpen.withValues(alpha: 0.35),
+                ),
+              ),
+              child: Text(
+                _infoBanner!,
+                style: GoogleFonts.inter(
+                  fontSize: 12.5,
+                  fontWeight: FontWeight.w600,
+                  color: AppColors.deepNavy,
+                ),
+              ),
+            ),
+            const SizedBox(height: 14),
+          ],
+
           Text(
             'Email Address',
             style: GoogleFonts.inter(
@@ -291,7 +366,7 @@ class _ResetPasswordScreenState extends State<ResetPasswordScreen> {
           TextFormField(
             controller: _emailCtrl,
             keyboardType: TextInputType.emailAddress,
-            enabled: !_isSaving,
+            enabled: !_isSaving && !widget.isRecoverySession,
             decoration: const InputDecoration(
               hintText: 'you@example.com',
               prefixIcon: Icon(Icons.email_outlined, size: 20),
@@ -306,78 +381,85 @@ class _ResetPasswordScreenState extends State<ResetPasswordScreen> {
           ),
           const SizedBox(height: 14),
 
-          Text(
-            'New Password',
-            style: GoogleFonts.inter(
-              fontSize: 12.5,
-              fontWeight: FontWeight.w600,
-              color: AppColors.darkText,
-            ),
-          ),
-          const SizedBox(height: 6),
-          TextFormField(
-            controller: _newPassCtrl,
-            obscureText: _obscureNew,
-            enabled: !_isSaving,
-            decoration: InputDecoration(
-              hintText: 'Enter new password',
-              prefixIcon: const Icon(Icons.lock_outline_rounded, size: 20),
-              suffixIcon: IconButton(
-                icon: Icon(
-                  _obscureNew
-                      ? Icons.visibility_off_outlined
-                      : Icons.visibility_outlined,
-                  size: 20,
-                  color: AppColors.grayText,
-                ),
-                onPressed: () => setState(() => _obscureNew = !_obscureNew),
+          if (showPasswordFields) ...[
+            Text(
+              'New Password',
+              style: GoogleFonts.inter(
+                fontSize: 12.5,
+                fontWeight: FontWeight.w600,
+                color: AppColors.darkText,
               ),
             ),
-            validator: (val) {
-              if (val == null || val.trim().isEmpty) {
-                return 'Enter a new password';
-              }
-              return null;
-            },
-          ),
-          const SizedBox(height: 14),
+            const SizedBox(height: 6),
+            TextFormField(
+              controller: _newPassCtrl,
+              obscureText: _obscureNew,
+              enabled: !_isSaving,
+              decoration: InputDecoration(
+                hintText: 'Enter new password',
+                prefixIcon: const Icon(Icons.lock_outline_rounded, size: 20),
+                suffixIcon: IconButton(
+                  icon: Icon(
+                    _obscureNew
+                        ? Icons.visibility_off_outlined
+                        : Icons.visibility_outlined,
+                    size: 20,
+                    color: AppColors.grayText,
+                  ),
+                  onPressed: () => setState(() => _obscureNew = !_obscureNew),
+                ),
+              ),
+              validator: (val) {
+                final v = val?.trim() ?? '';
+                if (v.isEmpty) {
+                  return 'Enter a new password';
+                }
+                if (_hasLiveSupabase && v.length < 6) {
+                  return 'Password must be at least 6 characters';
+                }
+                return null;
+              },
+            ),
+            const SizedBox(height: 14),
 
-          Text(
-            'Confirm New Password',
-            style: GoogleFonts.inter(
-              fontSize: 12.5,
-              fontWeight: FontWeight.w600,
-              color: AppColors.darkText,
-            ),
-          ),
-          const SizedBox(height: 6),
-          TextFormField(
-            controller: _confirmPassCtrl,
-            obscureText: _obscureConfirm,
-            enabled: !_isSaving,
-            decoration: InputDecoration(
-              hintText: 'Re-enter new password',
-              prefixIcon: const Icon(Icons.lock_outline_rounded, size: 20),
-              suffixIcon: IconButton(
-                icon: Icon(
-                  _obscureConfirm
-                      ? Icons.visibility_off_outlined
-                      : Icons.visibility_outlined,
-                  size: 20,
-                  color: AppColors.grayText,
-                ),
-                onPressed: () =>
-                    setState(() => _obscureConfirm = !_obscureConfirm),
+            Text(
+              'Confirm New Password',
+              style: GoogleFonts.inter(
+                fontSize: 12.5,
+                fontWeight: FontWeight.w600,
+                color: AppColors.darkText,
               ),
             ),
-            validator: (val) {
-              if (val?.trim() != _newPassCtrl.text.trim()) {
-                return 'Passwords do not match';
-              }
-              return null;
-            },
-          ),
-          const SizedBox(height: 22),
+            const SizedBox(height: 6),
+            TextFormField(
+              controller: _confirmPassCtrl,
+              obscureText: _obscureConfirm,
+              enabled: !_isSaving,
+              decoration: InputDecoration(
+                hintText: 'Re-enter new password',
+                prefixIcon: const Icon(Icons.lock_outline_rounded, size: 20),
+                suffixIcon: IconButton(
+                  icon: Icon(
+                    _obscureConfirm
+                        ? Icons.visibility_off_outlined
+                        : Icons.visibility_outlined,
+                    size: 20,
+                    color: AppColors.grayText,
+                  ),
+                  onPressed: () =>
+                      setState(() => _obscureConfirm = !_obscureConfirm),
+                ),
+              ),
+              validator: (val) {
+                if (val?.trim() != _newPassCtrl.text.trim()) {
+                  return 'Passwords do not match';
+                }
+                return null;
+              },
+            ),
+            const SizedBox(height: 22),
+          ] else
+            const SizedBox(height: 8),
 
           SizedBox(
             width: double.infinity,
@@ -394,7 +476,11 @@ class _ResetPasswordScreenState extends State<ResetPasswordScreen> {
                       ),
                     )
                   : Text(
-                      'Reset Password',
+                      requiresEmailLink
+                          ? (_linkSent
+                              ? 'Resend Reset Link'
+                              : 'Send Password Reset Link')
+                          : 'Reset Password',
                       style: GoogleFonts.poppins(
                         fontSize: 14.5,
                         fontWeight: FontWeight.w600,

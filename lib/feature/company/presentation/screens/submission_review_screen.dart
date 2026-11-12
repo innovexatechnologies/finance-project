@@ -7,7 +7,7 @@ import 'package:link_vibe/core/widgets/status_badge.dart';
 import 'package:link_vibe/feature/company/models/assignment_model.dart';
 import 'package:link_vibe/feature/company/services/company_assignment_service.dart';
 import 'package:link_vibe/feature/company/services/company_profile_service.dart';
-import 'package:url_launcher/url_launcher.dart';
+import 'package:link_vibe/core/services/cloud_storage_service.dart';
 import 'applicant_detail_screen.dart';
 
 class SubmissionReviewScreen extends StatefulWidget {
@@ -63,35 +63,26 @@ class _SubmissionReviewScreenState extends State<SubmissionReviewScreen> {
   }
 
   Future<void> _openExternalUrl(String rawUrl, String label) async {
-    final trimmed = rawUrl.trim();
-    if (trimmed.isEmpty) return;
-    final normalized =
-        (trimmed.startsWith('http://') || trimmed.startsWith('https://'))
-            ? trimmed
-            : 'https://$trimmed';
-    final uri = Uri.tryParse(normalized);
-    if (uri != null) {
-      try {
-        final launched =
-            await launchUrl(uri, mode: LaunchMode.externalApplication);
-        if (launched) return;
-      } catch (_) {}
-    }
-
-    await Clipboard.setData(ClipboardData(text: trimmed));
-    if (!mounted) return;
-    ScaffoldMessenger.of(context).showSnackBar(
-      SnackBar(
-        content: Text('$label link copied to clipboard.'),
-        behavior: SnackBarBehavior.floating,
-      ),
+    await CloudStorageService.openUrl(
+      context,
+      rawUrl,
+      label: label,
+      copyFallback: true,
     );
   }
 
   void _openAttachmentSheet(SubmissionFileAttachment file) {
-    final isUrl = file.fileName.startsWith('http://') ||
+    final assignment = _getAssignment();
+    final repoUrl = assignment?.latestSubmission?.repositoryUrl.trim() ?? '';
+    final isFileAUrl = file.fileName.startsWith('http://') ||
         file.fileName.startsWith('https://') ||
         file.fileName.startsWith('www.');
+    final targetUrl = isFileAUrl
+        ? file.fileName
+        : (repoUrl.startsWith('http://') || repoUrl.startsWith('https://')
+            ? repoUrl
+            : '');
+    final hasUrl = targetUrl.isNotEmpty;
 
     showModalBottomSheet(
       context: context,
@@ -156,8 +147,8 @@ class _SubmissionReviewScreenState extends State<SubmissionReviewScreen> {
                 child: ElevatedButton.icon(
                   onPressed: () {
                     Navigator.pop(ctx);
-                    if (isUrl) {
-                      _openExternalUrl(file.fileName, 'Attachment');
+                    if (hasUrl) {
+                      _openExternalUrl(targetUrl, 'Attachment');
                     } else {
                       Clipboard.setData(ClipboardData(text: file.fileName));
                       ScaffoldMessenger.of(context).showSnackBar(
@@ -169,11 +160,11 @@ class _SubmissionReviewScreenState extends State<SubmissionReviewScreen> {
                     }
                   },
                   icon: Icon(
-                    isUrl ? Icons.open_in_new_rounded : Icons.copy_rounded,
+                    hasUrl ? Icons.open_in_new_rounded : Icons.copy_rounded,
                     size: 18,
                   ),
                   label: Text(
-                    isUrl ? 'Open Attachment URL' : 'Copy Attachment Name',
+                    hasUrl ? 'Open Deliverable' : 'Copy Attachment Name',
                   ),
                 ),
               ),

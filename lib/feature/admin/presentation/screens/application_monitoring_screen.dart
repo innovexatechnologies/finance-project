@@ -9,7 +9,7 @@ import 'package:link_vibe/feature/admin/presentation/widgets/admin_sidebar.dart'
 import 'package:link_vibe/feature/admin/presentation/widgets/admin_top_navbar.dart';
 import 'package:link_vibe/feature/admin/services/admin_application_monitoring_service.dart';
 import 'package:link_vibe/feature/admin/services/admin_auth_service.dart';
-import 'package:url_launcher/url_launcher.dart';
+import 'package:link_vibe/core/services/cloud_storage_service.dart';
 
 /// Enterprise Application Monitoring & Investigation Desk for SkillBridge Admin Panel.
 /// Surfaced for auditing suspicious, reported, or problematic project applications,
@@ -117,41 +117,12 @@ class _ApplicationMonitoringScreenState
   }
 
   Future<void> _launchExternalUrl(String rawUrl) async {
-    final trimmed = rawUrl.trim();
-    if (trimmed.isEmpty) return;
-    final uri = Uri.tryParse(trimmed);
-    if (uri == null || !uri.hasScheme) {
-      if (!mounted) return;
-      ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(
-          content: Text('Invalid or incomplete document URL.'),
-          behavior: SnackBarBehavior.floating,
-        ),
-      );
-      return;
-    }
-    try {
-      final launched = await launchUrl(
-        uri,
-        mode: LaunchMode.externalApplication,
-      );
-      if (!launched && mounted) {
-        ScaffoldMessenger.of(context).showSnackBar(
-          const SnackBar(
-            content: Text('Could not open attached document link.'),
-            behavior: SnackBarBehavior.floating,
-          ),
-        );
-      }
-    } catch (_) {
-      if (!mounted) return;
-      ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(
-          content: Text('Unable to launch attached URL on this device.'),
-          behavior: SnackBarBehavior.floating,
-        ),
-      );
-    }
+    await CloudStorageService.openUrl(
+      context,
+      rawUrl,
+      label: 'Attached Document',
+      copyFallback: false,
+    );
   }
 
   Future<void> _handleSignOut() async {

@@ -10,7 +10,7 @@ import 'package:link_vibe/feature/admin/presentation/widgets/admin_top_navbar.da
 import 'package:link_vibe/feature/admin/services/admin_auth_service.dart';
 import 'package:link_vibe/feature/admin/services/admin_verification_service.dart';
 import 'package:link_vibe/feature/company/models/company_verification_model.dart';
-import 'package:url_launcher/url_launcher.dart';
+import 'package:link_vibe/core/services/cloud_storage_service.dart';
 
 /// Enterprise Company Verification Management & Review Desk (Screen 34)
 /// Provides a live audit data grid, uploaded evidence inspection,
@@ -118,39 +118,12 @@ class _CompanyVerificationsScreenState
   }
 
   Future<void> _launchExternalUrl(String rawUrl) async {
-    final trimmed = rawUrl.trim();
-    if (trimmed.isEmpty) return;
-    final uri = Uri.tryParse(trimmed);
-    if (uri == null || !uri.hasScheme) {
-      if (!mounted) return;
-      ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(
-          content: Text('Invalid or incomplete document URL.'),
-          behavior: SnackBarBehavior.floating,
-        ),
-      );
-      return;
-    }
-    try {
-      final launched =
-          await launchUrl(uri, mode: LaunchMode.externalApplication);
-      if (!launched && mounted) {
-        ScaffoldMessenger.of(context).showSnackBar(
-          const SnackBar(
-            content: Text('Could not open document link in browser/viewer.'),
-            behavior: SnackBarBehavior.floating,
-          ),
-        );
-      }
-    } catch (e) {
-      if (!mounted) return;
-      ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(
-          content: Text('Unable to open document: $e'),
-          behavior: SnackBarBehavior.floating,
-        ),
-      );
-    }
+    await CloudStorageService.openUrl(
+      context,
+      rawUrl,
+      label: 'Verification Document',
+      copyFallback: false,
+    );
   }
 
   void _openDossierModal(AdminCompanyVerificationItem item) {

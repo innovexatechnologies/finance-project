@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 import 'package:google_fonts/google_fonts.dart';
 import 'package:link_vibe/core/constants/app_colors.dart';
 import 'package:link_vibe/core/services/app_data_service.dart';
+import 'package:link_vibe/core/services/cloud_storage_service.dart';
 import 'package:link_vibe/core/widgets/executive_ui.dart';
 import 'package:link_vibe/core/widgets/status_badge.dart';
 
@@ -20,7 +21,51 @@ class _SubmitWorkScreenState extends State<SubmitWorkScreen> {
   final _linkController = TextEditingController();
   final _fileNameController = TextEditingController();
   bool _isSubmitting = false;
+  bool _isUploadingFile = false;
   bool _autoValidate = false;
+  String? _uploadedFileUrl;
+  String? _uploadedFileSize;
+
+  Future<void> _pickAndUploadDeliverable() async {
+    if (_isUploadingFile) return;
+    setState(() => _isUploadingFile = true);
+    try {
+      final res = await CloudStorageService.pickAndUploadFile(
+        bucket: 'student-docs',
+        folder: 'submissions',
+        dialogTitle: 'Select Deliverable File (PDF, ZIP, APK, DOCX)',
+        allowedExtensions: CloudStorageService.deliverableExtensions,
+      );
+      if (res != null && mounted) {
+        setState(() {
+          _uploadedFileUrl = res.url;
+          _uploadedFileSize = res.sizeLabel;
+          _fileNameController.text = res.fileName;
+          if (_linkController.text.trim().isEmpty) {
+            _linkController.text = res.url;
+          }
+        });
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(
+            content: Text('Uploaded: ${res.fileName} (${res.sizeLabel})'),
+            backgroundColor: AppColors.statusOpen,
+            behavior: SnackBarBehavior.floating,
+          ),
+        );
+      }
+    } catch (e) {
+      if (!mounted) return;
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(
+          content: Text('Could not upload deliverable: $e'),
+          backgroundColor: AppColors.statusClosed,
+          behavior: SnackBarBehavior.floating,
+        ),
+      );
+    } finally {
+      if (mounted) setState(() => _isUploadingFile = false);
+    }
+  }
 
   @override
   void initState() {
@@ -104,12 +149,16 @@ class _SubmitWorkScreenState extends State<SubmitWorkScreen> {
               ? widget.project['company'].toString().trim()
               : 'Partner Company';
 
+      final effectiveUrl = _linkController.text.trim().isNotEmpty
+          ? _linkController.text.trim()
+          : (_uploadedFileUrl ?? '');
+
       await AppDataService.instance.submitWork(
         projectId: projectId,
         projectTitle: projectTitle,
         company: company,
         summary: _responseController.text.trim(),
-        workLink: _linkController.text.trim(),
+        workLink: effectiveUrl,
         fileName: _fileNameController.text.trim(),
       );
 
@@ -330,13 +379,99 @@ class _SubmitWorkScreenState extends State<SubmitWorkScreen> {
                         validator: (value) {
                           final v = value?.trim() ?? '';
                           if (v.isEmpty) {
-                            return 'Deliverable repository or cloud link is required';
+                            if (_uploadedFileUrl != null &&
+                                _uploadedFileUrl!.isNotEmpty) {
+                              return null;
+                            }
+                            return 'Provide a repository URL or upload a deliverable file below';
                           }
                           if (!_isValidUrl(v)) {
                             return 'Enter a valid URL (e.g. https://github.com/user/repo)';
                           }
                           return null;
                         },
+                      ),
+                      const SizedBox(height: 18),
+
+                      _label('Upload Deliverable File (PDF, ZIP, APK, DOCX)'),
+                      const SizedBox(height: 6),
+                      Container(
+                        padding: const EdgeInsets.all(12),
+                        decoration: BoxDecoration(
+                          color: AppColors.cardWhite,
+                          borderRadius: BorderRadius.circular(12),
+                          border: Border.all(
+                            color: _uploadedFileUrl != null
+                                ? AppColors.statusOpen.withValues(alpha: 0.4)
+                                : AppColors.lightGray,
+                          ),
+                        ),
+                        child: Row(
+                          children: [
+                            Icon(
+                              _uploadedFileUrl != null
+                                  ? Icons.cloud_done_rounded
+                                  : Icons.cloud_upload_outlined,
+                              color: _uploadedFileUrl != null
+                                  ? AppColors.statusOpen
+                                  : AppColors.primaryBlue,
+                            ),
+                            const SizedBox(width: 10),
+                            Expanded(
+                              child: Column(
+                                crossAxisAlignment: CrossAxisAlignment.start,
+                                children: [
+                                  Text(
+                                    _uploadedFileUrl != null
+                                        ? _fileNameController.text.trim()
+                                        : 'Attach file directly to cloud storage',
+                                    maxLines: 1,
+                                    overflow: TextOverflow.ellipsis,
+                                    style: GoogleFonts.inter(
+                                      fontSize: 12.5,
+                                      fontWeight: _uploadedFileUrl != null
+                                          ? FontWeight.w600
+                                          : FontWeight.w500,
+                                      color: _uploadedFileUrl != null
+                                          ? AppColors.deepNavy
+                                          : AppColors.grayText,
+                                    ),
+                                  ),
+                                  if (_uploadedFileSize != null)
+                                    Text(
+                                      'Uploaded • $_uploadedFileSize',
+                                      style: GoogleFonts.inter(
+                                        fontSize: 11,
+                                        color: AppColors.statusOpen,
+                                      ),
+                                    ),
+                                ],
+                              ),
+                            ),
+                            OutlinedButton.icon(
+                              onPressed: _isUploadingFile
+                                  ? null
+                                  : _pickAndUploadDeliverable,
+                              icon: _isUploadingFile
+                                  ? const SizedBox(
+                                      width: 14,
+                                      height: 14,
+                                      child: CircularProgressIndicator(
+                                        strokeWidth: 2,
+                                      ),
+                                    )
+                                  : const Icon(
+                                      Icons.upload_file_rounded,
+                                      size: 16,
+                                    ),
+                              label: Text(
+                                _uploadedFileUrl != null
+                                    ? 'Replace'
+                                    : 'Upload File',
+                              ),
+                            ),
+                          ],
+                        ),
                       ),
                       const SizedBox(height: 18),
 

@@ -1462,18 +1462,20 @@ class AdminSettingsService {
     final supabase = SupabaseHelper.clientOrNull;
     if (supabase != null && supabase.auth.currentUser != null) {
       try {
-        try {
-          await supabase.auth.updateUser(UserAttributes(password: trimmedNew));
-        } on AuthException catch (e) {
-          if (SupabaseHelper.isWeakPasswordError(e)) {
-            await SupabaseHelper.resetPasswordInApp(
-              email: adminEmail,
-              newPassword: trimmedNew,
+        if (currentPassword.trim().isNotEmpty) {
+          final currentEmail =
+              supabase.auth.currentUser?.email ?? adminEmail.trim();
+          SupabaseHelper.beginInteractiveAuth();
+          try {
+            await supabase.auth.signInWithPassword(
+              email: currentEmail,
+              password: currentPassword.trim(),
             );
-          } else {
-            rethrow;
+          } finally {
+            SupabaseHelper.endInteractiveAuth();
           }
         }
+        await supabase.auth.updateUser(UserAttributes(password: trimmedNew));
       } catch (e) {
         lastError = SupabaseHelper.friendlyError(e);
         debugPrint('AdminSettingsService changePassword error: $e');

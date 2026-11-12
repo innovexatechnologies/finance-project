@@ -9,7 +9,12 @@ import 'package:link_vibe/feature/admin/presentation/screens/admin_login_screen.
 import 'package:link_vibe/feature/auth/presentation/screens/reset_password_screen.dart';
 import 'package:link_vibe/feature/auth/presentation/widgets/auth_form_helpers.dart';
 import 'package:link_vibe/feature/company/presentation/screens/company_main_nav.dart';
+import 'package:link_vibe/feature/company/services/company_applicant_service.dart';
+import 'package:link_vibe/feature/company/services/company_assignment_service.dart';
 import 'package:link_vibe/feature/company/services/company_profile_service.dart';
+import 'package:link_vibe/feature/company/services/company_project_service.dart';
+import 'package:link_vibe/feature/company/services/company_settings_service.dart';
+import 'package:link_vibe/feature/company/services/company_verification_service.dart';
 import 'package:link_vibe/feature/student/presentation/screens/student_main_nav.dart';
 import 'signup_screen.dart';
 
@@ -30,7 +35,9 @@ class _LoginScreenState extends State<LoginScreen> {
   late String _selectedRole;
   bool _isLoading = false;
   bool _obscurePassword = true;
+  bool _needsEmailVerification = false;
   String? _errorBanner;
+  String? _infoBanner;
 
   @override
   void initState() {
@@ -54,20 +61,56 @@ class _LoginScreenState extends State<LoginScreen> {
     setState(() {
       _selectedRole = role;
       _obscurePassword = true;
+      _needsEmailVerification = false;
       _errorBanner = null;
+      _infoBanner = null;
     });
+  }
+
+  Future<void> _resendVerificationEmail() async {
+    final supabase = SupabaseHelper.clientOrNull;
+    final email = _emailController.text.trim().toLowerCase();
+    if (supabase == null || email.isEmpty || !email.contains('@')) return;
+
+    setState(() {
+      _isLoading = true;
+      _errorBanner = null;
+      _infoBanner = null;
+    });
+    try {
+      await supabase.auth.resend(
+        type: OtpType.signup,
+        email: email,
+        emailRedirectTo: 'io.supabase.campusconnect://login-callback',
+      );
+      if (!mounted) return;
+      setState(() {
+        _infoBanner =
+            'Verification link sent to $email. Please open the link in your email inbox, then sign in.';
+      });
+    } on AuthException catch (e) {
+      if (!mounted) return;
+      setState(() => _errorBanner = SupabaseHelper.friendlyError(e));
+    } catch (e) {
+      if (!mounted) return;
+      setState(() => _errorBanner = SupabaseHelper.friendlyError(e));
+    } finally {
+      if (mounted) setState(() => _isLoading = false);
+    }
   }
 
   Future<void> _handleLogin() async {
     setState(() {
       _errorBanner = null;
+      _infoBanner = null;
+      _needsEmailVerification = false;
     });
 
     if (!_formKey.currentState!.validate()) {
       return;
     }
 
-    final email = _emailController.text.trim();
+    final email = _emailController.text.trim().toLowerCase();
     final password = _passwordController.text.trim();
 
     setState(() => _isLoading = true);
@@ -77,23 +120,10 @@ class _LoginScreenState extends State<LoginScreen> {
       // 1. Real Supabase Cloud Authentication (when initialized)
       final supabase = SupabaseHelper.clientOrNull;
       if (supabase != null) {
-        AuthResponse authResponse;
-        try {
-          authResponse = await supabase.auth.signInWithPassword(
-            email: email,
-            password: password,
-          );
-        } on AuthException catch (loginErr) {
-          if (SupabaseHelper.isEmailNotConfirmedError(loginErr)) {
-            await SupabaseHelper.confirmUserEmailInApp(email);
-            authResponse = await supabase.auth.signInWithPassword(
-              email: email,
-              password: password,
-            );
-          } else {
-            rethrow;
-          }
-        }
+        final AuthResponse authResponse = await supabase.auth.signInWithPassword(
+          email: email,
+          password: password,
+        );
         final user = authResponse.user;
         if (user == null) {
           throw const AuthException('Unable to verify account credentials.');
@@ -154,7 +184,35 @@ class _LoginScreenState extends State<LoginScreen> {
           return;
         }
 
-        // Role-specific suspension checks (guarded against legacy schemas / duplicate rows)
+        final resolvedName =
+            (profileRow?['name']?.toString().trim().isNotEmpty == true)
+                ? profileRow!['name'].toString().trim()
+                : (user.userMetadata?['name']?.toString().trim().isNotEmpty ==
+                        true
+                    ? user.userMetadata!['name'].toString().trim()
+                    : (email.split('@').first));
+        final resolvedUni =
+            (profileRow?['university']?.toString().trim().isNotEmpty == true)
+                ? profileRow!['university'].toString().trim()
+                : (user.userMetadata?['university']?.toString().trim() ?? '');
+
+        // Ensure profile row exists in Supabase so Admin always sees this account
+        if (profileRow == null) {
+          try {
+            await supabase.from('profiles').upsert({
+              'id': user.id,
+              'name': resolvedName,
+              'email': user.email ?? email,
+              'user_type': actualRole,
+              'university': resolvedUni,
+              'account_status': 'active',
+            });
+          } catch (e) {
+            debugPrint('LoginScreen profile backfill warning: $e');
+          }
+        }
+
+        // Role-specific suspension checks & missing role-row healing
         if (actualRole == 'Student') {
           try {
             final stuRow = await supabase
@@ -163,9 +221,16 @@ class _LoginScreenState extends State<LoginScreen> {
                 .eq('user_id', user.id)
                 .limit(1)
                 .maybeSingle();
-            if ((stuRow?['account_status']?.toString().toLowerCase() ?? '') ==
+            if (stuRow == null) {
+              await supabase.from('students').insert({
+                'user_id': user.id,
+                'full_name': resolvedName,
+                'email': user.email ?? email,
+                'university': resolvedUni,
+              });
+            } else if ((stuRow['account_status']?.toString().toLowerCase() ?? '') ==
                 'suspended') {
-              final reason = stuRow?['suspension_reason']?.toString() ?? '';
+              final reason = stuRow['suspension_reason']?.toString() ?? '';
               await supabase.auth.signOut();
               if (!mounted) return;
               setState(() {
@@ -186,9 +251,21 @@ class _LoginScreenState extends State<LoginScreen> {
                 .eq('user_id', user.id)
                 .limit(1)
                 .maybeSingle();
-            if ((compRow?['account_status']?.toString().toLowerCase() ?? '') ==
+            if (compRow == null) {
+              await supabase.from('companies').insert({
+                'user_id': user.id,
+                'company_name': resolvedName,
+                'email': user.email ?? email,
+                'industry': resolvedUni.isNotEmpty
+                    ? resolvedUni
+                    : 'Software & Cloud Services',
+                'verification_status': 'not_submitted',
+                'logo_initial':
+                    SupabaseHelper.initialsFor(resolvedName, fallback: 'CO'),
+              });
+            } else if ((compRow['account_status']?.toString().toLowerCase() ?? '') ==
                 'suspended') {
-              final reason = compRow?['suspension_reason']?.toString() ?? '';
+              final reason = compRow['suspension_reason']?.toString() ?? '';
               await supabase.auth.signOut();
               if (!mounted) return;
               setState(() {
@@ -203,17 +280,17 @@ class _LoginScreenState extends State<LoginScreen> {
           }
         }
 
-        final resolvedName =
-            (profileRow?['name']?.toString().trim().isNotEmpty == true)
-                ? profileRow!['name'].toString().trim()
-                : (user.userMetadata?['name']?.toString().trim().isNotEmpty ==
-                        true
-                    ? user.userMetadata!['name'].toString().trim()
-                    : (email.split('@').first));
-        final resolvedUni =
-            (profileRow?['university']?.toString().trim().isNotEmpty == true)
-                ? profileRow!['university'].toString().trim()
-                : user.userMetadata?['university']?.toString();
+        // Clear any previous user's cached workspace before loading this account
+        if (AppDataService.instance.userId.isNotEmpty &&
+            AppDataService.instance.userId != user.id) {
+          await AppDataService.instance.clearAuthSession();
+        }
+        CompanyProfileService().reset();
+        CompanyVerificationService().reset();
+        CompanyProjectService().reset();
+        CompanyApplicantService().reset();
+        CompanyAssignmentService().reset();
+        CompanySettingsService().reset();
 
         await AppDataService.instance.saveAuthSession(
           role: actualRole,
@@ -311,8 +388,12 @@ class _LoginScreenState extends State<LoginScreen> {
       });
     } on AuthException catch (e) {
       if (!mounted) return;
+      final unconfirmed = SupabaseHelper.isEmailNotConfirmedError(e);
       setState(() {
-        _errorBanner = SupabaseHelper.friendlyError(e);
+        _needsEmailVerification = unconfirmed;
+        _errorBanner = unconfirmed
+            ? 'Please verify your email address using the link sent to your inbox before signing in.'
+            : SupabaseHelper.friendlyError(e);
       });
     } catch (e) {
       if (!mounted) return;
@@ -429,6 +510,29 @@ class _LoginScreenState extends State<LoginScreen> {
                           ),
                           const SizedBox(height: 18),
 
+                          if (_infoBanner != null) ...[
+                            Container(
+                              width: double.infinity,
+                              padding: const EdgeInsets.all(12),
+                              decoration: BoxDecoration(
+                                color: AppColors.successBg,
+                                borderRadius: BorderRadius.circular(12),
+                                border: Border.all(
+                                  color: AppColors.statusOpen.withValues(alpha: 0.35),
+                                ),
+                              ),
+                              child: Text(
+                                _infoBanner!,
+                                style: GoogleFonts.inter(
+                                  fontSize: 12.5,
+                                  fontWeight: FontWeight.w600,
+                                  color: AppColors.deepNavy,
+                                ),
+                              ),
+                            ),
+                            const SizedBox(height: 16),
+                          ],
+
                           if (_errorBanner != null) ...[
                             Container(
                               width: double.infinity,
@@ -440,25 +544,56 @@ class _LoginScreenState extends State<LoginScreen> {
                                   color: AppColors.error.withValues(alpha: 0.35),
                                 ),
                               ),
-                              child: Row(
+                              child: Column(
                                 crossAxisAlignment: CrossAxisAlignment.start,
                                 children: [
-                                  const Icon(
-                                    Icons.error_outline_rounded,
-                                    color: AppColors.error,
-                                    size: 18,
+                                  Row(
+                                    crossAxisAlignment:
+                                        CrossAxisAlignment.start,
+                                    children: [
+                                      const Icon(
+                                        Icons.error_outline_rounded,
+                                        color: AppColors.error,
+                                        size: 18,
+                                      ),
+                                      const SizedBox(width: 8),
+                                      Expanded(
+                                        child: Text(
+                                          _errorBanner!,
+                                          style: GoogleFonts.inter(
+                                            fontSize: 12.5,
+                                            fontWeight: FontWeight.w600,
+                                            color: const Color(0xFF991B1B),
+                                          ),
+                                        ),
+                                      ),
+                                    ],
                                   ),
-                                  const SizedBox(width: 8),
-                                  Expanded(
-                                    child: Text(
-                                      _errorBanner!,
-                                      style: GoogleFonts.inter(
-                                        fontSize: 12.5,
-                                        fontWeight: FontWeight.w600,
-                                        color: const Color(0xFF991B1B),
+                                  if (_needsEmailVerification) ...[
+                                    const SizedBox(height: 8),
+                                    Align(
+                                      alignment: Alignment.centerRight,
+                                      child: TextButton(
+                                        onPressed: _isLoading
+                                            ? null
+                                            : _resendVerificationEmail,
+                                        style: TextButton.styleFrom(
+                                          padding: EdgeInsets.zero,
+                                          minimumSize: const Size(0, 0),
+                                          tapTargetSize:
+                                              MaterialTapTargetSize.shrinkWrap,
+                                        ),
+                                        child: Text(
+                                          'Resend Verification Link',
+                                          style: GoogleFonts.inter(
+                                            fontSize: 12,
+                                            fontWeight: FontWeight.w700,
+                                            color: AppColors.primaryBlue,
+                                          ),
+                                        ),
                                       ),
                                     ),
-                                  ),
+                                  ],
                                 ],
                               ),
                             ),

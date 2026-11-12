@@ -43,22 +43,28 @@ class AdminCompanyService {
           .select()
           .order('created_at', ascending: false);
 
-      // Count projects per company_id / posted_by
-      final Map<String, int> projectCountsByCompany = {};
-      final Map<String, int> projectCountsByUser = {};
+      // Count unique projects per company_id / posted_by
+      final Map<String, Set<String>> projectIdsByCompany = {};
+      final Map<String, Set<String>> projectIdsByUser = {};
       try {
         final projRows = await supabase
             .from('projects')
             .select('id, company_id, posted_by, user_id');
         for (final raw in projRows) {
           final p = Map<String, dynamic>.from(raw);
+          final pId = p['id']?.toString() ?? '';
           final cId = p['company_id']?.toString() ?? '';
-          final uId = p['posted_by']?.toString() ?? p['user_id']?.toString() ?? '';
+          final pBy = p['posted_by']?.toString() ?? '';
+          final uId = p['user_id']?.toString() ?? '';
+          if (pId.isEmpty) continue;
           if (cId.isNotEmpty) {
-            projectCountsByCompany[cId] = (projectCountsByCompany[cId] ?? 0) + 1;
+            projectIdsByCompany.putIfAbsent(cId, () => <String>{}).add(pId);
+          }
+          if (pBy.isNotEmpty) {
+            projectIdsByUser.putIfAbsent(pBy, () => <String>{}).add(pId);
           }
           if (uId.isNotEmpty) {
-            projectCountsByUser[uId] = (projectCountsByUser[uId] ?? 0) + 1;
+            projectIdsByUser.putIfAbsent(uId, () => <String>{}).add(pId);
           }
         }
       } catch (e) {
@@ -78,17 +84,20 @@ class AdminCompanyService {
         }
       } catch (_) {}
 
-      // Enrich with profiles rows (handles newly registered companies without an extended row yet)
+      // Enrich with profiles rows (handles newly registered companies and filters out non-company accounts)
       final Map<String, Map<String, dynamic>> companyProfilesById = {};
+      final Map<String, Map<String, dynamic>> allProfilesById = {};
       try {
-        final profRows = await supabase
-            .from('profiles')
-            .select()
-            .ilike('user_type', 'company');
+        final profRows = await supabase.from('profiles').select();
         for (final raw in profRows) {
           final p = Map<String, dynamic>.from(raw);
           final id = p['id']?.toString() ?? '';
-          if (id.isNotEmpty) companyProfilesById[id] = p;
+          if (id.isEmpty) continue;
+          allProfilesById[id] = p;
+          final uType = (p['user_type']?.toString() ?? '').trim().toLowerCase();
+          if (uType == 'company') {
+            companyProfilesById[id] = p;
+          }
         }
       } catch (e) {
         debugPrint('AdminCompanyService profiles lookup skipped: $e');
@@ -100,6 +109,15 @@ class AdminCompanyService {
         final row = Map<String, dynamic>.from(raw);
         final id = row['id']?.toString() ?? '';
         final userId = row['user_id']?.toString();
+        final mergedProjIds = <String>{
+          ...(projectIdsByCompany[id] ?? const <String>{}),
+          if (userId != null) ...(projectIdsByUser[userId] ?? const <String>{}),
+        };
+        final anyProf = userId != null ? allProfilesById[userId] : null;
+        final anyRole = (anyProf?['user_type']?.toString() ?? '').trim().toLowerCase();
+        if ((anyRole == 'student' || anyRole == 'admin') && mergedProjIds.isEmpty) {
+          continue;
+        }
         if (userId != null && userId.isNotEmpty) seenUserIds.add(userId);
         final prof = userId != null ? companyProfilesById[userId] : null;
         final rawAcc = (row['account_status']?.toString().trim().toLowerCase() ??
@@ -154,8 +172,7 @@ class AdminCompanyService {
                 ))
             .toList();
 
-        final projCount = projectCountsByCompany[id] ??
-            (userId != null ? (projectCountsByUser[userId] ?? 0) : 0);
+        final projCount = mergedProjIds.length;
 
         final evidenceFileName = row['evidence_file_name']?.toString() ?? '';
 
@@ -246,7 +263,7 @@ class AdminCompanyService {
             evidenceFileName: '',
             evidenceFileType: 'Not Uploaded',
             evidenceFileSize: '',
-            postedProjectsCount: projectCountsByUser[entry.key] ?? 0,
+            postedProjectsCount: (projectIdsByUser[entry.key] ?? const <String>{}).length,
             auditHistory: const [],
           ),
         );
