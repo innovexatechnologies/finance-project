@@ -402,7 +402,7 @@ class _ApplyProjectScreenState extends State<ApplyProjectScreen> {
                       ),
                       const SizedBox(height: 16),
 
-                      _fieldLabel('Portfolio / GitHub Profile Link *'),
+                      _fieldLabel('Portfolio / GitHub Profile Link (Optional)'),
                       const SizedBox(height: 6),
                       TextFormField(
                         controller: _portfolioController,
@@ -414,7 +414,7 @@ class _ApplyProjectScreenState extends State<ApplyProjectScreen> {
                         validator: (value) {
                           final v = value?.trim() ?? '';
                           if (v.isEmpty) {
-                            return 'Portfolio or GitHub link is required';
+                            return null;
                           }
                           if (!_isValidUrl(v)) {
                             return 'Enter a valid URL (e.g. https://github.com/username)';

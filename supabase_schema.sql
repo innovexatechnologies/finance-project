@@ -323,6 +323,10 @@ ALTER TABLE public.applications ADD COLUMN IF NOT EXISTS work_submitted_at TIMES
 ALTER TABLE public.applications ADD COLUMN IF NOT EXISTS submitted_at TIMESTAMPTZ DEFAULT timezone('utc'::text, now());
 ALTER TABLE public.applications ADD COLUMN IF NOT EXISTS updated_at TIMESTAMPTZ DEFAULT timezone('utc'::text, now());
 
+ALTER TABLE public.applications ADD COLUMN IF NOT EXISTS name TEXT;
+ALTER TABLE public.applications ALTER COLUMN name DROP NOT NULL;
+ALTER TABLE public.applications ADD COLUMN IF NOT EXISTS email TEXT;
+ALTER TABLE public.applications ALTER COLUMN email DROP NOT NULL;
 ALTER TABLE public.applications DROP CONSTRAINT IF EXISTS applications_status_check;
 
 UPDATE public.applications SET student_id = user_id WHERE student_id IS NULL AND user_id IS NOT NULL;

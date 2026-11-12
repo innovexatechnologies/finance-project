@@ -1052,6 +1052,9 @@ class AppDataService extends ChangeNotifier {
           ? app['resumeLink'].toString().trim()
           : (_profile['resumeUrl']?.toString().trim() ?? '');
 
+      final studentEmail =
+          (_userEmail.isNotEmpty ? _userEmail : user.email) ?? '';
+
       await supabase.from('applications').insert({
         'id': app['id'],
         if (SupabaseHelper.isUuid(projectId)) 'project_id': projectId,
@@ -1060,8 +1063,10 @@ class AppDataService extends ChangeNotifier {
         'company_name': app['company'],
         'student_id': user.id,
         'user_id': user.id,
+        'name': studentName,
         'student_name': studentName,
-        'student_email': _userEmail.isNotEmpty ? _userEmail : user.email,
+        'email': studentEmail,
+        'student_email': studentEmail,
         'university': university,
         'student_degree': _profile['degree']?.toString() ?? 'BS Computer Science',
         'student_department':
