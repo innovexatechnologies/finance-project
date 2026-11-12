@@ -943,7 +943,9 @@ class AppDataService extends ChangeNotifier {
     String? portfolioLink,
     String? resumeLink,
   }) async {
-    final projectId = project['id']?.toString() ?? '';
+    final rawProjectId =
+        project['id']?.toString() ?? project['projectId']?.toString() ?? '';
+    final projectId = rawProjectId.trim();
     if (projectId.isNotEmpty && hasApplied(projectId)) return;
 
     if (projectId.isNotEmpty) {
@@ -985,43 +987,38 @@ class AppDataService extends ChangeNotifier {
       'deadline': project['deadline']?.toString() ?? 'Flexible',
     };
 
+    // 1. Push to Supabase first; if it throws, do not corrupt local state
     try {
       await _pushApplicationToSupabase(newApp, project);
     } catch (e) {
+      if (e.toString().toLowerCase().contains('already applied')) {
+        await syncFromSupabase(forceRefresh: true);
+        return;
+      }
       rethrow;
     }
 
+    // 2. Add to in-memory state and update applicant counts
     _applications.insert(0, newApp);
     if (projectId.isNotEmpty) {
       _projectApplicantCounts[projectId] =
           getProjectApplicantsCount(projectId) + 1;
       for (final p in _projects) {
-        if (p['id']?.toString() == projectId) {
+        if (p['id']?.toString() == projectId ||
+            p['projectId']?.toString() == projectId) {
           p['applicantsCount'] = _projectApplicantCounts[projectId];
         }
       }
     }
     _safeNotifyListeners();
 
-    try {
-      if (_prefs != null) {
+    // 3. Persist local cache
+    if (_prefs != null) {
+      try {
         await _prefs!.setString(_kApplications, jsonEncode(_applications));
+      } catch (e) {
+        debugPrint('Application local persistence warning: $e');
       }
-
-      await _pushApplicationToSupabase(newApp, project);
-    } catch (error, stackTrace) {
-      _applications.removeWhere((application) => application['id'] == appId);
-      _safeNotifyListeners();
-
-      if (_prefs != null) {
-        try {
-          await _prefs!.setString(_kApplications, jsonEncode(_applications));
-        } catch (rollbackError) {
-          debugPrint('Application rollback persistence failed: $rollbackError');
-        }
-      }
-
-      Error.throwWithStackTrace(error, stackTrace);
     }
   }
 
@@ -1039,14 +1036,18 @@ class AppDataService extends ChangeNotifier {
               ? _profile['name'].toString().trim()
               : (_userName.isNotEmpty
                   ? _userName
-                  : (user.userMetadata?['name']?.toString() ?? 'Student'));
+                  : (user.userMetadata?['name']?.toString() ??
+                      user.userMetadata?['full_name']?.toString() ??
+                      'Student'));
       final university =
           (_profile['university']?.toString().trim().isNotEmpty == true)
               ? _profile['university'].toString().trim()
               : (user.userMetadata?['university']?.toString() ?? '');
       final skillsList = SupabaseHelper.parseStringList(app['skills']);
-      final projectId = project['id']?.toString();
-      final companyId = project['companyId']?.toString();
+      final projectId =
+          project['id']?.toString() ?? project['projectId']?.toString();
+      final companyId =
+          project['companyId']?.toString() ?? project['company_id']?.toString();
       final resumeLink = (app['resumeLink']?.toString().trim().isNotEmpty == true)
           ? app['resumeLink'].toString().trim()
           : (_profile['resumeUrl']?.toString().trim() ?? '');
@@ -1521,41 +1522,83 @@ class AppDataService extends ChangeNotifier {
     required String category,
     required String subject,
     required String message,
+    String? email,
+    String? senderName,
   }) async {
     final ticketNumber = 'CC-${DateTime.now().millisecondsSinceEpoch % 100000}';
-    final ticketEmail = _userEmail.isNotEmpty
-        ? _userEmail
-        : (_profile['email']?.toString() ?? '');
+    final user = SupabaseHelper.currentUser;
+
+    final resolvedEmail = (email != null && email.trim().isNotEmpty)
+        ? email.trim()
+        : (_userEmail.isNotEmpty
+            ? _userEmail
+            : ((user?.email?.isNotEmpty == true)
+                ? user!.email!
+                : (_profile['email']?.toString() ?? '')));
+
+    String resolvedName = (senderName != null && senderName.trim().isNotEmpty)
+        ? senderName.trim()
+        : (_userName.trim().isNotEmpty
+            ? _userName.trim()
+            : (_profile['name']?.toString().trim().isNotEmpty == true
+                ? _profile['name'].toString().trim()
+                : (user?.userMetadata?['name']?.toString().trim().isNotEmpty == true
+                    ? user!.userMetadata!['name'].toString().trim()
+                    : (user?.userMetadata?['full_name']?.toString().trim().isNotEmpty == true
+                        ? user!.userMetadata!['full_name'].toString().trim()
+                        : ''))));
+
+    final supabase = SupabaseHelper.clientOrNull;
+    if (resolvedName.isEmpty && supabase != null && user != null) {
+      try {
+        final prof = await supabase
+            .from('profiles')
+            .select('name')
+            .eq('id', user.id)
+            .maybeSingle();
+        if (prof != null && prof['name']?.toString().trim().isNotEmpty == true) {
+          resolvedName = prof['name'].toString().trim();
+          _profile['name'] = resolvedName;
+          _userName = resolvedName;
+        }
+      } catch (_) {}
+    }
+
+    if (resolvedName.isEmpty) {
+      resolvedName = 'Student';
+    }
+
     final ticket = {
       'id': ticketNumber,
       'category': category,
       'subject': subject,
       'message': message,
-      'email': ticketEmail,
+      'email': resolvedEmail,
+      'user_name': resolvedName,
+      'senderName': resolvedName,
       'createdAt': DateTime.now().toIso8601String(),
       'status': 'Open',
     };
 
     _supportTickets.insert(0, ticket);
-
     _safeNotifyListeners();
 
     if (_prefs != null) {
-      await _prefs!.setString(_kSupportTickets, jsonEncode(_supportTickets));
+      try {
+        await _prefs!.setString(_kSupportTickets, jsonEncode(_supportTickets));
+      } catch (e) {
+        debugPrint('Support ticket local persistence warning: $e');
+      }
     }
 
-    final supabase = SupabaseHelper.clientOrNull;
-    final user = supabase?.auth.currentUser;
     if (supabase != null && user != null) {
       try {
         await supabase.from('support_tickets').insert({
           'ticket_number': ticketNumber,
           'user_id': user.id,
-          'user_name': _userName.isNotEmpty
-              ? _userName
-              : (_profile['name']?.toString() ?? 'User'),
-          'user_email': ticketEmail,
-          'user_role': _userRole,
+          'user_name': resolvedName,
+          'user_email': resolvedEmail,
+          'user_role': _userRole.isNotEmpty ? _userRole : 'Student',
           'category': category,
           'subject': subject,
           'message': message,
@@ -1563,6 +1606,7 @@ class AppDataService extends ChangeNotifier {
         });
       } catch (e) {
         debugPrint('Supabase support ticket sync error: $e');
+        rethrow;
       }
     }
   }

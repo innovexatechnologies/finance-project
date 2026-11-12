@@ -20,7 +20,8 @@ import 'package:link_vibe/feature/admin/services/admin_settings_service.dart';
 
 /// Enterprise Admin Settings, Taxonomies, Support & RBAC Console.
 class AdminSettingsScreen extends StatefulWidget {
-  const AdminSettingsScreen({super.key});
+  final int initialTabIndex;
+  const AdminSettingsScreen({super.key, this.initialTabIndex = 0});
 
   @override
   State<AdminSettingsScreen> createState() => _AdminSettingsScreenState();
@@ -52,7 +53,12 @@ class _AdminSettingsScreenState extends State<AdminSettingsScreen>
   @override
   void initState() {
     super.initState();
-    _tabController = TabController(length: 8, vsync: this);
+    final validIndex =
+        (widget.initialTabIndex >= 0 && widget.initialTabIndex < 8)
+            ? widget.initialTabIndex
+            : 0;
+    _tabController =
+        TabController(length: 8, vsync: this, initialIndex: validIndex);
     WidgetsBinding.instance.addPostFrameCallback((_) {
       if (!mounted) return;
       _settingsService.loadFromSupabase();
@@ -103,7 +109,10 @@ class _AdminSettingsScreenState extends State<AdminSettingsScreen>
     if (_scaffoldKey.currentState?.isEndDrawerOpen ?? false) {
       Navigator.pop(context);
     }
-    if (routeId == 'settings') {
+    if (routeId == 'settings' || routeId == 'support_desk') {
+      if (routeId == 'support_desk' && _tabController.index != 2) {
+        _tabController.animateTo(2);
+      }
       return;
     }
     if (routeId == 'dashboard') {

@@ -551,5 +551,24 @@ void main() {
       'https://xyz.supabase.co/storage/v1/object/public/student-docs/cv.pdf',
     );
   });
+
+  test('Support ticket records student name and email cleanly', () async {
+    final initialTickets = AppDataService.instance.getSupportTickets().length;
+
+    await AppDataService.instance.submitSupportTicket(
+      category: 'Technical Issue',
+      subject: 'Issue with file upload',
+      message: 'My resume is not uploading properly.',
+      email: 'student.ali@example.com',
+      senderName: 'Ali Khan',
+    );
+
+    final tickets = AppDataService.instance.getSupportTickets();
+    expect(tickets.length, equals(initialTickets + 1));
+    final latest = tickets.first;
+    expect(latest['subject'], equals('Issue with file upload'));
+    expect(latest['email'], equals('student.ali@example.com'));
+    expect(latest['senderName'], equals('Ali Khan'));
+  });
 }
 

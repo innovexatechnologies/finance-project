@@ -2,7 +2,9 @@ import 'package:flutter/material.dart';
 import 'package:google_fonts/google_fonts.dart';
 import 'package:link_vibe/core/constants/app_colors.dart';
 import 'package:link_vibe/core/widgets/skillbridge_logo.dart';
+import 'package:link_vibe/feature/admin/models/admin_settings_model.dart';
 import 'package:link_vibe/feature/admin/presentation/screens/admin_dashboard_screen.dart';
+import 'package:link_vibe/feature/admin/presentation/screens/admin_settings_screen.dart';
 import 'package:link_vibe/feature/admin/presentation/screens/company_management_screen.dart';
 import 'package:link_vibe/feature/admin/presentation/screens/project_management_screen.dart';
 import 'package:link_vibe/feature/admin/presentation/screens/reports_analytics_screen.dart';
@@ -10,6 +12,7 @@ import 'package:link_vibe/feature/admin/presentation/screens/student_management_
 import 'package:link_vibe/feature/admin/services/admin_auth_service.dart';
 import 'package:link_vibe/feature/admin/services/admin_company_service.dart';
 import 'package:link_vibe/feature/admin/services/admin_project_service.dart';
+import 'package:link_vibe/feature/admin/services/admin_settings_service.dart';
 import 'package:link_vibe/feature/admin/services/admin_student_service.dart';
 
 /// Navigation item model for Admin Sidebar
@@ -98,6 +101,12 @@ class AdminSidebar extends StatelessWidget {
       case 'analytics':
         destination = const ReportsAnalyticsScreen();
         break;
+      case 'support_desk':
+        destination = const AdminSettingsScreen(initialTabIndex: 2);
+        break;
+      case 'settings':
+        destination = const AdminSettingsScreen();
+        break;
       case 'dashboard':
       default:
         destination = const AdminDashboardScreen();
@@ -114,6 +123,11 @@ class AdminSidebar extends StatelessWidget {
     final studentCount = AdminStudentService().totalCount;
     final companyCount = AdminCompanyService().totalCount;
     final projectCount = AdminProjectService().totalCount;
+    final pendingSupportCount = AdminSettingsService()
+        .helpRequestsNotifier
+        .value
+        .where((t) => t.status == HelpRequestStatus.pending)
+        .length;
 
     return [
       const AdminNavItem(
@@ -149,6 +163,13 @@ class AdminSidebar extends StatelessWidget {
         badgeText: 'Live',
         badgeColor: AppColors.accentTeal,
       ),
+      AdminNavItem(
+        title: 'Support & Inquiries',
+        icon: Icons.support_agent_rounded,
+        routeId: 'support_desk',
+        badgeText: pendingSupportCount > 0 ? '$pendingSupportCount' : null,
+        badgeColor: AppColors.error,
+      ),
     ];
   }
 
@@ -159,6 +180,7 @@ class AdminSidebar extends StatelessWidget {
       AdminStudentService().studentsNotifier,
       AdminCompanyService().companiesNotifier,
       AdminProjectService().projectsNotifier,
+      AdminSettingsService().helpRequestsNotifier,
     ]);
 
     return ListenableBuilder(
