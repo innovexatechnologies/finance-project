@@ -9,11 +9,13 @@ import 'package:link_vibe/feature/auth/presentation/screens/login_screen.dart';
 class ResetPasswordScreen extends StatefulWidget {
   final String initialEmail;
   final String? initialError;
+  final bool isRecoverySession;
 
   const ResetPasswordScreen({
     super.key,
     this.initialEmail = '',
     this.initialError,
+    this.isRecoverySession = false,
   });
 
   @override
@@ -23,7 +25,6 @@ class ResetPasswordScreen extends StatefulWidget {
 class _ResetPasswordScreenState extends State<ResetPasswordScreen> {
   final _formKey = GlobalKey<FormState>();
   late final TextEditingController _emailCtrl;
-  final _otpCtrl = TextEditingController();
   final _newPassCtrl = TextEditingController();
   final _confirmPassCtrl = TextEditingController();
 
@@ -31,7 +32,7 @@ class _ResetPasswordScreenState extends State<ResetPasswordScreen> {
   bool _obscureNew = true;
   bool _obscureConfirm = true;
   bool _isUpdated = false;
-  bool _otpSent = false;
+  bool _linkSent = false;
   String? _errorBanner;
   String? _infoBanner;
 
@@ -39,35 +40,44 @@ class _ResetPasswordScreenState extends State<ResetPasswordScreen> {
 
   bool get _isSignedInAsTarget {
     final supabase = SupabaseHelper.clientOrNull;
-    final currentEmail = supabase?.auth.currentUser?.email?.trim().toLowerCase() ?? '';
+    final currentEmail =
+        supabase?.auth.currentUser?.email?.trim().toLowerCase() ?? '';
     final enteredEmail = _emailCtrl.text.trim().toLowerCase();
     return currentEmail.isNotEmpty && currentEmail == enteredEmail;
   }
+
+  bool get _canSetPasswordDirectly =>
+      !_hasLiveSupabase || widget.isRecoverySession || _isSignedInAsTarget;
 
   @override
   void initState() {
     super.initState();
     _emailCtrl = TextEditingController(text: widget.initialEmail);
     _errorBanner = widget.initialError;
+    if (widget.isRecoverySession) {
+      _infoBanner =
+          'Email link verified. Enter your new password below to complete the reset.';
+    }
   }
 
   @override
   void dispose() {
     _emailCtrl.dispose();
-    _otpCtrl.dispose();
     _newPassCtrl.dispose();
     _confirmPassCtrl.dispose();
     super.dispose();
   }
 
-  Future<void> _sendRecoveryCode() async {
+  Future<void> _sendResetLink() async {
     setState(() {
       _errorBanner = null;
       _infoBanner = null;
     });
-    final email = _emailCtrl.text.trim();
+    final email = _emailCtrl.text.trim().toLowerCase();
     if (email.isEmpty || !email.contains('@')) {
-      setState(() => _errorBanner = 'Please enter a valid email address first.');
+      setState(
+        () => _errorBanner = 'Please enter a valid email address first.',
+      );
       return;
     }
 
@@ -82,9 +92,9 @@ class _ResetPasswordScreenState extends State<ResetPasswordScreen> {
       );
       if (!mounted) return;
       setState(() {
-        _otpSent = true;
+        _linkSent = true;
         _infoBanner =
-            'Verification code sent to $email. Enter the 6-digit code from your inbox along with your new password.';
+            'Password reset link sent to $email. Open the link from your email inbox to set a new password in SkillBridge.';
       });
     } on AuthException catch (e) {
       if (!mounted) return;
@@ -104,14 +114,14 @@ class _ResetPasswordScreenState extends State<ResetPasswordScreen> {
     });
 
     final supabase = SupabaseHelper.clientOrNull;
-    if (supabase != null && !_isSignedInAsTarget && !_otpSent) {
-      await _sendRecoveryCode();
+    if (supabase != null && !_canSetPasswordDirectly) {
+      await _sendResetLink();
       return;
     }
 
     if (!_formKey.currentState!.validate()) return;
 
-    final email = _emailCtrl.text.trim();
+    final email = _emailCtrl.text.trim().toLowerCase();
     final newPassword = _newPassCtrl.text.trim();
 
     setState(() => _isSaving = true);
@@ -119,21 +129,9 @@ class _ResetPasswordScreenState extends State<ResetPasswordScreen> {
 
     try {
       if (supabase != null) {
-        if (_isSignedInAsTarget) {
-          await supabase.auth.updateUser(
-            UserAttributes(password: newPassword),
-          );
-        } else {
-          final otp = _otpCtrl.text.trim();
-          await supabase.auth.verifyOTP(
-            email: email,
-            token: otp,
-            type: OtpType.recovery,
-          );
-          await supabase.auth.updateUser(
-            UserAttributes(password: newPassword),
-          );
-        }
+        await supabase.auth.updateUser(
+          UserAttributes(password: newPassword),
+        );
       } else {
         final existing = AppDataService.instance.findUserAccount(email);
         if (existing == null) {
@@ -258,8 +256,8 @@ class _ResetPasswordScreenState extends State<ResetPasswordScreen> {
   }
 
   Widget _buildFormView() {
-    final requiresOtp = _hasLiveSupabase && !_isSignedInAsTarget;
-    final showPasswordFields = !requiresOtp || _otpSent;
+    final requiresEmailLink = _hasLiveSupabase && !_canSetPasswordDirectly;
+    final showPasswordFields = !requiresEmailLink;
 
     return Form(
       key: _formKey,
@@ -294,10 +292,8 @@ class _ResetPasswordScreenState extends State<ResetPasswordScreen> {
                       ),
                     ),
                     Text(
-                      requiresOtp
-                          ? (_otpSent
-                              ? 'Enter your recovery code and new password'
-                              : 'Verify your email to reset your password')
+                      requiresEmailLink
+                          ? 'Verify via email link to reset your password'
                           : 'Set a new password directly in the app',
                       style: GoogleFonts.inter(
                         fontSize: 12.5,
@@ -370,7 +366,7 @@ class _ResetPasswordScreenState extends State<ResetPasswordScreen> {
           TextFormField(
             controller: _emailCtrl,
             keyboardType: TextInputType.emailAddress,
-            enabled: !_isSaving && !(requiresOtp && _otpSent),
+            enabled: !_isSaving && !widget.isRecoverySession,
             decoration: const InputDecoration(
               hintText: 'you@example.com',
               prefixIcon: Icon(Icons.email_outlined, size: 20),
@@ -384,37 +380,6 @@ class _ResetPasswordScreenState extends State<ResetPasswordScreen> {
             },
           ),
           const SizedBox(height: 14),
-
-          if (requiresOtp && _otpSent) ...[
-            Text(
-              '6-Digit Recovery Code',
-              style: GoogleFonts.inter(
-                fontSize: 12.5,
-                fontWeight: FontWeight.w600,
-                color: AppColors.darkText,
-              ),
-            ),
-            const SizedBox(height: 6),
-            TextFormField(
-              controller: _otpCtrl,
-              keyboardType: TextInputType.number,
-              enabled: !_isSaving,
-              decoration: const InputDecoration(
-                hintText: 'Enter 6-digit code from email',
-                prefixIcon: Icon(Icons.pin_outlined, size: 20),
-              ),
-              validator: (val) {
-                if (requiresOtp && _otpSent) {
-                  final v = val?.trim() ?? '';
-                  if (v.length < 6) {
-                    return 'Enter the verification code sent to your email';
-                  }
-                }
-                return null;
-              },
-            ),
-            const SizedBox(height: 14),
-          ],
 
           if (showPasswordFields) ...[
             Text(
@@ -511,8 +476,10 @@ class _ResetPasswordScreenState extends State<ResetPasswordScreen> {
                       ),
                     )
                   : Text(
-                      requiresOtp && !_otpSent
-                          ? 'Send Recovery Code'
+                      requiresEmailLink
+                          ? (_linkSent
+                              ? 'Resend Reset Link'
+                              : 'Send Password Reset Link')
                           : 'Reset Password',
                       style: GoogleFonts.poppins(
                         fontSize: 14.5,
@@ -521,22 +488,6 @@ class _ResetPasswordScreenState extends State<ResetPasswordScreen> {
                     ),
             ),
           ),
-          if (requiresOtp && _otpSent) ...[
-            const SizedBox(height: 4),
-            Center(
-              child: TextButton(
-                onPressed: _isSaving ? null : _sendRecoveryCode,
-                child: Text(
-                  'Resend Recovery Code',
-                  style: GoogleFonts.inter(
-                    fontSize: 12.5,
-                    color: AppColors.primaryBlue,
-                    fontWeight: FontWeight.w600,
-                  ),
-                ),
-              ),
-            ),
-          ],
           const SizedBox(height: 8),
           Center(
             child: TextButton(

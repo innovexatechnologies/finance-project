@@ -34,7 +34,10 @@ class _SignupScreenState extends State<SignupScreen> {
   late String _selectedRole;
   bool _isLoading = false;
   bool _obscurePassword = true;
+  bool _awaitingEmailVerification = false;
+  String _pendingVerificationEmail = '';
   String? _errorBanner;
+  String? _infoBanner;
 
   @override
   void initState() {
@@ -65,16 +68,53 @@ class _SignupScreenState extends State<SignupScreen> {
     setState(() {
       _selectedRole = role;
       _obscurePassword = true;
+      _awaitingEmailVerification = false;
+      _pendingVerificationEmail = '';
       _errorBanner = null;
+      _infoBanner = null;
     });
   }
 
+  Future<void> _resendVerificationLink() async {
+    final supabase = SupabaseHelper.clientOrNull;
+    final targetEmail = _pendingVerificationEmail.trim().toLowerCase();
+    if (supabase == null || targetEmail.isEmpty) return;
+
+    setState(() {
+      _isLoading = true;
+      _errorBanner = null;
+    });
+    try {
+      await supabase.auth.resend(
+        type: OtpType.signup,
+        email: targetEmail,
+        emailRedirectTo: 'io.supabase.campusconnect://login-callback',
+      );
+      if (!mounted) return;
+      setState(() {
+        _infoBanner =
+            'Verification link re-sent to $targetEmail. Please open the link in your inbox, then sign in.';
+      });
+    } on AuthException catch (e) {
+      if (!mounted) return;
+      setState(() => _errorBanner = SupabaseHelper.friendlyError(e));
+    } catch (e) {
+      if (!mounted) return;
+      setState(() => _errorBanner = SupabaseHelper.friendlyError(e));
+    } finally {
+      if (mounted) setState(() => _isLoading = false);
+    }
+  }
+
   Future<void> _handleRegister() async {
-    setState(() => _errorBanner = null);
+    setState(() {
+      _errorBanner = null;
+      _infoBanner = null;
+    });
     if (!_formKey.currentState!.validate()) return;
 
     final name = _nameController.text.trim();
-    final email = _emailController.text.trim();
+    final email = _emailController.text.trim().toLowerCase();
     final instituteOrIndustry = _universityController.text.trim();
     final password = _passwordController.text.trim();
 
@@ -90,6 +130,7 @@ class _SignupScreenState extends State<SignupScreen> {
           authResponse = await supabase.auth.signUp(
             email: email,
             password: password,
+            emailRedirectTo: 'io.supabase.campusconnect://login-callback',
             data: {
               'name': name,
               'user_type': _selectedRole,
@@ -152,8 +193,10 @@ class _SignupScreenState extends State<SignupScreen> {
             if (SupabaseHelper.isEmailNotConfirmedError(loginErr)) {
               if (!mounted) return;
               setState(() {
-                _errorBanner =
-                    'Account created! Please check your email inbox to confirm your address before signing in.';
+                _awaitingEmailVerification = true;
+                _pendingVerificationEmail = email;
+                _infoBanner =
+                    'Account created! A verification link has been sent to $email. Click the link in your inbox, then sign in.';
               });
               return;
             }
@@ -336,6 +379,72 @@ class _SignupScreenState extends State<SignupScreen> {
                         ),
                       ),
                       const SizedBox(height: 18),
+
+                      if (_infoBanner != null) ...[
+                        Container(
+                          width: double.infinity,
+                          padding: const EdgeInsets.all(12),
+                          decoration: BoxDecoration(
+                            color: AppColors.successBg,
+                            borderRadius: BorderRadius.circular(12),
+                            border: Border.all(
+                              color: AppColors.statusOpen.withValues(alpha: 0.35),
+                            ),
+                          ),
+                          child: Column(
+                            crossAxisAlignment: CrossAxisAlignment.start,
+                            children: [
+                              Row(
+                                crossAxisAlignment: CrossAxisAlignment.start,
+                                children: [
+                                  const Icon(
+                                    Icons.mark_email_read_outlined,
+                                    color: AppColors.statusOpen,
+                                    size: 18,
+                                  ),
+                                  const SizedBox(width: 8),
+                                  Expanded(
+                                    child: Text(
+                                      _infoBanner!,
+                                      style: GoogleFonts.inter(
+                                        fontSize: 12.5,
+                                        fontWeight: FontWeight.w600,
+                                        color: AppColors.deepNavy,
+                                      ),
+                                    ),
+                                  ),
+                                ],
+                              ),
+                              if (_awaitingEmailVerification) ...[
+                                const SizedBox(height: 8),
+                                Align(
+                                  alignment: Alignment.centerRight,
+                                  child: TextButton(
+                                    onPressed: _isLoading
+                                        ? null
+                                        : _resendVerificationLink,
+                                    style: TextButton.styleFrom(
+                                      padding: EdgeInsets.zero,
+                                      minimumSize: const Size(0, 0),
+                                      tapTargetSize:
+                                          MaterialTapTargetSize.shrinkWrap,
+                                    ),
+                                    child: Text(
+                                      'Resend Verification Link',
+                                      style: GoogleFonts.inter(
+                                        fontSize: 12,
+                                        fontWeight: FontWeight.w700,
+                                        color: AppColors.primaryBlue,
+                                      ),
+                                    ),
+                                  ),
+                                ),
+                              ],
+                            ],
+                          ),
+                        ),
+                        const SizedBox(height: 16),
+                      ],
 
                       if (_errorBanner != null) ...[
                         Container(

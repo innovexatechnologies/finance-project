@@ -35,7 +35,9 @@ class _LoginScreenState extends State<LoginScreen> {
   late String _selectedRole;
   bool _isLoading = false;
   bool _obscurePassword = true;
+  bool _needsEmailVerification = false;
   String? _errorBanner;
+  String? _infoBanner;
 
   @override
   void initState() {
@@ -59,20 +61,56 @@ class _LoginScreenState extends State<LoginScreen> {
     setState(() {
       _selectedRole = role;
       _obscurePassword = true;
+      _needsEmailVerification = false;
       _errorBanner = null;
+      _infoBanner = null;
     });
+  }
+
+  Future<void> _resendVerificationEmail() async {
+    final supabase = SupabaseHelper.clientOrNull;
+    final email = _emailController.text.trim().toLowerCase();
+    if (supabase == null || email.isEmpty || !email.contains('@')) return;
+
+    setState(() {
+      _isLoading = true;
+      _errorBanner = null;
+      _infoBanner = null;
+    });
+    try {
+      await supabase.auth.resend(
+        type: OtpType.signup,
+        email: email,
+        emailRedirectTo: 'io.supabase.campusconnect://login-callback',
+      );
+      if (!mounted) return;
+      setState(() {
+        _infoBanner =
+            'Verification link sent to $email. Please open the link in your email inbox, then sign in.';
+      });
+    } on AuthException catch (e) {
+      if (!mounted) return;
+      setState(() => _errorBanner = SupabaseHelper.friendlyError(e));
+    } catch (e) {
+      if (!mounted) return;
+      setState(() => _errorBanner = SupabaseHelper.friendlyError(e));
+    } finally {
+      if (mounted) setState(() => _isLoading = false);
+    }
   }
 
   Future<void> _handleLogin() async {
     setState(() {
       _errorBanner = null;
+      _infoBanner = null;
+      _needsEmailVerification = false;
     });
 
     if (!_formKey.currentState!.validate()) {
       return;
     }
 
-    final email = _emailController.text.trim();
+    final email = _emailController.text.trim().toLowerCase();
     final password = _passwordController.text.trim();
 
     setState(() => _isLoading = true);
@@ -350,8 +388,12 @@ class _LoginScreenState extends State<LoginScreen> {
       });
     } on AuthException catch (e) {
       if (!mounted) return;
+      final unconfirmed = SupabaseHelper.isEmailNotConfirmedError(e);
       setState(() {
-        _errorBanner = SupabaseHelper.friendlyError(e);
+        _needsEmailVerification = unconfirmed;
+        _errorBanner = unconfirmed
+            ? 'Please verify your email address using the link sent to your inbox before signing in.'
+            : SupabaseHelper.friendlyError(e);
       });
     } catch (e) {
       if (!mounted) return;
@@ -468,6 +510,29 @@ class _LoginScreenState extends State<LoginScreen> {
                           ),
                           const SizedBox(height: 18),
 
+                          if (_infoBanner != null) ...[
+                            Container(
+                              width: double.infinity,
+                              padding: const EdgeInsets.all(12),
+                              decoration: BoxDecoration(
+                                color: AppColors.successBg,
+                                borderRadius: BorderRadius.circular(12),
+                                border: Border.all(
+                                  color: AppColors.statusOpen.withValues(alpha: 0.35),
+                                ),
+                              ),
+                              child: Text(
+                                _infoBanner!,
+                                style: GoogleFonts.inter(
+                                  fontSize: 12.5,
+                                  fontWeight: FontWeight.w600,
+                                  color: AppColors.deepNavy,
+                                ),
+                              ),
+                            ),
+                            const SizedBox(height: 16),
+                          ],
+
                           if (_errorBanner != null) ...[
                             Container(
                               width: double.infinity,
@@ -479,25 +544,56 @@ class _LoginScreenState extends State<LoginScreen> {
                                   color: AppColors.error.withValues(alpha: 0.35),
                                 ),
                               ),
-                              child: Row(
+                              child: Column(
                                 crossAxisAlignment: CrossAxisAlignment.start,
                                 children: [
-                                  const Icon(
-                                    Icons.error_outline_rounded,
-                                    color: AppColors.error,
-                                    size: 18,
+                                  Row(
+                                    crossAxisAlignment:
+                                        CrossAxisAlignment.start,
+                                    children: [
+                                      const Icon(
+                                        Icons.error_outline_rounded,
+                                        color: AppColors.error,
+                                        size: 18,
+                                      ),
+                                      const SizedBox(width: 8),
+                                      Expanded(
+                                        child: Text(
+                                          _errorBanner!,
+                                          style: GoogleFonts.inter(
+                                            fontSize: 12.5,
+                                            fontWeight: FontWeight.w600,
+                                            color: const Color(0xFF991B1B),
+                                          ),
+                                        ),
+                                      ),
+                                    ],
                                   ),
-                                  const SizedBox(width: 8),
-                                  Expanded(
-                                    child: Text(
-                                      _errorBanner!,
-                                      style: GoogleFonts.inter(
-                                        fontSize: 12.5,
-                                        fontWeight: FontWeight.w600,
-                                        color: const Color(0xFF991B1B),
+                                  if (_needsEmailVerification) ...[
+                                    const SizedBox(height: 8),
+                                    Align(
+                                      alignment: Alignment.centerRight,
+                                      child: TextButton(
+                                        onPressed: _isLoading
+                                            ? null
+                                            : _resendVerificationEmail,
+                                        style: TextButton.styleFrom(
+                                          padding: EdgeInsets.zero,
+                                          minimumSize: const Size(0, 0),
+                                          tapTargetSize:
+                                              MaterialTapTargetSize.shrinkWrap,
+                                        ),
+                                        child: Text(
+                                          'Resend Verification Link',
+                                          style: GoogleFonts.inter(
+                                            fontSize: 12,
+                                            fontWeight: FontWeight.w700,
+                                            color: AppColors.primaryBlue,
+                                          ),
+                                        ),
                                       ),
                                     ),
-                                  ),
+                                  ],
                                 ],
                               ),
                             ),
