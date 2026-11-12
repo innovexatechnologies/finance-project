@@ -4,15 +4,7 @@ import 'package:google_fonts/google_fonts.dart';
 import 'package:link_vibe/core/constants/app_colors.dart';
 import 'package:link_vibe/core/widgets/app_empty_state.dart';
 import 'package:link_vibe/feature/admin/models/admin_application_monitoring_model.dart';
-import 'package:link_vibe/feature/admin/presentation/screens/admin_dashboard_screen.dart';
 import 'package:link_vibe/feature/admin/presentation/screens/admin_login_screen.dart';
-import 'package:link_vibe/feature/admin/presentation/screens/admin_settings_screen.dart';
-import 'package:link_vibe/feature/admin/presentation/screens/certificate_management_screen.dart';
-import 'package:link_vibe/feature/admin/presentation/screens/company_management_screen.dart';
-import 'package:link_vibe/feature/admin/presentation/screens/company_verifications_screen.dart';
-import 'package:link_vibe/feature/admin/presentation/screens/project_management_screen.dart';
-import 'package:link_vibe/feature/admin/presentation/screens/reports_analytics_screen.dart';
-import 'package:link_vibe/feature/admin/presentation/screens/student_management_screen.dart';
 import 'package:link_vibe/feature/admin/presentation/widgets/admin_sidebar.dart';
 import 'package:link_vibe/feature/admin/presentation/widgets/admin_top_navbar.dart';
 import 'package:link_vibe/feature/admin/services/admin_application_monitoring_service.dart';
@@ -189,53 +181,12 @@ class _ApplicationMonitoringScreenState
   }
 
   void _onRouteSelected(String routeId) {
-    if (_scaffoldKey.currentState?.isEndDrawerOpen ?? false) {
-      Navigator.pop(context);
-    }
-    if (routeId == 'compliance' || routeId == 'application_monitoring') {
-      return;
-    }
-    if (routeId == 'dashboard') {
-      Navigator.pushReplacement(
-        context,
-        MaterialPageRoute(builder: (_) => const AdminDashboardScreen()),
-      );
-    } else if (routeId == 'student_verifications') {
-      Navigator.pushReplacement(
-        context,
-        MaterialPageRoute(builder: (_) => const StudentManagementScreen()),
-      );
-    } else if (routeId == 'company_verifications') {
-      Navigator.pushReplacement(
-        context,
-        MaterialPageRoute(builder: (_) => const CompanyVerificationsScreen()),
-      );
-    } else if (routeId == 'company_management') {
-      Navigator.pushReplacement(
-        context,
-        MaterialPageRoute(builder: (_) => const CompanyManagementScreen()),
-      );
-    } else if (routeId == 'projects_audit' || routeId == 'projects') {
-      Navigator.pushReplacement(
-        context,
-        MaterialPageRoute(builder: (_) => const ProjectManagementScreen()),
-      );
-    } else if (routeId == 'audit_logs' || routeId == 'certificates') {
-      Navigator.pushReplacement(
-        context,
-        MaterialPageRoute(builder: (_) => const CertificateManagementScreen()),
-      );
-    } else if (routeId == 'analytics' || routeId == 'reports') {
-      Navigator.pushReplacement(
-        context,
-        MaterialPageRoute(builder: (_) => const ReportsAnalyticsScreen()),
-      );
-    } else if (routeId == 'settings') {
-      Navigator.pushReplacement(
-        context,
-        MaterialPageRoute(builder: (_) => const AdminSettingsScreen()),
-      );
-    }
+    AdminSidebar.navigateToRoute(
+      context,
+      scaffoldKey: _scaffoldKey,
+      currentRouteId: 'application_monitoring',
+      targetRouteId: routeId,
+    );
   }
 
   List<AdminApplicationModel> _getFilteredApplications(
