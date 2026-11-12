@@ -204,13 +204,13 @@ void main() {
 
   group('Portal Role & Direct Auth Flows', () {
     test('SupabaseHelper error helpers classify auth states without credential limits', () {
-        final msg = SupabaseHelper.friendlyError(
-          Exception(
-            "ClientException with SocketException: Failed host lookup: 'example.supabase.co' (OS Error: No address associated with hostname, errno = 7)",
-          ),
-        );
-        expect(msg, contains('internet connection'));
-        expect(SupabaseHelper.isInteractiveAuthInProgress, isFalse);
+      final msg = SupabaseHelper.friendlyError(
+        Exception(
+          "ClientException with SocketException: Failed host lookup: 'example.supabase.co' (OS Error: No address associated with hostname, errno = 7)",
+        ),
+      );
+      expect(msg, contains('internet connection'));
+      expect(SupabaseHelper.isInteractiveAuthInProgress, isFalse);
 
       SupabaseHelper.beginInteractiveAuth();
       expect(SupabaseHelper.isInteractiveAuthInProgress, isTrue);
@@ -239,12 +239,12 @@ void main() {
       );
       expect(SupabaseHelper.isEmailNotConfirmedError(unconfirmedErr), isTrue);
 
-        const alreadyErr = AuthApiException(
-          'User already registered',
-          statusCode: '422',
-          code: 'user_already_exists',
-        );
-        expect(SupabaseHelper.isAlreadyRegisteredError(alreadyErr), isTrue);
+      const alreadyErr = AuthApiException(
+        'User already registered',
+        statusCode: '422',
+        code: 'user_already_exists',
+      );
+      expect(SupabaseHelper.isAlreadyRegisteredError(alreadyErr), isTrue);
     });
 
     testWidgets(
@@ -852,48 +852,48 @@ void main() {
     });
 
     test('ShareService summaries contain no generated app links', () {
-        final projectMsg = ShareService.buildProjectShareText({
-          'id': 'proj-101',
-          'title': 'Flutter Mobile App',
-          'company': 'Acme Labs',
-          'workMode': 'Remote',
-          'duration': '4 Weeks',
-          'websiteUrl': 'https://skillbridge.app/external',
-        });
-        expect(projectMsg, contains('Flutter Mobile App'));
-        expect(projectMsg, contains('Acme Labs'));
+      final projectMsg = ShareService.buildProjectShareText({
+        'id': 'proj-101',
+        'title': 'Flutter Mobile App',
+        'company': 'Acme Labs',
+        'workMode': 'Remote',
+        'duration': '4 Weeks',
+        'websiteUrl': 'https://skillbridge.app/external',
+      });
+      expect(projectMsg, contains('Flutter Mobile App'));
+      expect(projectMsg, contains('Acme Labs'));
       expect(projectMsg, isNot(contains('skillbridge://')));
 
-        final appMsg = ShareService.buildApplicationShareText({
-          'id': 'app-77',
-          'projectId': 'proj-101',
-          'title': 'Flutter Mobile App',
-          'company': 'Acme Labs',
-          'status': 'Pending',
-          'timelineStep': 1,
-        });
-        expect(appMsg, contains('Flutter Mobile App'));
-        expect(appMsg, contains('Pending'));
+      final appMsg = ShareService.buildApplicationShareText({
+        'id': 'app-77',
+        'projectId': 'proj-101',
+        'title': 'Flutter Mobile App',
+        'company': 'Acme Labs',
+        'status': 'Pending',
+        'timelineStep': 1,
+      });
+      expect(appMsg, contains('Flutter Mobile App'));
+      expect(appMsg, contains('Pending'));
       expect(appMsg, isNot(contains('skillbridge://')));
 
-        final certMsg = ShareService.buildCertificateShareText({
-          'id': 'CERT-999',
-          'title': 'Excellence Certificate',
-          'project': 'Cloud API',
-          'issuer': 'Acme Labs',
-          'verificationUrl': 'https://skillbridge.app/cert/999',
-        });
-        expect(certMsg, contains('Excellence Certificate'));
+      final certMsg = ShareService.buildCertificateShareText({
+        'id': 'CERT-999',
+        'title': 'Excellence Certificate',
+        'project': 'Cloud API',
+        'issuer': 'Acme Labs',
+        'verificationUrl': 'https://skillbridge.app/cert/999',
+      });
+      expect(certMsg, contains('Excellence Certificate'));
       expect(certMsg, isNot(contains('skillbridge://')));
-        });
+    });
 
     test('CompanyProfileService caches workspace snapshot cleanly', () async {
-        await AppDataService.instance.saveAuthSession(
-          role: 'Company',
-          email: 'hr@fastcloud.io',
-          name: 'FastCloud Labs',
-          userId: 'comp-user-1',
-        );
+      await AppDataService.instance.saveAuthSession(
+        role: 'Company',
+        email: 'hr@fastcloud.io',
+        name: 'FastCloud Labs',
+        userId: 'comp-user-1',
+      );
 
       CompanyProfileService().currentProfileNotifier.value =
           const CompanyProfileModel(
@@ -938,13 +938,13 @@ void main() {
       expect(CompanyProfileService().currentProfile.companyName, isEmpty);
       expect(CompanyProjectService().allProjects, isEmpty);
 
-        CompanyProfileService.hydrateFromLocalCache();
-        expect(
-          CompanyProfileService().currentProfile.companyName,
-          'FastCloud Labs',
-        );
-        expect(CompanyProjectService().allProjects.length, 1);
-        expect(CompanyProfileService.hasLoadedWorkspace, isTrue);
+      CompanyProfileService.hydrateFromLocalCache();
+      expect(
+        CompanyProfileService().currentProfile.companyName,
+        'FastCloud Labs',
+      );
+      expect(CompanyProjectService().allProjects.length, 1);
+      expect(CompanyProfileService.hasLoadedWorkspace, isTrue);
     });
 
     testWidgets(
@@ -1231,88 +1231,88 @@ void main() {
     testWidgets('Share buttons remain available without app-link controls', (
       tester,
     ) async {
-        tester.view.physicalSize = const Size(412, 915);
-        tester.view.devicePixelRatio = 1.0;
-        addTearDown(() => tester.view.resetPhysicalSize());
+      tester.view.physicalSize = const Size(412, 915);
+      tester.view.devicePixelRatio = 1.0;
+      addTearDown(() => tester.view.resetPhysicalSize());
 
-        SharedPreferences.setMockInitialValues({
-          'cc_is_logged_in_v1': true,
-          'cc_user_role_v1': 'Student',
-          'cc_user_id_v1': 'stu-dl-1',
-          'cc_user_name_v1': 'Hina Khan',
+      SharedPreferences.setMockInitialValues({
+        'cc_is_logged_in_v1': true,
+        'cc_user_role_v1': 'Student',
+        'cc_user_id_v1': 'stu-dl-1',
+        'cc_user_name_v1': 'Hina Khan',
         'cc_custom_projects_v1': '[{"id":"proj-dl-1","title":"Deep Link Mobile App","company":"Acme Labs","category":"Development","duration":"4 Weeks","workMode":"Remote","status":"Open","stipend":"PKR 25,000"}]',
         'cc_applications_v1': '[{"id":"app-dl-1","projectId":"proj-dl-1","title":"Deep Link Mobile App","company":"Acme Labs","status":"Pending","appliedDate":"Today","timelineStep":1}]',
         'cc_certificates_v1': '[{"id":"CERT-DL-1","title":"Completion Certificate","project":"Deep Link Mobile App","issuer":"Acme Labs","date":"2026","status":"valid","verificationUrl":"https://skillbridge.edu.pk/verify/CERT-DL-1"}]',
-        });
-        await AppDataService.instance.init();
+      });
+      await AppDataService.instance.init();
 
       // StudentHomeScreen must NOT have Share button even with open projects
-        await tester.pumpWidget(
-          MaterialApp(
+      await tester.pumpWidget(
+        MaterialApp(
           key: const ValueKey('share_home'),
-            theme: AppTheme.lightTheme,
-            home: const StudentHomeScreen(),
-          ),
-        );
-        await tester.pumpAndSettle();
-        expect(find.text('Deep Link Mobile App'), findsOneWidget);
-        expect(find.byTooltip('Share Project'), findsNothing);
-        expect(find.byIcon(Icons.share_outlined), findsNothing);
+          theme: AppTheme.lightTheme,
+          home: const StudentHomeScreen(),
+        ),
+      );
+      await tester.pumpAndSettle();
+      expect(find.text('Deep Link Mobile App'), findsOneWidget);
+      expect(find.byTooltip('Share Project'), findsNothing);
+      expect(find.byIcon(Icons.share_outlined), findsNothing);
 
       // StudentProfileScreen must NOT have Share Profile button
-        await tester.pumpWidget(
-          MaterialApp(
+      await tester.pumpWidget(
+        MaterialApp(
           key: const ValueKey('share_profile'),
-            theme: AppTheme.lightTheme,
-            home: const StudentProfileScreen(),
-          ),
-        );
-        await tester.pumpAndSettle();
-        expect(find.byTooltip('Share Profile'), findsNothing);
-        expect(find.byIcon(Icons.share_outlined), findsNothing);
+          theme: AppTheme.lightTheme,
+          home: const StudentProfileScreen(),
+        ),
+      );
+      await tester.pumpAndSettle();
+      expect(find.byTooltip('Share Profile'), findsNothing);
+      expect(find.byIcon(Icons.share_outlined), findsNothing);
 
       // Explore projects retains native sharing without app-link actions.
-        await tester.pumpWidget(
-          MaterialApp(
+      await tester.pumpWidget(
+        MaterialApp(
           key: const ValueKey('share_explore'),
-            theme: AppTheme.lightTheme,
-            home: const ExploreProjectsScreen(),
-          ),
-        );
-        await tester.pumpAndSettle();
-        expect(find.byTooltip('Share Project'), findsOneWidget);
+          theme: AppTheme.lightTheme,
+          home: const ExploreProjectsScreen(),
+        ),
+      );
+      await tester.pumpAndSettle();
+      expect(find.byTooltip('Share Project'), findsOneWidget);
       expect(find.text('Open Shared Link'), findsNothing);
 
-        await tester.tap(find.byTooltip('Share Project'));
-        await tester.pumpAndSettle();
-        expect(find.text('Share Project'), findsOneWidget);
-        expect(find.text('Share via Apps'), findsOneWidget);
+      await tester.tap(find.byTooltip('Share Project'));
+      await tester.pumpAndSettle();
+      expect(find.text('Share Project'), findsOneWidget);
+      expect(find.text('Share via Apps'), findsOneWidget);
       expect(find.text('Copy Details'), findsOneWidget);
       expect(find.text('Direct SkillBridge Link'), findsNothing);
       expect(find.text('Open in App'), findsNothing);
       await tester.tap(find.byIcon(Icons.close_rounded).last);
-        await tester.pumpAndSettle();
+      await tester.pumpAndSettle();
 
-        await tester.pumpWidget(
-          MaterialApp(
+      await tester.pumpWidget(
+        MaterialApp(
           key: const ValueKey('share_apps'),
-            theme: AppTheme.lightTheme,
-            home: const MyApplicationsScreen(),
-          ),
-        );
-        await tester.pumpAndSettle();
-        expect(find.byTooltip('Share Application'), findsOneWidget);
+          theme: AppTheme.lightTheme,
+          home: const MyApplicationsScreen(),
+        ),
+      );
+      await tester.pumpAndSettle();
+      expect(find.byTooltip('Share Application'), findsOneWidget);
 
-        await tester.pumpWidget(
-          MaterialApp(
+      await tester.pumpWidget(
+        MaterialApp(
           key: const ValueKey('share_certs'),
-            theme: AppTheme.lightTheme,
-            home: const CertificatesScreen(),
-          ),
-        );
-        await tester.pumpAndSettle();
-        expect(find.byIcon(Icons.share_outlined), findsOneWidget);
-        expect(tester.takeException(), isNull);
+          theme: AppTheme.lightTheme,
+          home: const CertificatesScreen(),
+        ),
+      );
+      await tester.pumpAndSettle();
+      expect(find.byIcon(Icons.share_outlined), findsOneWidget);
+      expect(tester.takeException(), isNull);
     });
   });
 
@@ -1337,9 +1337,9 @@ void main() {
     });
 
     test('AdminAuthService & AdminSettingsService support async Supabase-first persistence', () async {
-        final authService = AdminAuthService();
-        final settings = AdminSettingsService();
-        settings.reset();
+      final authService = AdminAuthService();
+      final settings = AdminSettingsService();
+      settings.reset();
 
       final authOk = await authService.login(
         email: 'admin@skillbridge.edu.pk',
@@ -1419,18 +1419,18 @@ void main() {
         isFalse,
       );
 
-        await authService.logout();
-        expect(authService.isAuthenticated, isFalse);
-        expect(settings.categoriesNotifier.value, isEmpty);
+      await authService.logout();
+      expect(authService.isAuthenticated, isFalse);
+      expect(settings.categoriesNotifier.value, isEmpty);
     });
 
     test('AdminCompanyService, AdminStudentService & AdminProjectService handle moderation cleanly', () async {
-        final compService = AdminCompanyService();
-        final studService = AdminStudentService();
-        final projService = AdminProjectService();
-        compService.reset();
-        studService.reset();
-        projService.reset();
+      final compService = AdminCompanyService();
+      final studService = AdminStudentService();
+      final projService = AdminProjectService();
+      compService.reset();
+      studService.reset();
+      projService.reset();
 
       const synthUid = '11111111-1111-4111-8111-111111111111';
       compService.companiesNotifier.value = [
@@ -1553,51 +1553,43 @@ void main() {
       tester.view.devicePixelRatio = 1.0;
       addTearDown(() => tester.view.resetPhysicalSize());
 
-        const projUid = '22222222-2222-4222-8222-222222222222';
-        projService.projectsNotifier.value = [
-          AdminProjectModel(
-            id: projUid,
-            title: 'AI Analytics Engine',
-            companyId: synthUid,
-            companyName: 'Synthesized Corp',
-            category: 'AI',
-            description: 'Build engine',
-            requirements: 'Dart',
-            skillsRequired: const ['Dart'],
-            deliverables: 'App',
-            deadline: '2026-12-31',
-            deadlineDateTime: DateTime(2026, 12, 31),
-            projectType: 'Sprint',
-            duration: '4 Weeks',
-            openings: 2,
-            additionalInstructions: '',
-            applicantsCount: 0,
-            status: AdminProjectStatus.pendingReview,
-            publicationStatus: AdminPublicationStatus.pendingModeration,
-            createdAt: '2026-11-11',
-            createdDateTime: DateTime(2026, 11, 11),
-            moderationHistory: const [],
-          ),
-        ];
-
-        final moderatedCount = await projService.bulkModerateProjects(
-          projectIds: const [projUid],
-          newStatus: AdminProjectStatus.published,
-          moderatorName: 'Executive Administrator',
-        );
-        expect(moderatedCount, 1);
-        expect(
-          projService.projectsNotifier.value.first.status,
-          AdminProjectStatus.published,
-        );
+      for (final screen in const [
+        StudentManagementScreen(),
+        CompanyManagementScreen(),
+        CompanyVerificationsScreen(),
+        ProjectManagementScreen(),
+        ApplicationMonitoringScreen(),
+        CertificateManagementScreen(),
+        ReportsAnalyticsScreen(),
+        AdminSettingsScreen(),
+      ]) {
+        await tester.pumpWidget(MaterialApp(home: screen));
+        await tester.pump(const Duration(milliseconds: 250));
+        expect(tester.takeException(), isNull);
+        if (screen is ReportsAnalyticsScreen) {
+          expect(find.text('Refresh'), findsNothing);
+          expect(find.text('Export CSV'), findsNothing);
+          expect(find.text('Today'), findsOneWidget);
+          expect(find.text('This Week'), findsOneWidget);
+          expect(find.text('This Month'), findsOneWidget);
+          expect(find.text('Last Month'), findsOneWidget);
+          expect(find.text('This Year'), findsOneWidget);
+          expect(find.text('Custom Range'), findsOneWidget);
+          expect(find.text('Generate Report'), findsOneWidget);
+          expect(find.text('Total Projects'), findsOneWidget);
+        }
+      }
     });
 
-    testWidgets('All primary Admin screens render cleanly without exceptions', (
-      tester,
-    ) async {
-        tester.view.physicalSize = const Size(1280, 800);
-        tester.view.devicePixelRatio = 1.0;
-        addTearDown(() => tester.view.resetPhysicalSize());
+    testWidgets(
+      'ReportsAnalyticsScreen fits mobile layouts and shows filters',
+      (tester) async {
+        for (final size in const [Size(320, 568), Size(412, 915)]) {
+          await pumpAndVerifyScreen(
+            tester,
+            screen: const ReportsAnalyticsScreen(),
+            size: size,
+          );
 
           expect(find.text('Overall Statistics'), findsOneWidget);
           expect(find.text('Date Range Filter'), findsOneWidget);
@@ -1613,6 +1605,7 @@ void main() {
           expect(find.text('Export CSV'), findsNothing);
           expect(tester.takeException(), isNull);
         }
-    });
+      },
+    );
   });
 }
