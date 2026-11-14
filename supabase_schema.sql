@@ -315,6 +315,40 @@ ALTER TABLE public.applications DROP CONSTRAINT IF EXISTS applications_status_ch
 UPDATE public.applications SET student_id = user_id WHERE student_id IS NULL AND user_id IS NOT NULL;
 UPDATE public.applications SET user_id = student_id WHERE user_id IS NULL AND student_id IS NOT NULL;
 
+CREATE OR REPLACE FUNCTION public.enforce_project_application_limit()
+RETURNS TRIGGER
+LANGUAGE plpgsql
+SECURITY DEFINER
+SET search_path = public, pg_temp
+AS $$
+DECLARE
+  application_count INTEGER;
+BEGIN
+  PERFORM 1
+  FROM public.projects
+  WHERE id = NEW.project_id
+  FOR UPDATE;
+
+  SELECT COUNT(DISTINCT COALESCE(student_id, user_id))
+  INTO application_count
+  FROM public.applications
+  WHERE project_id = NEW.project_id;
+
+  IF application_count >= 10 THEN
+    RAISE EXCEPTION 'PROJECT_APPLICATION_LIMIT_REACHED'
+      USING ERRCODE = 'P0001';
+  END IF;
+
+  RETURN NEW;
+END;
+$$;
+
+DROP TRIGGER IF EXISTS applications_project_limit ON public.applications;
+CREATE TRIGGER applications_project_limit
+  BEFORE INSERT ON public.applications
+  FOR EACH ROW
+  EXECUTE FUNCTION public.enforce_project_application_limit();
+
 -- ----------------------------------------------------------------------------
 -- 7. CERTIFICATES TABLE
 -- ----------------------------------------------------------------------------

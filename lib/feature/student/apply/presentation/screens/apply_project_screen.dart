@@ -184,7 +184,11 @@ class _ApplyProjectScreenState extends State<ApplyProjectScreen> {
       if (!mounted) return;
       ScaffoldMessenger.of(context).showSnackBar(
         SnackBar(
-          content: Text('Error submitting application: $e'),
+          content: Text(
+            e is StateError
+                ? e.message.toString()
+                : 'Error submitting application: $e',
+          ),
           backgroundColor: AppColors.statusClosed,
         ),
       );

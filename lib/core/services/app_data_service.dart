@@ -3,7 +3,8 @@ import 'dart:convert';
 import 'package:flutter/foundation.dart';
 import 'package:flutter/scheduler.dart';
 import 'package:shared_preferences/shared_preferences.dart';
-import 'package:supabase_flutter/supabase_flutter.dart' show FileOptions;
+import 'package:supabase_flutter/supabase_flutter.dart'
+    show FileOptions, PostgrestException;
 import 'package:link_vibe/core/services/supabase_helper.dart';
 
 /// Central Persistent & Supabase-Synchronized Data Service for SkillBridge.
@@ -886,9 +887,10 @@ class AppDataService extends ChangeNotifier {
       final skillsList = SupabaseHelper.parseStringList(app['skills']);
       final companyId = project['companyId']?.toString();
 
+    try {
       await supabase.from('applications').insert({
         'id': app['id'],
-      'project_id': projectId,
+        'project_id': projectId,
         'project_title': app['title'],
         if (SupabaseHelper.isUuid(companyId)) 'company_id': companyId,
         'company_name': app['company'],
@@ -897,7 +899,8 @@ class AppDataService extends ChangeNotifier {
         'student_name': studentName,
         'student_email': _userEmail.isNotEmpty ? _userEmail : user.email,
         'university': university,
-        'student_degree': _profile['degree']?.toString() ?? 'BS Computer Science',
+        'student_degree':
+            _profile['degree']?.toString() ?? 'BS Computer Science',
         'student_department':
             _profile['department']?.toString() ?? 'Computer Science',
         'student_semester': _profile['semester']?.toString() ?? 'Senior',
@@ -911,6 +914,14 @@ class AppDataService extends ChangeNotifier {
         'status': 'Pending',
         'progress': 0.0,
       });
+    } on PostgrestException catch (e) {
+      if (e.message.contains('PROJECT_APPLICATION_LIMIT_REACHED')) {
+        throw StateError(
+          'This project has reached the maximum of 10 student applications.',
+        );
+      }
+      rethrow;
+    }
   }
 
   // ===========================================================================
@@ -1128,8 +1139,8 @@ class AppDataService extends ChangeNotifier {
             'github_url': _profile['githubUrl'] ?? '',
             'portfolio_url': _profile['portfolioUrl'] ?? '',
             'resume_url': _profile['resumeUrl'] ?? '',
-            'skills': _skills,
-            'updated_at': DateTime.now().toIso8601String(),
+        'skills': _skills,
+        'updated_at': DateTime.now().toIso8601String(),
           };
 
           if (existing != null) {
@@ -1183,8 +1194,8 @@ class AppDataService extends ChangeNotifier {
       await supabase
           .from('students')
           .update({
-        'skills': _skills,
-        'updated_at': DateTime.now().toIso8601String(),
+            'skills': _skills,
+            'updated_at': DateTime.now().toIso8601String(),
           })
           .eq('user_id', user.id);
     } catch (e) {
