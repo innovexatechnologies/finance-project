@@ -295,7 +295,8 @@ class AppDataService extends ChangeNotifier {
         for (final raw in projectRows) {
           final p = Map<String, dynamic>.from(raw);
           final status = p['status']?.toString() ?? 'Open';
-          if (status == 'Removed' || status == 'Flagged') continue;
+          final sLower = status.toLowerCase();
+          if (sLower != 'open') continue;
 
           final postedBy =
               p['posted_by']?.toString() ?? p['user_id']?.toString() ?? '';

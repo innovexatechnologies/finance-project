@@ -8,6 +8,7 @@ import 'package:link_vibe/feature/company/presentation/widgets/company_executive
 import 'package:link_vibe/feature/company/services/company_profile_service.dart';
 import 'package:link_vibe/feature/company/services/company_project_service.dart';
 
+import 'package:link_vibe/screens/company/company_escrow_payment_screen.dart';
 import 'applicants_screen.dart';
 import 'company_project_detail_screen.dart';
 import 'post_project_screen.dart';
@@ -42,11 +43,12 @@ class _CompanyProjectsListScreenState extends State<CompanyProjectsListScreen> {
   final List<String> _statusFilters = [
     'All',
     'Open',
+    'Pending Verification',
+    'Pending Payment',
     'In Progress',
     'Completed',
     'Draft',
     'Closed',
-    'Cancelled',
   ];
 
   @override
@@ -1165,42 +1167,77 @@ class _CompanyProjectsListScreenState extends State<CompanyProjectsListScreen> {
                             ),
                           ),
                           const SizedBox(width: 10),
-                          Material(
-                            color: Colors.transparent,
-                            child: InkWell(
-                              borderRadius: BorderRadius.circular(11),
-                              onTap: () => _openProjectDetails(project),
-                              child: Ink(
+                          if (project.isPendingPayment)
+                            ElevatedButton.icon(
+                              style: ElevatedButton.styleFrom(
+                                backgroundColor: AppColors.statusPending,
+                                foregroundColor: Colors.white,
                                 padding: const EdgeInsets.symmetric(
-                                  horizontal: 14,
-                                  vertical: 8.5,
+                                  horizontal: 12,
+                                  vertical: 7,
                                 ),
-                                decoration: BoxDecoration(
-                                  color: AppColors.deepNavy,
-                                  borderRadius: BorderRadius.circular(11),
+                                shape: RoundedRectangleBorder(
+                                  borderRadius: BorderRadius.circular(10),
                                 ),
-                                child: Row(
-                                  mainAxisSize: MainAxisSize.min,
-                                  children: [
-                                    Text(
-                                      'Manage',
-                                      style: GoogleFonts.poppins(
-                                        fontSize: 12.5,
-                                        fontWeight: FontWeight.w600,
+                                elevation: 0,
+                              ),
+                              icon: const Icon(Icons.payment_rounded, size: 14),
+                              label: Text(
+                                'Deposit Escrow',
+                                style: GoogleFonts.inter(
+                                  fontSize: 12,
+                                  fontWeight: FontWeight.bold,
+                                ),
+                              ),
+                              onPressed: () async {
+                                await Navigator.push(
+                                  context,
+                                  MaterialPageRoute(
+                                    builder: (_) => CompanyEscrowPaymentScreen(
+                                      project: project,
+                                    ),
+                                  ),
+                                );
+                                _refreshProjects();
+                              },
+                            )
+                          else
+                            Material(
+                              color: Colors.transparent,
+                              child: InkWell(
+                                borderRadius: BorderRadius.circular(11),
+                                onTap: () => _openProjectDetails(project),
+                                child: Ink(
+                                  padding: const EdgeInsets.symmetric(
+                                    horizontal: 14,
+                                    vertical: 8.5,
+                                  ),
+                                  decoration: BoxDecoration(
+                                    color: AppColors.deepNavy,
+                                    borderRadius: BorderRadius.circular(11),
+                                  ),
+                                  child: Row(
+                                    mainAxisSize: MainAxisSize.min,
+                                    children: [
+                                      Text(
+                                        'Manage',
+                                        style: GoogleFonts.poppins(
+                                          fontSize: 12.5,
+                                          fontWeight: FontWeight.w600,
+                                          color: Colors.white,
+                                        ),
+                                      ),
+                                      const SizedBox(width: 4),
+                                      const Icon(
+                                        Icons.arrow_forward_rounded,
+                                        size: 15,
                                         color: Colors.white,
                                       ),
-                                    ),
-                                    const SizedBox(width: 4),
-                                    const Icon(
-                                      Icons.arrow_forward_rounded,
-                                      size: 15,
-                                      color: Colors.white,
-                                    ),
-                                  ],
+                                    ],
+                                  ),
                                 ),
                               ),
                             ),
-                          ),
                         ],
                       ),
                     ],

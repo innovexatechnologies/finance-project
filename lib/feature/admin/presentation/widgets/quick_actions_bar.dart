@@ -2,6 +2,8 @@ import 'package:flutter/material.dart';
 import 'package:google_fonts/google_fonts.dart';
 import 'package:link_vibe/core/constants/app_colors.dart';
 import 'package:link_vibe/core/widgets/app_empty_state.dart';
+import 'package:link_vibe/feature/admin/presentation/screens/admin_payment_methods_screen.dart';
+import 'package:link_vibe/screens/admin/admin_project_approvals_screen.dart';
 import 'package:link_vibe/feature/admin/presentation/screens/company_management_screen.dart';
 import 'package:link_vibe/feature/admin/presentation/screens/company_verifications_screen.dart';
 import 'package:link_vibe/feature/admin/presentation/screens/project_management_screen.dart';
@@ -26,6 +28,22 @@ class QuickActionsBar extends StatelessWidget {
     Navigator.push(
       context,
       MaterialPageRoute(builder: (_) => const CompanyManagementScreen()),
+    );
+  }
+
+  void _openEscrowAccounts(BuildContext context) {
+    Navigator.push(
+      context,
+      MaterialPageRoute(builder: (_) => const AdminPaymentMethodsScreen()),
+    );
+  }
+
+  void _openPaymentApprovals(BuildContext context) {
+    Navigator.push(
+      context,
+      MaterialPageRoute(
+        builder: (_) => const AdminProjectApprovalsScreen(),
+      ),
     );
   }
 
@@ -439,6 +457,20 @@ class QuickActionsBar extends StatelessWidget {
                 color: AppColors.success,
                 bgColor: AppColors.successBg,
                 onTap: () => _openViewReports(context),
+              ),
+              _buildActionButton(
+                label: 'Escrow Accounts',
+                icon: Icons.account_balance_wallet_outlined,
+                color: AppColors.primary,
+                bgColor: AppColors.lightIceBlue,
+                onTap: () => _openEscrowAccounts(context),
+              ),
+              _buildActionButton(
+                label: 'Payment Approvals',
+                icon: Icons.fact_check_outlined,
+                color: AppColors.warning,
+                bgColor: AppColors.warningBg,
+                onTap: () => _openPaymentApprovals(context),
               ),
             ],
           ),

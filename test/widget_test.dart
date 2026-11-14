@@ -17,8 +17,15 @@ import 'package:link_vibe/core/widgets/student_avatar.dart';
 import 'package:link_vibe/feature/admin/models/admin_company_model.dart';
 import 'package:link_vibe/feature/admin/models/admin_project_model.dart';
 import 'package:link_vibe/feature/admin/models/admin_student_model.dart';
+import 'package:link_vibe/feature/admin/models/platform_payment_method_model.dart';
 import 'package:link_vibe/feature/admin/presentation/screens/admin_dashboard_screen.dart';
+import 'package:link_vibe/screens/company/company_escrow_payment_screen.dart';
+import 'package:link_vibe/screens/admin/admin_project_approvals_screen.dart';
+import 'package:link_vibe/services/company_escrow_service.dart';
+import 'package:link_vibe/services/admin_project_approval_service.dart';
+import 'package:link_vibe/services/student_project_service.dart';
 import 'package:link_vibe/feature/admin/presentation/screens/admin_login_screen.dart';
+import 'package:link_vibe/feature/admin/presentation/screens/admin_payment_methods_screen.dart';
 import 'package:link_vibe/feature/admin/presentation/screens/admin_settings_screen.dart';
 import 'package:link_vibe/feature/admin/presentation/screens/application_monitoring_screen.dart';
 import 'package:link_vibe/feature/admin/presentation/screens/certificate_management_screen.dart';
@@ -29,6 +36,7 @@ import 'package:link_vibe/feature/admin/presentation/screens/reports_analytics_s
 import 'package:link_vibe/feature/admin/presentation/screens/student_management_screen.dart';
 import 'package:link_vibe/feature/admin/services/admin_auth_service.dart';
 import 'package:link_vibe/feature/admin/services/admin_company_service.dart';
+import 'package:link_vibe/feature/admin/services/admin_payment_service.dart';
 import 'package:link_vibe/feature/admin/services/admin_project_service.dart';
 import 'package:link_vibe/feature/admin/services/admin_settings_service.dart';
 import 'package:link_vibe/feature/admin/services/admin_student_service.dart';
@@ -1682,6 +1690,7 @@ void main() {
           CertificateManagementScreen(),
           ReportsAnalyticsScreen(),
           AdminSettingsScreen(),
+          AdminPaymentMethodsScreen(),
         ]) {
           await tester.pumpWidget(MaterialApp(home: screen));
           await tester.pump(const Duration(milliseconds: 250));
@@ -1689,5 +1698,128 @@ void main() {
         }
       },
     );
+
+    test('PlatformPaymentMethodModel serialization and properties', () {
+      const model = PlatformPaymentMethodModel(
+        id: 'ppm-test-01',
+        methodType: PlatformPaymentMethodType.bankAccount,
+        bankOrWalletName: 'Meezan Bank Ltd',
+        accountTitle: 'SkillBridge Escrow Services Pvt Ltd',
+        accountNumber: '01020304050607',
+        iban: 'PK36MEZN0001020304050607',
+        instructions: 'Include Project ID in memo.',
+        isActive: true,
+      );
+
+      final json = model.toJson();
+      expect(json['method_type'], PlatformPaymentMethodType.bankAccount);
+      expect(json['account_number'], '01020304050607');
+      expect(json['is_active'], isTrue);
+
+      final restored = PlatformPaymentMethodModel.fromJson(json);
+      expect(restored.id, 'ppm-test-01');
+      expect(restored.bankOrWalletName, 'Meezan Bank Ltd');
+      expect(restored.accountTitle, 'SkillBridge Escrow Services Pvt Ltd');
+      expect(restored.iban, 'PK36MEZN0001020304050607');
+      expect(restored.icon, Icons.account_balance_rounded);
+      expect(restored.brandColor, AppColors.primary);
+
+      final copied = restored.copyWith(isActive: false);
+      expect(copied.isActive, isFalse);
+      expect(copied.accountTitle, restored.accountTitle);
+    });
+
+    test('AdminPaymentService state and offline fallback operations', () async {
+      final service = AdminPaymentService();
+      await service.loadPaymentMethods();
+      expect(service.paymentMethodsNotifier.value.isNotEmpty, isTrue);
+
+      const customMethod = PlatformPaymentMethodModel(
+        id: 'ppm-custom-test',
+        methodType: PlatformPaymentMethodType.jazzCash,
+        bankOrWalletName: 'JazzCash Merchant',
+        accountTitle: 'SkillBridge Escrow JazzCash',
+        accountNumber: '03009988776',
+        isActive: true,
+      );
+
+      await service.addPaymentMethod(customMethod);
+      expect(
+        service.paymentMethodsNotifier.value.any((m) => m.id == 'ppm-custom-test'),
+        isTrue,
+      );
+
+      await service.toggleMethodStatus('ppm-custom-test', false);
+      final toggled = service.paymentMethodsNotifier.value
+          .firstWhere((m) => m.id == 'ppm-custom-test');
+      expect(toggled.isActive, isFalse);
+
+      await service.deletePaymentMethod('ppm-custom-test');
+      expect(
+        service.paymentMethodsNotifier.value.any((m) => m.id == 'ppm-custom-test'),
+        isFalse,
+      );
+    });
+
+    test('CompanyEscrowService, AdminProjectApprovalService & StudentProjectService integration', () async {
+      final escrowService = CompanyEscrowService();
+      final approvalService = AdminProjectApprovalService();
+      final studentService = StudentProjectService();
+
+      // 1. Company creates draft project with pending_payment
+      final draft = ProjectModel(
+        id: 'test-escrow-p1',
+        title: 'Flutter Mobile App Challenge',
+        category: 'Mobile App Development',
+        description: 'Build enterprise flutter widgets with test cases.',
+        deadline: '2026-12-01',
+        companyName: 'TechCorp Pakistan',
+        companyId: 'company-uuid-1',
+        status: 'pending_payment',
+        escrowAmount: 25000.0,
+      );
+
+      final createdDraft = await escrowService.createProjectDraft(
+        project: draft,
+        escrowAmount: 25000.0,
+      );
+      expect(createdDraft.isPendingPayment, isTrue);
+      expect(createdDraft.escrowAmount, 25000.0);
+
+      // 2. Company fetches active payment accounts
+      final activeMethods = await escrowService.getActivePlatformPaymentMethods();
+      expect(activeMethods.isNotEmpty, isTrue);
+
+      // 3. Company submits payment proof -> pending_verification
+      final proofSubmitted = await escrowService.submitPaymentProof(
+        projectId: 'test-escrow-p1',
+        transactionId: 'TXN-99887766',
+        paymentMethodUsed: 'Meezan Bank Ltd',
+        receiptUrl: 'https://supabase.mock.storage/payment_receipts/receipt.jpg',
+      );
+      expect(proofSubmitted, isTrue);
+
+      // 4. Admin loads pending approvals
+      final pendingList = await approvalService.loadPendingApprovals();
+      expect(pendingList.any((p) => p.id == 'test-escrow-p1'), isTrue);
+
+      // 5. Admin approves -> status becomes Open, isEscrowVerified = true
+      final approved = await approvalService.markAsPaidAndPublish(
+        projectId: 'test-escrow-p1',
+      );
+      expect(approved, isTrue);
+      expect(approvalService.pendingApprovalsNotifier.value.any((p) => p.id == 'test-escrow-p1'), isFalse);
+
+      // 6. Student service fetches verified open projects
+      final verifiedOpen = await studentService.fetchVerifiedOpenProjects();
+      expect(verifiedOpen.any((p) => p.id == 'test-escrow-p1' && p.isEscrowVerified), isTrue);
+
+      // 7. Verify filtering
+      final filtered = studentService.filterProjects(
+        category: 'Mobile App Development',
+        searchQuery: 'Flutter',
+      );
+      expect(filtered.any((p) => p.id == 'test-escrow-p1'), isTrue);
+    });
   });
 }

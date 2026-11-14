@@ -12,12 +12,20 @@ class ProjectModel {
   final String additionalInstructions;
   final String companyName;
   final String companyId;
-  final String status; // 'Draft', 'Open', 'In Progress', 'Completed', 'Closed', 'Cancelled'
+  final String status; // 'pending_payment', 'pending_verification', 'Open', 'In Progress', 'Completed', 'Closed', 'Cancelled', 'rejected'
   final String duration;
   final int applicantsCount;
   final String? assignedStudent;
   final double progress;
   final String createdAt;
+
+  // Upfront Custodial Escrow Fields
+  final double escrowAmount;
+  final String? paymentMethodUsed;
+  final String? transactionId;
+  final String? paymentReceiptUrl;
+  final bool isEscrowVerified;
+  final String? verifiedAt;
 
   ProjectModel({
     required this.id,
@@ -39,7 +47,19 @@ class ProjectModel {
     this.assignedStudent,
     this.progress = 0.0,
     this.createdAt = 'Just now',
+    this.escrowAmount = 0.0,
+    this.paymentMethodUsed,
+    this.transactionId,
+    this.paymentReceiptUrl,
+    this.isEscrowVerified = false,
+    this.verifiedAt,
   });
+
+  bool get isPendingPayment => status.toLowerCase() == 'pending_payment';
+  bool get isPendingVerification =>
+      status.toLowerCase() == 'pending_verification';
+  bool get isLiveVerified =>
+      (status.toLowerCase() == 'open') && isEscrowVerified;
 
   ProjectModel copyWith({
     String? id,
@@ -61,6 +81,12 @@ class ProjectModel {
     String? assignedStudent,
     double? progress,
     String? createdAt,
+    double? escrowAmount,
+    String? paymentMethodUsed,
+    String? transactionId,
+    String? paymentReceiptUrl,
+    bool? isEscrowVerified,
+    String? verifiedAt,
   }) {
     return ProjectModel(
       id: id ?? this.id,
@@ -83,6 +109,12 @@ class ProjectModel {
       assignedStudent: assignedStudent ?? this.assignedStudent,
       progress: progress ?? this.progress,
       createdAt: createdAt ?? this.createdAt,
+      escrowAmount: escrowAmount ?? this.escrowAmount,
+      paymentMethodUsed: paymentMethodUsed ?? this.paymentMethodUsed,
+      transactionId: transactionId ?? this.transactionId,
+      paymentReceiptUrl: paymentReceiptUrl ?? this.paymentReceiptUrl,
+      isEscrowVerified: isEscrowVerified ?? this.isEscrowVerified,
+      verifiedAt: verifiedAt ?? this.verifiedAt,
     );
   }
 
@@ -107,12 +139,18 @@ class ProjectModel {
           (json['additional_instructions'] ?? '').toString(),
       companyName: (json['company_name'] ?? '').toString(),
       companyId: (json['company_id'] ?? '').toString(),
-      status: (json['status'] ?? 'Open').toString(),
+      status: (json['status'] ?? 'pending_payment').toString(),
       duration: (json['duration'] ?? '3-4 weeks').toString(),
       applicantsCount: (json['applicants_count'] as num?)?.toInt() ?? 0,
       assignedStudent: json['assigned_student']?.toString(),
       progress: (json['progress'] as num?)?.toDouble() ?? 0.0,
       createdAt: (json['created_at'] ?? 'Recently').toString(),
+      escrowAmount: (json['escrow_amount'] as num?)?.toDouble() ?? 0.0,
+      paymentMethodUsed: json['payment_method_used']?.toString(),
+      transactionId: json['transaction_id']?.toString(),
+      paymentReceiptUrl: json['payment_receipt_url']?.toString(),
+      isEscrowVerified: json['is_escrow_verified'] == true,
+      verifiedAt: json['verified_at']?.toString(),
     );
   }
 
@@ -137,6 +175,12 @@ class ProjectModel {
       'assigned_student': assignedStudent,
       'progress': progress,
       'created_at': createdAt,
+      'escrow_amount': escrowAmount,
+      'payment_method_used': paymentMethodUsed,
+      'transaction_id': transactionId,
+      'payment_receipt_url': paymentReceiptUrl,
+      'is_escrow_verified': isEscrowVerified,
+      'verified_at': verifiedAt,
     };
   }
 }

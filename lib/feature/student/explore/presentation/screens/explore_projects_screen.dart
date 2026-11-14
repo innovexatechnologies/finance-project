@@ -124,7 +124,8 @@ class _ExploreProjectsScreenState extends State<ExploreProjectsScreen> {
 
     return allProjects.where((p) {
       final status = (p['status']?.toString() ?? 'Open').toLowerCase();
-      if (status == 'removed' || status == 'flagged' || status == 'closed') {
+      // Only live open projects verified by Admin are shown to students
+      if (status != 'open') {
         return false;
       }
 
@@ -547,7 +548,42 @@ class _ExploreProjectsScreenState extends State<ExploreProjectsScreen> {
                     ),
                   ),
                   const SizedBox(width: 6),
-                  StatusBadge(label: status),
+                  Column(
+                    crossAxisAlignment: CrossAxisAlignment.end,
+                    children: [
+                      StatusBadge(label: status),
+                      const SizedBox(height: 4),
+                      Container(
+                        padding: const EdgeInsets.symmetric(
+                          horizontal: 6,
+                          vertical: 2,
+                        ),
+                        decoration: BoxDecoration(
+                          color: AppColors.successBg,
+                          borderRadius: BorderRadius.circular(5),
+                          border: Border.all(
+                            color: AppColors.success.withValues(alpha: 0.3),
+                          ),
+                        ),
+                        child: const Row(
+                          mainAxisSize: MainAxisSize.min,
+                          children: [
+                            Icon(Icons.shield_rounded,
+                                size: 10, color: AppColors.success),
+                            SizedBox(width: 3),
+                            Text(
+                              'Escrow Funded',
+                              style: TextStyle(
+                                fontSize: 9.5,
+                                fontWeight: FontWeight.bold,
+                                color: AppColors.success,
+                              ),
+                            ),
+                          ],
+                        ),
+                      ),
+                    ],
+                  ),
                 ],
               ),
               const SizedBox(height: 12),
