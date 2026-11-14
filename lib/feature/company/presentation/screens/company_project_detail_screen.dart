@@ -6,6 +6,7 @@ import 'package:link_vibe/core/widgets/status_badge.dart';
 import 'package:link_vibe/feature/company/models/project_model.dart';
 import 'package:link_vibe/feature/company/services/company_profile_service.dart';
 import 'package:link_vibe/feature/company/services/company_project_service.dart';
+import 'package:link_vibe/services/escrow_lifecycle_service.dart';
 import 'applicants_screen.dart';
 import 'assigned_projects_screen.dart';
 import 'post_project_screen.dart';
@@ -190,6 +191,253 @@ class _CompanyProjectDetailScreenState
     }
   }
 
+  Future<void> _handleApproveAndRelease(ProjectModel project) async {
+    final feedbackController = TextEditingController();
+    final escrow = project.escrowAmount > 0 ? project.escrowAmount : 10000.0;
+    final commission = double.parse((escrow * 0.10).toStringAsFixed(2));
+    final studentPayout = double.parse((escrow - commission).toStringAsFixed(2));
+
+    final confirmed = await showDialog<bool>(
+      context: context,
+      builder: (ctx) => AlertDialog(
+        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
+        title: const Row(
+          children: [
+            Icon(Icons.check_circle_rounded, color: AppColors.statusOpen),
+            SizedBox(width: 10),
+            Expanded(
+              child: Text(
+                'Approve & Release Payment',
+                style: TextStyle(fontSize: 17, fontWeight: FontWeight.bold),
+              ),
+            ),
+          ],
+        ),
+        content: SingleChildScrollView(
+          child: Column(
+            mainAxisSize: MainAxisSize.min,
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              Text(
+                'Are you satisfied with the deliverables submitted for "${project.title}"?',
+                style: const TextStyle(fontSize: 13, height: 1.4),
+              ),
+              const SizedBox(height: 14),
+              Container(
+                padding: const EdgeInsets.all(12),
+                decoration: BoxDecoration(
+                  color: AppColors.successBg,
+                  borderRadius: BorderRadius.circular(10),
+                  border: Border.all(color: AppColors.statusOpen.withValues(alpha: 0.3)),
+                ),
+                child: Column(
+                  children: [
+                    Row(
+                      mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                      children: [
+                        const Text('Escrow Funded Budget:', style: TextStyle(fontSize: 12)),
+                        Text('PKR ${escrow.toStringAsFixed(0)}',
+                            style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 12)),
+                      ],
+                    ),
+                    const SizedBox(height: 4),
+                    Row(
+                      mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                      children: [
+                        const Text('Platform Fee (10%):',
+                            style: TextStyle(fontSize: 12, color: AppColors.grayText)),
+                        Text('- PKR ${commission.toStringAsFixed(0)}',
+                            style: const TextStyle(fontSize: 12, color: AppColors.grayText)),
+                      ],
+                    ),
+                    const Divider(height: 12),
+                    Row(
+                      mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                      children: [
+                        const Text('Net Student Payout (90%):',
+                            style: TextStyle(
+                                fontSize: 12.5,
+                                fontWeight: FontWeight.bold,
+                                color: Color(0xFF14532D))),
+                        Text('PKR ${studentPayout.toStringAsFixed(0)}',
+                            style: const TextStyle(
+                                fontWeight: FontWeight.bold,
+                                fontSize: 13,
+                                color: Color(0xFF14532D))),
+                      ],
+                    ),
+                  ],
+                ),
+              ),
+              const SizedBox(height: 14),
+              TextField(
+                controller: feedbackController,
+                maxLines: 2,
+                decoration: InputDecoration(
+                  labelText: 'Supervisor Feedback (Optional)',
+                  hintText: 'Great work on deliverables...',
+                  border: OutlineInputBorder(borderRadius: BorderRadius.circular(10)),
+                ),
+              ),
+            ],
+          ),
+        ),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.pop(ctx, false),
+            child: const Text('Cancel'),
+          ),
+          ElevatedButton(
+            style: ElevatedButton.styleFrom(
+              backgroundColor: const Color(0xFF059669),
+              foregroundColor: Colors.white,
+              shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(10)),
+            ),
+            onPressed: () => Navigator.pop(ctx, true),
+            child: const Text('Confirm Release'),
+          ),
+        ],
+      ),
+    );
+
+    if (confirmed == true && mounted) {
+      final success = await EscrowLifecycleService().approveAndReleasePayment(
+        projectId: project.id,
+        companyFeedback: feedbackController.text.trim().isEmpty ? null : feedbackController.text.trim(),
+      );
+
+      if (!mounted) return;
+      if (success) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(
+            content: Text('Payment approved! Admin notified to execute transfer to Student.'),
+            backgroundColor: Color(0xFF059669),
+            behavior: SnackBarBehavior.floating,
+          ),
+        );
+      } else {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(
+            content: Text(EscrowLifecycleService().lastError ?? 'Unable to approve payout.'),
+            backgroundColor: AppColors.error,
+            behavior: SnackBarBehavior.floating,
+          ),
+        );
+      }
+    }
+  }
+
+  Future<void> _handleRaiseDispute(ProjectModel project) async {
+    final reasonController = TextEditingController();
+
+    final confirmed = await showDialog<bool>(
+      context: context,
+      builder: (ctx) => AlertDialog(
+        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
+        title: const Row(
+          children: [
+            Icon(Icons.gavel_rounded, color: AppColors.error),
+            SizedBox(width: 10),
+            Expanded(
+              child: Text(
+                'Raise Escrow Dispute',
+                style: TextStyle(fontSize: 17, fontWeight: FontWeight.bold),
+              ),
+            ),
+          ],
+        ),
+        content: SingleChildScrollView(
+          child: Column(
+            mainAxisSize: MainAxisSize.min,
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              Text(
+                'Are deliverables for "${project.title}" incomplete or unsatisfactory? Raising a dispute halts auto-release and transfers the case to Skill Bridge Admin for mediation.',
+                style: const TextStyle(fontSize: 13, height: 1.4),
+              ),
+              const SizedBox(height: 14),
+              TextField(
+                controller: reasonController,
+                maxLines: 3,
+                decoration: InputDecoration(
+                  labelText: 'Dispute Reason / Details *',
+                  hintText: 'Explain the issue with deliverables in detail...',
+                  border: OutlineInputBorder(borderRadius: BorderRadius.circular(10)),
+                ),
+              ),
+            ],
+          ),
+        ),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.pop(ctx, false),
+            child: const Text('Cancel'),
+          ),
+          ElevatedButton(
+            style: ElevatedButton.styleFrom(
+              backgroundColor: AppColors.error,
+              foregroundColor: Colors.white,
+              shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(10)),
+            ),
+            onPressed: () {
+              if (reasonController.text.trim().isEmpty) {
+                ScaffoldMessenger.of(ctx).showSnackBar(
+                  const SnackBar(content: Text('Please describe the reason for dispute.')),
+                );
+                return;
+              }
+              Navigator.pop(ctx, true);
+            },
+            child: const Text('Raise Dispute'),
+          ),
+        ],
+      ),
+    );
+
+    if (confirmed == true && mounted) {
+      final caseId = await EscrowLifecycleService().raiseDispute(
+        projectId: project.id,
+        reason: reasonController.text.trim(),
+        raisedByRole: 'Company (${project.companyName})',
+      );
+
+      if (!mounted) return;
+      if (caseId != null) {
+        showDialog(
+          context: context,
+          builder: (c) => AlertDialog(
+            shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
+            title: const Row(
+              children: [
+                Icon(Icons.info_outline_rounded, color: AppColors.primaryBlue),
+                SizedBox(width: 8),
+                Text('Dispute Registered'),
+              ],
+            ),
+            content: Text(
+              'Dispute has been logged under Case $caseId.\n\nSkill Bridge Administrator has been alerted and will review project submissions, communication logs, and issue a binding resolution (100% Student, 100% Refund, or 50-50 Split).',
+              style: const TextStyle(fontSize: 13.5, height: 1.45),
+            ),
+            actions: [
+              TextButton(
+                onPressed: () => Navigator.pop(c),
+                child: const Text('Understood'),
+              ),
+            ],
+          ),
+        );
+      } else {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(
+            content: Text(EscrowLifecycleService().lastError ?? 'Failed to raise dispute.'),
+            backgroundColor: AppColors.error,
+            behavior: SnackBarBehavior.floating,
+          ),
+        );
+      }
+    }
+  }
+
   @override
   Widget build(BuildContext context) {
     return ValueListenableBuilder<List<ProjectModel>>(
@@ -352,6 +600,16 @@ class _CompanyProjectDetailScreenState
           body: ListView(
             padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 20),
             children: [
+              if (project.isDelivered) ...[
+                _buildDeliveryReviewCard(project),
+                const SizedBox(height: 16),
+              ] else if (project.isDisputed) ...[
+                _buildDisputeStatusBanner(project),
+                const SizedBox(height: 16),
+              ] else if (project.isReadyForPayout) ...[
+                _buildPayoutStatusBanner(project),
+                const SizedBox(height: 16),
+              ],
               if (hasAssignedStudents)
                 Container(
                   margin: const EdgeInsets.only(bottom: 16),
@@ -805,6 +1063,36 @@ class _CompanyProjectDetailScreenState
             ),
           ],
         ),
+        if (project.isDelivered) ...[
+          const SizedBox(height: 12),
+          SizedBox(
+            width: double.infinity,
+            child: ElevatedButton.icon(
+              style: ElevatedButton.styleFrom(
+                backgroundColor: const Color(0xFF059669),
+                foregroundColor: Colors.white,
+                padding: const EdgeInsets.symmetric(vertical: 12),
+              ),
+              onPressed: () => _handleApproveAndRelease(project),
+              icon: const Icon(Icons.check_circle_outline_rounded, size: 18),
+              label: const Text('Approve & Release Payment to Student'),
+            ),
+          ),
+          const SizedBox(height: 8),
+          SizedBox(
+            width: double.infinity,
+            child: OutlinedButton.icon(
+              style: OutlinedButton.styleFrom(
+                foregroundColor: AppColors.error,
+                side: const BorderSide(color: AppColors.error),
+                padding: const EdgeInsets.symmetric(vertical: 12),
+              ),
+              onPressed: () => _handleRaiseDispute(project),
+              icon: const Icon(Icons.gavel_rounded, size: 18),
+              label: const Text('Raise Dispute / Contest Deliverables'),
+            ),
+          ),
+        ],
         if (isDraft) ...[
           const SizedBox(height: 12),
           SizedBox(
@@ -913,6 +1201,221 @@ class _CompanyProjectDetailScreenState
           ),
         ),
       ],
+    );
+  }
+
+  Widget _buildDeliveryReviewCard(ProjectModel project) {
+    final remaining = project.autoReleaseRemaining;
+    return Container(
+      padding: const EdgeInsets.all(16),
+      decoration: BoxDecoration(
+        color: const Color(0xFFFFFBEB),
+        borderRadius: BorderRadius.circular(16),
+        border: Border.all(color: const Color(0xFFF59E0B)),
+        boxShadow: [
+          BoxShadow(
+            color: Colors.amber.withValues(alpha: 0.08),
+            blurRadius: 10,
+            offset: const Offset(0, 3),
+          ),
+        ],
+      ),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Row(
+            children: [
+              Container(
+                padding: const EdgeInsets.all(8),
+                decoration: BoxDecoration(
+                  color: const Color(0xFFFEF3C7),
+                  borderRadius: BorderRadius.circular(10),
+                ),
+                child: const Icon(
+                  Icons.hourglass_top_rounded,
+                  color: Color(0xFFD97706),
+                  size: 22,
+                ),
+              ),
+              const SizedBox(width: 12),
+              Expanded(
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    Text(
+                      'Student Delivered Deliverables',
+                      style: GoogleFonts.poppins(
+                        fontSize: 15,
+                        fontWeight: FontWeight.w700,
+                        color: const Color(0xFF92400E),
+                      ),
+                    ),
+                    Text(
+                      '5-Day Auto-Release Window: $remaining remaining',
+                      style: GoogleFonts.inter(
+                        fontSize: 12,
+                        fontWeight: FontWeight.w600,
+                        color: const Color(0xFFB45309),
+                      ),
+                    ),
+                  ],
+                ),
+              ),
+            ],
+          ),
+          const SizedBox(height: 12),
+          Text(
+            'The assigned student has submitted completed deliverables. Please review the output. If accepted, approve the payment to trigger transfer. If no dispute or approval is registered within 5 days, Skill Bridge Admin will automatically release funds to the student.',
+            style: GoogleFonts.inter(
+              fontSize: 12.5,
+              color: const Color(0xFF78350F),
+              height: 1.45,
+            ),
+          ),
+          const SizedBox(height: 16),
+          Row(
+            children: [
+              Expanded(
+                child: ElevatedButton.icon(
+                  style: ElevatedButton.styleFrom(
+                    backgroundColor: const Color(0xFF059669),
+                    foregroundColor: Colors.white,
+                    padding: const EdgeInsets.symmetric(vertical: 12),
+                    shape: RoundedRectangleBorder(
+                      borderRadius: BorderRadius.circular(10),
+                    ),
+                  ),
+                  icon: const Icon(Icons.check_circle_outline_rounded, size: 18),
+                  label: const Text('Approve & Release'),
+                  onPressed: () => _handleApproveAndRelease(project),
+                ),
+              ),
+              const SizedBox(width: 10),
+              Expanded(
+                child: OutlinedButton.icon(
+                  style: OutlinedButton.styleFrom(
+                    foregroundColor: AppColors.error,
+                    side: const BorderSide(color: AppColors.error),
+                    padding: const EdgeInsets.symmetric(vertical: 12),
+                    shape: RoundedRectangleBorder(
+                      borderRadius: BorderRadius.circular(10),
+                    ),
+                  ),
+                  icon: const Icon(Icons.gavel_rounded, size: 18),
+                  label: const Text('Raise Dispute'),
+                  onPressed: () => _handleRaiseDispute(project),
+                ),
+              ),
+            ],
+          ),
+        ],
+      ),
+    );
+  }
+
+  Widget _buildDisputeStatusBanner(ProjectModel project) {
+    return Container(
+      padding: const EdgeInsets.all(16),
+      decoration: BoxDecoration(
+        color: const Color(0xFFFEF2F2),
+        borderRadius: BorderRadius.circular(16),
+        border: Border.all(color: const Color(0xFFEF4444)),
+      ),
+      child: Row(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Container(
+            padding: const EdgeInsets.all(8),
+            decoration: BoxDecoration(
+              color: const Color(0xFFFEE2E2),
+              borderRadius: BorderRadius.circular(10),
+            ),
+            child: const Icon(
+              Icons.gavel_rounded,
+              color: Color(0xFFDC2626),
+              size: 22,
+            ),
+          ),
+          const SizedBox(width: 12),
+          Expanded(
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Text(
+                  'Dispute Active [${project.disputeCaseId ?? "#SB-CASE"}]',
+                  style: GoogleFonts.poppins(
+                    fontSize: 15,
+                    fontWeight: FontWeight.w700,
+                    color: const Color(0xFF991B1B),
+                  ),
+                ),
+                const SizedBox(height: 3),
+                Text(
+                  'Reason: "${project.disputeReason ?? "Deliverables under contention"}". Skill Bridge Admin is reviewing submissions and will issue a binding decision (100% Student, 100% Company, or 50-50 Split).',
+                  style: GoogleFonts.inter(
+                    fontSize: 12.5,
+                    color: const Color(0xFFB91C1C),
+                    height: 1.4,
+                  ),
+                ),
+              ],
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+
+  Widget _buildPayoutStatusBanner(ProjectModel project) {
+    return Container(
+      padding: const EdgeInsets.all(16),
+      decoration: BoxDecoration(
+        color: const Color(0xFFECFDF5),
+        borderRadius: BorderRadius.circular(16),
+        border: Border.all(color: const Color(0xFF10B981)),
+      ),
+      child: Row(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Container(
+            padding: const EdgeInsets.all(8),
+            decoration: BoxDecoration(
+              color: const Color(0xFFD1FAE5),
+              borderRadius: BorderRadius.circular(10),
+            ),
+            child: const Icon(
+              Icons.payments_rounded,
+              color: Color(0xFF059669),
+              size: 22,
+            ),
+          ),
+          const SizedBox(width: 12),
+          Expanded(
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Text(
+                  'Ready for Payout',
+                  style: GoogleFonts.poppins(
+                    fontSize: 15,
+                    fontWeight: FontWeight.w700,
+                    color: const Color(0xFF065F46),
+                  ),
+                ),
+                const SizedBox(height: 3),
+                Text(
+                  'Payout resolution applied (${project.payoutType ?? "full_student"}). Skill Bridge Admin will execute account transfer.',
+                  style: GoogleFonts.inter(
+                    fontSize: 12.5,
+                    color: const Color(0xFF047857),
+                    height: 1.4,
+                  ),
+                ),
+              ],
+            ),
+          ),
+        ],
+      ),
     );
   }
 }

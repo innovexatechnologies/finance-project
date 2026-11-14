@@ -12,7 +12,7 @@ class ProjectModel {
   final String additionalInstructions;
   final String companyName;
   final String companyId;
-  final String status; // 'pending_payment', 'pending_verification', 'Open', 'In Progress', 'Completed', 'Closed', 'Cancelled', 'rejected'
+  final String status; // 'pending_payment', 'pending_verification', 'Open', 'In Progress', 'delivered', 'ready_for_payout', 'completed', 'disputed', 'rejected', 'Closed', 'Cancelled'
   final String duration;
   final int applicantsCount;
   final String? assignedStudent;
@@ -26,6 +26,18 @@ class ProjectModel {
   final String? paymentReceiptUrl;
   final bool isEscrowVerified;
   final String? verifiedAt;
+
+  // Delivery, Auto-Release & Dispute Fields
+  final String? deliveredAt;
+  final String? disputeCaseId;
+  final String? disputeReason;
+  final String? payoutType; // 'full_student', 'auto_released_student', 'full_company_refund', 'split_50_50'
+  final double? studentPayoutAmount;
+  final double? companyRefundAmount;
+  final double? platformCommissionAmount;
+  final String? payoutTransactionId;
+  final String? payoutReceiptUrl;
+  final String? completedAt;
 
   ProjectModel({
     required this.id,
@@ -53,6 +65,16 @@ class ProjectModel {
     this.paymentReceiptUrl,
     this.isEscrowVerified = false,
     this.verifiedAt,
+    this.deliveredAt,
+    this.disputeCaseId,
+    this.disputeReason,
+    this.payoutType,
+    this.studentPayoutAmount,
+    this.companyRefundAmount,
+    this.platformCommissionAmount,
+    this.payoutTransactionId,
+    this.payoutReceiptUrl,
+    this.completedAt,
   });
 
   bool get isPendingPayment => status.toLowerCase() == 'pending_payment';
@@ -60,6 +82,29 @@ class ProjectModel {
       status.toLowerCase() == 'pending_verification';
   bool get isLiveVerified =>
       (status.toLowerCase() == 'open') && isEscrowVerified;
+  bool get isInProgress =>
+      status.toLowerCase() == 'in_progress' ||
+      status.toLowerCase() == 'in progress';
+  bool get isDelivered => status.toLowerCase() == 'delivered';
+  bool get isDisputed => status.toLowerCase() == 'disputed';
+  bool get isReadyForPayout => status.toLowerCase() == 'ready_for_payout';
+  bool get isCompleted => status.toLowerCase() == 'completed';
+
+  DateTime? get deliveredAtDateTime =>
+      deliveredAt != null ? DateTime.tryParse(deliveredAt!) : null;
+
+  bool get isAutoReleaseEligible {
+    if (!isDelivered || deliveredAtDateTime == null) return false;
+    return DateTime.now().difference(deliveredAtDateTime!).inHours >= 120; // 5 days
+  }
+
+  Duration get autoReleaseRemaining {
+    if (deliveredAtDateTime == null) return Duration.zero;
+    final diff = DateTime.now().difference(deliveredAtDateTime!);
+    const fiveDays = Duration(days: 5);
+    if (diff >= fiveDays) return Duration.zero;
+    return fiveDays - diff;
+  }
 
   ProjectModel copyWith({
     String? id,
@@ -87,6 +132,16 @@ class ProjectModel {
     String? paymentReceiptUrl,
     bool? isEscrowVerified,
     String? verifiedAt,
+    String? deliveredAt,
+    String? disputeCaseId,
+    String? disputeReason,
+    String? payoutType,
+    double? studentPayoutAmount,
+    double? companyRefundAmount,
+    double? platformCommissionAmount,
+    String? payoutTransactionId,
+    String? payoutReceiptUrl,
+    String? completedAt,
   }) {
     return ProjectModel(
       id: id ?? this.id,
@@ -115,6 +170,17 @@ class ProjectModel {
       paymentReceiptUrl: paymentReceiptUrl ?? this.paymentReceiptUrl,
       isEscrowVerified: isEscrowVerified ?? this.isEscrowVerified,
       verifiedAt: verifiedAt ?? this.verifiedAt,
+      deliveredAt: deliveredAt ?? this.deliveredAt,
+      disputeCaseId: disputeCaseId ?? this.disputeCaseId,
+      disputeReason: disputeReason ?? this.disputeReason,
+      payoutType: payoutType ?? this.payoutType,
+      studentPayoutAmount: studentPayoutAmount ?? this.studentPayoutAmount,
+      companyRefundAmount: companyRefundAmount ?? this.companyRefundAmount,
+      platformCommissionAmount:
+          platformCommissionAmount ?? this.platformCommissionAmount,
+      payoutTransactionId: payoutTransactionId ?? this.payoutTransactionId,
+      payoutReceiptUrl: payoutReceiptUrl ?? this.payoutReceiptUrl,
+      completedAt: completedAt ?? this.completedAt,
     );
   }
 
@@ -151,6 +217,19 @@ class ProjectModel {
       paymentReceiptUrl: json['payment_receipt_url']?.toString(),
       isEscrowVerified: json['is_escrow_verified'] == true,
       verifiedAt: json['verified_at']?.toString(),
+      deliveredAt: json['delivered_at']?.toString(),
+      disputeCaseId: json['dispute_case_id']?.toString(),
+      disputeReason: json['dispute_reason']?.toString(),
+      payoutType: json['payout_type']?.toString(),
+      studentPayoutAmount:
+          (json['student_payout_amount'] as num?)?.toDouble(),
+      companyRefundAmount:
+          (json['company_refund_amount'] as num?)?.toDouble(),
+      platformCommissionAmount:
+          (json['platform_commission_amount'] as num?)?.toDouble(),
+      payoutTransactionId: json['payout_transaction_id']?.toString(),
+      payoutReceiptUrl: json['payout_receipt_url']?.toString(),
+      completedAt: json['completed_at']?.toString(),
     );
   }
 
@@ -181,6 +260,20 @@ class ProjectModel {
       'payment_receipt_url': paymentReceiptUrl,
       'is_escrow_verified': isEscrowVerified,
       'verified_at': verifiedAt,
+      if (deliveredAt != null) 'delivered_at': deliveredAt,
+      if (disputeCaseId != null) 'dispute_case_id': disputeCaseId,
+      if (disputeReason != null) 'dispute_reason': disputeReason,
+      if (payoutType != null) 'payout_type': payoutType,
+      if (studentPayoutAmount != null)
+        'student_payout_amount': studentPayoutAmount,
+      if (companyRefundAmount != null)
+        'company_refund_amount': companyRefundAmount,
+      if (platformCommissionAmount != null)
+        'platform_commission_amount': platformCommissionAmount,
+      if (payoutTransactionId != null)
+        'payout_transaction_id': payoutTransactionId,
+      if (payoutReceiptUrl != null) 'payout_receipt_url': payoutReceiptUrl,
+      if (completedAt != null) 'completed_at': completedAt,
     };
   }
 }

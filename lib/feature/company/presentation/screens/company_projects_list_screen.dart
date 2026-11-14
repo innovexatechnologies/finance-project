@@ -46,6 +46,8 @@ class _CompanyProjectsListScreenState extends State<CompanyProjectsListScreen> {
     'Pending Verification',
     'Pending Payment',
     'In Progress',
+    'Delivered',
+    'Disputed',
     'Completed',
     'Draft',
     'Closed',

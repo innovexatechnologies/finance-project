@@ -24,6 +24,9 @@ import 'package:link_vibe/screens/admin/admin_project_approvals_screen.dart';
 import 'package:link_vibe/services/company_escrow_service.dart';
 import 'package:link_vibe/services/admin_project_approval_service.dart';
 import 'package:link_vibe/services/student_project_service.dart';
+import 'package:link_vibe/services/escrow_lifecycle_service.dart';
+import 'package:link_vibe/services/admin_dispute_payout_service.dart';
+import 'package:link_vibe/screens/admin/admin_dispute_resolution_screen.dart';
 import 'package:link_vibe/feature/admin/presentation/screens/admin_login_screen.dart';
 import 'package:link_vibe/feature/admin/presentation/screens/admin_payment_methods_screen.dart';
 import 'package:link_vibe/feature/admin/presentation/screens/admin_settings_screen.dart';
@@ -1820,6 +1823,122 @@ void main() {
         searchQuery: 'Flutter',
       );
       expect(filtered.any((p) => p.id == 'test-escrow-p1'), isTrue);
+    });
+
+    test('EscrowLifecycleService delivery, approval, and dispute lifecycle transitions', () async {
+      final lifecycle = EscrowLifecycleService();
+
+      // Case ID generation
+      final caseId = lifecycle.generateCaseId();
+      expect(caseId.startsWith('#SB-'), isTrue);
+
+      // 1. Deliver Project
+      final delivered = await lifecycle.deliverProject(
+        projectId: 'test-escrow-p1',
+        workUrl: 'https://github.com/student/solution',
+        summary: 'Completed all responsive widgets and tests.',
+      );
+      expect(delivered, isTrue);
+
+      final project = CompanyProjectService().allProjects.firstWhere((p) => p.id == 'test-escrow-p1');
+      expect(project.isDelivered, isTrue);
+      expect(project.deliveredAt != null, isTrue);
+
+      // 2. Company approves and releases
+      final approved = await lifecycle.approveAndReleasePayment(
+        projectId: 'test-escrow-p1',
+        companyFeedback: 'Outstanding work!',
+      );
+      expect(approved, isTrue);
+
+      final payoutReadyProject = CompanyProjectService().allProjects.firstWhere((p) => p.id == 'test-escrow-p1');
+      expect(payoutReadyProject.isReadyForPayout, isTrue);
+      expect(payoutReadyProject.payoutType, 'full_student');
+      expect(payoutReadyProject.platformCommissionAmount, 2500.0);
+      expect(payoutReadyProject.studentPayoutAmount, 22500.0);
+      expect(payoutReadyProject.companyRefundAmount, 0.0);
+
+      // 3. Dispute transition test
+      final disputeCase = await lifecycle.raiseDispute(
+        projectId: 'test-escrow-p1',
+        reason: 'Code submitted has failing tests.',
+        raisedByRole: 'Company (TechCorp Pakistan)',
+      );
+      expect(disputeCase != null && disputeCase.startsWith('#SB-'), isTrue);
+
+      final disputedProject = CompanyProjectService().allProjects.firstWhere((p) => p.id == 'test-escrow-p1');
+      expect(disputedProject.isDisputed, isTrue);
+      expect(disputedProject.disputeCaseId, disputeCase);
+    });
+
+    test('AdminDisputePayoutService 3-way resolution calculations and final payout', () async {
+      final payoutService = AdminDisputePayoutService();
+
+      // Load disputes
+      final disputes = await payoutService.loadDisputedProjects();
+      expect(disputes.any((p) => p.id == 'test-escrow-p1'), isTrue);
+
+      // Decision 1: 50-50 Split
+      final splitApplied = await payoutService.resolveDisputeDecision(
+        projectId: 'test-escrow-p1',
+        decision: AdminDisputeDecision.split5050,
+        adminNotes: 'Partial work accepted, remainder refunded.',
+      );
+      expect(splitApplied, isTrue);
+
+      var p = CompanyProjectService().allProjects.firstWhere((p) => p.id == 'test-escrow-p1');
+      expect(p.isReadyForPayout, isTrue);
+      expect(p.payoutType, 'split_50_50');
+      expect(p.platformCommissionAmount, 2500.0);
+      expect(p.studentPayoutAmount, 11250.0);
+      expect(p.companyRefundAmount, 11250.0);
+
+      // Decision 2: 100% Student
+      final fullStudentApplied = await payoutService.resolveDisputeDecision(
+        projectId: 'test-escrow-p1',
+        decision: AdminDisputeDecision.fullStudent,
+        adminNotes: 'Deliverables verified compliant.',
+      );
+      expect(fullStudentApplied, isTrue);
+
+      p = CompanyProjectService().allProjects.firstWhere((p) => p.id == 'test-escrow-p1');
+      expect(p.studentPayoutAmount, 22500.0);
+      expect(p.companyRefundAmount, 0.0);
+
+      // Decision 3: 100% Company Refund
+      final fullRefundApplied = await payoutService.resolveDisputeDecision(
+        projectId: 'test-escrow-p1',
+        decision: AdminDisputeDecision.fullCompanyRefund,
+        adminNotes: 'Deliverables failed requirements.',
+      );
+      expect(fullRefundApplied, isTrue);
+
+      p = CompanyProjectService().allProjects.firstWhere((p) => p.id == 'test-escrow-p1');
+      expect(p.studentPayoutAmount, 0.0);
+      expect(p.companyRefundAmount, 25000.0);
+
+      // Final payout completion
+      final completed = await payoutService.completePayout(
+        projectId: 'test-escrow-p1',
+        transactionId: 'PAYOUT-TXN-12345',
+        receiptUrl: 'https://storage.mock/receipts/payout.png',
+      );
+      expect(completed, isTrue);
+
+      p = CompanyProjectService().allProjects.firstWhere((p) => p.id == 'test-escrow-p1');
+      expect(p.isCompleted, isTrue);
+      expect(p.payoutTransactionId, 'PAYOUT-TXN-12345');
+    });
+
+    testWidgets('AdminDisputeResolutionScreen renders tabs and UI cleanly', (tester) async {
+      await tester.pumpWidget(
+        const MaterialApp(
+          home: AdminDisputeResolutionScreen(),
+        ),
+      );
+      await tester.pump(const Duration(milliseconds: 200));
+      expect(find.byType(AdminDisputeResolutionScreen), findsOneWidget);
+      expect(find.text('Escrow Disputes & Payout Desk'), findsOneWidget);
     });
   });
 }

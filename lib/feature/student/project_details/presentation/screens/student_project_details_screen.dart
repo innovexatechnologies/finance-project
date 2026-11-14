@@ -7,6 +7,7 @@ import 'package:link_vibe/core/services/share_service.dart';
 import 'package:link_vibe/core/services/supabase_helper.dart';
 import 'package:link_vibe/core/widgets/status_badge.dart';
 import 'package:link_vibe/feature/student/apply/presentation/screens/apply_project_screen.dart';
+import 'package:link_vibe/services/escrow_lifecycle_service.dart';
 
 class StudentProjectDetailsScreen extends StatelessWidget {
   final Map<String, dynamic> project;
@@ -33,6 +34,116 @@ class StudentProjectDetailsScreen extends StatelessWidget {
       ScaffoldMessenger.of(context).showSnackBar(
         const SnackBar(content: Text('Could not open project attachment link.')),
       );
+    }
+  }
+
+  Future<void> _handleDeliverProject(
+    BuildContext context,
+    String projectId,
+    String title,
+  ) async {
+    final notesController = TextEditingController();
+    final urlController = TextEditingController();
+
+    final confirmed = await showDialog<bool>(
+      context: context,
+      builder: (ctx) => AlertDialog(
+        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
+        title: Row(
+          children: [
+            Container(
+              padding: const EdgeInsets.all(8),
+              decoration: BoxDecoration(
+                color: const Color(0xFF10B981).withValues(alpha: 0.15),
+                borderRadius: BorderRadius.circular(10),
+              ),
+              child: const Icon(Icons.send_rounded, color: Color(0xFF059669)),
+            ),
+            const SizedBox(width: 10),
+            const Expanded(
+              child: Text(
+                'Deliver Project',
+                style: TextStyle(fontSize: 18, fontWeight: FontWeight.bold),
+              ),
+            ),
+          ],
+        ),
+        content: SingleChildScrollView(
+          child: Column(
+            mainAxisSize: MainAxisSize.min,
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              Text(
+                'Ready to submit completed deliverables for "$title"? Skill Bridge will notify the company. They have 5 days to review, after which payment is automatically released.',
+                style: const TextStyle(fontSize: 13, height: 1.4),
+              ),
+              const SizedBox(height: 14),
+              TextField(
+                controller: urlController,
+                decoration: InputDecoration(
+                  labelText: 'Deliverables Link / GitHub / Drive (Optional)',
+                  hintText: 'https://github.com/...',
+                  border: OutlineInputBorder(borderRadius: BorderRadius.circular(10)),
+                  prefixIcon: const Icon(Icons.link_rounded),
+                ),
+              ),
+              const SizedBox(height: 12),
+              TextField(
+                controller: notesController,
+                maxLines: 2,
+                decoration: InputDecoration(
+                  labelText: 'Delivery Notes (Optional)',
+                  hintText: 'Summary of completed work and notes for the supervisor...',
+                  border: OutlineInputBorder(borderRadius: BorderRadius.circular(10)),
+                ),
+              ),
+            ],
+          ),
+        ),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.pop(ctx, false),
+            child: const Text('Cancel'),
+          ),
+          ElevatedButton(
+            style: ElevatedButton.styleFrom(
+              backgroundColor: const Color(0xFF059669),
+              foregroundColor: Colors.white,
+              shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(10)),
+            ),
+            onPressed: () => Navigator.pop(ctx, true),
+            child: const Text('Confirm Delivery'),
+          ),
+        ],
+      ),
+    );
+
+    if (confirmed == true && context.mounted) {
+      final success = await EscrowLifecycleService().deliverProject(
+        projectId: projectId,
+        workUrl: urlController.text.trim().isEmpty ? null : urlController.text.trim(),
+        summary: notesController.text.trim().isEmpty ? null : notesController.text.trim(),
+      );
+
+      if (!context.mounted) return;
+      if (success) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(
+            content: Text('Project delivered successfully! 5-day review period started.'),
+            backgroundColor: Color(0xFF059669),
+            behavior: SnackBarBehavior.floating,
+          ),
+        );
+        Navigator.pop(context);
+      } else {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(
+            content: Text(EscrowLifecycleService().lastError ?? 'Failed to deliver project.'),
+            backgroundColor: AppColors.error,
+            behavior: SnackBarBehavior.floating,
+          ),
+        );
+      }
     }
   }
 
@@ -70,6 +181,19 @@ class StudentProjectDetailsScreen extends StatelessWidget {
     final skills = SupabaseHelper.parseStringList(project['skills']);
     final isVerified = project['isVerified'] == true;
     final status = project['status']?.toString().trim() ?? 'Open';
+    final rawBudget = project['budgetAmount'] ??
+        project['budget'] ??
+        project['escrow_amount'] ??
+        project['escrowAmount'] ??
+        15000;
+    final budgetNum = (rawBudget is num)
+        ? rawBudget
+        : double.tryParse(rawBudget.toString().replaceAll(RegExp(r'[^0-9.]'), '')) ?? 15000;
+    final escrowFormatted = budgetNum.toStringAsFixed(0);
+    final statusLower = status.toLowerCase();
+    final isInProgress = statusLower == 'in_progress' || statusLower == 'in progress';
+    final isDelivered = statusLower == 'delivered';
+    final isDisputed = statusLower == 'disputed';
 
     final requirementBullets = _splitLines(requirementsRaw);
     final deliverableBullets = _splitLines(deliverablesRaw);
@@ -323,6 +447,121 @@ class StudentProjectDetailsScreen extends StatelessWidget {
                           ),
                           const SizedBox(height: 22),
 
+                          // Escrow Trust Banner for Awarded/In Progress/Delivered/Disputed Projects
+                          if (isInProgress || isDelivered) ...[
+                            Container(
+                              width: double.infinity,
+                              margin: const EdgeInsets.only(bottom: 16),
+                              padding: const EdgeInsets.all(14),
+                              decoration: BoxDecoration(
+                                color: const Color(0xFFECFDF5),
+                                borderRadius: BorderRadius.circular(14),
+                                border: Border.all(
+                                  color: const Color(0xFF10B981).withValues(alpha: 0.35),
+                                ),
+                              ),
+                              child: Row(
+                                crossAxisAlignment: CrossAxisAlignment.start,
+                                children: [
+                                  Container(
+                                    padding: const EdgeInsets.all(7),
+                                    decoration: BoxDecoration(
+                                      color: const Color(0xFF10B981).withValues(alpha: 0.15),
+                                      shape: BoxShape.circle,
+                                    ),
+                                    child: const Icon(
+                                      Icons.verified_user_rounded,
+                                      color: Color(0xFF059669),
+                                      size: 20,
+                                    ),
+                                  ),
+                                  const SizedBox(width: 12),
+                                  Expanded(
+                                    child: Column(
+                                      crossAxisAlignment: CrossAxisAlignment.start,
+                                      children: [
+                                        Text(
+                                          'Escrow Protected: PKR $escrowFormatted is securely held by Skill Bridge Admin',
+                                          style: GoogleFonts.inter(
+                                            fontSize: 13,
+                                            fontWeight: FontWeight.w700,
+                                            color: const Color(0xFF065F46),
+                                          ),
+                                        ),
+                                        const SizedBox(height: 3),
+                                        Text(
+                                          isDelivered
+                                              ? 'Deliverables submitted. Payout releases upon company approval or after 5-day review window.'
+                                              : 'Your payout is pre-funded and held in platform custody. Submit deliverables to trigger release.',
+                                          style: GoogleFonts.inter(
+                                            fontSize: 11.5,
+                                            color: const Color(0xFF047857),
+                                            height: 1.35,
+                                          ),
+                                        ),
+                                      ],
+                                    ),
+                                  ),
+                                ],
+                              ),
+                            ),
+                          ] else if (isDisputed) ...[
+                            Container(
+                              width: double.infinity,
+                              margin: const EdgeInsets.only(bottom: 16),
+                              padding: const EdgeInsets.all(14),
+                              decoration: BoxDecoration(
+                                color: const Color(0xFFFEF2F2),
+                                borderRadius: BorderRadius.circular(14),
+                                border: Border.all(
+                                  color: const Color(0xFFEF4444).withValues(alpha: 0.35),
+                                ),
+                              ),
+                              child: Row(
+                                crossAxisAlignment: CrossAxisAlignment.start,
+                                children: [
+                                  Container(
+                                    padding: const EdgeInsets.all(7),
+                                    decoration: BoxDecoration(
+                                      color: const Color(0xFFEF4444).withValues(alpha: 0.15),
+                                      shape: BoxShape.circle,
+                                    ),
+                                    child: const Icon(
+                                      Icons.gavel_rounded,
+                                      color: Color(0xFFDC2626),
+                                      size: 20,
+                                    ),
+                                  ),
+                                  const SizedBox(width: 12),
+                                  Expanded(
+                                    child: Column(
+                                      crossAxisAlignment: CrossAxisAlignment.start,
+                                      children: [
+                                        Text(
+                                          'Dispute Under Review: Case ${project['dispute_case_id'] ?? project['disputeCaseId'] ?? '#SB-PENDING'}',
+                                          style: GoogleFonts.inter(
+                                            fontSize: 13,
+                                            fontWeight: FontWeight.w700,
+                                            color: const Color(0xFF991B1B),
+                                          ),
+                                        ),
+                                        const SizedBox(height: 3),
+                                        const Text(
+                                          'Skill Bridge Admin is mediating this project to decide 100% student, refund, or 50-50 split.',
+                                          style: TextStyle(
+                                            fontSize: 11.5,
+                                            color: Color(0xFFB91C1C),
+                                            height: 1.35,
+                                          ),
+                                        ),
+                                      ],
+                                    ),
+                                  ),
+                                ],
+                              ),
+                            ),
+                          ],
+
                           _buildSectionCard(
                             title: 'About this Project',
                             child: Text(
@@ -484,58 +723,115 @@ class StudentProjectDetailsScreen extends StatelessWidget {
                   Expanded(
                     child: SizedBox(
                       height: 48,
-                      child: ElevatedButton(
-                        style: ElevatedButton.styleFrom(
-                          backgroundColor: hasApplied
-                              ? AppColors.statusOpen
-                              : (isClosed
-                                  ? AppColors.grayText
-                                  : AppColors.primaryBlue),
-                          foregroundColor: Colors.white,
-                          shape: RoundedRectangleBorder(
-                            borderRadius: BorderRadius.circular(14),
-                          ),
-                        ),
-                        onPressed: isClosed && !hasApplied
-                            ? null
-                            : () {
-                                if (hasApplied) {
-                                  ScaffoldMessenger.of(context).showSnackBar(
-                                    const SnackBar(
-                                      content: Text(
-                                        'You have already applied! Check status in My Applications.',
+                      child: isInProgress
+                          ? ElevatedButton.icon(
+                              style: ElevatedButton.styleFrom(
+                                backgroundColor: const Color(0xFF059669),
+                                foregroundColor: Colors.white,
+                                shape: RoundedRectangleBorder(
+                                  borderRadius: BorderRadius.circular(14),
+                                ),
+                              ),
+                              onPressed: () => _handleDeliverProject(context, id, title),
+                              icon: const Icon(Icons.send_rounded, size: 18),
+                              label: Text(
+                                'Deliver Project',
+                                style: GoogleFonts.poppins(
+                                  fontSize: 15,
+                                  fontWeight: FontWeight.bold,
+                                ),
+                              ),
+                            )
+                          : isDelivered
+                              ? ElevatedButton.icon(
+                                  style: ElevatedButton.styleFrom(
+                                    backgroundColor: const Color(0xFFD97706),
+                                    foregroundColor: Colors.white,
+                                    shape: RoundedRectangleBorder(
+                                      borderRadius: BorderRadius.circular(14),
+                                    ),
+                                  ),
+                                  onPressed: null,
+                                  icon: const Icon(Icons.hourglass_top_rounded, size: 18),
+                                  label: Text(
+                                    'Delivered (Under Review)',
+                                    style: GoogleFonts.poppins(
+                                      fontSize: 14,
+                                      fontWeight: FontWeight.w600,
+                                    ),
+                                  ),
+                                )
+                              : isDisputed
+                                  ? ElevatedButton.icon(
+                                      style: ElevatedButton.styleFrom(
+                                        backgroundColor: const Color(0xFFDC2626),
+                                        foregroundColor: Colors.white,
+                                        shape: RoundedRectangleBorder(
+                                          borderRadius: BorderRadius.circular(14),
+                                        ),
+                                      ),
+                                      onPressed: null,
+                                      icon: const Icon(Icons.gavel_rounded, size: 18),
+                                      label: Text(
+                                        'Disputed (In Mediation)',
+                                        style: GoogleFonts.poppins(
+                                          fontSize: 14,
+                                          fontWeight: FontWeight.w600,
+                                        ),
+                                      ),
+                                    )
+                                  : ElevatedButton(
+                                      style: ElevatedButton.styleFrom(
+                                        backgroundColor: hasApplied
+                                            ? AppColors.statusOpen
+                                            : (isClosed
+                                                ? AppColors.grayText
+                                                : AppColors.primaryBlue),
+                                        foregroundColor: Colors.white,
+                                        shape: RoundedRectangleBorder(
+                                          borderRadius: BorderRadius.circular(14),
+                                        ),
+                                      ),
+                                      onPressed: isClosed && !hasApplied
+                                          ? null
+                                          : () {
+                                              if (hasApplied) {
+                                                ScaffoldMessenger.of(context).showSnackBar(
+                                                  const SnackBar(
+                                                    content: Text(
+                                                      'You have already applied! Check status in My Applications.',
+                                                    ),
+                                                  ),
+                                                );
+                                              } else {
+                                                Navigator.push(
+                                                  context,
+                                                  MaterialPageRoute(
+                                                    builder: (_) =>
+                                                        ApplyProjectScreen(project: project),
+                                                  ),
+                                                );
+                                              }
+                                            },
+                                      child: Row(
+                                        mainAxisAlignment: MainAxisAlignment.center,
+                                        children: [
+                                          Text(
+                                            hasApplied
+                                                ? 'Applied ✓'
+                                                : (isClosed ? 'Closed' : 'Apply Now'),
+                                            style: GoogleFonts.poppins(
+                                              fontSize: 15,
+                                              fontWeight: FontWeight.bold,
+                                            ),
+                                          ),
+                                          if (!hasApplied && !isClosed) ...[
+                                            const SizedBox(width: 6),
+                                            const Icon(Icons.arrow_forward_rounded, size: 16),
+                                          ],
+                                        ],
                                       ),
                                     ),
-                                  );
-                                } else {
-                                  Navigator.push(
-                                    context,
-                                    MaterialPageRoute(
-                                      builder: (_) =>
-                                          ApplyProjectScreen(project: project),
-                                    ),
-                                  );
-                                }
-                              },
-                        child: Row(
-                          mainAxisAlignment: MainAxisAlignment.center,
-                          children: [
-                            Text(
-                              hasApplied
-                                  ? 'Applied ✓'
-                                  : (isClosed ? 'Closed' : 'Apply Now'),
-                              style: GoogleFonts.poppins(
-                                fontSize: 15,
-                                fontWeight: FontWeight.bold,
-                              ),
-                            ),
-                            if (!hasApplied && !isClosed) ...[
-                              const SizedBox(width: 6),
-                              const Icon(Icons.arrow_forward_rounded, size: 16),
-                            ],
-                          ],
-                        ),
-                      ),
                     ),
                   ),
                 ],

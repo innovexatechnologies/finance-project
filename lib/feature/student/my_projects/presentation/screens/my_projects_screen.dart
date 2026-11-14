@@ -11,6 +11,7 @@ import 'package:link_vibe/feature/student/certificates/presentation/screens/cert
 import 'package:link_vibe/feature/student/feedback/presentation/screens/feedback_screen.dart';
 import 'package:link_vibe/feature/student/project_details/presentation/screens/student_project_details_screen.dart';
 import 'package:link_vibe/feature/student/submissions/presentation/screens/submit_work_screen.dart';
+import 'package:link_vibe/services/escrow_lifecycle_service.dart';
 
 class MyProjectsScreen extends StatefulWidget {
   const MyProjectsScreen({super.key});
@@ -82,6 +83,116 @@ class _MyProjectsScreenState extends State<MyProjectsScreen>
     }
   }
 
+  Future<void> _handleDeliverProject(
+    BuildContext context,
+    String projectId,
+    String title,
+  ) async {
+    final notesController = TextEditingController();
+    final urlController = TextEditingController();
+
+    final confirmed = await showDialog<bool>(
+      context: context,
+      builder: (ctx) => AlertDialog(
+        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
+        title: Row(
+          children: [
+            Container(
+              padding: const EdgeInsets.all(8),
+              decoration: BoxDecoration(
+                color: const Color(0xFF10B981).withValues(alpha: 0.15),
+                borderRadius: BorderRadius.circular(10),
+              ),
+              child: const Icon(Icons.send_rounded, color: Color(0xFF059669)),
+            ),
+            const SizedBox(width: 10),
+            const Expanded(
+              child: Text(
+                'Deliver Project',
+                style: TextStyle(fontSize: 17, fontWeight: FontWeight.bold),
+              ),
+            ),
+          ],
+        ),
+        content: SingleChildScrollView(
+          child: Column(
+            mainAxisSize: MainAxisSize.min,
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              Text(
+                'Submit deliverables for "$title"? The company has 5 days to inspect work or funds will automatically release to you.',
+                style: const TextStyle(fontSize: 13, height: 1.4),
+              ),
+              const SizedBox(height: 14),
+              TextField(
+                controller: urlController,
+                decoration: InputDecoration(
+                  labelText: 'Deliverables Link / GitHub / Drive (Optional)',
+                  hintText: 'https://github.com/...',
+                  border: OutlineInputBorder(borderRadius: BorderRadius.circular(10)),
+                  prefixIcon: const Icon(Icons.link_rounded),
+                ),
+              ),
+              const SizedBox(height: 12),
+              TextField(
+                controller: notesController,
+                maxLines: 2,
+                decoration: InputDecoration(
+                  labelText: 'Delivery Notes (Optional)',
+                  hintText: 'Summary of completed work...',
+                  border: OutlineInputBorder(borderRadius: BorderRadius.circular(10)),
+                ),
+              ),
+            ],
+          ),
+        ),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.pop(ctx, false),
+            child: const Text('Cancel'),
+          ),
+          ElevatedButton(
+            style: ElevatedButton.styleFrom(
+              backgroundColor: const Color(0xFF059669),
+              foregroundColor: Colors.white,
+              shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(10)),
+            ),
+            onPressed: () => Navigator.pop(ctx, true),
+            child: const Text('Confirm Delivery'),
+          ),
+        ],
+      ),
+    );
+
+    if (confirmed == true && context.mounted) {
+      final success = await EscrowLifecycleService().deliverProject(
+        projectId: projectId,
+        workUrl: urlController.text.trim().isEmpty ? null : urlController.text.trim(),
+        summary: notesController.text.trim().isEmpty ? null : notesController.text.trim(),
+      );
+
+      if (!context.mounted) return;
+      if (success) {
+        _refreshProjects(showFeedback: false);
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(
+            content: Text('Project delivered successfully! 5-day review period started.'),
+            backgroundColor: Color(0xFF059669),
+            behavior: SnackBarBehavior.floating,
+          ),
+        );
+      } else {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(
+            content: Text(EscrowLifecycleService().lastError ?? 'Failed to deliver project.'),
+            backgroundColor: AppColors.error,
+            behavior: SnackBarBehavior.floating,
+          ),
+        );
+      }
+    }
+  }
+
   @override
   Widget build(BuildContext context) {
     return ListenableBuilder(
@@ -90,16 +201,23 @@ class _MyProjectsScreenState extends State<MyProjectsScreen>
         final allApps = AppDataService.instance.getApplications();
 
         final activeList = allApps
-            .where((a) =>
-                a['status'] == 'In Progress' ||
-                a['status'] == 'Under Review' ||
-                a['status'] == 'Revision Requested' ||
-                a['status'] == 'Accepted' ||
-                a['status'] == 'Shortlisted')
+            .where((a) {
+              final s = (a['status'] ?? '').toString().toLowerCase();
+              return s == 'in progress' ||
+                  s == 'in_progress' ||
+                  s == 'under review' ||
+                  s == 'revision requested' ||
+                  s == 'accepted' ||
+                  s == 'shortlisted' ||
+                  s == 'delivered' ||
+                  s == 'disputed' ||
+                  s == 'ready_for_payout';
+            })
             .toList();
 
-        final completedList =
-            allApps.where((a) => a['status'] == 'Completed').toList();
+        final completedList = allApps
+            .where((a) => (a['status'] ?? '').toString().toLowerCase() == 'completed')
+            .toList();
 
         return Scaffold(
           backgroundColor: AppColors.background,
@@ -217,6 +335,10 @@ class _MyProjectsScreenState extends State<MyProjectsScreen>
 
   Widget _buildProjectItem(Map<String, dynamic> project, bool isCompleted) {
     final status = project['status']?.toString() ?? 'In Progress';
+    final statusLower = status.toLowerCase();
+    final isInProgress = statusLower == 'in progress' || statusLower == 'in_progress';
+    final isDelivered = statusLower == 'delivered';
+    final isDisputed = statusLower == 'disputed';
     final company = (project['company']?.toString().trim().isNotEmpty == true)
         ? project['company'].toString().trim()
         : 'Partner Company';
@@ -338,6 +460,98 @@ class _MyProjectsScreenState extends State<MyProjectsScreen>
               ],
             ),
 
+            if (isInProgress) ...[
+              const SizedBox(height: 10),
+              Container(
+                width: double.infinity,
+                padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 7),
+                decoration: BoxDecoration(
+                  color: const Color(0xFFECFDF5),
+                  borderRadius: BorderRadius.circular(8),
+                  border: Border.all(
+                    color: const Color(0xFF10B981).withValues(alpha: 0.3),
+                  ),
+                ),
+                child: const Row(
+                  children: [
+                    Icon(Icons.verified_user_rounded,
+                        size: 14, color: Color(0xFF059669)),
+                    SizedBox(width: 6),
+                    Expanded(
+                      child: Text(
+                        'Escrow Protected: Funds securely held by Skill Bridge Admin',
+                        style: TextStyle(
+                          fontSize: 11,
+                          fontWeight: FontWeight.w600,
+                          color: Color(0xFF065F46),
+                        ),
+                      ),
+                    ),
+                  ],
+                ),
+              ),
+            ] else if (isDelivered) ...[
+              const SizedBox(height: 10),
+              Container(
+                width: double.infinity,
+                padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 7),
+                decoration: BoxDecoration(
+                  color: const Color(0xFFFFFBEB),
+                  borderRadius: BorderRadius.circular(8),
+                  border: Border.all(
+                    color: const Color(0xFFF59E0B).withValues(alpha: 0.3),
+                  ),
+                ),
+                child: const Row(
+                  children: [
+                    Icon(Icons.hourglass_top_rounded,
+                        size: 14, color: Color(0xFFD97706)),
+                    SizedBox(width: 6),
+                    Expanded(
+                      child: Text(
+                        'Delivered: Awaiting Company Review (5-day auto-release window)',
+                        style: TextStyle(
+                          fontSize: 11,
+                          fontWeight: FontWeight.w600,
+                          color: Color(0xFF92400E),
+                        ),
+                      ),
+                    ),
+                  ],
+                ),
+              ),
+            ] else if (isDisputed) ...[
+              const SizedBox(height: 10),
+              Container(
+                width: double.infinity,
+                padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 7),
+                decoration: BoxDecoration(
+                  color: const Color(0xFFFEF2F2),
+                  borderRadius: BorderRadius.circular(8),
+                  border: Border.all(
+                    color: const Color(0xFFEF4444).withValues(alpha: 0.3),
+                  ),
+                ),
+                child: const Row(
+                  children: [
+                    Icon(Icons.gavel_rounded,
+                        size: 14, color: Color(0xFFDC2626)),
+                    SizedBox(width: 6),
+                    Expanded(
+                      child: Text(
+                        'Disputed: Skill Bridge Admin is mediating settlement',
+                        style: TextStyle(
+                          fontSize: 11,
+                          fontWeight: FontWeight.w600,
+                          color: Color(0xFF991B1B),
+                        ),
+                      ),
+                    ),
+                  ],
+                ),
+              ),
+            ],
+
             if (feedback.isNotEmpty) ...[
               const SizedBox(height: 12),
               Container(
@@ -397,6 +611,28 @@ class _MyProjectsScreenState extends State<MyProjectsScreen>
                   icon: const Icon(Icons.share_outlined, size: 15),
                   label: const Text('Share'),
                 ),
+                if (!isCompleted && isInProgress)
+                  ElevatedButton.icon(
+                    style: ElevatedButton.styleFrom(
+                      backgroundColor: const Color(0xFF059669),
+                      foregroundColor: Colors.white,
+                      padding: const EdgeInsets.symmetric(
+                          horizontal: 14, vertical: 10),
+                    ),
+                    onPressed: () => _handleDeliverProject(
+                      context,
+                      pId,
+                      project['title']?.toString() ?? 'Project',
+                    ),
+                    icon: const Icon(Icons.send_rounded, size: 15),
+                    label: Text(
+                      'Deliver Project',
+                      style: GoogleFonts.poppins(
+                        fontSize: 12.5,
+                        fontWeight: FontWeight.w600,
+                      ),
+                    ),
+                  ),
                 if (!isCompleted)
                   ElevatedButton.icon(
                     style: ElevatedButton.styleFrom(
