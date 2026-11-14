@@ -193,6 +193,116 @@ class _MyProjectsScreenState extends State<MyProjectsScreen>
     }
   }
 
+  Future<void> _handleReDeliverProject(
+    BuildContext context,
+    String projectId,
+    String title,
+  ) async {
+    final notesController = TextEditingController();
+    final urlController = TextEditingController();
+
+    final confirmed = await showDialog<bool>(
+      context: context,
+      builder: (ctx) => AlertDialog(
+        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
+        title: Row(
+          children: [
+            Container(
+              padding: const EdgeInsets.all(8),
+              decoration: BoxDecoration(
+                color: const Color(0xFF2563EB).withValues(alpha: 0.15),
+                borderRadius: BorderRadius.circular(10),
+              ),
+              child: const Icon(Icons.refresh_rounded, color: Color(0xFF2563EB)),
+            ),
+            const SizedBox(width: 10),
+            const Expanded(
+              child: Text(
+                'Re-Deliver Project',
+                style: TextStyle(fontSize: 17, fontWeight: FontWeight.bold),
+              ),
+            ),
+          ],
+        ),
+        content: SingleChildScrollView(
+          child: Column(
+            mainAxisSize: MainAxisSize.min,
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              Text(
+                'Submit revised deliverables for "$title"? The 5-day auto-release countdown will reset and restart from 0 for company inspection.',
+                style: const TextStyle(fontSize: 13, height: 1.4),
+              ),
+              const SizedBox(height: 14),
+              TextField(
+                controller: urlController,
+                decoration: InputDecoration(
+                  labelText: 'Updated Work Link / GitHub / Drive (Optional)',
+                  hintText: 'https://github.com/...',
+                  border: OutlineInputBorder(borderRadius: BorderRadius.circular(10)),
+                  prefixIcon: const Icon(Icons.link_rounded),
+                ),
+              ),
+              const SizedBox(height: 12),
+              TextField(
+                controller: notesController,
+                maxLines: 2,
+                decoration: InputDecoration(
+                  labelText: 'Revision Changelog / Notes (Optional)',
+                  hintText: 'Summary of fixes applied...',
+                  border: OutlineInputBorder(borderRadius: BorderRadius.circular(10)),
+                ),
+              ),
+            ],
+          ),
+        ),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.pop(ctx, false),
+            child: const Text('Cancel'),
+          ),
+          ElevatedButton(
+            style: ElevatedButton.styleFrom(
+              backgroundColor: const Color(0xFF2563EB),
+              foregroundColor: Colors.white,
+              shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(10)),
+            ),
+            onPressed: () => Navigator.pop(ctx, true),
+            child: const Text('Confirm Re-Delivery'),
+          ),
+        ],
+      ),
+    );
+
+    if (confirmed == true && context.mounted) {
+      final success = await EscrowLifecycleService().reDeliverProject(
+        projectId: projectId,
+        workUrl: urlController.text.trim().isEmpty ? null : urlController.text.trim(),
+        summary: notesController.text.trim().isEmpty ? null : notesController.text.trim(),
+      );
+
+      if (!context.mounted) return;
+      if (success) {
+        _refreshProjects(showFeedback: false);
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(
+            content: Text('Revised deliverables submitted! 5-day review countdown restarted.'),
+            backgroundColor: Color(0xFF059669),
+            behavior: SnackBarBehavior.floating,
+          ),
+        );
+      } else {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(
+            content: Text(EscrowLifecycleService().lastError ?? 'Failed to re-deliver project.'),
+            backgroundColor: AppColors.error,
+            behavior: SnackBarBehavior.floating,
+          ),
+        );
+      }
+    }
+  }
+
   @override
   Widget build(BuildContext context) {
     return ListenableBuilder(
@@ -338,7 +448,11 @@ class _MyProjectsScreenState extends State<MyProjectsScreen>
     final statusLower = status.toLowerCase();
     final isInProgress = statusLower == 'in progress' || statusLower == 'in_progress';
     final isDelivered = statusLower == 'delivered';
+    final isRevisionRequested = statusLower == 'revision_requested' || statusLower == 'revision requested';
     final isDisputed = statusLower == 'disputed';
+    final revisionCount = (project['revision_count'] as num?)?.toInt() ??
+        (project['revisionCount'] as num?)?.toInt() ??
+        1;
     final company = (project['company']?.toString().trim().isNotEmpty == true)
         ? project['company'].toString().trim()
         : 'Partner Company';
@@ -348,6 +462,10 @@ class _MyProjectsScreenState extends State<MyProjectsScreen>
     final hasSubmission = AppDataService.instance.getSubmission(pId) != null;
     final assignedDate = project['appliedDate']?.toString().trim() ?? 'Recently';
     final feedback = project['companyFeedback']?.toString().trim() ?? '';
+    final revisionNotes =
+        (project['revision_notes'] ?? project['revisionNotes'] ?? feedback)
+            .toString()
+            .trim();
 
     return Container(
       margin: const EdgeInsets.only(bottom: 14),
@@ -520,6 +638,53 @@ class _MyProjectsScreenState extends State<MyProjectsScreen>
                   ],
                 ),
               ),
+            ] else if (isRevisionRequested) ...[
+              const SizedBox(height: 10),
+              Container(
+                width: double.infinity,
+                padding:
+                    const EdgeInsets.symmetric(horizontal: 10, vertical: 8),
+                decoration: BoxDecoration(
+                  color: const Color(0xFFEFF6FF),
+                  borderRadius: BorderRadius.circular(8),
+                  border: Border.all(
+                    color: const Color(0xFF3B82F6).withValues(alpha: 0.35),
+                  ),
+                ),
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    Row(
+                      children: [
+                        const Icon(Icons.rate_review_rounded,
+                            size: 15, color: Color(0xFF2563EB)),
+                        const SizedBox(width: 6),
+                        Expanded(
+                          child: Text(
+                            'Revision $revisionCount of 2 Requested (5-day timer paused)',
+                            style: const TextStyle(
+                              fontSize: 11.5,
+                              fontWeight: FontWeight.w700,
+                              color: Color(0xFF1E40AF),
+                            ),
+                          ),
+                        ),
+                      ],
+                    ),
+                    if (revisionNotes.isNotEmpty) ...[
+                      const SizedBox(height: 4),
+                      Text(
+                        'Notes: $revisionNotes',
+                        style: const TextStyle(
+                          fontSize: 11,
+                          color: Color(0xFF1E3A8A),
+                          height: 1.35,
+                        ),
+                      ),
+                    ],
+                  ],
+                ),
+              ),
             ] else if (isDisputed) ...[
               const SizedBox(height: 10),
               Container(
@@ -627,6 +792,28 @@ class _MyProjectsScreenState extends State<MyProjectsScreen>
                     icon: const Icon(Icons.send_rounded, size: 15),
                     label: Text(
                       'Deliver Project',
+                      style: GoogleFonts.poppins(
+                        fontSize: 12.5,
+                        fontWeight: FontWeight.w600,
+                      ),
+                    ),
+                  ),
+                if (!isCompleted && isRevisionRequested)
+                  ElevatedButton.icon(
+                    style: ElevatedButton.styleFrom(
+                      backgroundColor: const Color(0xFF2563EB),
+                      foregroundColor: Colors.white,
+                      padding: const EdgeInsets.symmetric(
+                          horizontal: 14, vertical: 10),
+                    ),
+                    onPressed: () => _handleReDeliverProject(
+                      context,
+                      pId,
+                      project['title']?.toString() ?? 'Project',
+                    ),
+                    icon: const Icon(Icons.refresh_rounded, size: 15),
+                    label: Text(
+                      'Re-Deliver Project',
                       style: GoogleFonts.poppins(
                         fontSize: 12.5,
                         fontWeight: FontWeight.w600,

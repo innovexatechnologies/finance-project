@@ -39,6 +39,12 @@ class ProjectModel {
   final String? payoutReceiptUrl;
   final String? completedAt;
 
+  // Revision Tracking Fields (Max 2 Revisions)
+  final int revisionCount;
+  final int maxRevisions;
+  final String? revisionNotes;
+  final String? lastRevisionRequestedAt;
+
   ProjectModel({
     required this.id,
     required this.title,
@@ -75,6 +81,10 @@ class ProjectModel {
     this.payoutTransactionId,
     this.payoutReceiptUrl,
     this.completedAt,
+    this.revisionCount = 0,
+    this.maxRevisions = 2,
+    this.revisionNotes,
+    this.lastRevisionRequestedAt,
   });
 
   bool get isPendingPayment => status.toLowerCase() == 'pending_payment';
@@ -86,9 +96,13 @@ class ProjectModel {
       status.toLowerCase() == 'in_progress' ||
       status.toLowerCase() == 'in progress';
   bool get isDelivered => status.toLowerCase() == 'delivered';
+  bool get isRevisionRequested => status.toLowerCase() == 'revision_requested';
   bool get isDisputed => status.toLowerCase() == 'disputed';
   bool get isReadyForPayout => status.toLowerCase() == 'ready_for_payout';
   bool get isCompleted => status.toLowerCase() == 'completed';
+
+  int get remainingRevisions => (maxRevisions - revisionCount).clamp(0, maxRevisions);
+  bool get canRequestRevision => revisionCount < maxRevisions;
 
   DateTime? get deliveredAtDateTime =>
       deliveredAt != null ? DateTime.tryParse(deliveredAt!) : null;
@@ -142,6 +156,10 @@ class ProjectModel {
     String? payoutTransactionId,
     String? payoutReceiptUrl,
     String? completedAt,
+    int? revisionCount,
+    int? maxRevisions,
+    String? revisionNotes,
+    String? lastRevisionRequestedAt,
   }) {
     return ProjectModel(
       id: id ?? this.id,
@@ -181,6 +199,11 @@ class ProjectModel {
       payoutTransactionId: payoutTransactionId ?? this.payoutTransactionId,
       payoutReceiptUrl: payoutReceiptUrl ?? this.payoutReceiptUrl,
       completedAt: completedAt ?? this.completedAt,
+      revisionCount: revisionCount ?? this.revisionCount,
+      maxRevisions: maxRevisions ?? this.maxRevisions,
+      revisionNotes: revisionNotes ?? this.revisionNotes,
+      lastRevisionRequestedAt:
+          lastRevisionRequestedAt ?? this.lastRevisionRequestedAt,
     );
   }
 
@@ -230,6 +253,10 @@ class ProjectModel {
       payoutTransactionId: json['payout_transaction_id']?.toString(),
       payoutReceiptUrl: json['payout_receipt_url']?.toString(),
       completedAt: json['completed_at']?.toString(),
+      revisionCount: (json['revision_count'] as num?)?.toInt() ?? 0,
+      maxRevisions: (json['max_revisions'] as num?)?.toInt() ?? 2,
+      revisionNotes: json['revision_notes']?.toString(),
+      lastRevisionRequestedAt: json['last_revision_requested_at']?.toString(),
     );
   }
 
@@ -274,6 +301,11 @@ class ProjectModel {
         'payout_transaction_id': payoutTransactionId,
       if (payoutReceiptUrl != null) 'payout_receipt_url': payoutReceiptUrl,
       if (completedAt != null) 'completed_at': completedAt,
+      'revision_count': revisionCount,
+      'max_revisions': maxRevisions,
+      if (revisionNotes != null) 'revision_notes': revisionNotes,
+      if (lastRevisionRequestedAt != null)
+        'last_revision_requested_at': lastRevisionRequestedAt,
     };
   }
 }

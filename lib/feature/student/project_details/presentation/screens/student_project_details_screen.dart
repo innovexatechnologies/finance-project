@@ -147,6 +147,116 @@ class StudentProjectDetailsScreen extends StatelessWidget {
     }
   }
 
+  Future<void> _handleReDeliverProject(
+    BuildContext context,
+    String projectId,
+    String title,
+  ) async {
+    final notesController = TextEditingController();
+    final urlController = TextEditingController();
+
+    final confirmed = await showDialog<bool>(
+      context: context,
+      builder: (ctx) => AlertDialog(
+        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
+        title: Row(
+          children: [
+            Container(
+              padding: const EdgeInsets.all(8),
+              decoration: BoxDecoration(
+                color: const Color(0xFF2563EB).withValues(alpha: 0.15),
+                borderRadius: BorderRadius.circular(10),
+              ),
+              child: const Icon(Icons.refresh_rounded, color: Color(0xFF2563EB)),
+            ),
+            const SizedBox(width: 10),
+            const Expanded(
+              child: Text(
+                'Re-Deliver Project',
+                style: TextStyle(fontSize: 18, fontWeight: FontWeight.bold),
+              ),
+            ),
+          ],
+        ),
+        content: SingleChildScrollView(
+          child: Column(
+            mainAxisSize: MainAxisSize.min,
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              Text(
+                'Submit revised deliverables for "$title"? The 5-day review timer will reset and restart from 0 for company inspection.',
+                style: const TextStyle(fontSize: 13, height: 1.4),
+              ),
+              const SizedBox(height: 14),
+              TextField(
+                controller: urlController,
+                decoration: InputDecoration(
+                  labelText: 'Updated Work Link / GitHub / Drive (Optional)',
+                  hintText: 'https://github.com/...',
+                  border: OutlineInputBorder(borderRadius: BorderRadius.circular(10)),
+                  prefixIcon: const Icon(Icons.link_rounded),
+                ),
+              ),
+              const SizedBox(height: 12),
+              TextField(
+                controller: notesController,
+                maxLines: 2,
+                decoration: InputDecoration(
+                  labelText: 'Revision Changelog / Notes (Optional)',
+                  hintText: 'Summary of fixes applied based on supervisor notes...',
+                  border: OutlineInputBorder(borderRadius: BorderRadius.circular(10)),
+                ),
+              ),
+            ],
+          ),
+        ),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.pop(ctx, false),
+            child: const Text('Cancel'),
+          ),
+          ElevatedButton(
+            style: ElevatedButton.styleFrom(
+              backgroundColor: const Color(0xFF2563EB),
+              foregroundColor: Colors.white,
+              shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(10)),
+            ),
+            onPressed: () => Navigator.pop(ctx, true),
+            child: const Text('Re-Deliver Work'),
+          ),
+        ],
+      ),
+    );
+
+    if (confirmed == true && context.mounted) {
+      final success = await EscrowLifecycleService().reDeliverProject(
+        projectId: projectId,
+        workUrl: urlController.text.trim().isEmpty ? null : urlController.text.trim(),
+        summary: notesController.text.trim().isEmpty ? null : notesController.text.trim(),
+      );
+
+      if (!context.mounted) return;
+      if (success) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(
+            content: Text('Revised work submitted! 5-day review countdown restarted.'),
+            backgroundColor: Color(0xFF059669),
+            behavior: SnackBarBehavior.floating,
+          ),
+        );
+        Navigator.pop(context);
+      } else {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(
+            content: Text(EscrowLifecycleService().lastError ?? 'Failed to re-deliver project.'),
+            backgroundColor: AppColors.error,
+            behavior: SnackBarBehavior.floating,
+          ),
+        );
+      }
+    }
+  }
+
   @override
   Widget build(BuildContext context) {
     final id = project['id']?.toString() ??
@@ -193,7 +303,15 @@ class StudentProjectDetailsScreen extends StatelessWidget {
     final statusLower = status.toLowerCase();
     final isInProgress = statusLower == 'in_progress' || statusLower == 'in progress';
     final isDelivered = statusLower == 'delivered';
+    final isRevisionRequested = statusLower == 'revision_requested' || statusLower == 'revision requested';
     final isDisputed = statusLower == 'disputed';
+    final revisionCount = (project['revision_count'] as num?)?.toInt() ??
+        (project['revisionCount'] as num?)?.toInt() ??
+        1;
+    final revisionNotes =
+        (project['revision_notes'] ?? project['revisionNotes'] ?? '')
+            .toString()
+            .trim();
 
     final requirementBullets = _splitLines(requirementsRaw);
     final deliverableBullets = _splitLines(deliverablesRaw);
@@ -505,6 +623,88 @@ class StudentProjectDetailsScreen extends StatelessWidget {
                                 ],
                               ),
                             ),
+                          ] else if (isRevisionRequested) ...[
+                            Container(
+                              width: double.infinity,
+                              margin: const EdgeInsets.only(bottom: 16),
+                              padding: const EdgeInsets.all(14),
+                              decoration: BoxDecoration(
+                                color: const Color(0xFFEFF6FF),
+                                borderRadius: BorderRadius.circular(14),
+                                border: Border.all(
+                                  color: const Color(0xFF3B82F6).withValues(alpha: 0.4),
+                                ),
+                              ),
+                              child: Column(
+                                crossAxisAlignment: CrossAxisAlignment.start,
+                                children: [
+                                  Row(
+                                    crossAxisAlignment: CrossAxisAlignment.start,
+                                    children: [
+                                      Container(
+                                        padding: const EdgeInsets.all(7),
+                                        decoration: BoxDecoration(
+                                          color: const Color(0xFFDBEAFE),
+                                          shape: BoxShape.circle,
+                                        ),
+                                        child: const Icon(
+                                          Icons.rate_review_rounded,
+                                          color: Color(0xFF2563EB),
+                                          size: 20,
+                                        ),
+                                      ),
+                                      const SizedBox(width: 12),
+                                      Expanded(
+                                        child: Column(
+                                          crossAxisAlignment: CrossAxisAlignment.start,
+                                          children: [
+                                            Text(
+                                              'Revision $revisionCount of 2 Requested by Company',
+                                              style: GoogleFonts.inter(
+                                                fontSize: 13.5,
+                                                fontWeight: FontWeight.w700,
+                                                color: const Color(0xFF1E40AF),
+                                              ),
+                                            ),
+                                            const SizedBox(height: 3),
+                                            const Text(
+                                              '5-day auto-release timer is paused. Review requested improvements and click Re-Deliver when ready.',
+                                              style: TextStyle(
+                                                fontSize: 11.5,
+                                                color: Color(0xFF1D4ED8),
+                                                height: 1.35,
+                                              ),
+                                            ),
+                                          ],
+                                        ),
+                                      ),
+                                    ],
+                                  ),
+                                  if (revisionNotes.isNotEmpty) ...[
+                                    const SizedBox(height: 10),
+                                    Container(
+                                      width: double.infinity,
+                                      padding: const EdgeInsets.all(10),
+                                      decoration: BoxDecoration(
+                                        color: Colors.white,
+                                        borderRadius: BorderRadius.circular(8),
+                                        border: Border.all(
+                                          color: const Color(0xFFBFDBFE),
+                                        ),
+                                      ),
+                                      child: Text(
+                                        'Supervisor Feedback: "$revisionNotes"',
+                                        style: GoogleFonts.inter(
+                                          fontSize: 12.5,
+                                          color: const Color(0xFF1E3A8A),
+                                          height: 1.4,
+                                        ),
+                                      ),
+                                    ),
+                                  ],
+                                ],
+                              ),
+                            ),
                           ] else if (isDisputed) ...[
                             Container(
                               width: double.infinity,
@@ -723,7 +923,27 @@ class StudentProjectDetailsScreen extends StatelessWidget {
                   Expanded(
                     child: SizedBox(
                       height: 48,
-                      child: isInProgress
+                      child: isRevisionRequested
+                          ? ElevatedButton.icon(
+                              style: ElevatedButton.styleFrom(
+                                backgroundColor: const Color(0xFF2563EB),
+                                foregroundColor: Colors.white,
+                                shape: RoundedRectangleBorder(
+                                  borderRadius: BorderRadius.circular(14),
+                                ),
+                              ),
+                              onPressed: () =>
+                                  _handleReDeliverProject(context, id, title),
+                              icon: const Icon(Icons.refresh_rounded, size: 18),
+                              label: Text(
+                                'Re-Deliver Project (Revision $revisionCount/2)',
+                                style: GoogleFonts.poppins(
+                                  fontSize: 14.5,
+                                  fontWeight: FontWeight.bold,
+                                ),
+                              ),
+                            )
+                          : isInProgress
                           ? ElevatedButton.icon(
                               style: ElevatedButton.styleFrom(
                                 backgroundColor: const Color(0xFF059669),

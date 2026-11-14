@@ -47,6 +47,7 @@ class _CompanyProjectsListScreenState extends State<CompanyProjectsListScreen> {
     'Pending Payment',
     'In Progress',
     'Delivered',
+    'Revision Requested',
     'Disputed',
     'Completed',
     'Draft',
@@ -337,9 +338,13 @@ class _CompanyProjectsListScreenState extends State<CompanyProjectsListScreen> {
               ? companyProjects
               : companyProjects
                     .where(
-                      (p) =>
-                          p.status.toLowerCase() ==
-                          _selectedStatus.toLowerCase(),
+                      (p) {
+                        final pNorm =
+                            p.status.toLowerCase().replaceAll('_', ' ');
+                        final fNorm =
+                            _selectedStatus.toLowerCase().replaceAll('_', ' ');
+                        return pNorm == fNorm;
+                      },
                     )
                     .toList();
 

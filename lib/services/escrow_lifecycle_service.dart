@@ -78,7 +78,136 @@ class EscrowLifecycleService {
     return _lastError == null;
   }
 
-  /// 2. Company approves delivered work and releases payment to Student.
+  /// 2. Company requests revisions on delivered deliverables (Max 2 Revisions Limit).
+  /// Sets: status = 'revision_requested', revision_count = currentCount + 1,
+  /// revision_notes = revisionNotes, last_revision_requested_at = now().
+  /// Pauses 5-day auto-release countdown since status is no longer 'delivered'.
+  Future<bool> requestProjectRevision({
+    required String projectId,
+    required String revisionNotes,
+  }) async {
+    _lastError = null;
+    final nowIso = DateTime.now().toIso8601String();
+    final supabase = SupabaseHelper.clientOrNull;
+
+    int currentCount = 0;
+    String projectTitle = 'Project';
+    final existing = CompanyProjectService().allProjects;
+    try {
+      final p = existing.firstWhere((p) => p.id == projectId);
+      currentCount = p.revisionCount;
+      projectTitle = p.title;
+    } catch (_) {}
+
+    // Check maximum 2 revisions limit
+    if (currentCount >= 2) {
+      _lastError = 'Maximum limit of 2 revisions has already been reached for this project.';
+      return false;
+    }
+
+    final newCount = currentCount + 1;
+
+    if (supabase != null && SupabaseHelper.isUuid(projectId)) {
+      try {
+        await supabase
+            .from('projects')
+            .update({
+              'status': 'revision_requested',
+              'revision_count': newCount,
+              'revision_notes': revisionNotes.trim(),
+              'last_revision_requested_at': nowIso,
+              'updated_at': nowIso,
+            })
+            .eq('id', projectId);
+
+        // Insert alert for Admin/Student
+        await supabase.from('admin_notifications').insert({
+          'project_id': projectId,
+          'title': 'Revision Requested ($newCount of 2): $projectTitle',
+          'message':
+              'Company requested revisions. 5-day countdown paused. Notes: "${revisionNotes.trim()}".',
+          'notification_type': 'revision_requested',
+          'is_read': false,
+          'created_at': nowIso,
+        });
+      } catch (e) {
+        debugPrint('EscrowLifecycleService requestProjectRevision error: $e');
+        _lastError = SupabaseHelper.friendlyError(e);
+        return false;
+      }
+    }
+
+    // Update in-memory project state
+    _updateLocalProjectStatus(
+      projectId: projectId,
+      newStatus: 'revision_requested',
+      revisionCount: newCount,
+      revisionNotes: revisionNotes.trim(),
+      lastRevisionRequestedAt: nowIso,
+    );
+
+    return true;
+  }
+
+  /// 3. Student submits revised work ("Re-Deliver Project").
+  /// Sets: status = 'delivered', delivered_at = now().
+  /// Resets and restarts the 5-Day Auto-Release countdown from zero.
+  Future<bool> reDeliverProject({
+    required String projectId,
+    String? workUrl,
+    String? summary,
+  }) async {
+    _lastError = null;
+    final nowIso = DateTime.now().toIso8601String();
+    final supabase = SupabaseHelper.clientOrNull;
+
+    String projectTitle = 'Project';
+    final existing = CompanyProjectService().allProjects;
+    try {
+      final p = existing.firstWhere((p) => p.id == projectId);
+      projectTitle = p.title;
+    } catch (_) {}
+
+    if (supabase != null && SupabaseHelper.isUuid(projectId)) {
+      try {
+        await supabase
+            .from('projects')
+            .update({
+          'status': 'delivered',
+          'delivered_at': nowIso,
+          'updated_at': nowIso,
+          if (workUrl != null && workUrl.trim().isNotEmpty)
+            'attachment_url': workUrl.trim(),
+        }).eq('id', projectId);
+
+        // Notify company / admin
+        await supabase.from('admin_notifications').insert({
+          'project_id': projectId,
+          'title': 'Project Re-Delivered for Review: $projectTitle',
+          'message':
+              'Student submitted revised work. 5-day review window reset to 120 hours.',
+          'notification_type': 'payout_ready',
+          'is_read': false,
+          'created_at': nowIso,
+        });
+      } catch (e) {
+        debugPrint('EscrowLifecycleService reDeliverProject error: $e');
+        _lastError = SupabaseHelper.friendlyError(e);
+        return false;
+      }
+    }
+
+    // Update in-memory project state with fresh deliveredAt
+    _updateLocalProjectStatus(
+      projectId: projectId,
+      newStatus: 'delivered',
+      deliveredAt: nowIso,
+    );
+
+    return true;
+  }
+
+  /// 4. Company approves delivered work and releases payment to Student.
   /// Sets: status = 'ready_for_payout', payout_type = 'full_student'.
   /// Calculates: 10% platform fee, 90% net student payout.
   Future<bool> approveAndReleasePayment({
@@ -268,6 +397,9 @@ class EscrowLifecycleService {
     double? studentPayout,
     double? commission,
     double? refund,
+    int? revisionCount,
+    String? revisionNotes,
+    String? lastRevisionRequestedAt,
   }) {
     final compProjService = CompanyProjectService();
     final list = List<ProjectModel>.from(compProjService.allProjects);
@@ -282,6 +414,10 @@ class EscrowLifecycleService {
         studentPayoutAmount: studentPayout ?? list[idx].studentPayoutAmount,
         platformCommissionAmount: commission ?? list[idx].platformCommissionAmount,
         companyRefundAmount: refund ?? list[idx].companyRefundAmount,
+        revisionCount: revisionCount ?? list[idx].revisionCount,
+        revisionNotes: revisionNotes ?? list[idx].revisionNotes,
+        lastRevisionRequestedAt:
+            lastRevisionRequestedAt ?? list[idx].lastRevisionRequestedAt,
       );
       compProjService.projectsNotifier.value = list;
     }
