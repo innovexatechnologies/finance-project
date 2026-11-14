@@ -12,11 +12,7 @@ class PostProjectScreen extends StatefulWidget {
   final ProjectModel? existingProject;
   final Function(int)? onTabChange;
 
-  const PostProjectScreen({
-    super.key,
-    this.existingProject,
-    this.onTabChange,
-  });
+  const PostProjectScreen({super.key, this.existingProject, this.onTabChange});
 
   @override
   State<PostProjectScreen> createState() => _PostProjectScreenState();
@@ -250,10 +246,14 @@ class _PostProjectScreenState extends State<PostProjectScreen> {
     if (lower.contains('web')) {
       return Icons.language_rounded;
     }
-    if (lower.contains('ai') || lower.contains('machine') || lower.contains('data')) {
+    if (lower.contains('ai') ||
+        lower.contains('machine') ||
+        lower.contains('data')) {
       return Icons.psychology_outlined;
     }
-    if (lower.contains('ui') || lower.contains('ux') || lower.contains('design')) {
+    if (lower.contains('ui') ||
+        lower.contains('ux') ||
+        lower.contains('design')) {
       return Icons.palette_outlined;
     }
     if (lower.contains('cyber') || lower.contains('security')) {
@@ -327,8 +327,8 @@ class _PostProjectScreenState extends State<PostProjectScreen> {
   Future<void> _pickDeadline() async {
     final now = DateTime.now();
     final firstAllowed = now.add(const Duration(days: 1));
-    final initialDate = _selectedDeadline != null &&
-            _selectedDeadline!.isAfter(firstAllowed)
+    final initialDate =
+        _selectedDeadline != null && _selectedDeadline!.isAfter(firstAllowed)
         ? _selectedDeadline!
         : firstAllowed;
 
@@ -412,7 +412,7 @@ class _PostProjectScreenState extends State<PostProjectScreen> {
       deliverables: _deliverablesController.text.trim(),
       deadline: deadlineString,
       projectType: _selectedProjectType,
-      openings: int.tryParse(_openingsController.text.trim()) ?? 1,
+      openings: 1,
       additionalInstructions: _instructionsController.text.trim(),
       companyName: company.companyName.isNotEmpty
           ? company.companyName
@@ -425,6 +425,7 @@ class _PostProjectScreenState extends State<PostProjectScreen> {
       assignedStudent: existing?.assignedStudent,
       progress: existing?.progress ?? 0.0,
       createdAt: existing?.createdAt ?? 'Just now',
+      paymentSent: existing?.paymentSent ?? false,
       escrowAmount: double.tryParse(
               _escrowAmountController.text.trim().replaceAll(',', '')) ??
           15000.0,
@@ -471,7 +472,7 @@ class _PostProjectScreenState extends State<PostProjectScreen> {
       setState(() => _isSavingDraft = false);
       ScaffoldMessenger.of(context).showSnackBar(
         SnackBar(
-          content: Text('Could not save draft: $e'),
+          content: Text(SupabaseHelper.friendlyError(e)),
           backgroundColor: AppColors.statusClosed,
         ),
       );
@@ -633,7 +634,7 @@ class _PostProjectScreenState extends State<PostProjectScreen> {
       setState(() => _isPublishing = false);
       ScaffoldMessenger.of(context).showSnackBar(
         SnackBar(
-          content: Text('Failed to publish project: $e'),
+          content: Text(SupabaseHelper.friendlyError(e)),
           backgroundColor: AppColors.statusClosed,
         ),
       );
@@ -663,8 +664,7 @@ class _PostProjectScreenState extends State<PostProjectScreen> {
 
   @override
   Widget build(BuildContext context) {
-    final canPopModal =
-        widget.onTabChange == null && Navigator.canPop(context);
+    final canPopModal = widget.onTabChange == null && Navigator.canPop(context);
 
     return Scaffold(
       backgroundColor: AppColors.background,
@@ -693,9 +693,7 @@ class _PostProjectScreenState extends State<PostProjectScreen> {
                 borderRadius: BorderRadius.circular(10),
               ),
               child: Icon(
-                _isEditMode
-                    ? Icons.edit_note_rounded
-                    : Icons.post_add_rounded,
+                _isEditMode ? Icons.edit_note_rounded : Icons.post_add_rounded,
                 color: Colors.white,
                 size: 19,
               ),
@@ -747,8 +745,9 @@ class _PostProjectScreenState extends State<PostProjectScreen> {
                     borderRadius: BorderRadius.circular(20),
                   ),
                 ),
-                onPressed:
-                    _isSavingDraft || _isPublishing ? null : _handleSaveDraft,
+                onPressed: _isSavingDraft || _isPublishing
+                    ? null
+                    : _handleSaveDraft,
                 icon: _isSavingDraft
                     ? const SizedBox(
                         width: 14,
@@ -823,9 +822,7 @@ class _PostProjectScreenState extends State<PostProjectScreen> {
                       title: 'Required Skills & Tech Stack',
                       subtitle: 'Curated tools matching your selected category',
                       icon: Icons.code_rounded,
-                      children: [
-                        _buildSkillsSelector(),
-                      ],
+                      children: [_buildSkillsSelector()],
                     ),
                     const SizedBox(height: 18),
                     _buildSectionCard(
@@ -845,9 +842,7 @@ class _PostProjectScreenState extends State<PostProjectScreen> {
                       title: 'Additional Guidelines (Optional)',
                       subtitle: 'Mentor sync rules or technical standards',
                       icon: Icons.speaker_notes_outlined,
-                      children: [
-                        _buildAdditionalInstructionsField(),
-                      ],
+                      children: [_buildAdditionalInstructionsField()],
                     ),
                     const SizedBox(height: 24),
                     _buildBottomActionButtons(),
@@ -1039,10 +1034,7 @@ class _PostProjectScreenState extends State<PostProjectScreen> {
               ),
               const SizedBox(width: 8),
               Container(
-                padding: const EdgeInsets.symmetric(
-                  horizontal: 9,
-                  vertical: 4,
-                ),
+                padding: const EdgeInsets.symmetric(horizontal: 9, vertical: 4),
                 decoration: BoxDecoration(
                   color: AppColors.surfaceAlt,
                   borderRadius: BorderRadius.circular(20),
@@ -1285,8 +1277,9 @@ class _PostProjectScreenState extends State<PostProjectScreen> {
                       boxShadow: isSelected
                           ? [
                               BoxShadow(
-                                color: AppColors.primaryBlue
-                                    .withValues(alpha: 0.25),
+                                color: AppColors.primaryBlue.withValues(
+                                  alpha: 0.25,
+                                ),
                                 blurRadius: 10,
                                 offset: const Offset(0, 4),
                               ),
@@ -1299,9 +1292,7 @@ class _PostProjectScreenState extends State<PostProjectScreen> {
                         Icon(
                           modeIcon(type),
                           size: 16,
-                          color: isSelected
-                              ? Colors.white
-                              : AppColors.grayText,
+                          color: isSelected ? Colors.white : AppColors.grayText,
                         ),
                         const SizedBox(width: 6),
                         Flexible(
@@ -1333,25 +1324,18 @@ class _PostProjectScreenState extends State<PostProjectScreen> {
   Widget _buildOpeningsField() {
     return TextFormField(
       controller: _openingsController,
-      keyboardType: TextInputType.number,
+      readOnly: true,
       style: GoogleFonts.inter(
         fontSize: 14,
         fontWeight: FontWeight.w600,
         color: AppColors.deepNavy,
       ),
       validator: (val) {
-        if (val == null || val.trim().isEmpty) {
-          return 'Number of student openings is required';
-        }
-        final parsed = int.tryParse(val.trim());
-        if (parsed == null || parsed < 1 || parsed > 20) {
-          return 'Enter a valid number of openings (1 to 20)';
-        }
-        return null;
+        return val?.trim() == '1' ? null : 'Only one student can be assigned';
       },
       decoration: _fieldDecoration(
-        labelText: 'Number of Student Openings *',
-        hintText: 'e.g. 2',
+        labelText: 'Students Assigned Per Project',
+        hintText: 'One student can be assigned',
         prefixIcon: Icons.people_outline_rounded,
       ),
     );
@@ -1400,8 +1384,7 @@ class _PostProjectScreenState extends State<PostProjectScreen> {
       },
       decoration: _fieldDecoration(
         labelText: 'Project Description & Objectives *',
-        hintText:
-            'Detail the problem statement, product context, and expected engineering outcomes...',
+        hintText: 'Detail the problem statement, product context, and expected engineering outcomes...',
         alignLabelWithHint: true,
       ),
     );
@@ -1420,8 +1403,7 @@ class _PostProjectScreenState extends State<PostProjectScreen> {
       },
       decoration: _fieldDecoration(
         labelText: 'Student Prerequisites & Requirements *',
-        hintText:
-            'e.g. Final-year CS/SE student familiar with Git workflow and REST APIs...',
+        hintText: 'e.g. Final-year CS/SE student familiar with Git workflow and REST APIs...',
         alignLabelWithHint: true,
       ),
     );
@@ -1537,8 +1519,9 @@ class _PostProjectScreenState extends State<PostProjectScreen> {
                         color: isSelected
                             ? AppColors.primaryBlue
                             : AppColors.darkText,
-                        fontWeight:
-                            isSelected ? FontWeight.w700 : FontWeight.w500,
+                        fontWeight: isSelected
+                            ? FontWeight.w700
+                            : FontWeight.w500,
                         fontSize: 12.5,
                       ),
                     ),
@@ -1701,8 +1684,7 @@ class _PostProjectScreenState extends State<PostProjectScreen> {
       },
       decoration: _fieldDecoration(
         labelText: 'Expected Deliverables *',
-        hintText:
-            'e.g. Clean GitHub repository, test suite, documentation, and demo video...',
+        hintText: 'e.g. Clean GitHub repository, test suite, documentation, and demo video...',
         alignLabelWithHint: true,
       ),
     );
@@ -1812,8 +1794,7 @@ class _PostProjectScreenState extends State<PostProjectScreen> {
       style: GoogleFonts.inter(fontSize: 13.5, height: 1.45),
       decoration: _fieldDecoration(
         labelText: 'Additional Instructions (Optional)',
-        hintText:
-            'e.g. Weekly mentor sync cadence, coding conventions, or preferred university focus...',
+        hintText: 'e.g. Weekly mentor sync cadence, coding conventions, or preferred university focus...',
         alignLabelWithHint: true,
       ),
     );
@@ -1831,14 +1812,18 @@ class _PostProjectScreenState extends State<PostProjectScreen> {
                 style: OutlinedButton.styleFrom(
                   backgroundColor: Colors.white,
                   foregroundColor: AppColors.deepNavy,
-                  side: const BorderSide(color: AppColors.lightGray, width: 1.2),
+                  side: const BorderSide(
+                    color: AppColors.lightGray,
+                    width: 1.2,
+                  ),
                   padding: const EdgeInsets.symmetric(horizontal: 10),
                   shape: RoundedRectangleBorder(
                     borderRadius: BorderRadius.circular(14),
                   ),
                 ),
-                onPressed:
-                    _isSavingDraft || _isPublishing ? null : _handleSaveDraft,
+                onPressed: _isSavingDraft || _isPublishing
+                    ? null
+                    : _handleSaveDraft,
                 child: Row(
                   mainAxisAlignment: MainAxisAlignment.center,
                   children: [
@@ -1923,7 +1908,9 @@ class _PostProjectScreenState extends State<PostProjectScreen> {
                         child: Text(
                           _isPublishing
                               ? 'Saving...'
-                              : (_isEditMode ? 'Update Project' : 'Publish Project'),
+                              : (_isEditMode
+                                    ? 'Update Project'
+                                    : 'Publish Project'),
                           maxLines: 1,
                           overflow: TextOverflow.ellipsis,
                           style: GoogleFonts.poppins(

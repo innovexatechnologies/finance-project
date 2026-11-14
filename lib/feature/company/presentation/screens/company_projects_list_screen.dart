@@ -37,6 +37,7 @@ class _CompanyProjectsListScreenState extends State<CompanyProjectsListScreen> {
   final _profileService = CompanyProfileService();
 
   late String _selectedStatus;
+  bool _showPaidProjects = false;
   final TextEditingController _searchController = TextEditingController();
   String _searchQuery = '';
 
@@ -115,13 +116,14 @@ class _CompanyProjectsListScreenState extends State<CompanyProjectsListScreen> {
     );
   }
 
-  Future<void> _confirmDeleteDraft(ProjectModel project) async {
+  Future<void> _confirmDeleteProject(ProjectModel project) async {
+    final isDraft = project.status.toLowerCase() == 'draft';
     final confirmed = await showDialog<bool>(
       context: context,
       builder: (ctx) => AlertDialog(
-        title: const Text('Delete Draft Listing?'),
+        title: Text(isDraft ? 'Delete Draft Listing?' : 'Delete Project?'),
         content: Text(
-          'Are you sure you want to permanently remove draft "${project.title}"?',
+          'Are you sure you want to permanently remove "${project.title}"? This action cannot be undone.',
         ),
         actions: [
           TextButton(
@@ -134,7 +136,7 @@ class _CompanyProjectsListScreenState extends State<CompanyProjectsListScreen> {
               foregroundColor: Colors.white,
             ),
             onPressed: () => Navigator.pop(ctx, true),
-            child: const Text('Delete Draft'),
+            child: Text(isDraft ? 'Delete Draft' : 'Delete Project'),
           ),
         ],
       ),
@@ -144,8 +146,8 @@ class _CompanyProjectsListScreenState extends State<CompanyProjectsListScreen> {
       await _projectService.deleteProject(project.id);
       if (!mounted) return;
       ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(
-          content: Text('Draft project removed.'),
+        SnackBar(
+          content: Text(isDraft ? 'Draft project removed.' : 'Project deleted successfully.'),
           backgroundColor: AppColors.deepNavy,
         ),
       );
@@ -325,18 +327,25 @@ class _CompanyProjectsListScreenState extends State<CompanyProjectsListScreen> {
       body: ValueListenableBuilder<List<ProjectModel>>(
         valueListenable: _projectService.projectsNotifier,
         builder: (context, allProjects, _) {
-          final companyProjects = allProjects
-              .where(
-                (p) =>
-                    company.id.isEmpty ||
-                    p.companyId.isEmpty ||
-                    p.companyId == company.id,
-              )
+          final companyProjects = allProjects.where((p) {
+            if (company.id.isEmpty) return true;
+            if (p.companyId.isEmpty) return true;
+            if (p.companyId == company.id) return true;
+            if (company.companyName.trim().isNotEmpty &&
+                p.companyName.trim().toLowerCase() ==
+                    company.companyName.trim().toLowerCase()) {
+              return true;
+            }
+            return false;
+          }).toList();
+
+          final paymentFiltered = companyProjects
+              .where((project) => project.paymentSent == _showPaidProjects)
               .toList();
 
           final statusFiltered = _selectedStatus == 'All'
-              ? companyProjects
-              : companyProjects
+              ? paymentFiltered
+              : paymentFiltered
                     .where(
                       (p) {
                         final pNorm =
@@ -373,7 +382,9 @@ class _CompanyProjectsListScreenState extends State<CompanyProjectsListScreen> {
             (sum, p) => sum + p.applicantsCount,
           );
           final hasActiveFilters =
-              _selectedStatus != 'All' || _searchQuery.isNotEmpty;
+              _selectedStatus != 'All' ||
+              _searchQuery.isNotEmpty ||
+              _showPaidProjects;
 
           return Column(
             children: [
@@ -402,7 +413,8 @@ class _CompanyProjectsListScreenState extends State<CompanyProjectsListScreen> {
                               color: AppColors.darkText,
                             ),
                             decoration: InputDecoration(
-                              hintText: 'Search by title, category, or skill...',
+                              hintText:
+                                  'Search by title, category, or skill...',
                               hintStyle: GoogleFonts.inter(
                                 fontSize: 13.5,
                                 color: AppColors.textMuted,
@@ -447,6 +459,36 @@ class _CompanyProjectsListScreenState extends State<CompanyProjectsListScreen> {
                           ),
                         ),
                         Padding(
+                          padding: const EdgeInsets.fromLTRB(16, 0, 16, 10),
+                          child: Row(
+                            children: [
+                              Expanded(
+                                child: _buildPaymentFilter(
+                                  key: const Key(
+                                    'company-payment-filter-pending',
+                                  ),
+                                  label: 'Payment Pending',
+                                  isSelected: !_showPaidProjects,
+                                  onPressed: () {
+                                    setState(() => _showPaidProjects = false);
+                                  },
+                                ),
+                              ),
+                              const SizedBox(width: 8),
+                              Expanded(
+                                child: _buildPaymentFilter(
+                                  key: const Key('company-payment-filter-paid'),
+                                  label: 'Paid',
+                                  isSelected: _showPaidProjects,
+                                  onPressed: () {
+                                    setState(() => _showPaidProjects = true);
+                                  },
+                                ),
+                              ),
+                            ],
+                          ),
+                        ),
+                        Padding(
                           padding: const EdgeInsets.only(bottom: 12),
                           child: SizedBox(
                             height: 36,
@@ -463,8 +505,8 @@ class _CompanyProjectsListScreenState extends State<CompanyProjectsListScreen> {
                                 final status = _statusFilters[index];
                                 final isSelected = _selectedStatus == status;
                                 final count = status == 'All'
-                                    ? companyProjects.length
-                                    : companyProjects
+                                    ? paymentFiltered.length
+                                    : paymentFiltered
                                           .where(
                                             (p) =>
                                                 p.status.toLowerCase() ==
@@ -561,6 +603,7 @@ class _CompanyProjectsListScreenState extends State<CompanyProjectsListScreen> {
                                               onPressed: () {
                                                 setState(() {
                                                   _selectedStatus = 'All';
+                                                  _showPaidProjects = false;
                                                   _searchController.clear();
                                                 });
                                               },
@@ -607,6 +650,38 @@ class _CompanyProjectsListScreenState extends State<CompanyProjectsListScreen> {
             ],
           );
         },
+      ),
+    );
+  }
+
+  Widget _buildPaymentFilter({
+    required Key key,
+    required String label,
+    required bool isSelected,
+    required VoidCallback onPressed,
+  }) {
+    return SizedBox(
+      height: 40,
+      child: OutlinedButton(
+        key: key,
+        onPressed: onPressed,
+        style: OutlinedButton.styleFrom(
+          backgroundColor: isSelected ? AppColors.primaryBlue : Colors.white,
+          foregroundColor: isSelected ? Colors.white : AppColors.grayText,
+          side: BorderSide(
+            color: isSelected ? AppColors.primaryBlue : AppColors.borderLight,
+          ),
+          padding: const EdgeInsets.symmetric(horizontal: 8),
+          shape: RoundedRectangleBorder(
+            borderRadius: BorderRadius.circular(12),
+          ),
+        ),
+        child: Text(
+          label,
+          maxLines: 1,
+          overflow: TextOverflow.ellipsis,
+          style: GoogleFonts.inter(fontSize: 12, fontWeight: FontWeight.w600),
+        ),
       ),
     );
   }
@@ -848,57 +923,56 @@ class _CompanyProjectsListScreenState extends State<CompanyProjectsListScreen> {
                   child: Column(
                     crossAxisAlignment: CrossAxisAlignment.start,
                     children: [
-                      Row(
+                      Wrap(
+                        crossAxisAlignment: WrapCrossAlignment.center,
+                        spacing: 8,
+                        runSpacing: 4,
                         children: [
-                          Expanded(
-                            child: Align(
-                              alignment: Alignment.centerLeft,
-                              child: Container(
-                                padding: const EdgeInsets.symmetric(
-                                  horizontal: 10,
-                                  vertical: 5,
+                          ConstrainedBox(
+                            constraints: const BoxConstraints(maxWidth: 160),
+                            child: Container(
+                              padding: const EdgeInsets.symmetric(
+                                horizontal: 10,
+                                vertical: 5,
+                              ),
+                              decoration: BoxDecoration(
+                                color: AppColors.lightAqua.withValues(
+                                  alpha: 0.7,
                                 ),
-                                decoration: BoxDecoration(
-                                  color: AppColors.lightAqua.withValues(
-                                    alpha: 0.7,
-                                  ),
-                                  borderRadius: BorderRadius.circular(9),
-                                  border: Border.all(
-                                    color: AppColors.primaryBlue.withValues(
-                                      alpha: 0.14,
-                                    ),
+                                borderRadius: BorderRadius.circular(9),
+                                border: Border.all(
+                                  color: AppColors.primaryBlue.withValues(
+                                    alpha: 0.14,
                                   ),
                                 ),
-                                child: Row(
-                                  mainAxisSize: MainAxisSize.min,
-                                  children: [
-                                    Icon(
-                                      _categoryIcon(project.category),
-                                      size: 13.5,
-                                      color: AppColors.primaryBlue,
-                                    ),
-                                    const SizedBox(width: 6),
-                                    Flexible(
-                                      child: Text(
-                                        project.category,
-                                        maxLines: 1,
-                                        overflow: TextOverflow.ellipsis,
-                                        style: GoogleFonts.inter(
-                                          color: AppColors.primaryBlue,
-                                          fontSize: 11.5,
-                                          fontWeight: FontWeight.w700,
-                                        ),
+                              ),
+                              child: Row(
+                                mainAxisSize: MainAxisSize.min,
+                                children: [
+                                  Icon(
+                                    _categoryIcon(project.category),
+                                    size: 13.5,
+                                    color: AppColors.primaryBlue,
+                                  ),
+                                  const SizedBox(width: 6),
+                                  Flexible(
+                                    child: Text(
+                                      project.category,
+                                      maxLines: 1,
+                                      overflow: TextOverflow.ellipsis,
+                                      style: GoogleFonts.inter(
+                                        color: AppColors.primaryBlue,
+                                        fontSize: 11.5,
+                                        fontWeight: FontWeight.w700,
                                       ),
                                     ),
-                                  ],
-                                ),
+                                  ),
+                                ],
                               ),
                             ),
                           ),
-                          const SizedBox(width: 8),
                           StatusBadge(label: project.status),
                           if (canCloseOrCancel || isDraft) ...[
-                            const SizedBox(width: 2),
                             PopupMenuButton<String>(
                               padding: EdgeInsets.zero,
                               constraints: const BoxConstraints(
@@ -930,8 +1004,9 @@ class _CompanyProjectsListScreenState extends State<CompanyProjectsListScreen> {
                                       backgroundColor: AppColors.statusOpen,
                                     ),
                                   );
-                                } else if (val == 'DeleteDraft') {
-                                  _confirmDeleteDraft(project);
+                                } else if (val == 'DeleteDraft' ||
+                                    val == 'DeleteProject') {
+                                  _confirmDeleteProject(project);
                                 }
                               },
                               itemBuilder: (ctx) => [
@@ -1005,6 +1080,27 @@ class _CompanyProjectsListScreenState extends State<CompanyProjectsListScreen> {
                                     ),
                                   ),
                                 ],
+                                if (!isDraft)
+                                  const PopupMenuItem(
+                                    value: 'DeleteProject',
+                                    child: Row(
+                                      children: [
+                                        Icon(
+                                          Icons.delete_outline_rounded,
+                                          size: 18,
+                                          color: AppColors.statusClosed,
+                                        ),
+                                        SizedBox(width: 10),
+                                        Text(
+                                          'Delete Project',
+                                          style: TextStyle(
+                                            color: AppColors.statusClosed,
+                                            fontWeight: FontWeight.w600,
+                                          ),
+                                        ),
+                                      ],
+                                    ),
+                                  ),
                               ],
                             ),
                           ],
@@ -1103,6 +1199,7 @@ class _CompanyProjectsListScreenState extends State<CompanyProjectsListScreen> {
                             icon: Icons.calendar_today_outlined,
                             label: 'Due ${project.deadline}',
                           ),
+                          _buildPaymentStatusChip(project),
                         ],
                       ),
                       const SizedBox(height: 14),
@@ -1277,6 +1374,56 @@ class _CompanyProjectsListScreenState extends State<CompanyProjectsListScreen> {
               fontSize: 12,
               fontWeight: FontWeight.w500,
               color: AppColors.darkText,
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+
+  Widget _buildPaymentStatusChip(ProjectModel project) {
+    final isAssigned = project.assignedStudent?.trim().isNotEmpty == true;
+    final label = !isAssigned
+        ? 'Unassigned'
+        : project.paymentSent
+        ? 'Paid'
+        : 'Payment Pending';
+    final color = !isAssigned
+        ? AppColors.grayText
+        : project.paymentSent
+        ? const Color(0xFF166534)
+        : const Color(0xFF92400E);
+    final background = !isAssigned
+        ? AppColors.surfaceAlt
+        : project.paymentSent
+        ? AppColors.successBg
+        : AppColors.warningBg;
+    return Container(
+      padding: const EdgeInsets.symmetric(horizontal: 9, vertical: 5),
+      decoration: BoxDecoration(
+        color: background,
+        borderRadius: BorderRadius.circular(9),
+        border: Border.all(color: color.withValues(alpha: 0.2)),
+      ),
+      child: Row(
+        mainAxisSize: MainAxisSize.min,
+        children: [
+          Icon(
+            !isAssigned
+                ? Icons.person_outline_rounded
+                : project.paymentSent
+                ? Icons.check_circle_outline
+                : Icons.pending_outlined,
+            size: 13.5,
+            color: color,
+          ),
+          const SizedBox(width: 5),
+          Text(
+            label,
+            style: GoogleFonts.inter(
+              fontSize: 12,
+              fontWeight: FontWeight.w600,
+              color: color,
             ),
           ),
         ],

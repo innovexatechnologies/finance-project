@@ -771,50 +771,59 @@ class _AdminPaymentMethodsScreenState extends State<AdminPaymentMethodsScreen> {
             child: Row(
               mainAxisAlignment: MainAxisAlignment.spaceBetween,
               children: [
-                Row(
-                  children: [
-                    Container(
-                      padding: const EdgeInsets.all(10),
-                      decoration: BoxDecoration(
-                        color: brandColor.withValues(alpha: 0.15),
-                        borderRadius: BorderRadius.circular(10),
+                Expanded(
+                  child: Row(
+                    children: [
+                      Container(
+                        padding: const EdgeInsets.all(10),
+                        decoration: BoxDecoration(
+                          color: brandColor.withValues(alpha: 0.15),
+                          borderRadius: BorderRadius.circular(10),
+                        ),
+                        child: Icon(method.icon, color: brandColor, size: 22),
                       ),
-                      child: Icon(method.icon, color: brandColor, size: 22),
-                    ),
-                    const SizedBox(width: 12),
-                    Column(
-                      crossAxisAlignment: CrossAxisAlignment.start,
-                      children: [
-                        Text(
-                          method.bankOrWalletName,
-                          style: GoogleFonts.poppins(
-                            fontSize: 16,
-                            fontWeight: FontWeight.bold,
-                            color: AppColors.darkNavy,
-                          ),
-                        ),
-                        Container(
-                          padding: const EdgeInsets.symmetric(
-                            horizontal: 6,
-                            vertical: 2,
-                          ),
-                          decoration: BoxDecoration(
-                            color: brandColor.withValues(alpha: 0.12),
-                            borderRadius: BorderRadius.circular(4),
-                          ),
-                          child: Text(
-                            method.methodType,
-                            style: GoogleFonts.inter(
-                              fontSize: 10.5,
-                              fontWeight: FontWeight.bold,
-                              color: brandColor,
+                      const SizedBox(width: 12),
+                      Expanded(
+                        child: Column(
+                          crossAxisAlignment: CrossAxisAlignment.start,
+                          children: [
+                            Text(
+                              method.bankOrWalletName,
+                              maxLines: 1,
+                              overflow: TextOverflow.ellipsis,
+                              style: GoogleFonts.poppins(
+                                fontSize: 16,
+                                fontWeight: FontWeight.bold,
+                                color: AppColors.darkNavy,
+                              ),
                             ),
-                          ),
+                            Container(
+                              padding: const EdgeInsets.symmetric(
+                                horizontal: 6,
+                                vertical: 2,
+                              ),
+                              decoration: BoxDecoration(
+                                color: brandColor.withValues(alpha: 0.12),
+                                borderRadius: BorderRadius.circular(4),
+                              ),
+                              child: Text(
+                                method.methodType,
+                                maxLines: 1,
+                                overflow: TextOverflow.ellipsis,
+                                style: GoogleFonts.inter(
+                                  fontSize: 10.5,
+                                  fontWeight: FontWeight.bold,
+                                  color: brandColor,
+                                ),
+                              ),
+                            ),
+                          ],
                         ),
-                      ],
-                    ),
-                  ],
+                      ),
+                    ],
+                  ),
                 ),
+                const SizedBox(width: 8),
                 // Active / Inactive Switch
                 Row(
                   mainAxisSize: MainAxisSize.min,
@@ -832,7 +841,7 @@ class _AdminPaymentMethodsScreenState extends State<AdminPaymentMethodsScreen> {
                     const SizedBox(width: 6),
                     Switch.adaptive(
                       value: method.isActive,
-                      activeColor: AppColors.success,
+                      activeThumbColor: AppColors.success,
                       activeTrackColor: AppColors.successBg,
                       onChanged: (val) async {
                         final ok = await _paymentService.toggleMethodStatus(
@@ -964,33 +973,41 @@ class _AdminPaymentMethodsScreenState extends State<AdminPaymentMethodsScreen> {
                 Row(
                   mainAxisAlignment: MainAxisAlignment.spaceBetween,
                   children: [
-                    Row(
-                      children: [
-                        Icon(
-                          method.isActive
-                              ? Icons.visibility_rounded
-                              : Icons.visibility_off_rounded,
-                          size: 14,
-                          color: method.isActive
-                              ? AppColors.success
-                              : AppColors.textMuted,
-                        ),
-                        const SizedBox(width: 5),
-                        Text(
-                          method.isActive
-                              ? 'Visible during checkout'
-                              : 'Hidden from checkout',
-                          style: GoogleFonts.inter(
-                            fontSize: 11.5,
+                    Expanded(
+                      child: Row(
+                        children: [
+                          Icon(
+                            method.isActive
+                                ? Icons.visibility_rounded
+                                : Icons.visibility_off_rounded,
+                            size: 14,
                             color: method.isActive
                                 ? AppColors.success
                                 : AppColors.textMuted,
-                            fontWeight: FontWeight.w500,
                           ),
-                        ),
-                      ],
+                          const SizedBox(width: 5),
+                          Expanded(
+                            child: Text(
+                              method.isActive
+                                  ? 'Visible during checkout'
+                                  : 'Hidden from checkout',
+                              maxLines: 1,
+                              overflow: TextOverflow.ellipsis,
+                              style: GoogleFonts.inter(
+                                fontSize: 11.5,
+                                color: method.isActive
+                                    ? AppColors.success
+                                    : AppColors.textMuted,
+                                fontWeight: FontWeight.w500,
+                              ),
+                            ),
+                          ),
+                        ],
+                      ),
                     ),
+                    const SizedBox(width: 8),
                     Row(
+                      mainAxisSize: MainAxisSize.min,
                       children: [
                         IconButton(
                           tooltip: 'Delete Method',
@@ -1346,7 +1363,7 @@ class _AddEditMethodSheetState extends State<_AddEditMethodSheet> {
                 ),
                 const SizedBox(height: 8),
                 DropdownButtonFormField<String>(
-                  value: _selectedType,
+                  initialValue: _selectedType,
                   decoration: InputDecoration(
                     prefixIcon: const Icon(Icons.category_rounded, size: 20),
                     filled: true,
@@ -1577,7 +1594,7 @@ class _AddEditMethodSheetState extends State<_AddEditMethodSheet> {
                       ),
                       Switch.adaptive(
                         value: _isActive,
-                        activeColor: AppColors.success,
+                        activeThumbColor: AppColors.success,
                         onChanged: (val) => setState(() => _isActive = val),
                       ),
                     ],

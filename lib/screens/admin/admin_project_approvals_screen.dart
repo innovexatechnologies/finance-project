@@ -607,7 +607,7 @@ class _AdminProjectApprovalsScreenState
                         width: 48,
                         height: 48,
                         fit: BoxFit.cover,
-                        errorBuilder: (_, __, ___) => const Icon(
+                        errorBuilder: (context, error, stackTrace) => const Icon(
                           Icons.receipt_long_rounded,
                           size: 32,
                           color: AppColors.primary,

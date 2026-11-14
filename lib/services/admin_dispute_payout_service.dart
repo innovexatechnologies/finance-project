@@ -230,17 +230,35 @@ class AdminDisputePayoutService {
     final nowIso = DateTime.now().toIso8601String();
     final supabase = SupabaseHelper.clientOrNull;
 
-    // Get escrow amount
-    double escrow = 0.0;
-    String projectTitle = 'Project';
-    final currentList = disputedProjectsNotifier.value;
-    try {
-      final p = currentList.firstWhere((p) => p.id == projectId);
-      escrow = p.escrowAmount > 0 ? p.escrowAmount : 10000.0;
-      projectTitle = p.title;
-    } catch (_) {
-      escrow = 10000.0;
+    // Find project to get escrow amount and title
+    ProjectModel? existing;
+    for (final p in disputedProjectsNotifier.value) {
+      if (p.id == projectId) {
+        existing = p;
+        break;
+      }
     }
+    if (existing == null) {
+      for (final p in payoutReadyProjectsNotifier.value) {
+        if (p.id == projectId) {
+          existing = p;
+          break;
+        }
+      }
+    }
+    if (existing == null) {
+      for (final p in CompanyProjectService().allProjects) {
+        if (p.id == projectId) {
+          existing = p;
+          break;
+        }
+      }
+    }
+
+    final escrow = (existing != null && existing.escrowAmount > 0)
+        ? existing.escrowAmount
+        : 10000.0;
+    final projectTitle = existing?.title ?? 'Project';
 
     double commission = 0.0;
     double studentPayout = 0.0;
@@ -296,27 +314,32 @@ class AdminDisputePayoutService {
 
     // Remove from disputed queue
     final dList = List<ProjectModel>.from(disputedProjectsNotifier.value);
-    final idx = dList.indexWhere((p) => p.id == projectId);
-    ProjectModel? updatedModel;
-    if (idx != -1) {
-      updatedModel = dList[idx].copyWith(
-        status: 'ready_for_payout',
-        payoutType: decisionType,
-        platformCommissionAmount: commission,
-        studentPayoutAmount: studentPayout,
-        companyRefundAmount: companyRefund,
-      );
-      dList.removeAt(idx);
-      disputedProjectsNotifier.value = dList;
-    }
+    dList.removeWhere((p) => p.id == projectId);
+    disputedProjectsNotifier.value = dList;
 
-    // Add to payout-ready queue
-    if (updatedModel != null) {
-      final pList = List<ProjectModel>.from(payoutReadyProjectsNotifier.value);
-      pList.removeWhere((p) => p.id == projectId);
-      pList.insert(0, updatedModel);
-      payoutReadyProjectsNotifier.value = pList;
-    }
+    final updatedModel = (existing ??
+            ProjectModel(
+              id: projectId,
+              title: projectTitle,
+              description: 'Project',
+              companyName: 'Company',
+              category: 'General',
+              deadline: 'Flexible',
+              status: 'ready_for_payout',
+            ))
+        .copyWith(
+      status: 'ready_for_payout',
+      payoutType: decisionType,
+      platformCommissionAmount: commission,
+      studentPayoutAmount: studentPayout,
+      companyRefundAmount: companyRefund,
+    );
+
+    // Add or update in payout-ready queue
+    final pList = List<ProjectModel>.from(payoutReadyProjectsNotifier.value);
+    pList.removeWhere((p) => p.id == projectId);
+    pList.insert(0, updatedModel);
+    payoutReadyProjectsNotifier.value = pList;
 
     // Sync into CompanyProjectService
     _syncCompanyService(projectId, 'ready_for_payout');

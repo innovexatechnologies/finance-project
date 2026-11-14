@@ -172,6 +172,17 @@ ALTER TABLE public.students ADD COLUMN IF NOT EXISTS created_at TIMESTAMPTZ DEFA
 ALTER TABLE public.students ADD COLUMN IF NOT EXISTS updated_at TIMESTAMPTZ DEFAULT timezone('utc'::text, now());
 
 -- ----------------------------------------------------------------------------
+-- 4A. PRIVATE STUDENT PAYMENT METHODS
+-- ----------------------------------------------------------------------------
+CREATE TABLE IF NOT EXISTS public.student_payment_methods (
+  user_id UUID PRIMARY KEY REFERENCES auth.users(id) ON DELETE CASCADE,
+  provider TEXT NOT NULL CHECK (provider IN ('Bank Account', 'JazzCash', 'Easypaisa')),
+  account_number TEXT NOT NULL
+    CHECK (length(btrim(account_number)) BETWEEN 1 AND 50),
+  updated_at TIMESTAMPTZ DEFAULT timezone('utc'::text, now()) NOT NULL
+);
+
+-- ----------------------------------------------------------------------------
 -- 5. PROJECTS / SPRINTS TABLE
 -- ----------------------------------------------------------------------------
 CREATE TABLE IF NOT EXISTS public.projects (
@@ -194,6 +205,7 @@ CREATE TABLE IF NOT EXISTS public.projects (
   status TEXT DEFAULT 'Open',
   assigned_student TEXT,
   progress DOUBLE PRECISION DEFAULT 0.0,
+  payment_sent BOOLEAN NOT NULL DEFAULT FALSE,
   attachment_url TEXT,
   moderation_reason TEXT,
   moderator_name TEXT,
@@ -219,6 +231,7 @@ ALTER TABLE public.projects ADD COLUMN IF NOT EXISTS skills TEXT[] DEFAULT '{}';
 ALTER TABLE public.projects ADD COLUMN IF NOT EXISTS status TEXT DEFAULT 'Open';
 ALTER TABLE public.projects ADD COLUMN IF NOT EXISTS assigned_student TEXT;
 ALTER TABLE public.projects ADD COLUMN IF NOT EXISTS progress DOUBLE PRECISION DEFAULT 0.0;
+ALTER TABLE public.projects ADD COLUMN IF NOT EXISTS payment_sent BOOLEAN NOT NULL DEFAULT FALSE;
 ALTER TABLE public.projects ADD COLUMN IF NOT EXISTS attachment_url TEXT;
 ALTER TABLE public.projects ADD COLUMN IF NOT EXISTS moderation_reason TEXT;
 ALTER TABLE public.projects ADD COLUMN IF NOT EXISTS moderator_name TEXT;
@@ -226,9 +239,24 @@ ALTER TABLE public.projects ADD COLUMN IF NOT EXISTS created_at TIMESTAMPTZ DEFA
 ALTER TABLE public.projects ADD COLUMN IF NOT EXISTS updated_at TIMESTAMPTZ DEFAULT timezone('utc'::text, now());
 
 ALTER TABLE public.projects DROP CONSTRAINT IF EXISTS projects_status_check;
+ALTER TABLE public.projects ALTER COLUMN company_id DROP NOT NULL;
+ALTER TABLE public.projects ALTER COLUMN posted_by DROP NOT NULL;
+ALTER TABLE public.projects ALTER COLUMN user_id DROP NOT NULL;
+ALTER TABLE public.projects ALTER COLUMN title DROP NOT NULL;
+ALTER TABLE public.projects ALTER COLUMN stipend DROP NOT NULL;
+ALTER TABLE public.projects ALTER COLUMN budget DROP NOT NULL;
 
 UPDATE public.projects SET posted_by = user_id WHERE posted_by IS NULL AND user_id IS NOT NULL;
 UPDATE public.projects SET user_id = posted_by WHERE user_id IS NULL AND posted_by IS NOT NULL;
+
+-- Automatically link orphan projects to their respective company or first registered company
+UPDATE public.projects p
+SET
+  company_id = COALESCE(p.company_id, (SELECT c.id FROM public.companies c WHERE c.user_id = p.posted_by LIMIT 1), (SELECT c.id FROM public.companies c LIMIT 1)),
+  posted_by = COALESCE(p.posted_by, (SELECT c.user_id FROM public.companies c WHERE c.id = p.company_id LIMIT 1), (SELECT c.user_id FROM public.companies c LIMIT 1)),
+  user_id = COALESCE(p.user_id, p.posted_by, (SELECT c.user_id FROM public.companies c LIMIT 1)),
+  company_name = COALESCE(NULLIF(p.company_name, ''), (SELECT c.company_name FROM public.companies c WHERE c.id = p.company_id LIMIT 1), (SELECT c.company_name FROM public.companies c LIMIT 1), 'Partner Company')
+WHERE p.company_id IS NULL OR p.posted_by IS NULL OR p.user_id IS NULL OR p.company_name IS NULL OR p.company_name = '';
 
 -- ----------------------------------------------------------------------------
 -- 6. APPLICATIONS & SUBMITTED WORK TABLE
@@ -306,10 +334,82 @@ ALTER TABLE public.applications ADD COLUMN IF NOT EXISTS work_submitted_at TIMES
 ALTER TABLE public.applications ADD COLUMN IF NOT EXISTS submitted_at TIMESTAMPTZ DEFAULT timezone('utc'::text, now());
 ALTER TABLE public.applications ADD COLUMN IF NOT EXISTS updated_at TIMESTAMPTZ DEFAULT timezone('utc'::text, now());
 
+ALTER TABLE public.applications ADD COLUMN IF NOT EXISTS name TEXT;
+ALTER TABLE public.applications ALTER COLUMN name DROP NOT NULL;
+ALTER TABLE public.applications ADD COLUMN IF NOT EXISTS email TEXT;
+ALTER TABLE public.applications ALTER COLUMN email DROP NOT NULL;
+ALTER TABLE public.applications ALTER COLUMN student_name DROP NOT NULL;
+ALTER TABLE public.applications ALTER COLUMN student_email DROP NOT NULL;
+ALTER TABLE public.applications ALTER COLUMN cover_letter DROP NOT NULL;
+ALTER TABLE public.applications ALTER COLUMN portfolio_link DROP NOT NULL;
+ALTER TABLE public.applications ALTER COLUMN resume_link DROP NOT NULL;
 ALTER TABLE public.applications DROP CONSTRAINT IF EXISTS applications_status_check;
 
 UPDATE public.applications SET student_id = user_id WHERE student_id IS NULL AND user_id IS NOT NULL;
 UPDATE public.applications SET user_id = student_id WHERE user_id IS NULL AND student_id IS NOT NULL;
+UPDATE public.applications SET name = student_name WHERE name IS NULL AND student_name IS NOT NULL;
+UPDATE public.applications SET student_name = name WHERE student_name IS NULL AND name IS NOT NULL;
+UPDATE public.applications SET email = student_email WHERE email IS NULL AND student_email IS NOT NULL;
+UPDATE public.applications SET student_email = email WHERE student_email IS NULL AND email IS NOT NULL;
+
+-- A private, server-authoritative record of company selections.
+CREATE TABLE IF NOT EXISTS public.project_assignments (
+  application_id UUID PRIMARY KEY
+    REFERENCES public.applications(id) ON DELETE CASCADE,
+  project_id UUID NOT NULL REFERENCES public.projects(id) ON DELETE CASCADE,
+  student_id UUID NOT NULL REFERENCES auth.users(id) ON DELETE CASCADE,
+  assigned_at TIMESTAMPTZ DEFAULT timezone('utc'::text, now()) NOT NULL
+);
+
+CREATE INDEX IF NOT EXISTS idx_project_assignments_project_id
+  ON public.project_assignments (project_id);
+
+CREATE TABLE IF NOT EXISTS public.project_payment_confirmations (
+  project_id UUID NOT NULL REFERENCES public.projects(id) ON DELETE CASCADE,
+  student_id UUID NOT NULL REFERENCES auth.users(id) ON DELETE CASCADE,
+  confirmation_status TEXT NOT NULL
+    CHECK (confirmation_status IN ('Received', 'Not Received')),
+  confirmed_at TIMESTAMPTZ NOT NULL DEFAULT timezone('utc'::text, now()),
+  PRIMARY KEY (project_id, student_id)
+);
+
+DO $$
+BEGIN
+  IF EXISTS (
+    SELECT 1
+    FROM public.project_assignments
+    GROUP BY project_id
+    HAVING count(*) > 1
+  ) THEN
+    RAISE EXCEPTION
+      'Multiple assignments exist for a project. Reconcile them before applying the single-assignment constraint.';
+  END IF;
+
+END;
+$$;
+
+CREATE UNIQUE INDEX IF NOT EXISTS idx_project_assignments_one_per_project
+  ON public.project_assignments (project_id);
+
+UPDATE public.projects
+SET openings = 1
+WHERE openings IS DISTINCT FROM 1;
+
+ALTER TABLE public.projects
+  ALTER COLUMN openings SET DEFAULT 1,
+  ALTER COLUMN openings SET NOT NULL;
+ALTER TABLE public.projects
+  DROP CONSTRAINT IF EXISTS projects_single_assignment_opening_check;
+ALTER TABLE public.projects
+  ADD CONSTRAINT projects_single_assignment_opening_check CHECK (openings = 1);
+
+DELETE FROM public.project_payment_confirmations pc
+WHERE NOT EXISTS (
+  SELECT 1
+  FROM public.project_assignments pa
+  WHERE pa.project_id = pc.project_id
+    AND pa.student_id = pc.student_id
+);
 
 -- ----------------------------------------------------------------------------
 -- 7. CERTIFICATES TABLE
@@ -446,46 +546,59 @@ $$;
 -- 12. AUTOMATED TRIGGER: AUTO INSERT STUDENT / COMPANY UPON AUTH SIGNUP
 -- ----------------------------------------------------------------------------
 CREATE OR REPLACE FUNCTION public.handle_new_user()
-RETURNS TRIGGER AS $$
+RETURNS TRIGGER
+LANGUAGE plpgsql
+SECURITY DEFINER
+SET search_path = public, auth
+AS $$
 DECLARE
+  raw_role TEXT;
   role_val TEXT;
   name_val TEXT;
   uni_val TEXT;
 BEGIN
-  role_val := COALESCE(new.raw_user_meta_data->>'user_type', 'Student');
-  name_val := COALESCE(new.raw_user_meta_data->>'name', split_part(new.email, '@', 1));
-  uni_val  := COALESCE(new.raw_user_meta_data->>'university', '');
+  raw_role := lower(trim(COALESCE(new.raw_user_meta_data->>'user_type', 'student')));
+  role_val := CASE
+    WHEN raw_role = 'admin' THEN 'Admin'
+    WHEN raw_role = 'company' THEN 'Company'
+    ELSE 'Student'
+  END;
+  name_val := COALESCE(NULLIF(trim(new.raw_user_meta_data->>'name'), ''), split_part(new.email, '@', 1));
+  uni_val  := COALESCE(trim(new.raw_user_meta_data->>'university'), '');
 
-  INSERT INTO public.profiles (id, name, email, user_type, university)
-  VALUES (new.id, name_val, new.email, role_val, uni_val)
+  INSERT INTO public.profiles (id, name, email, user_type, university, account_status)
+  VALUES (new.id, name_val, new.email, role_val, uni_val, 'active')
   ON CONFLICT (id) DO UPDATE
-  SET name = EXCLUDED.name,
+  SET name = COALESCE(NULLIF(EXCLUDED.name, ''), public.profiles.name),
+      email = COALESCE(NULLIF(EXCLUDED.email, ''), public.profiles.email),
       user_type = EXCLUDED.user_type,
       university = COALESCE(NULLIF(EXCLUDED.university, ''), public.profiles.university),
       updated_at = timezone('utc'::text, now());
 
-  IF lower(role_val) = 'company' THEN
-    IF NOT EXISTS (SELECT 1 FROM public.companies WHERE user_id = new.id) THEN
-      INSERT INTO public.companies (user_id, company_name, email, industry, verification_status, logo_initial)
-      VALUES (
-        new.id,
-        name_val,
-        new.email,
-        COALESCE(NULLIF(uni_val, ''), 'Software & Cloud Services'),
-        'not_submitted',
-        upper(left(regexp_replace(name_val, '[^a-zA-Z0-9]', '', 'g') || 'CO', 2))
-      );
-    END IF;
-  ELSIF lower(role_val) = 'student' THEN
-    IF NOT EXISTS (SELECT 1 FROM public.students WHERE user_id = new.id) THEN
-      INSERT INTO public.students (user_id, full_name, email, university)
-      VALUES (new.id, name_val, new.email, uni_val);
-    END IF;
+  IF role_val = 'Company' THEN
+    INSERT INTO public.companies (user_id, company_name, email, industry, verification_status, logo_initial)
+    VALUES (
+      new.id,
+      name_val,
+      new.email,
+      COALESCE(NULLIF(uni_val, ''), 'Software & Cloud Services'),
+      'not_submitted',
+      upper(left(regexp_replace(name_val, '[^a-zA-Z0-9]', '', 'g') || 'CO', 2))
+    )
+    ON CONFLICT (user_id) WHERE user_id IS NOT NULL DO NOTHING;
+  ELSIF role_val = 'Student' THEN
+    INSERT INTO public.students (user_id, full_name, email, university)
+    VALUES (new.id, name_val, new.email, uni_val)
+    ON CONFLICT (user_id) WHERE user_id IS NOT NULL DO NOTHING;
   END IF;
+
+  INSERT INTO public.user_settings (user_id)
+  VALUES (new.id)
+  ON CONFLICT (user_id) DO NOTHING;
 
   RETURN new;
 END;
-$$ LANGUAGE plpgsql SECURITY DEFINER;
+$$;
 
 DROP TRIGGER IF EXISTS on_auth_user_created ON auth.users;
 CREATE TRIGGER on_auth_user_created
@@ -493,15 +606,19 @@ CREATE TRIGGER on_auth_user_created
   FOR EACH ROW EXECUTE FUNCTION public.handle_new_user();
 
 -- ----------------------------------------------------------------------------
--- 12B. DIRECT SIGNUP AUTO-CONFIRMATION & IN-APP AUTH RPCs (NO EMAIL LIMITS)
+-- 12B. DIRECT SIGNUP AUTO-CONFIRMATION & HARDENED AUTH RPCs
 -- ----------------------------------------------------------------------------
 CREATE OR REPLACE FUNCTION public.auto_confirm_auth_user()
-RETURNS TRIGGER AS $$
+RETURNS TRIGGER
+LANGUAGE plpgsql
+SECURITY DEFINER
+SET search_path = public, auth
+AS $$
 BEGIN
   new.email_confirmed_at := COALESCE(new.email_confirmed_at, timezone('utc'::text, now()));
   RETURN new;
 END;
-$$ LANGUAGE plpgsql SECURITY DEFINER;
+$$;
 
 DROP TRIGGER IF EXISTS on_auth_user_auto_confirm ON auth.users;
 CREATE TRIGGER on_auth_user_auto_confirm
@@ -520,10 +637,21 @@ SET search_path = public, auth, extensions
 AS $$
 DECLARE
   clean_email TEXT := lower(trim(COALESCE(target_email, '')));
+  caller_email TEXT;
 BEGIN
+  IF auth.uid() IS NULL THEN
+    RAISE EXCEPTION 'Authentication required.';
+  END IF;
   IF clean_email = '' THEN
     RETURN;
   END IF;
+  IF NOT public.is_admin() THEN
+    SELECT lower(email) INTO caller_email FROM auth.users WHERE id = auth.uid();
+    IF caller_email IS DISTINCT FROM clean_email THEN
+      RAISE EXCEPTION 'Forbidden: you can only confirm your own account.';
+    END IF;
+  END IF;
+
   UPDATE auth.users
   SET email_confirmed_at = COALESCE(email_confirmed_at, timezone('utc'::text, now())),
       confirmation_token = COALESCE(confirmation_token, ''),
@@ -554,8 +682,11 @@ DECLARE
   detected_instance_id UUID := '00000000-0000-0000-0000-000000000000'::UUID;
   col_name TEXT;
 BEGIN
-  IF clean_email = '' OR clean_pass = '' THEN
-    RAISE EXCEPTION 'Email and password are required.';
+  IF clean_email = '' OR position('@' in clean_email) = 0 THEN
+    RAISE EXCEPTION 'A valid email address is required.';
+  END IF;
+  IF length(clean_pass) < 6 THEN
+    RAISE EXCEPTION 'Password must be at least 6 characters long.';
   END IF;
 
   IF EXISTS (SELECT 1 FROM auth.users WHERE lower(email) = clean_email) THEN
@@ -682,14 +813,25 @@ AS $$
 DECLARE
   clean_email TEXT := lower(trim(COALESCE(target_email, '')));
   clean_pass TEXT := trim(COALESCE(new_password, ''));
+  caller_email TEXT;
   target_uid UUID;
   col_name TEXT;
 BEGIN
+  IF auth.uid() IS NULL THEN
+    RAISE EXCEPTION 'Authentication required to update password.';
+  END IF;
   IF clean_email = '' THEN
     RAISE EXCEPTION 'Please enter your email address.';
   END IF;
-  IF clean_pass = '' THEN
-    RAISE EXCEPTION 'Please enter a new password.';
+  IF length(clean_pass) < 6 THEN
+    RAISE EXCEPTION 'Password must be at least 6 characters long.';
+  END IF;
+
+  IF NOT public.is_admin() THEN
+    SELECT lower(email) INTO caller_email FROM auth.users WHERE id = auth.uid();
+    IF caller_email IS DISTINCT FROM clean_email THEN
+      RAISE EXCEPTION 'Forbidden: you can only update your own account password.';
+    END IF;
   END IF;
 
   SELECT id INTO target_uid
@@ -883,21 +1025,28 @@ BEGIN
 END;
 $$;
 
-GRANT EXECUTE ON FUNCTION public.confirm_user_email_in_app(TEXT) TO anon, authenticated;
+REVOKE ALL ON FUNCTION public.confirm_user_email_in_app(TEXT) FROM PUBLIC, anon;
+GRANT EXECUTE ON FUNCTION public.confirm_user_email_in_app(TEXT) TO authenticated;
+
+REVOKE ALL ON FUNCTION public.register_user_in_app(TEXT, TEXT, TEXT, TEXT, TEXT) FROM PUBLIC;
 GRANT EXECUTE ON FUNCTION public.register_user_in_app(TEXT, TEXT, TEXT, TEXT, TEXT) TO anon, authenticated;
-GRANT EXECUTE ON FUNCTION public.reset_user_password_in_app(TEXT, TEXT) TO anon, authenticated;
+
+REVOKE ALL ON FUNCTION public.reset_user_password_in_app(TEXT, TEXT) FROM PUBLIC, anon;
+GRANT EXECUTE ON FUNCTION public.reset_user_password_in_app(TEXT, TEXT) TO authenticated;
+
+REVOKE ALL ON FUNCTION public.provision_admin_in_app(TEXT, TEXT, TEXT, TEXT) FROM PUBLIC, anon;
 GRANT EXECUTE ON FUNCTION public.provision_admin_in_app(TEXT, TEXT, TEXT, TEXT) TO authenticated;
 
 -- ----------------------------------------------------------------------------
--- 13. SUPABASE STORAGE BUCKETS (PUBLIC VISIBILITY)
+-- 13. SUPABASE STORAGE BUCKETS (PUBLIC ASSETS VS PRIVATE DOCS)
 -- ----------------------------------------------------------------------------
 INSERT INTO storage.buckets (id, name, public)
 VALUES
   ('public-files', 'public-files', true),
-  ('company-assets', 'company-assets', true),
-  ('student-docs', 'student-docs', true),
-  ('certificates', 'certificates', true)
-ON CONFLICT (id) DO UPDATE SET public = true;
+  ('certificates', 'certificates', true),
+  ('company-assets', 'company-assets', false),
+  ('student-docs', 'student-docs', false)
+ON CONFLICT (id) DO UPDATE SET public = EXCLUDED.public;
 
 -- ----------------------------------------------------------------------------
 -- 14. STORAGE ROW LEVEL SECURITY (RLS) POLICIES
@@ -909,29 +1058,130 @@ DROP POLICY IF EXISTS "Owner Storage Delete" ON storage.objects;
 
 CREATE POLICY "Public Storage Read"
 ON storage.objects FOR SELECT
-USING (bucket_id IN ('public-files', 'company-assets', 'student-docs', 'certificates'));
+USING (
+  bucket_id IN ('public-files', 'certificates')
+  OR (
+    bucket_id = 'student-docs'
+    AND (
+      (storage.foldername(name))[1] = 'avatars'
+      OR (
+        auth.uid() IS NOT NULL
+        AND (
+          auth.uid() = owner
+          OR auth.uid()::text = (storage.foldername(name))[1]
+          OR name LIKE (auth.uid()::text || '/%')
+          OR name LIKE ('%' || auth.uid()::text || '%')
+          OR public.is_admin()
+          OR EXISTS (
+            SELECT 1 FROM public.applications a
+            JOIN public.projects p ON p.id = a.project_id
+            LEFT JOIN public.companies c ON c.id = COALESCE(p.company_id, a.company_id)
+            WHERE (
+              a.student_id::text = (storage.foldername(name))[1]
+              OR a.user_id::text = (storage.foldername(name))[1]
+              OR a.student_id = auth.uid()
+              OR a.user_id = auth.uid()
+            )
+              AND (p.posted_by = auth.uid() OR p.user_id = auth.uid() OR c.user_id = auth.uid())
+          )
+        )
+      )
+    )
+  )
+  OR (
+    bucket_id = 'company-assets'
+    AND auth.uid() IS NOT NULL
+    AND (
+      auth.uid() = owner
+      OR auth.uid()::text = (storage.foldername(name))[1]
+      OR name LIKE (auth.uid()::text || '/%')
+      OR name LIKE ('%' || auth.uid()::text || '%')
+      OR public.is_admin()
+    )
+  )
+);
 
 CREATE POLICY "Authenticated Storage Upload"
 ON storage.objects FOR INSERT
 TO authenticated
-WITH CHECK (bucket_id IN ('public-files', 'company-assets', 'student-docs', 'certificates'));
+WITH CHECK (
+  (
+    bucket_id = 'public-files'
+    AND (
+      auth.uid()::text = (storage.foldername(name))[1]
+      OR name LIKE (auth.uid()::text || '/%')
+      OR name LIKE ('avatars/' || auth.uid()::text || '_%')
+      OR name LIKE ('logos/' || auth.uid()::text || '_%')
+      OR public.is_admin()
+    )
+  )
+  OR (
+    bucket_id = 'student-docs'
+    AND (
+      auth.uid()::text = (storage.foldername(name))[1]
+      OR name LIKE (auth.uid()::text || '/%')
+      OR name LIKE ('avatars/' || auth.uid()::text || '_%')
+      OR name LIKE ('resumes/' || auth.uid()::text || '_%')
+      OR name LIKE ('deliverables/' || auth.uid()::text || '_%')
+      OR name LIKE ('submissions/' || auth.uid()::text || '_%')
+      OR public.is_admin()
+    )
+  )
+  OR (
+    bucket_id = 'company-assets'
+    AND (
+      auth.uid()::text = (storage.foldername(name))[1]
+      OR name LIKE (auth.uid()::text || '/%')
+      OR name LIKE ('evidence/' || auth.uid()::text || '_%')
+      OR name LIKE ('logos/' || auth.uid()::text || '_%')
+      OR public.is_admin()
+    )
+  )
+  OR (
+    bucket_id = 'certificates'
+    AND (
+      public.is_admin()
+      OR EXISTS (SELECT 1 FROM public.companies c WHERE c.user_id = auth.uid())
+      OR EXISTS (SELECT 1 FROM public.projects p WHERE p.posted_by = auth.uid() OR p.user_id = auth.uid())
+    )
+  )
+);
 
 CREATE POLICY "Owner Storage Update"
 ON storage.objects FOR UPDATE
 TO authenticated
-USING (auth.uid() = owner OR public.is_admin());
+USING (
+  auth.uid() = owner
+  OR auth.uid()::text = (storage.foldername(name))[1]
+  OR name LIKE (auth.uid()::text || '/%')
+  OR public.is_admin()
+)
+WITH CHECK (
+  auth.uid() = owner
+  OR auth.uid()::text = (storage.foldername(name))[1]
+  OR name LIKE (auth.uid()::text || '/%')
+  OR public.is_admin()
+);
 
 CREATE POLICY "Owner Storage Delete"
 ON storage.objects FOR DELETE
 TO authenticated
-USING (auth.uid() = owner OR public.is_admin());
+USING (
+  auth.uid() = owner
+  OR auth.uid()::text = (storage.foldername(name))[1]
+  OR name LIKE (auth.uid()::text || '/%')
+  OR public.is_admin()
+);
 
 -- ----------------------------------------------------------------------------
--- 15. TABLE ROW LEVEL SECURITY (RLS) POLICIES
+-- 15. TABLE ROW LEVEL SECURITY (RLS) POLICIES (HARDENED)
 -- ----------------------------------------------------------------------------
 ALTER TABLE public.profiles ENABLE ROW LEVEL SECURITY;
 ALTER TABLE public.companies ENABLE ROW LEVEL SECURITY;
 ALTER TABLE public.students ENABLE ROW LEVEL SECURITY;
+ALTER TABLE public.student_payment_methods ENABLE ROW LEVEL SECURITY;
+ALTER TABLE public.project_assignments ENABLE ROW LEVEL SECURITY;
+ALTER TABLE public.project_payment_confirmations ENABLE ROW LEVEL SECURITY;
 ALTER TABLE public.projects ENABLE ROW LEVEL SECURITY;
 ALTER TABLE public.applications ENABLE ROW LEVEL SECURITY;
 ALTER TABLE public.certificates ENABLE ROW LEVEL SECURITY;
@@ -942,51 +1192,534 @@ ALTER TABLE public.platform_taxonomies ENABLE ROW LEVEL SECURITY;
 ALTER TABLE public.admin_audit_logs ENABLE ROW LEVEL SECURITY;
 
 DROP POLICY IF EXISTS "Profiles Public View" ON public.profiles;
+DROP POLICY IF EXISTS "Profiles Authenticated View" ON public.profiles;
 DROP POLICY IF EXISTS "Profiles Self Insert" ON public.profiles;
 DROP POLICY IF EXISTS "Profiles Self Update" ON public.profiles;
 DROP POLICY IF EXISTS "Profiles Self Manage" ON public.profiles;
+DROP TRIGGER IF EXISTS prevent_profile_role_changes ON public.profiles;
 
 DROP POLICY IF EXISTS "Companies Public View" ON public.companies;
+DROP POLICY IF EXISTS "Companies Authenticated View" ON public.companies;
 DROP POLICY IF EXISTS "Companies Self Manage" ON public.companies;
 
 DROP POLICY IF EXISTS "Students Public View" ON public.students;
+DROP POLICY IF EXISTS "Students Authenticated View" ON public.students;
 DROP POLICY IF EXISTS "Students Self Manage" ON public.students;
+DROP POLICY IF EXISTS "Student Payment Methods Owner Access" ON public.student_payment_methods;
 
 DROP POLICY IF EXISTS "Projects Public View" ON public.projects;
+DROP POLICY IF EXISTS "Projects Authenticated View" ON public.projects;
 DROP POLICY IF EXISTS "Projects Company Manage" ON public.projects;
 
 DROP POLICY IF EXISTS "Applications Student Manage" ON public.applications;
 DROP POLICY IF EXISTS "Applications Company View" ON public.applications;
 DROP POLICY IF EXISTS "Applications Company Manage" ON public.applications;
+DROP POLICY IF EXISTS "Applications Company Delete" ON public.applications;
 DROP POLICY IF EXISTS "Applications Admin Manage" ON public.applications;
+DROP TRIGGER IF EXISTS prevent_application_identity_insert ON public.applications;
+DROP TRIGGER IF EXISTS prevent_application_identity_changes ON public.applications;
 
 DROP POLICY IF EXISTS "Certificates Public View" ON public.certificates;
+DROP POLICY IF EXISTS "Certificates Authenticated View" ON public.certificates;
 DROP POLICY IF EXISTS "Certificates Authenticated Manage" ON public.certificates;
+DROP POLICY IF EXISTS "Certificates Company Manage" ON public.certificates;
+DROP POLICY IF EXISTS "Certificates Admin Manage" ON public.certificates;
 
 DROP POLICY IF EXISTS "Saved Projects User Access" ON public.saved_projects;
 DROP POLICY IF EXISTS "Support Tickets Access" ON public.support_tickets;
 DROP POLICY IF EXISTS "User Settings Self Access" ON public.user_settings;
 DROP POLICY IF EXISTS "Platform Taxonomies Public Read" ON public.platform_taxonomies;
+DROP POLICY IF EXISTS "Platform Taxonomies Authenticated Read" ON public.platform_taxonomies;
 DROP POLICY IF EXISTS "Platform Taxonomies Admin Manage" ON public.platform_taxonomies;
 DROP POLICY IF EXISTS "Admin Audit Logs Access" ON public.admin_audit_logs;
 
-CREATE POLICY "Profiles Public View" ON public.profiles FOR SELECT USING (true);
+-- Profiles: never readable by anon; readable by self, admin, company partners, and companies reviewing applicants
+CREATE POLICY "Profiles Authenticated View" ON public.profiles FOR SELECT TO authenticated
+  USING (
+    auth.uid() = id
+    OR public.is_admin()
+    OR EXISTS (SELECT 1 FROM public.companies c WHERE c.user_id = public.profiles.id)
+    OR EXISTS (
+      SELECT 1 FROM public.applications a
+      JOIN public.projects p ON p.id = a.project_id
+      LEFT JOIN public.companies c ON c.id = p.company_id
+      WHERE (a.student_id = public.profiles.id OR a.user_id = public.profiles.id)
+        AND (p.posted_by = auth.uid() OR p.user_id = auth.uid() OR c.user_id = auth.uid())
+    )
+  );
 CREATE POLICY "Profiles Self Insert" ON public.profiles FOR INSERT TO authenticated
-  WITH CHECK (auth.uid() = id OR public.is_admin());
+  WITH CHECK (
+    (auth.uid() = id AND lower(COALESCE(user_type, 'student')) IN ('student', 'company'))
+    OR public.is_admin()
+  );
 CREATE POLICY "Profiles Self Update" ON public.profiles FOR UPDATE TO authenticated
-  USING (auth.uid() = id OR public.is_admin());
+  USING (auth.uid() = id OR public.is_admin())
+  WITH CHECK (
+    (auth.uid() = id AND lower(COALESCE(user_type, 'student')) IN ('student', 'company'))
+    OR public.is_admin()
+  );
 
-CREATE POLICY "Companies Public View" ON public.companies FOR SELECT USING (true);
+CREATE OR REPLACE FUNCTION public.prevent_profile_role_changes()
+RETURNS TRIGGER
+LANGUAGE plpgsql
+SET search_path = pg_catalog
+AS $$
+BEGIN
+  IF auth.uid() IS NOT NULL
+    AND auth.uid() = OLD.id
+    AND NOT public.is_admin()
+    AND NEW.user_type IS DISTINCT FROM OLD.user_type
+  THEN
+    RAISE EXCEPTION 'Account roles cannot be changed by the account owner.';
+  END IF;
+  RETURN NEW;
+END;
+$$;
+
+DROP TRIGGER IF EXISTS prevent_profile_role_changes ON public.profiles;
+CREATE TRIGGER prevent_profile_role_changes
+BEFORE UPDATE OF user_type ON public.profiles
+FOR EACH ROW
+EXECUTE FUNCTION public.prevent_profile_role_changes();
+
+-- Companies: readable by authenticated users only (no anon scraping); writable by owner or admin
+DROP POLICY IF EXISTS "Companies Public View" ON public.companies;
+DROP POLICY IF EXISTS "Companies Authenticated View" ON public.companies;
+CREATE POLICY "Companies Authenticated View" ON public.companies FOR SELECT TO authenticated
+  USING (true);
 CREATE POLICY "Companies Self Manage" ON public.companies FOR ALL TO authenticated
   USING (auth.uid() = user_id OR public.is_admin())
   WITH CHECK (auth.uid() = user_id OR public.is_admin());
 
-CREATE POLICY "Students Public View" ON public.students FOR SELECT USING (true);
+-- Students: readable by self, admin, or company whose project the student applied to (no anon scraping)
+CREATE POLICY "Students Authenticated View" ON public.students FOR SELECT TO authenticated
+  USING (
+    auth.uid() = user_id
+    OR public.is_admin()
+    OR EXISTS (
+      SELECT 1 FROM public.applications a
+      JOIN public.projects p ON p.id = a.project_id
+      LEFT JOIN public.companies c ON c.id = p.company_id
+      WHERE (a.student_id = public.students.user_id OR a.user_id = public.students.user_id)
+        AND (p.posted_by = auth.uid() OR p.user_id = auth.uid() OR c.user_id = auth.uid())
+    )
+  );
 CREATE POLICY "Students Self Manage" ON public.students FOR ALL TO authenticated
   USING (auth.uid() = user_id OR public.is_admin())
   WITH CHECK (auth.uid() = user_id OR public.is_admin());
 
-CREATE POLICY "Projects Public View" ON public.projects FOR SELECT USING (true);
+REVOKE ALL ON TABLE public.student_payment_methods FROM anon, PUBLIC;
+GRANT SELECT, INSERT, UPDATE, DELETE ON TABLE public.student_payment_methods TO authenticated;
+CREATE POLICY "Student Payment Methods Owner Access"
+ON public.student_payment_methods FOR ALL TO authenticated
+USING (auth.uid() = user_id OR public.is_admin())
+WITH CHECK (auth.uid() = user_id OR public.is_admin());
+
+REVOKE ALL ON TABLE public.project_assignments FROM anon, PUBLIC, authenticated;
+REVOKE ALL ON TABLE public.project_payment_confirmations
+  FROM anon, PUBLIC, authenticated;
+
+CREATE OR REPLACE FUNCTION public.assign_applicant_to_project(
+  p_application_id UUID,
+  p_confirm_existing BOOLEAN
+)
+RETURNS VOID
+LANGUAGE plpgsql
+SECURITY DEFINER
+SET search_path = pg_catalog
+AS $$
+DECLARE
+  v_project_id UUID;
+  v_project_company_id UUID;
+  v_project_owner UUID;
+  v_project_user_id UUID;
+  v_student_id UUID;
+  v_user_id UUID;
+  v_student_name TEXT;
+  v_university TEXT;
+  v_application_status TEXT;
+  v_payment_sent BOOLEAN;
+  v_assigned_label TEXT;
+BEGIN
+  IF auth.uid() IS NULL THEN
+    RAISE EXCEPTION 'Authentication is required to assign an applicant.';
+  END IF;
+
+  IF NOT EXISTS (
+    SELECT 1 FROM public.profiles pr
+    WHERE pr.id = auth.uid()
+      AND lower(BTRIM(pr.user_type)) = 'company'
+  ) THEN
+    RAISE EXCEPTION 'Only company accounts can assign applicants.';
+  END IF;
+
+  IF NOT EXISTS (
+    SELECT 1
+    FROM public.applications a
+    JOIN public.projects p ON p.id = a.project_id
+    LEFT JOIN public.companies c ON c.id = p.company_id
+    WHERE a.id = p_application_id
+      AND (
+        p.posted_by = auth.uid()
+        OR p.user_id = auth.uid()
+        OR c.user_id = auth.uid()
+      )
+  ) THEN
+    RAISE EXCEPTION 'Application not found or you are not authorized to assign it.';
+  END IF;
+
+  SELECT
+    p.id,
+    p.company_id,
+    p.posted_by,
+    p.user_id,
+    p.payment_sent,
+    a.student_id,
+    a.user_id,
+    a.student_name,
+    a.university,
+    a.status
+  INTO
+    v_project_id,
+    v_project_company_id,
+    v_project_owner,
+    v_project_user_id,
+    v_payment_sent,
+    v_student_id,
+    v_user_id,
+    v_student_name,
+    v_university,
+    v_application_status
+  FROM public.applications a
+  JOIN public.projects p ON p.id = a.project_id
+  WHERE a.id = p_application_id
+  FOR UPDATE OF p, a;
+
+  IF NOT FOUND THEN
+    RAISE EXCEPTION 'Application not found or you are not authorized to assign it.';
+  END IF;
+
+  IF NOT EXISTS (
+      SELECT 1 FROM public.profiles pr
+      WHERE pr.id = auth.uid()
+        AND lower(BTRIM(pr.user_type)) = 'company'
+    )
+    OR v_project_owner IS DISTINCT FROM auth.uid()
+    AND v_project_user_id IS DISTINCT FROM auth.uid()
+    AND NOT EXISTS (
+      SELECT 1 FROM public.companies c
+      WHERE c.id = v_project_company_id AND c.user_id = auth.uid()
+    )
+  THEN
+    RAISE EXCEPTION 'Application not found or you are not authorized to assign it.';
+  END IF;
+
+  v_assigned_label := COALESCE(NULLIF(BTRIM(v_student_name), ''), 'Student');
+  IF NULLIF(BTRIM(v_university), '') IS NOT NULL THEN
+    v_assigned_label := v_assigned_label || ' (' || BTRIM(v_university) || ')';
+  END IF;
+
+  IF EXISTS (
+    SELECT 1 FROM public.project_assignments pa
+    WHERE pa.project_id = v_project_id
+      AND pa.application_id <> p_application_id
+  ) THEN
+    RAISE EXCEPTION 'This project already has an assigned student.';
+  END IF;
+
+  IF EXISTS (
+    SELECT 1 FROM public.project_assignments pa
+    WHERE pa.application_id = p_application_id
+  ) THEN
+    UPDATE public.applications
+    SET status = 'Rejected',
+        updated_at = timezone('utc'::text, now())
+    WHERE project_id = v_project_id
+      AND id <> p_application_id
+      AND status IS DISTINCT FROM 'Rejected';
+    UPDATE public.projects
+    SET assigned_student = v_assigned_label,
+        updated_at = timezone('utc'::text, now())
+    WHERE id = v_project_id;
+    RETURN;
+  END IF;
+
+  IF v_payment_sent IS TRUE THEN
+    RAISE EXCEPTION 'A student cannot be assigned after payment is marked sent.';
+  END IF;
+
+  IF v_student_id IS NOT NULL
+    AND v_user_id IS NOT NULL
+    AND v_student_id <> v_user_id
+  THEN
+    RAISE EXCEPTION 'The application has inconsistent student account IDs.';
+  END IF;
+
+  v_student_id := COALESCE(v_student_id, v_user_id);
+  IF v_student_id IS NULL THEN
+    RAISE EXCEPTION 'The application does not have a valid student account.';
+  END IF;
+
+  IF p_confirm_existing THEN
+    IF v_application_status NOT IN (
+      'Accepted',
+      'In Progress',
+      'Revision Requested',
+      'Under Review',
+      'Completed'
+    ) THEN
+      RAISE EXCEPTION 'This application is not marked as an existing assignment.';
+    END IF;
+  ELSIF v_application_status IS NULL OR v_application_status NOT IN (
+      'Pending',
+      'Under Review',
+      'Shortlisted'
+    )
+  THEN
+    RAISE EXCEPTION 'This application cannot be assigned in its current status.';
+  END IF;
+
+  INSERT INTO public.project_assignments (
+    application_id,
+    project_id,
+    student_id
+  )
+  VALUES (p_application_id, v_project_id, v_student_id);
+
+  IF p_confirm_existing IS NOT TRUE THEN
+    UPDATE public.applications
+    SET status = 'Accepted',
+        progress = 0.15,
+        updated_at = timezone('utc'::text, now())
+    WHERE id = p_application_id;
+
+    UPDATE public.projects
+    SET status = 'In Progress',
+        progress = 0.15,
+        updated_at = timezone('utc'::text, now())
+    WHERE id = v_project_id;
+  END IF;
+
+  UPDATE public.projects
+  SET assigned_student = v_assigned_label,
+      updated_at = timezone('utc'::text, now())
+  WHERE id = v_project_id;
+
+  UPDATE public.applications
+  SET status = 'Rejected',
+      updated_at = timezone('utc'::text, now())
+  WHERE project_id = v_project_id
+    AND id <> p_application_id
+    AND status IS DISTINCT FROM 'Rejected';
+END;
+$$;
+
+REVOKE ALL ON FUNCTION public.assign_applicant_to_project(UUID, BOOLEAN)
+  FROM PUBLIC, anon;
+GRANT EXECUTE ON FUNCTION public.assign_applicant_to_project(UUID, BOOLEAN)
+  TO authenticated;
+
+CREATE OR REPLACE FUNCTION public.get_assigned_student_payment_details(
+  p_application_id UUID
+)
+RETURNS TABLE(provider TEXT, account_number TEXT)
+LANGUAGE sql
+SECURITY DEFINER
+SET search_path = pg_catalog
+AS $$
+  SELECT pm.provider, pm.account_number
+  FROM public.project_assignments pa
+  JOIN public.projects p ON p.id = pa.project_id
+  LEFT JOIN public.companies pc ON pc.id = p.company_id
+  LEFT JOIN public.student_payment_methods pm ON pm.user_id = pa.student_id
+  WHERE pa.application_id = p_application_id
+    AND EXISTS (
+      SELECT 1 FROM public.profiles pr
+      WHERE pr.id = auth.uid()
+        AND lower(BTRIM(pr.user_type)) = 'company'
+    )
+    AND (
+      p.posted_by = auth.uid()
+      OR p.user_id = auth.uid()
+      OR pc.user_id = auth.uid()
+    )
+  LIMIT 1;
+$$;
+
+REVOKE ALL ON FUNCTION public.get_assigned_student_payment_details(UUID)
+  FROM PUBLIC, anon;
+GRANT EXECUTE ON FUNCTION public.get_assigned_student_payment_details(UUID)
+  TO authenticated;
+
+CREATE OR REPLACE FUNCTION public.mark_project_payment_sent(
+  p_project_id UUID
+)
+RETURNS VOID
+LANGUAGE plpgsql
+SECURITY DEFINER
+SET search_path = pg_catalog
+AS $$
+BEGIN
+  IF auth.uid() IS NULL OR NOT EXISTS (
+    SELECT 1 FROM public.profiles pr
+    WHERE pr.id = auth.uid()
+      AND lower(BTRIM(pr.user_type)) = 'company'
+  ) THEN
+    RAISE EXCEPTION 'Only company accounts can mark project payments sent.';
+  END IF;
+
+  PERFORM set_config('app.allow_project_payment_sent_update', 'on', true);
+
+  UPDATE public.projects p
+  SET payment_sent = TRUE,
+      updated_at = timezone('utc'::text, now())
+  WHERE p.id = p_project_id
+    AND (
+      p.posted_by = auth.uid()
+      OR p.user_id = auth.uid()
+      OR EXISTS (
+        SELECT 1 FROM public.companies c
+        WHERE c.id = p.company_id
+          AND c.user_id = auth.uid()
+      )
+    )
+    AND EXISTS (
+      SELECT 1 FROM public.project_assignments pa
+      WHERE pa.project_id = p.id
+    );
+
+  IF NOT FOUND THEN
+    RAISE EXCEPTION 'Project not found, unauthorized, or no student is assigned.';
+  END IF;
+END;
+$$;
+
+REVOKE ALL ON FUNCTION public.mark_project_payment_sent(UUID)
+  FROM PUBLIC, anon;
+GRANT EXECUTE ON FUNCTION public.mark_project_payment_sent(UUID)
+  TO authenticated;
+
+CREATE OR REPLACE FUNCTION public.get_student_assigned_project_payment_status()
+RETURNS TABLE(
+  project_id UUID,
+  payment_sent BOOLEAN,
+  confirmation_status TEXT
+)
+LANGUAGE sql
+SECURITY DEFINER
+SET search_path = pg_catalog
+AS $$
+  SELECT DISTINCT
+    p.id,
+    p.payment_sent,
+    pc.confirmation_status
+  FROM public.project_assignments pa
+  JOIN public.projects p ON p.id = pa.project_id
+  LEFT JOIN public.project_payment_confirmations pc
+    ON pc.project_id = p.id
+   AND pc.student_id = auth.uid()
+  WHERE pa.student_id = auth.uid()
+    AND EXISTS (
+      SELECT 1 FROM public.profiles pr
+      WHERE pr.id = auth.uid()
+        AND lower(BTRIM(pr.user_type)) = 'student'
+    );
+$$;
+
+REVOKE ALL ON FUNCTION public.get_student_assigned_project_payment_status()
+  FROM PUBLIC, anon;
+GRANT EXECUTE ON FUNCTION public.get_student_assigned_project_payment_status()
+  TO authenticated;
+
+CREATE OR REPLACE FUNCTION public.respond_to_project_payment(
+  p_project_id UUID,
+  p_received BOOLEAN
+)
+RETURNS TEXT
+LANGUAGE plpgsql
+SECURITY DEFINER
+SET search_path = pg_catalog
+AS $$
+DECLARE
+  v_payment_sent BOOLEAN;
+  v_confirmation_status TEXT;
+BEGIN
+  IF auth.uid() IS NULL OR NOT EXISTS (
+    SELECT 1 FROM public.profiles pr
+    WHERE pr.id = auth.uid()
+      AND lower(BTRIM(pr.user_type)) = 'student'
+  ) THEN
+    RAISE EXCEPTION 'Only student accounts can confirm project payments.';
+  END IF;
+
+  SELECT p.payment_sent
+  INTO v_payment_sent
+  FROM public.projects p
+  WHERE p.id = p_project_id
+    AND EXISTS (
+      SELECT 1 FROM public.project_assignments pa
+      WHERE pa.project_id = p.id
+        AND pa.student_id = auth.uid()
+    )
+  FOR UPDATE;
+
+  IF NOT FOUND THEN
+    RAISE EXCEPTION 'Project not found or you are not assigned to it.';
+  END IF;
+
+  IF v_payment_sent IS NOT TRUE THEN
+    RAISE EXCEPTION 'The company has not marked this payment as sent.';
+  END IF;
+
+  IF p_received IS NULL THEN
+    RAISE EXCEPTION 'A payment received response is required.';
+  END IF;
+
+  SELECT pc.confirmation_status
+  INTO v_confirmation_status
+  FROM public.project_payment_confirmations pc
+  WHERE pc.project_id = p_project_id
+    AND pc.student_id = auth.uid();
+
+  IF FOUND THEN
+    RETURN v_confirmation_status;
+  END IF;
+
+  v_confirmation_status := CASE
+    WHEN p_received THEN 'Received'
+    ELSE 'Not Received'
+  END;
+
+  INSERT INTO public.project_payment_confirmations (
+    project_id,
+    student_id,
+    confirmation_status
+  )
+  VALUES (p_project_id, auth.uid(), v_confirmation_status)
+  ON CONFLICT (project_id, student_id) DO NOTHING;
+
+  IF NOT FOUND THEN
+    SELECT pc.confirmation_status
+    INTO v_confirmation_status
+    FROM public.project_payment_confirmations pc
+    WHERE pc.project_id = p_project_id
+      AND pc.student_id = auth.uid();
+  END IF;
+
+  RETURN v_confirmation_status;
+END;
+$$;
+
+REVOKE ALL ON FUNCTION public.respond_to_project_payment(UUID, BOOLEAN)
+  FROM PUBLIC, anon;
+GRANT EXECUTE ON FUNCTION public.respond_to_project_payment(UUID, BOOLEAN)
+  TO authenticated;
+
+-- Projects: readable by authenticated users; writable by owning company or admin
+DROP POLICY IF EXISTS "Projects Public View" ON public.projects;
+DROP POLICY IF EXISTS "Projects Authenticated View" ON public.projects;
+CREATE POLICY "Projects Authenticated View" ON public.projects FOR SELECT TO authenticated
+  USING (true);
 CREATE POLICY "Projects Company Manage" ON public.projects FOR ALL TO authenticated
   USING (
     auth.uid() = posted_by
@@ -1013,7 +1746,26 @@ CREATE POLICY "Applications Student Manage" ON public.applications FOR ALL TO au
   USING (auth.uid() = student_id OR auth.uid() = user_id)
   WITH CHECK (auth.uid() = student_id OR auth.uid() = user_id);
 
-CREATE POLICY "Applications Company Manage" ON public.applications FOR ALL TO authenticated
+CREATE POLICY "Applications Company View" ON public.applications FOR SELECT TO authenticated
+  USING (
+    EXISTS (
+      SELECT 1 FROM public.projects p
+      LEFT JOIN public.companies c ON c.id = p.company_id
+      WHERE p.id = public.applications.project_id
+        AND (
+          p.posted_by = auth.uid()
+          OR p.user_id = auth.uid()
+          OR c.user_id = auth.uid()
+        )
+    )
+    OR EXISTS (
+      SELECT 1 FROM public.companies c
+      WHERE c.id = public.applications.company_id
+        AND c.user_id = auth.uid()
+    )
+  );
+
+CREATE POLICY "Applications Company Manage" ON public.applications FOR UPDATE TO authenticated
   USING (
     EXISTS (
       SELECT 1 FROM public.projects p
@@ -1049,14 +1801,280 @@ CREATE POLICY "Applications Company Manage" ON public.applications FOR ALL TO au
     )
   );
 
+CREATE POLICY "Applications Company Delete" ON public.applications FOR DELETE TO authenticated
+  USING (
+    EXISTS (
+      SELECT 1 FROM public.projects p
+      LEFT JOIN public.companies c ON c.id = p.company_id
+      WHERE p.id = public.applications.project_id
+        AND (
+          p.posted_by = auth.uid()
+          OR p.user_id = auth.uid()
+          OR c.user_id = auth.uid()
+        )
+    )
+    OR EXISTS (
+      SELECT 1 FROM public.companies c
+      WHERE c.id = public.applications.company_id
+        AND c.user_id = auth.uid()
+    )
+  );
+
+CREATE OR REPLACE FUNCTION public.prevent_application_identity_changes()
+RETURNS TRIGGER
+LANGUAGE plpgsql
+SET search_path = pg_catalog
+AS $$
+BEGIN
+  IF auth.uid() IS NULL OR public.is_admin() THEN
+    RETURN NEW;
+  END IF;
+
+  IF TG_OP = 'INSERT' THEN
+    IF (
+      NEW.student_id IS NOT NULL
+      AND NEW.student_id IS DISTINCT FROM auth.uid()
+    ) OR (
+      NEW.user_id IS NOT NULL
+      AND NEW.user_id IS DISTINCT FROM auth.uid()
+    ) THEN
+      RAISE EXCEPTION 'An application must belong to the authenticated student.';
+    END IF;
+    RETURN NEW;
+  END IF;
+
+  IF auth.uid() = OLD.student_id OR auth.uid() = OLD.user_id THEN
+    IF (
+      NEW.student_id IS NOT NULL
+      AND NEW.student_id IS DISTINCT FROM auth.uid()
+    ) OR (
+      NEW.user_id IS NOT NULL
+      AND NEW.user_id IS DISTINCT FROM auth.uid()
+    ) THEN
+      RAISE EXCEPTION 'An application cannot be transferred to another student.';
+    END IF;
+  ELSIF NEW.student_id IS DISTINCT FROM OLD.student_id
+    OR NEW.user_id IS DISTINCT FROM OLD.user_id
+  THEN
+    RAISE EXCEPTION 'Companies cannot change the student attached to an application.';
+  END IF;
+
+  RETURN NEW;
+END;
+$$;
+
+CREATE OR REPLACE FUNCTION public.enforce_application_bid_rules()
+RETURNS TRIGGER
+LANGUAGE plpgsql
+SECURITY DEFINER
+SET search_path = pg_catalog
+AS $$
+DECLARE
+  v_project_status TEXT;
+  v_student_id UUID;
+  v_bid_count INTEGER;
+BEGIN
+  IF TG_OP <> 'INSERT' THEN
+    IF NEW.project_id IS DISTINCT FROM OLD.project_id
+      OR COALESCE(NEW.student_id, NEW.user_id)
+        IS DISTINCT FROM COALESCE(OLD.student_id, OLD.user_id)
+    THEN
+      RAISE EXCEPTION 'An application cannot be moved to another project or student.';
+    END IF;
+    RETURN NEW;
+  END IF;
+
+  v_student_id := COALESCE(NEW.student_id, NEW.user_id);
+  IF NEW.project_id IS NULL OR v_student_id IS NULL THEN
+    RAISE EXCEPTION 'A valid project and student are required to apply.';
+  END IF;
+
+  IF auth.uid() IS NOT NULL
+    AND NOT public.is_admin()
+    AND NOT EXISTS (
+      SELECT 1
+      FROM public.profiles pr
+      WHERE pr.id = auth.uid()
+        AND lower(BTRIM(pr.user_type)) = 'student'
+    )
+  THEN
+    RAISE EXCEPTION 'Only student accounts can apply to projects.';
+  END IF;
+
+  SELECT p.status
+  INTO v_project_status
+  FROM public.projects p
+  WHERE p.id = NEW.project_id
+  FOR UPDATE;
+
+  IF NOT FOUND THEN
+    RAISE EXCEPTION 'Project not found.';
+  END IF;
+
+  IF lower(BTRIM(COALESCE(v_project_status, ''))) NOT IN ('open', 'active') THEN
+    RAISE EXCEPTION 'This project is not accepting applications.';
+  END IF;
+
+  IF EXISTS (
+    SELECT 1
+    FROM public.project_assignments pa
+    WHERE pa.project_id = NEW.project_id
+  ) THEN
+    RAISE EXCEPTION 'This project already has an assigned student.';
+  END IF;
+
+  IF EXISTS (
+    SELECT 1
+    FROM public.applications a
+    WHERE a.project_id = NEW.project_id
+      AND COALESCE(a.student_id, a.user_id) = v_student_id
+  ) THEN
+    RAISE EXCEPTION 'You have already applied to this project.';
+  END IF;
+
+  SELECT count(*)::INTEGER
+  INTO v_bid_count
+  FROM public.applications a
+  WHERE a.project_id = NEW.project_id;
+
+  IF v_bid_count >= 10 THEN
+    RAISE EXCEPTION 'This project has reached the maximum of 10 applications.';
+  END IF;
+
+  RETURN NEW;
+END;
+$$;
+
+CREATE OR REPLACE FUNCTION public.enforce_application_assignment_status()
+RETURNS TRIGGER
+LANGUAGE plpgsql
+SECURITY DEFINER
+SET search_path = pg_catalog
+AS $$
+BEGIN
+  IF public.is_admin() THEN
+    RETURN NEW;
+  END IF;
+
+  IF TG_OP = 'INSERT' THEN
+    IF NEW.status IN ('Accepted', 'In Progress', 'Revision Requested', 'Completed') THEN
+      RAISE EXCEPTION 'This status requires an authoritative project assignment.';
+    END IF;
+    RETURN NEW;
+  END IF;
+
+  IF NEW.status IS NOT DISTINCT FROM OLD.status THEN
+    RETURN NEW;
+  END IF;
+
+  IF NEW.status IN ('Accepted', 'In Progress', 'Revision Requested', 'Completed')
+    AND NOT EXISTS (
+      SELECT 1
+      FROM public.project_assignments pa
+      WHERE pa.application_id = NEW.id
+        AND pa.project_id = NEW.project_id
+        AND pa.student_id = COALESCE(NEW.student_id, NEW.user_id)
+    )
+  THEN
+    RAISE EXCEPTION 'This status requires an authoritative project assignment.';
+  END IF;
+
+  IF EXISTS (
+    SELECT 1
+    FROM public.project_assignments pa
+    WHERE pa.application_id = NEW.id
+      AND pa.project_id = NEW.project_id
+  ) AND NEW.status IN ('Pending', 'Shortlisted', 'Rejected')
+  THEN
+    RAISE EXCEPTION 'An assigned application cannot be marked as unassigned.';
+  END IF;
+
+  RETURN NEW;
+END;
+$$;
+
+CREATE OR REPLACE FUNCTION public.guard_project_payment_sent_update()
+RETURNS TRIGGER
+LANGUAGE plpgsql
+SET search_path = pg_catalog
+AS $$
+BEGIN
+  IF NEW.payment_sent IS DISTINCT FROM OLD.payment_sent
+    AND current_setting('app.allow_project_payment_sent_update', true)
+      IS DISTINCT FROM 'on'
+  THEN
+    RAISE EXCEPTION 'Payment status must be changed through the authorized payment RPC.';
+  END IF;
+
+  RETURN NEW;
+END;
+$$;
+
+DROP TRIGGER IF EXISTS enforce_application_bid_rules ON public.applications;
+CREATE TRIGGER enforce_application_bid_rules
+BEFORE INSERT OR UPDATE OF project_id, student_id, user_id ON public.applications
+FOR EACH ROW
+EXECUTE FUNCTION public.enforce_application_bid_rules();
+
+DROP TRIGGER IF EXISTS enforce_application_assignment_status ON public.applications;
+CREATE TRIGGER enforce_application_assignment_status
+BEFORE INSERT OR UPDATE OF status ON public.applications
+FOR EACH ROW
+EXECUTE FUNCTION public.enforce_application_assignment_status();
+
+DROP TRIGGER IF EXISTS guard_project_payment_sent_update ON public.projects;
+CREATE TRIGGER guard_project_payment_sent_update
+BEFORE UPDATE OF payment_sent ON public.projects
+FOR EACH ROW
+EXECUTE FUNCTION public.guard_project_payment_sent_update();
+
+CREATE TRIGGER prevent_application_identity_insert
+BEFORE INSERT ON public.applications
+FOR EACH ROW
+EXECUTE FUNCTION public.prevent_application_identity_changes();
+
+CREATE TRIGGER prevent_application_identity_changes
+BEFORE UPDATE OF student_id, user_id ON public.applications
+FOR EACH ROW
+EXECUTE FUNCTION public.prevent_application_identity_changes();
+
 CREATE POLICY "Applications Admin Manage" ON public.applications FOR ALL TO authenticated
   USING (public.is_admin())
   WITH CHECK (public.is_admin());
 
-CREATE POLICY "Certificates Public View" ON public.certificates FOR SELECT USING (true);
-CREATE POLICY "Certificates Authenticated Manage" ON public.certificates FOR ALL TO authenticated
-  USING (true)
-  WITH CHECK (true);
+-- Certificates: verifiable by authenticated users; issued/managed ONLY by owning Company or Admin
+CREATE POLICY "Certificates Authenticated View" ON public.certificates FOR SELECT TO authenticated
+  USING (true);
+CREATE POLICY "Certificates Company Manage" ON public.certificates FOR ALL TO authenticated
+  USING (
+    EXISTS (
+      SELECT 1 FROM public.companies c
+      WHERE c.id = public.certificates.company_id
+        AND c.user_id = auth.uid()
+    )
+    OR EXISTS (
+      SELECT 1 FROM public.projects p
+      LEFT JOIN public.companies c ON c.id = p.company_id
+      WHERE p.id = public.certificates.project_id
+        AND (p.posted_by = auth.uid() OR p.user_id = auth.uid() OR c.user_id = auth.uid())
+    )
+  )
+  WITH CHECK (
+    EXISTS (
+      SELECT 1 FROM public.companies c
+      WHERE c.id = public.certificates.company_id
+        AND c.user_id = auth.uid()
+    )
+    OR EXISTS (
+      SELECT 1 FROM public.projects p
+      LEFT JOIN public.companies c ON c.id = p.company_id
+      WHERE p.id = public.certificates.project_id
+        AND (p.posted_by = auth.uid() OR p.user_id = auth.uid() OR c.user_id = auth.uid())
+    )
+  );
+CREATE POLICY "Certificates Admin Manage" ON public.certificates FOR ALL TO authenticated
+  USING (public.is_admin())
+  WITH CHECK (public.is_admin());
 
 CREATE POLICY "Saved Projects User Access" ON public.saved_projects FOR ALL TO authenticated
   USING (auth.uid() = user_id)
@@ -1070,7 +2088,8 @@ CREATE POLICY "User Settings Self Access" ON public.user_settings FOR ALL TO aut
   USING (auth.uid() = user_id OR public.is_admin())
   WITH CHECK (auth.uid() = user_id OR public.is_admin());
 
-CREATE POLICY "Platform Taxonomies Public Read" ON public.platform_taxonomies FOR SELECT USING (true);
+CREATE POLICY "Platform Taxonomies Authenticated Read" ON public.platform_taxonomies FOR SELECT TO authenticated
+  USING (true);
 CREATE POLICY "Platform Taxonomies Admin Manage" ON public.platform_taxonomies FOR ALL TO authenticated
   USING (public.is_admin())
   WITH CHECK (public.is_admin());
@@ -1251,10 +2270,10 @@ BEGIN
 END $$;
 
 -- ----------------------------------------------------------------------------
--- 17. COMPANY PANEL PRODUCTION HARDENING, INDEXES & DELETE ACCOUNT RPC
+-- 17. DATA INTEGRITY, DEDUPLICATION, CROSS-PANEL SYNC & DELETE ACCOUNT RPC
 -- ----------------------------------------------------------------------------
 
--- 17a. Deduplicate public.companies by user_id & enforce unique company per user
+-- 17a. Deduplicate public.companies & public.students by user_id
 DELETE FROM public.companies a
 USING public.companies b
 WHERE a.user_id IS NOT NULL
@@ -1271,7 +2290,53 @@ CREATE UNIQUE INDEX IF NOT EXISTS idx_companies_unique_user_id
   ON public.companies (user_id)
   WHERE user_id IS NOT NULL;
 
--- 17b. Backfill missing company rows for existing Company auth accounts
+DELETE FROM public.students a
+USING public.students b
+WHERE a.user_id IS NOT NULL
+  AND a.user_id = b.user_id
+  AND (
+    COALESCE(a.updated_at, a.created_at, now()) < COALESCE(b.updated_at, b.created_at, now())
+    OR (
+      COALESCE(a.updated_at, a.created_at, now()) = COALESCE(b.updated_at, b.created_at, now())
+      AND a.ctid < b.ctid
+    )
+  );
+
+CREATE UNIQUE INDEX IF NOT EXISTS idx_students_unique_user_id
+  ON public.students (user_id)
+  WHERE user_id IS NOT NULL;
+
+-- 17a-bis. Remove cross-role contaminated rows (e.g. a Student mistakenly in companies)
+DELETE FROM public.companies c
+USING public.profiles p
+WHERE c.user_id = p.id
+  AND lower(COALESCE(p.user_type, '')) IN ('student', 'admin')
+  AND NOT EXISTS (
+    SELECT 1 FROM public.projects pr WHERE pr.company_id = c.id
+  );
+
+DELETE FROM public.students s
+USING public.profiles p
+WHERE s.user_id = p.id
+  AND lower(COALESCE(p.user_type, '')) IN ('company', 'admin');
+
+-- 17b. Backfill missing profiles, companies, students & user_settings from auth.users
+INSERT INTO public.profiles (id, name, email, user_type, university, account_status)
+SELECT
+  u.id,
+  COALESCE(NULLIF(trim(u.raw_user_meta_data->>'name'), ''), split_part(COALESCE(u.email, ''), '@', 1), 'User'),
+  COALESCE(u.email, ''),
+  CASE
+    WHEN lower(COALESCE(u.raw_user_meta_data->>'user_type', '')) = 'admin' THEN 'Admin'
+    WHEN lower(COALESCE(u.raw_user_meta_data->>'user_type', '')) = 'company' THEN 'Company'
+    ELSE 'Student'
+  END,
+  COALESCE(trim(u.raw_user_meta_data->>'university'), ''),
+  'active'
+FROM auth.users u
+WHERE NOT EXISTS (SELECT 1 FROM public.profiles p WHERE p.id = u.id)
+ON CONFLICT (id) DO NOTHING;
+
 INSERT INTO public.companies (
   user_id,
   company_name,
@@ -1291,21 +2356,62 @@ FROM public.profiles p
 WHERE lower(COALESCE(p.user_type, '')) = 'company'
   AND NOT EXISTS (
     SELECT 1 FROM public.companies c WHERE c.user_id = p.id
-  );
+  )
+ON CONFLICT (user_id) WHERE user_id IS NOT NULL DO NOTHING;
 
--- 17c. Backfill company_id on projects & applications
+INSERT INTO public.students (
+  user_id,
+  full_name,
+  email,
+  university,
+  department,
+  degree,
+  semester,
+  cgpa,
+  verification_status,
+  account_status
+)
+SELECT
+  p.id,
+  COALESCE(NULLIF(trim(p.name), ''), NULLIF(split_part(COALESCE(p.email, ''), '@', 1), ''), 'Student Member'),
+  COALESCE(p.email, ''),
+  COALESCE(trim(p.university), ''),
+  COALESCE(NULLIF(trim(p.department), ''), 'Computer Science'),
+  COALESCE(NULLIF(trim(p.degree), ''), 'BS'),
+  COALESCE(NULLIF(trim(p.semester), ''), '1st Semester'),
+  COALESCE(p.cgpa, 0.0),
+  CASE WHEN p.is_verified = true THEN 'verified' ELSE 'pending' END,
+  COALESCE(NULLIF(trim(p.account_status), ''), 'active')
+FROM public.profiles p
+WHERE lower(COALESCE(p.user_type, '')) = 'student'
+  AND NOT EXISTS (
+    SELECT 1 FROM public.students s WHERE s.user_id = p.id
+  )
+ON CONFLICT (user_id) WHERE user_id IS NOT NULL DO NOTHING;
+
+INSERT INTO public.user_settings (user_id)
+SELECT p.id
+FROM public.profiles p
+WHERE NOT EXISTS (SELECT 1 FROM public.user_settings us WHERE us.user_id = p.id)
+ON CONFLICT (user_id) DO NOTHING;
+
+-- 17c. Backfill company_id & company_name on projects & applications
 UPDATE public.projects p
-SET company_id = c.id
+SET company_id = c.id,
+    company_name = COALESCE(NULLIF(trim(p.company_name), ''), c.company_name)
 FROM public.companies c
-WHERE p.company_id IS NULL
+WHERE (p.company_id IS NULL OR NULLIF(trim(p.company_name), '') IS NULL)
   AND c.user_id IN (p.posted_by, p.user_id);
 
 UPDATE public.applications a
-SET company_id = p.company_id
+SET company_id = p.company_id,
+    company_name = COALESCE(NULLIF(trim(a.company_name), ''), p.company_name)
 FROM public.projects p
-WHERE a.company_id IS NULL
-  AND a.project_id = p.id
-  AND p.company_id IS NOT NULL;
+WHERE a.project_id = p.id
+  AND (
+    (a.company_id IS NULL AND p.company_id IS NOT NULL)
+    OR NULLIF(trim(a.company_name), '') IS NULL
+  );
 
 -- 17d. Deduplicate certificates per (student_id, project_id) & prevent duplicates
 DELETE FROM public.certificates a
@@ -1372,4 +2478,165 @@ CREATE INDEX IF NOT EXISTS idx_projects_company_id ON public.projects (company_i
 CREATE INDEX IF NOT EXISTS idx_applications_project_id ON public.applications (project_id);
 CREATE INDEX IF NOT EXISTS idx_applications_student_id ON public.applications (student_id);
 CREATE INDEX IF NOT EXISTS idx_certificates_student_id ON public.certificates (student_id);
+
+-- 17g. Heal any NULL GoTrue string token columns across ALL auth.users so logins never fail
+DO $$
+DECLARE
+  col_name TEXT;
+BEGIN
+  FOR col_name IN
+    SELECT column_name
+    FROM information_schema.columns
+    WHERE table_schema = 'auth'
+      AND table_name = 'users'
+      AND column_name IN (
+        'confirmation_token',
+        'recovery_token',
+        'email_change_token_new',
+        'email_change',
+        'email_change_token_current',
+        'reauthentication_token',
+        'phone_change',
+        'phone_change_token'
+      )
+  LOOP
+    EXECUTE format(
+      'UPDATE auth.users SET %I = COALESCE(%I, '''') WHERE %I IS NULL',
+      col_name, col_name, col_name
+    );
+  END LOOP;
+END $$;
+
+-- 17h. Enforce maximum 10 student openings & maximum 10 applications per project
+UPDATE public.projects
+SET openings = 10
+WHERE openings IS NOT NULL AND openings > 10;
+
+UPDATE public.projects
+SET openings = 1
+WHERE openings IS NULL OR openings < 1;
+
+ALTER TABLE public.projects DROP CONSTRAINT IF EXISTS projects_openings_check;
+ALTER TABLE public.projects
+  ADD CONSTRAINT projects_openings_check CHECK (openings >= 1 AND openings <= 10);
+
+CREATE OR REPLACE FUNCTION public.enforce_project_application_limit()
+RETURNS TRIGGER
+LANGUAGE plpgsql
+SECURITY DEFINER
+SET search_path = public
+AS $$
+DECLARE
+  active_count INTEGER := 0;
+  effective_student UUID := COALESCE(NEW.student_id, NEW.user_id);
+BEGIN
+  IF NEW.project_id IS NULL THEN
+    RETURN NEW;
+  END IF;
+
+  -- Serialize concurrent applications to the same project inside this transaction
+  PERFORM pg_advisory_xact_lock(hashtext(NEW.project_id::text));
+
+  IF effective_student IS NOT NULL AND EXISTS (
+    SELECT 1 FROM public.applications a
+    WHERE a.project_id = NEW.project_id
+      AND (a.student_id = effective_student OR a.user_id = effective_student)
+      AND lower(COALESCE(a.status, 'pending')) <> 'withdrawn'
+  ) THEN
+    RAISE EXCEPTION 'You have already applied to this project.';
+  END IF;
+
+  SELECT count(*)::integer INTO active_count
+  FROM public.applications a
+  WHERE a.project_id = NEW.project_id
+    AND lower(COALESCE(a.status, 'pending')) <> 'withdrawn';
+
+  IF active_count >= 10 THEN
+    RAISE EXCEPTION 'Application limit reached: maximum 10 students can apply to this project.';
+  END IF;
+
+  RETURN NEW;
+END;
+$$;
+
+DROP TRIGGER IF EXISTS trg_enforce_project_application_limit ON public.applications;
+CREATE TRIGGER trg_enforce_project_application_limit
+  BEFORE INSERT ON public.applications
+  FOR EACH ROW EXECUTE FUNCTION public.enforce_project_application_limit();
+
+CREATE OR REPLACE FUNCTION public.get_project_applicant_count(target_project_id UUID)
+RETURNS INTEGER
+LANGUAGE sql
+STABLE
+SECURITY DEFINER
+SET search_path = public
+AS $$
+  SELECT count(*)::integer
+  FROM public.applications a
+  WHERE a.project_id = target_project_id
+    AND lower(COALESCE(a.status, 'pending')) <> 'withdrawn';
+$$;
+
+CREATE OR REPLACE FUNCTION public.get_project_applicant_counts()
+RETURNS TABLE(project_id UUID, applicant_count INTEGER)
+LANGUAGE sql
+STABLE
+SECURITY DEFINER
+SET search_path = public
+AS $$
+  SELECT a.project_id, count(*)::integer AS applicant_count
+  FROM public.applications a
+  WHERE a.project_id IS NOT NULL
+    AND lower(COALESCE(a.status, 'pending')) <> 'withdrawn'
+  GROUP BY a.project_id;
+$$;
+
+REVOKE ALL ON FUNCTION public.get_project_applicant_count(UUID) FROM PUBLIC, anon;
+GRANT EXECUTE ON FUNCTION public.get_project_applicant_count(UUID) TO authenticated;
+REVOKE ALL ON FUNCTION public.get_project_applicant_counts() FROM PUBLIC, anon;
+GRANT EXECUTE ON FUNCTION public.get_project_applicant_counts() TO authenticated;
+
+-- ----------------------------------------------------------------------------
+-- 18. SCHEMA, RLS, BUCKET & DATA VERIFICATION SUMMARY
+-- ----------------------------------------------------------------------------
+SELECT
+  t.tablename AS item_name,
+  'table' AS item_type,
+  CASE WHEN t.rowsecurity THEN 'RLS ENABLED' ELSE 'RLS DISABLED' END AS status,
+  (SELECT count(*)::text FROM pg_policies p WHERE p.schemaname = 'public' AND p.tablename = t.tablename) || ' policies' AS details
+FROM pg_tables t
+WHERE t.schemaname = 'public'
+  AND t.tablename IN (
+    'profiles', 'companies', 'students', 'projects', 'applications',
+    'certificates', 'saved_projects', 'support_tickets', 'user_settings',
+    'platform_taxonomies', 'admin_audit_logs'
+  )
+UNION ALL
+SELECT
+  b.id AS item_name,
+  'storage_bucket' AS item_type,
+  CASE WHEN b.public THEN 'PUBLIC' ELSE 'PRIVATE' END AS status,
+  'bucket ready' AS details
+FROM storage.buckets b
+WHERE b.id IN ('public-files', 'company-assets', 'student-docs', 'certificates')
+UNION ALL
+SELECT 'profiles' AS item_name, 'row_count', count(*)::text, 'total profiles' FROM public.profiles
+UNION ALL
+SELECT 'students' AS item_name, 'row_count', count(*)::text, 'student records' FROM public.students
+UNION ALL
+SELECT 'companies' AS item_name, 'row_count', count(*)::text, 'company records' FROM public.companies
+UNION ALL
+SELECT 'projects' AS item_name, 'row_count', count(*)::text, 'project records' FROM public.projects
+UNION ALL
+SELECT 'applications' AS item_name, 'row_count', count(*)::text, 'application records' FROM public.applications
+UNION ALL
+SELECT 'certificates' AS item_name, 'row_count', count(*)::text, 'certificate records' FROM public.certificates
+UNION ALL
+SELECT 'cross_role_orphans' AS item_name, 'integrity_check',
+  (
+    (SELECT count(*) FROM public.companies c JOIN public.profiles p ON p.id = c.user_id WHERE lower(COALESCE(p.user_type,'')) IN ('student','admin'))
+    + (SELECT count(*) FROM public.students s JOIN public.profiles p ON p.id = s.user_id WHERE lower(COALESCE(p.user_type,'')) IN ('company','admin'))
+  )::text,
+  'expected 0'
+ORDER BY item_type, item_name;
 

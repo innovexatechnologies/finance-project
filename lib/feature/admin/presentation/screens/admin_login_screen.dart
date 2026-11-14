@@ -74,11 +74,12 @@ class _AdminLoginScreenState extends State<AdminLoginScreen> {
         ),
       );
 
-      Navigator.pushReplacement(
+      Navigator.pushAndRemoveUntil(
         context,
         MaterialPageRoute(
           builder: (_) => const AdminDashboardScreen(),
         ),
+        (route) => false,
       );
     } else {
       setState(() {

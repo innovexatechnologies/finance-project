@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 import 'package:google_fonts/google_fonts.dart';
 import 'package:link_vibe/core/constants/app_colors.dart';
 import 'package:link_vibe/core/services/app_data_service.dart';
+import 'package:link_vibe/core/services/cloud_storage_service.dart';
 import 'package:link_vibe/core/services/supabase_helper.dart';
 import 'package:link_vibe/core/widgets/executive_ui.dart';
 
@@ -22,7 +23,10 @@ class _ApplyProjectScreenState extends State<ApplyProjectScreen> {
   final _portfolioController = TextEditingController();
 
   bool _isSubmitting = false;
+  bool _isUploadingResume = false;
   bool _autoValidate = false;
+  String _resumeUrl = '';
+  String _resumeFileName = '';
 
   static const List<String> _availabilityPresets = [
     '10 hrs/week (Part-time)',
@@ -45,7 +49,54 @@ class _ApplyProjectScreenState extends State<ApplyProjectScreen> {
     if (link.isNotEmpty) {
       _portfolioController.text = link;
     }
+    final existingResume = profile['resumeUrl']?.toString().trim() ?? '';
+    if (existingResume.isNotEmpty) {
+      _resumeUrl = existingResume;
+      _resumeFileName = CloudStorageService.displayNameFromUrl(
+        existingResume,
+        fallback: 'Academic_Resume.pdf',
+      );
+    }
     _availabilityController.text = _availabilityPresets.first;
+  }
+
+  Future<void> _pickAndUploadResume() async {
+    if (_isUploadingResume) return;
+    setState(() => _isUploadingResume = true);
+    try {
+      final res = await CloudStorageService.pickAndUploadFile(
+        bucket: 'student-docs',
+        folder: 'resumes',
+        dialogTitle: 'Select CV / Resume (PDF or DOCX)',
+        allowedExtensions: ['pdf', 'doc', 'docx'],
+      );
+      if (res != null) {
+        await AppDataService.instance.updateStudentResume(res.url);
+        if (!mounted) return;
+        setState(() {
+          _resumeUrl = res.url;
+          _resumeFileName = res.fileName;
+        });
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(
+            content: Text('CV uploaded: ${res.fileName} (${res.sizeLabel})'),
+            backgroundColor: AppColors.statusOpen,
+            behavior: SnackBarBehavior.floating,
+          ),
+        );
+      }
+    } catch (e) {
+      if (!mounted) return;
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(
+          content: Text('Could not upload CV: $e'),
+          backgroundColor: AppColors.statusClosed,
+          behavior: SnackBarBehavior.floating,
+        ),
+      );
+    } finally {
+      if (mounted) setState(() => _isUploadingResume = false);
+    }
   }
 
   @override
@@ -108,6 +159,7 @@ class _ApplyProjectScreenState extends State<ApplyProjectScreen> {
         skills: _skillsController.text.trim(),
         availability: _availabilityController.text.trim(),
         portfolioLink: _portfolioController.text.trim(),
+        resumeLink: _resumeUrl,
       );
 
       if (!mounted) return;
@@ -170,7 +222,7 @@ class _ApplyProjectScreenState extends State<ApplyProjectScreen> {
       if (!mounted) return;
       ScaffoldMessenger.of(context).showSnackBar(
         SnackBar(
-          content: Text('Error submitting application: $e'),
+          content: Text(SupabaseHelper.friendlyError(e)),
           backgroundColor: AppColors.statusClosed,
         ),
       );
@@ -350,7 +402,7 @@ class _ApplyProjectScreenState extends State<ApplyProjectScreen> {
                       ),
                       const SizedBox(height: 16),
 
-                      _fieldLabel('Portfolio / GitHub Profile Link *'),
+                      _fieldLabel('Portfolio / GitHub Profile Link (Optional)'),
                       const SizedBox(height: 6),
                       TextFormField(
                         controller: _portfolioController,
@@ -362,13 +414,93 @@ class _ApplyProjectScreenState extends State<ApplyProjectScreen> {
                         validator: (value) {
                           final v = value?.trim() ?? '';
                           if (v.isEmpty) {
-                            return 'Portfolio or GitHub link is required';
+                            return null;
                           }
                           if (!_isValidUrl(v)) {
                             return 'Enter a valid URL (e.g. https://github.com/username)';
                           }
                           return null;
                         },
+                      ),
+                      const SizedBox(height: 16),
+
+                      _fieldLabel('CV / Resume Attachment (Optional — PDF / DOCX)'),
+                      const SizedBox(height: 6),
+                      Container(
+                        padding: const EdgeInsets.all(12),
+                        decoration: BoxDecoration(
+                          color: AppColors.cardWhite,
+                          borderRadius: BorderRadius.circular(12),
+                          border: Border.all(
+                            color: _resumeUrl.isNotEmpty
+                                ? AppColors.statusOpen.withValues(alpha: 0.4)
+                                : AppColors.lightGray,
+                          ),
+                        ),
+                        child: Row(
+                          children: [
+                            Icon(
+                              _resumeUrl.isNotEmpty
+                                  ? Icons.picture_as_pdf_rounded
+                                  : Icons.upload_file_rounded,
+                              color: _resumeUrl.isNotEmpty
+                                  ? AppColors.statusOpen
+                                  : AppColors.primaryBlue,
+                            ),
+                            const SizedBox(width: 10),
+                            Expanded(
+                              child: Text(
+                                _resumeUrl.isNotEmpty
+                                    ? (_resumeFileName.isNotEmpty
+                                        ? _resumeFileName
+                                        : 'Resume attached')
+                                    : 'No CV attached yet',
+                                maxLines: 1,
+                                overflow: TextOverflow.ellipsis,
+                                style: GoogleFonts.inter(
+                                  fontSize: 12.5,
+                                  fontWeight: _resumeUrl.isNotEmpty
+                                      ? FontWeight.w600
+                                      : FontWeight.w400,
+                                  color: _resumeUrl.isNotEmpty
+                                      ? AppColors.deepNavy
+                                      : AppColors.grayText,
+                                ),
+                              ),
+                            ),
+                            if (_resumeUrl.isNotEmpty)
+                              IconButton(
+                                tooltip: 'Remove CV attachment',
+                                onPressed: () {
+                                  setState(() {
+                                    _resumeUrl = '';
+                                    _resumeFileName = '';
+                                  });
+                                },
+                                icon: const Icon(
+                                  Icons.close_rounded,
+                                  size: 18,
+                                  color: AppColors.grayText,
+                                ),
+                              ),
+                            OutlinedButton(
+                              onPressed: _isUploadingResume
+                                  ? null
+                                  : _pickAndUploadResume,
+                              child: _isUploadingResume
+                                  ? const SizedBox(
+                                      width: 16,
+                                      height: 16,
+                                      child: CircularProgressIndicator(
+                                        strokeWidth: 2,
+                                      ),
+                                    )
+                                  : Text(
+                                      _resumeUrl.isNotEmpty ? 'Replace' : 'Upload CV',
+                                    ),
+                            ),
+                          ],
+                        ),
                       ),
                     ],
                   ),

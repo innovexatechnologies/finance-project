@@ -1,4 +1,4 @@
-import 'dart:typed_data';
+// ignore_for_file: deprecated_member_use
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:google_fonts/google_fonts.dart';
@@ -90,6 +90,7 @@ class _CompanyEscrowPaymentScreenState
         });
       }
     } catch (e) {
+      if (!mounted) return;
       ScaffoldMessenger.of(context).showSnackBar(
         SnackBar(
           content: Text('Failed to select receipt image: $e'),

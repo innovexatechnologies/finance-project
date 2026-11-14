@@ -1,14 +1,19 @@
 import 'dart:async';
 import 'package:app_links/app_links.dart';
 import 'package:flutter/material.dart';
+import 'package:supabase_flutter/supabase_flutter.dart' show AuthChangeEvent, AuthState;
 import 'package:link_vibe/core/services/app_data_service.dart';
 import 'package:link_vibe/core/services/share_service.dart';
 import 'package:link_vibe/core/services/supabase_helper.dart';
+import 'package:link_vibe/feature/auth/presentation/screens/reset_password_screen.dart';
 import 'package:link_vibe/feature/company/models/project_model.dart';
+import 'package:link_vibe/feature/company/presentation/screens/company_main_nav.dart';
 import 'package:link_vibe/feature/company/presentation/screens/company_project_detail_screen.dart';
+import 'package:link_vibe/feature/company/services/company_profile_service.dart';
 import 'package:link_vibe/feature/company/services/company_project_service.dart';
 import 'package:link_vibe/feature/student/applications/presentation/screens/my_applications_screen.dart';
 import 'package:link_vibe/feature/student/certificates/presentation/screens/certificates_screen.dart';
+import 'package:link_vibe/feature/student/presentation/screens/student_main_nav.dart';
 import 'package:link_vibe/feature/student/project_details/presentation/screens/student_project_details_screen.dart';
 
 enum AppLinkType { project, application, certificate }
@@ -41,6 +46,7 @@ class DeepLinkService {
 
   GlobalKey<NavigatorState>? _navigatorKey;
   StreamSubscription<Uri>? _linkSubscription;
+  StreamSubscription<AuthState>? _authSubscription;
   bool _initialized = false;
   bool _workspaceReady = false;
   Uri? _pendingUri;
@@ -214,6 +220,94 @@ class DeepLinkService {
     } catch (e) {
       debugPrint('DeepLinkService init skipped: $e');
     }
+
+    _attachAuthRecoveryListener();
+  }
+
+  void _attachAuthRecoveryListener() {
+    final supabase = SupabaseHelper.clientOrNull;
+    if (supabase == null || _authSubscription != null) return;
+
+    _authSubscription = supabase.auth.onAuthStateChange.listen((data) async {
+      final event = data.event;
+      final session = data.session;
+
+      if (event == AuthChangeEvent.passwordRecovery) {
+        WidgetsBinding.instance.addPostFrameCallback((_) {
+          final nav = _navigatorKey?.currentState;
+          if (nav == null || !nav.mounted) return;
+          nav.push(
+            MaterialPageRoute(
+              builder: (_) => ResetPasswordScreen(
+                initialEmail: session?.user.email ?? '',
+                isRecoverySession: true,
+              ),
+            ),
+          );
+        });
+      } else if (event == AuthChangeEvent.signedIn &&
+          session?.user != null &&
+          !SupabaseHelper.isInteractiveAuthInProgress &&
+          !AppDataService.instance.isLoggedIn) {
+        // Email confirmation link opened the app & verified the account
+        try {
+          final user = session!.user;
+          Map<String, dynamic>? profileRow;
+          try {
+            profileRow = await supabase
+                .from('profiles')
+                .select()
+                .eq('id', user.id)
+                .limit(1)
+                .maybeSingle();
+          } catch (_) {}
+
+          final role = await SupabaseHelper.resolveAccountRole(
+            supabase,
+            user,
+            profileRow: profileRow,
+          );
+          if (role == 'Admin') return;
+
+          final name =
+              (profileRow?['name']?.toString().trim().isNotEmpty == true)
+                  ? profileRow!['name'].toString().trim()
+                  : (user.userMetadata?['name']?.toString().trim() ??
+                      (user.email?.split('@').first ?? 'User'));
+          final uni =
+              (profileRow?['university']?.toString().trim().isNotEmpty == true)
+                  ? profileRow!['university'].toString().trim()
+                  : (user.userMetadata?['university']?.toString().trim() ?? '');
+
+          await AppDataService.instance.saveAuthSession(
+            role: role,
+            email: user.email ?? '',
+            name: name,
+            university: uni,
+            userId: user.id,
+          );
+
+          if (role == 'Company') {
+            await CompanyProfileService.loadAllCompanyPanelData();
+          } else {
+            await AppDataService.instance.syncFromSupabase(forceRefresh: true);
+          }
+
+          final nav = _navigatorKey?.currentState;
+          if (nav == null || !nav.mounted) return;
+          nav.pushAndRemoveUntil(
+            MaterialPageRoute(
+              builder: (_) => role == 'Company'
+                  ? const CompanyMainNav()
+                  : const StudentMainNav(),
+            ),
+            (route) => false,
+          );
+        } catch (e) {
+          debugPrint('Auth link signedIn handling warning: $e');
+        }
+      }
+    });
   }
 
   Future<void> _handleIncomingUri(Uri uri) async {
@@ -612,6 +706,8 @@ class DeepLinkService {
   void resetForTest() {
     _linkSubscription?.cancel();
     _linkSubscription = null;
+    _authSubscription?.cancel();
+    _authSubscription = null;
     _initialized = false;
     _workspaceReady = false;
     _pendingUri = null;

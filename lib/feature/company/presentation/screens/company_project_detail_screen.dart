@@ -32,6 +32,7 @@ class _CompanyProjectDetailScreenState
     extends State<CompanyProjectDetailScreen> {
   final _projectService = CompanyProjectService();
   final _profileService = CompanyProfileService();
+  bool _isMarkingPaymentSent = false;
 
   ProjectModel? _resolveProject(List<ProjectModel> projects) {
     final targetId =
@@ -69,6 +70,70 @@ class _CompanyProjectDetailScreenState
         ),
       ),
     );
+  }
+
+  Future<void> _markPaymentSent(ProjectModel project) async {
+    if (_isMarkingPaymentSent || project.paymentSent) return;
+    setState(() => _isMarkingPaymentSent = true);
+    try {
+      await _projectService.markProjectPaymentSent(project.id);
+      if (!mounted) return;
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(
+          content: Text('Project payment marked as sent.'),
+          backgroundColor: AppColors.statusOpen,
+        ),
+      );
+    } catch (error) {
+      debugPrint('Company project payment status update failed: $error');
+      if (!mounted) return;
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(
+          content: Text('Could not update payment status. Please try again.'),
+          backgroundColor: AppColors.statusClosed,
+        ),
+      );
+    } finally {
+      if (mounted) setState(() => _isMarkingPaymentSent = false);
+    }
+  }
+
+  Future<void> _confirmDeleteProject(ProjectModel project) async {
+    final confirmed = await showDialog<bool>(
+      context: context,
+      builder: (ctx) => AlertDialog(
+        title: const Text('Delete Project?'),
+        content: Text(
+          'Are you sure you want to permanently delete "${project.title}"? This action cannot be undone.',
+        ),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.pop(ctx, false),
+            child: const Text('Cancel'),
+          ),
+          ElevatedButton(
+            style: ElevatedButton.styleFrom(
+              backgroundColor: AppColors.statusClosed,
+              foregroundColor: Colors.white,
+            ),
+            onPressed: () => Navigator.pop(ctx, true),
+            child: const Text('Delete Project'),
+          ),
+        ],
+      ),
+    );
+
+    if (confirmed == true) {
+      await _projectService.deleteProject(project.id);
+      if (!mounted) return;
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(
+          content: Text('Project deleted successfully.'),
+          backgroundColor: AppColors.deepNavy,
+        ),
+      );
+      Navigator.pop(context);
+    }
   }
 
   Future<void> _handleEditProject(ProjectModel project) async {
@@ -640,6 +705,8 @@ class _CompanyProjectDetailScreenState
                     _navigateToApplicants(project);
                   } else if (val == 'AssignedStudents') {
                     _navigateToAssignedStudents(project);
+                  } else if (val == 'Delete') {
+                    _confirmDeleteProject(project);
                   } else if (val == 'PublishDraft') {
                     _projectService.updateProjectStatus(project.id, 'Open');
                     ScaffoldMessenger.of(context).showSnackBar(
@@ -720,6 +787,23 @@ class _CompanyProjectDetailScreenState
                       ),
                     ),
                   ],
+                  const PopupMenuItem(
+                    value: 'Delete',
+                    child: Row(
+                      children: [
+                        Icon(Icons.delete_outline_rounded,
+                            size: 18, color: AppColors.statusClosed),
+                        SizedBox(width: 8),
+                        Text(
+                          'Delete Project',
+                          style: TextStyle(
+                            color: AppColors.statusClosed,
+                            fontWeight: FontWeight.w600,
+                          ),
+                        ),
+                      ],
+                    ),
+                  ),
                 ],
               ),
               const SizedBox(width: 4),
@@ -773,6 +857,8 @@ class _CompanyProjectDetailScreenState
               _buildHeroCard(project),
               const SizedBox(height: 16),
               _buildMetricsSection(project),
+              const SizedBox(height: 16),
+              _buildPaymentSection(project),
               const SizedBox(height: 16),
               _buildSectionCard(
                 title: 'Project Description & Scope',
@@ -976,12 +1062,16 @@ class _CompanyProjectDetailScreenState
                             const Icon(Icons.people_alt_outlined,
                                 size: 17, color: AppColors.primaryBlue),
                             const SizedBox(width: 6),
-                            Text(
-                              'Applications',
-                              style: GoogleFonts.inter(
-                                fontSize: 11,
-                                fontWeight: FontWeight.w700,
-                                color: AppColors.primaryBlue,
+                            Expanded(
+                              child: Text(
+                                'Applications',
+                                maxLines: 1,
+                                overflow: TextOverflow.ellipsis,
+                                style: GoogleFonts.inter(
+                                  fontSize: 11,
+                                  fontWeight: FontWeight.w700,
+                                  color: AppColors.primaryBlue,
+                                ),
                               ),
                             ),
                           ],
@@ -1037,14 +1127,18 @@ class _CompanyProjectDetailScreenState
                                   : AppColors.grayText,
                             ),
                             const SizedBox(width: 6),
-                            Text(
-                              'Assigned',
-                              style: GoogleFonts.inter(
-                                fontSize: 11,
-                                fontWeight: FontWeight.w700,
-                                color: hasAssigned
-                                    ? AppColors.statusOpen
-                                    : AppColors.grayText,
+                            Expanded(
+                              child: Text(
+                                'Assigned',
+                                maxLines: 1,
+                                overflow: TextOverflow.ellipsis,
+                                style: GoogleFonts.inter(
+                                  fontSize: 11,
+                                  fontWeight: FontWeight.w700,
+                                  color: hasAssigned
+                                      ? AppColors.statusOpen
+                                      : AppColors.grayText,
+                                ),
                               ),
                             ),
                           ],
@@ -1082,16 +1176,20 @@ class _CompanyProjectDetailScreenState
           ),
           const SizedBox(height: 16),
           Row(
-            mainAxisAlignment: MainAxisAlignment.spaceBetween,
             children: [
-              Text(
-                'Milestone Execution Progress',
-                style: GoogleFonts.inter(
-                  fontSize: 12.5,
-                  fontWeight: FontWeight.w600,
-                  color: AppColors.deepNavy,
+              Expanded(
+                child: Text(
+                  'Milestone Execution Progress',
+                  maxLines: 1,
+                  overflow: TextOverflow.ellipsis,
+                  style: GoogleFonts.inter(
+                    fontSize: 12.5,
+                    fontWeight: FontWeight.w600,
+                    color: AppColors.deepNavy,
+                  ),
                 ),
               ),
+              const SizedBox(width: 8),
               Text(
                 '${(project.progress * 100).toInt()}%',
                 style: GoogleFonts.poppins(
@@ -1112,6 +1210,89 @@ class _CompanyProjectDetailScreenState
               minHeight: 7,
             ),
           ),
+        ],
+      ),
+    );
+  }
+
+  Widget _buildPaymentSection(ProjectModel project) {
+    final hasAssignedStudent =
+        project.assignedStudent != null &&
+        project.assignedStudent!.trim().isNotEmpty;
+    final statusColor = project.paymentSent
+        ? const Color(0xFF166534)
+        : const Color(0xFF92400E);
+    final statusBackground = project.paymentSent
+        ? AppColors.successBg
+        : AppColors.warningBg;
+
+    return _buildSectionCard(
+      title: 'Payment Status',
+      icon: Icons.account_balance_wallet_outlined,
+      content: Column(
+        crossAxisAlignment: CrossAxisAlignment.stretch,
+        children: [
+          Wrap(
+            alignment: WrapAlignment.spaceBetween,
+            crossAxisAlignment: WrapCrossAlignment.center,
+            spacing: 8,
+            runSpacing: 8,
+            children: [
+              Text(
+                'Project payment',
+                style: GoogleFonts.inter(
+                  fontSize: 13,
+                  fontWeight: FontWeight.w600,
+                  color: AppColors.darkText,
+                ),
+              ),
+              Container(
+                padding: const EdgeInsets.symmetric(
+                  horizontal: 10,
+                  vertical: 5,
+                ),
+                decoration: BoxDecoration(
+                  color: statusBackground,
+                  borderRadius: BorderRadius.circular(9),
+                ),
+                child: Text(
+                  project.paymentSent ? 'Paid' : 'Payment Pending',
+                  style: GoogleFonts.inter(
+                    color: statusColor,
+                    fontSize: 12,
+                    fontWeight: FontWeight.w700,
+                  ),
+                ),
+              ),
+            ],
+          ),
+          const SizedBox(height: 12),
+          SizedBox(
+            width: double.infinity,
+            child: ElevatedButton.icon(
+              onPressed:
+                  !hasAssignedStudent ||
+                      project.paymentSent ||
+                      _isMarkingPaymentSent
+                  ? null
+                  : () => _markPaymentSent(project),
+              icon: _isMarkingPaymentSent
+                  ? const SizedBox(
+                      width: 18,
+                      height: 18,
+                      child: CircularProgressIndicator(strokeWidth: 2),
+                    )
+                  : const Icon(Icons.check_circle_outline, size: 18),
+              label: const Text('Payment Sent'),
+            ),
+          ),
+          if (!hasAssignedStudent) ...[
+            const SizedBox(height: 8),
+            Text(
+              'Assign a student before marking payment as sent.',
+              style: GoogleFonts.inter(fontSize: 12, color: AppColors.grayText),
+            ),
+          ],
         ],
       ),
     );
@@ -1345,21 +1526,29 @@ class _CompanyProjectDetailScreenState
       children: [
         Icon(icon, size: 17, color: AppColors.primaryBlue),
         const SizedBox(width: 8),
-        Text(
-          '$label: ',
-          style: GoogleFonts.inter(
-            fontSize: 13,
-            fontWeight: FontWeight.w600,
-            color: AppColors.darkText,
-          ),
-        ),
         Expanded(
-          child: Text(
-            value,
-            style: GoogleFonts.inter(
-              fontSize: 13,
-              color: AppColors.grayText,
+          child: Text.rich(
+            TextSpan(
+              children: [
+                TextSpan(
+                  text: '$label: ',
+                  style: GoogleFonts.inter(
+                    fontSize: 13,
+                    fontWeight: FontWeight.w600,
+                    color: AppColors.darkText,
+                  ),
+                ),
+                TextSpan(
+                  text: value,
+                  style: GoogleFonts.inter(
+                    fontSize: 13,
+                    color: AppColors.grayText,
+                  ),
+                ),
+              ],
             ),
+            maxLines: 2,
+            overflow: TextOverflow.ellipsis,
           ),
         ),
       ],

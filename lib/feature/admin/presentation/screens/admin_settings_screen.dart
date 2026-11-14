@@ -4,15 +4,7 @@ import 'package:link_vibe/core/constants/app_colors.dart';
 import 'package:link_vibe/core/widgets/app_empty_state.dart';
 import 'package:link_vibe/feature/admin/models/admin_settings_model.dart';
 import 'package:link_vibe/feature/admin/models/admin_user_model.dart';
-import 'package:link_vibe/feature/admin/presentation/screens/admin_dashboard_screen.dart';
 import 'package:link_vibe/feature/admin/presentation/screens/admin_login_screen.dart';
-import 'package:link_vibe/feature/admin/presentation/screens/application_monitoring_screen.dart';
-import 'package:link_vibe/feature/admin/presentation/screens/certificate_management_screen.dart';
-import 'package:link_vibe/feature/admin/presentation/screens/company_management_screen.dart';
-import 'package:link_vibe/feature/admin/presentation/screens/company_verifications_screen.dart';
-import 'package:link_vibe/feature/admin/presentation/screens/project_management_screen.dart';
-import 'package:link_vibe/feature/admin/presentation/screens/reports_analytics_screen.dart';
-import 'package:link_vibe/feature/admin/presentation/screens/student_management_screen.dart';
 import 'package:link_vibe/feature/admin/presentation/widgets/admin_sidebar.dart';
 import 'package:link_vibe/feature/admin/presentation/widgets/admin_top_navbar.dart';
 import 'package:link_vibe/feature/admin/services/admin_auth_service.dart';
@@ -20,7 +12,8 @@ import 'package:link_vibe/feature/admin/services/admin_settings_service.dart';
 
 /// Enterprise Admin Settings, Taxonomies, Support & RBAC Console.
 class AdminSettingsScreen extends StatefulWidget {
-  const AdminSettingsScreen({super.key});
+  final int initialTabIndex;
+  const AdminSettingsScreen({super.key, this.initialTabIndex = 0});
 
   @override
   State<AdminSettingsScreen> createState() => _AdminSettingsScreenState();
@@ -52,7 +45,12 @@ class _AdminSettingsScreenState extends State<AdminSettingsScreen>
   @override
   void initState() {
     super.initState();
-    _tabController = TabController(length: 8, vsync: this);
+    final validIndex =
+        (widget.initialTabIndex >= 0 && widget.initialTabIndex < 8)
+            ? widget.initialTabIndex
+            : 0;
+    _tabController =
+        TabController(length: 8, vsync: this, initialIndex: validIndex);
     WidgetsBinding.instance.addPostFrameCallback((_) {
       if (!mounted) return;
       _settingsService.loadFromSupabase();
@@ -103,54 +101,24 @@ class _AdminSettingsScreenState extends State<AdminSettingsScreen>
     if (_scaffoldKey.currentState?.isEndDrawerOpen ?? false) {
       Navigator.pop(context);
     }
-    if (routeId == 'settings') {
+    if (routeId == 'support_desk' || routeId == 'support') {
+      if (_tabController.index != 2) {
+        _tabController.animateTo(2);
+      }
       return;
     }
-    if (routeId == 'dashboard') {
-      Navigator.pushReplacement(
-        context,
-        MaterialPageRoute(builder: (_) => const AdminDashboardScreen()),
-      );
-    } else if (routeId == 'student_verifications') {
-      Navigator.pushReplacement(
-        context,
-        MaterialPageRoute(builder: (_) => const StudentManagementScreen()),
-      );
-    } else if (routeId == 'company_verifications') {
-      Navigator.pushReplacement(
-        context,
-        MaterialPageRoute(builder: (_) => const CompanyVerificationsScreen()),
-      );
-    } else if (routeId == 'company_management') {
-      Navigator.pushReplacement(
-        context,
-        MaterialPageRoute(builder: (_) => const CompanyManagementScreen()),
-      );
-    } else if (routeId == 'projects_audit' || routeId == 'projects') {
-      Navigator.pushReplacement(
-        context,
-        MaterialPageRoute(builder: (_) => const ProjectManagementScreen()),
-      );
-    } else if (routeId == 'compliance' || routeId == 'application_monitoring') {
-      Navigator.pushReplacement(
-        context,
-        MaterialPageRoute(
-          builder: (_) => const ApplicationMonitoringScreen(),
-        ),
-      );
-    } else if (routeId == 'audit_logs' || routeId == 'certificates') {
-      Navigator.pushReplacement(
-        context,
-        MaterialPageRoute(
-          builder: (_) => const CertificateManagementScreen(),
-        ),
-      );
-    } else if (routeId == 'analytics' || routeId == 'reports') {
-      Navigator.pushReplacement(
-        context,
-        MaterialPageRoute(builder: (_) => const ReportsAnalyticsScreen()),
-      );
+    if (routeId == 'settings') {
+      if (_tabController.index != 0) {
+        _tabController.animateTo(0);
+      }
+      return;
     }
+    AdminSidebar.navigateToRoute(
+      context,
+      scaffoldKey: _scaffoldKey,
+      currentRouteId: 'settings',
+      targetRouteId: routeId,
+    );
   }
 
   Future<void> _handleSignOut() async {

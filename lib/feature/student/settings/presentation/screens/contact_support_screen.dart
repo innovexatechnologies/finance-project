@@ -65,55 +65,77 @@ class _ContactSupportScreenState extends State<ContactSupportScreen> {
 
     setState(() => _isSubmitting = true);
 
-    await AppDataService.instance.submitSupportTicket(
-      category: _selectedCategory,
-      subject: subject,
-      message: message,
-    );
+    try {
+      final studentEmail = _emailController.text.trim();
+      final studentName = AppDataService.instance.userName.trim().isNotEmpty
+          ? AppDataService.instance.userName.trim()
+          : (AppDataService.instance.getProfile()['name']?.toString().trim() ??
+              '');
 
-    if (!mounted) return;
-    setState(() => _isSubmitting = false);
+      await AppDataService.instance.submitSupportTicket(
+        category: _selectedCategory,
+        subject: subject,
+        message: message,
+        email: studentEmail,
+        senderName: studentName,
+      );
 
-    _subjectController.clear();
-    _messageController.clear();
+      if (!mounted) return;
 
-    showDialog(
-      context: context,
-      builder: (dialogCtx) => AlertDialog(
-        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
-        title: Row(
-          children: [
-            const Icon(Icons.check_circle_rounded,
-                color: AppColors.statusOpen, size: 26),
-            const SizedBox(width: 8),
-            Expanded(
-              child: Text(
-                'Ticket Submitted',
-                style: GoogleFonts.poppins(
-                  fontWeight: FontWeight.bold,
-                  fontSize: 16,
-                  color: AppColors.deepNavy,
+      _subjectController.clear();
+      _messageController.clear();
+
+      showDialog(
+        context: context,
+        builder: (dialogCtx) => AlertDialog(
+          shape:
+              RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
+          title: Row(
+            children: [
+              const Icon(Icons.check_circle_rounded,
+                  color: AppColors.statusOpen, size: 26),
+              const SizedBox(width: 8),
+              Expanded(
+                child: Text(
+                  'Ticket Submitted',
+                  style: GoogleFonts.poppins(
+                    fontWeight: FontWeight.bold,
+                    fontSize: 16,
+                    color: AppColors.deepNavy,
+                  ),
                 ),
               ),
+            ],
+          ),
+          content: Text(
+            'Your support inquiry has been registered and synced with our governance helpdesk. Track replies below.',
+            style: GoogleFonts.inter(fontSize: 13, color: AppColors.darkText),
+          ),
+          actions: [
+            ElevatedButton(
+              onPressed: () => Navigator.pop(dialogCtx),
+              style: ElevatedButton.styleFrom(
+                backgroundColor: AppColors.primaryBlue,
+                foregroundColor: Colors.white,
+              ),
+              child: const Text('OK'),
             ),
           ],
         ),
-        content: Text(
-          'Your support inquiry has been registered and synced with our governance helpdesk. Track replies below.',
-          style: GoogleFonts.inter(fontSize: 13, color: AppColors.darkText),
+      );
+    } catch (e) {
+      if (!mounted) return;
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(
+          content: Text(SupabaseHelper.friendlyError(e)),
+          backgroundColor: AppColors.statusClosed,
         ),
-        actions: [
-          ElevatedButton(
-            onPressed: () => Navigator.pop(dialogCtx),
-            style: ElevatedButton.styleFrom(
-              backgroundColor: AppColors.primaryBlue,
-              foregroundColor: Colors.white,
-            ),
-            child: const Text('OK'),
-          ),
-        ],
-      ),
-    );
+      );
+    } finally {
+      if (mounted) {
+        setState(() => _isSubmitting = false);
+      }
+    }
   }
 
   @override

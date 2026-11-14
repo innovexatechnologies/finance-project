@@ -2,6 +2,7 @@ import 'dart:typed_data';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 import 'package:link_vibe/core/services/app_data_service.dart';
+import 'package:link_vibe/core/services/cloud_storage_service.dart';
 
 void main() {
   TestWidgetsFlutterBinding.ensureInitialized();
@@ -471,6 +472,102 @@ void main() {
     await AppDataService.instance.init();
     expect(AppDataService.instance.isLoggedIn, isTrue);
     expect(AppDataService.instance.userEmail, equals('sameuser@gmail.com'));
+  });
+
+  test('Project application limit blocks applying when 10 students have applied',
+      () async {
+    expect(AppDataService.maxApplicationsPerProject, equals(10));
+    const projId = 'proj-cap-10';
+    final project = {
+      'id': projId,
+      'title': 'FinTech Ledger Audit',
+      'company': 'Systems Limited',
+      'openings': 5,
+    };
+
+    AppDataService.instance.setProjectApplicantsCountForTest(projId, 10);
+    expect(
+      AppDataService.instance.isProjectApplicationLimitReached(projId),
+      isTrue,
+    );
+
+    await expectLater(
+      () => AppDataService.instance.addApplication(
+        project: project,
+        coverMessage: 'Experienced Flutter & SQL engineer ready to deliver.',
+        skills: 'Flutter, SQL',
+        availability: '15-20 hrs/week',
+      ),
+      throwsException,
+    );
+    expect(AppDataService.instance.hasApplied(projId), isFalse);
+
+    AppDataService.instance.setProjectApplicantsCountForTest(projId, 9);
+    expect(
+      AppDataService.instance.isProjectApplicationLimitReached(projId),
+      isFalse,
+    );
+    await AppDataService.instance.addApplication(
+      project: project,
+      coverMessage: 'Experienced Flutter & SQL engineer ready to deliver.',
+      skills: 'Flutter, SQL',
+      availability: '15-20 hrs/week',
+    );
+    expect(AppDataService.instance.hasApplied(projId), isTrue);
+    expect(AppDataService.instance.getProjectApplicantsCount(projId), equals(10));
+    expect(
+      AppDataService.instance.isProjectApplicationLimitReached(projId),
+      isTrue,
+    );
+  });
+
+  test('CloudStorageService utilities and resume persistence work cleanly', () async {
+    expect(CloudStorageService.sanitizeFileName('my resume (1).pdf'), 'my_resume__1_.pdf');
+    expect(CloudStorageService.extensionFromName('archive.tar.gz'), 'gz');
+    expect(CloudStorageService.extensionFromName('document.pdf'), 'pdf');
+    expect(CloudStorageService.mimeTypeForExtension('pdf'), 'application/pdf');
+    expect(CloudStorageService.mimeTypeForExtension('zip'), 'application/zip');
+    expect(CloudStorageService.formatBytes(500), '500 B');
+    expect(CloudStorageService.formatBytes(1024 * 1024 * 2), '2.0 MB');
+
+    final loc = CloudStorageService.extractStorageLocation(
+      'https://xyz.supabase.co/storage/v1/object/public/student-docs/user1/resumes/12345_cv.pdf',
+    );
+    expect(loc, isNotNull);
+    expect(loc?.bucket, 'student-docs');
+    expect(loc?.objectPath, 'user1/resumes/12345_cv.pdf');
+
+    expect(
+      CloudStorageService.displayNameFromUrl(
+        'https://xyz.supabase.co/storage/v1/object/public/student-docs/user1/resumes/1700000000000_my_cv.pdf',
+      ),
+      'my_cv.pdf',
+    );
+
+    await AppDataService.instance.updateStudentResume('https://xyz.supabase.co/storage/v1/object/public/student-docs/cv.pdf');
+    expect(
+      AppDataService.instance.getProfile()['resumeUrl'],
+      'https://xyz.supabase.co/storage/v1/object/public/student-docs/cv.pdf',
+    );
+  });
+
+  test('Support ticket records student name and email cleanly', () async {
+    final initialTickets = AppDataService.instance.getSupportTickets().length;
+
+    await AppDataService.instance.submitSupportTicket(
+      category: 'Technical Issue',
+      subject: 'Issue with file upload',
+      message: 'My resume is not uploading properly.',
+      email: 'student.ali@example.com',
+      senderName: 'Ali Khan',
+    );
+
+    final tickets = AppDataService.instance.getSupportTickets();
+    expect(tickets.length, equals(initialTickets + 1));
+    final latest = tickets.first;
+    expect(latest['subject'], equals('Issue with file upload'));
+    expect(latest['email'], equals('student.ali@example.com'));
+    expect(latest['senderName'], equals('Ali Khan'));
   });
 }
 

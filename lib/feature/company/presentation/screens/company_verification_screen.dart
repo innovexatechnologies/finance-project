@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:google_fonts/google_fonts.dart';
 import 'package:link_vibe/core/constants/app_colors.dart';
+import 'package:link_vibe/core/services/cloud_storage_service.dart';
 import 'package:link_vibe/core/widgets/status_badge.dart';
 import 'package:link_vibe/feature/company/models/company_verification_model.dart';
 import 'package:link_vibe/feature/company/services/company_profile_service.dart';
@@ -25,6 +26,8 @@ class _CompanyVerificationScreenState extends State<CompanyVerificationScreen> {
 
   bool _isConfirmingEmail = false;
   bool _isSubmitting = false;
+  bool _isUploadingEvidence = false;
+  String? _evidenceFileSize;
 
   String _selectedEvidenceType = 'SECP / Company Registration';
 
@@ -34,6 +37,46 @@ class _CompanyVerificationScreenState extends State<CompanyVerificationScreen> {
     'Chamber of Commerce License',
     'Trade License / Incorporation Certificate',
   ];
+
+  Future<void> _pickAndUploadEvidence() async {
+    if (_isUploadingEvidence) return;
+    setState(() => _isUploadingEvidence = true);
+    try {
+      final res = await CloudStorageService.pickAndUploadFile(
+        bucket: 'company-assets',
+        folder: 'evidence',
+        dialogTitle: 'Select Registration Evidence (PDF, PNG, JPG)',
+        allowedExtensions: ['pdf', 'png', 'jpg', 'jpeg', 'doc', 'docx'],
+      );
+      if (res != null && mounted) {
+        setState(() {
+          _evidenceNameController.text = res.fileName;
+          _evidenceUrlController.text = res.url;
+          _evidenceFileSize = res.sizeLabel;
+        });
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(
+            content: Text(
+              'Uploaded evidence document: ${res.fileName} (${res.sizeLabel})',
+            ),
+            backgroundColor: AppColors.statusOpen,
+            behavior: SnackBarBehavior.floating,
+          ),
+        );
+      }
+    } catch (e) {
+      if (!mounted) return;
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(
+          content: Text('Could not upload evidence document: $e'),
+          backgroundColor: AppColors.statusClosed,
+          behavior: SnackBarBehavior.floating,
+        ),
+      );
+    } finally {
+      if (mounted) setState(() => _isUploadingEvidence = false);
+    }
+  }
 
   @override
   void initState() {
@@ -140,6 +183,7 @@ class _CompanyVerificationScreenState extends State<CompanyVerificationScreen> {
         await _verificationService.resubmitVerificationRequest(
           businessEvidenceFileName: _evidenceNameController.text.trim(),
           businessEvidenceType: _selectedEvidenceType,
+          businessEvidenceFileSize: _evidenceFileSize ?? current.businessEvidenceFileSize,
           businessEvidenceUrl: _evidenceUrlController.text.trim(),
           websiteUrl: _websiteController.text.trim(),
           officialEmail: _emailController.text.trim(),
@@ -148,6 +192,7 @@ class _CompanyVerificationScreenState extends State<CompanyVerificationScreen> {
         await _verificationService.submitVerificationRequest(
           businessEvidenceFileName: _evidenceNameController.text.trim(),
           businessEvidenceType: _selectedEvidenceType,
+          businessEvidenceFileSize: _evidenceFileSize ?? current.businessEvidenceFileSize,
           businessEvidenceUrl: _evidenceUrlController.text.trim(),
           websiteUrl: _websiteController.text.trim(),
           officialEmail: _emailController.text.trim(),
@@ -362,7 +407,7 @@ class _CompanyVerificationScreenState extends State<CompanyVerificationScreen> {
                               labelText: 'Document Verification Link (Optional)',
                               hintText: 'https://drive.google.com/...',
                             ),
-                            validator: (v) {
+                              validator: (v) {
                               if (v != null && v.trim().isNotEmpty) {
                                 final t = v.trim();
                                 if (!t.startsWith('http://') &&
@@ -373,6 +418,53 @@ class _CompanyVerificationScreenState extends State<CompanyVerificationScreen> {
                               return null;
                             },
                           ),
+                          const SizedBox(height: 12),
+                          if (isEditable)
+                            SizedBox(
+                              width: double.infinity,
+                              child: OutlinedButton.icon(
+                                onPressed: _isUploadingEvidence
+                                    ? null
+                                    : _pickAndUploadEvidence,
+                                icon: _isUploadingEvidence
+                                    ? const SizedBox(
+                                        width: 16,
+                                        height: 16,
+                                        child: CircularProgressIndicator(
+                                          strokeWidth: 2,
+                                        ),
+                                      )
+                                    : const Icon(
+                                        Icons.upload_file_rounded,
+                                        size: 18,
+                                      ),
+                                label: Text(
+                                  _evidenceUrlController.text.trim().isNotEmpty
+                                      ? 'Replace Uploaded Document (PDF / Image)'
+                                      : 'Upload Evidence Document (PDF / Image)',
+                                ),
+                              ),
+                            ),
+                          if (_evidenceUrlController.text.trim().isNotEmpty) ...[
+                            const SizedBox(height: 8),
+                            Align(
+                              alignment: Alignment.centerLeft,
+                              child: TextButton.icon(
+                                onPressed: () => CloudStorageService.openUrl(
+                                  context,
+                                  _evidenceUrlController.text.trim(),
+                                  label: 'Registration Evidence',
+                                ),
+                                icon: const Icon(
+                                  Icons.open_in_new_rounded,
+                                  size: 16,
+                                ),
+                                label: Text(
+                                  'Preview Attached Document${_evidenceFileSize != null ? ' ($_evidenceFileSize)' : ''}',
+                                ),
+                              ),
+                            ),
+                          ],
                         ],
                       ),
                     ),

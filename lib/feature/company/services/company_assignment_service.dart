@@ -1,5 +1,7 @@
 import 'dart:math';
 import 'package:flutter/foundation.dart';
+import 'package:link_vibe/core/services/certificate_pdf_service.dart';
+import 'package:link_vibe/core/services/cloud_storage_service.dart';
 import 'package:link_vibe/core/services/share_service.dart';
 import 'package:link_vibe/core/services/supabase_helper.dart';
 import 'package:link_vibe/feature/company/models/assignment_model.dart';
@@ -305,16 +307,40 @@ class CompanyAssignmentService {
           if (existingCert == null) {
             final randNum = 1000 + Random().nextInt(9000);
             final certCode = 'CERT-${DateTime.now().year}-$randNum';
+            final issueDateStr = SupabaseHelper.formatDate(DateTime.now());
             final hashInput =
                 '$certCode:${assignment.studentId}:${assignment.projectId}';
+            final resolvedCompanyId = SupabaseHelper.isUuid(assignment.companyId)
+                ? assignment.companyId
+                : (SupabaseHelper.isUuid(profile.id) ? profile.id : null);
+
+            String? pdfUrl;
+            try {
+              final pdfBytes = await CertificatePdfService.generateCertificatePdf(
+                studentName: assignment.studentName,
+                projectTitle: assignment.projectTitle,
+                certificateTitle: certificateTitle,
+                issuer: companyDisplay,
+                certId: certCode,
+                issueDate: issueDateStr,
+              );
+              pdfUrl = await CloudStorageService.uploadBytes(
+                bucket: 'certificates',
+                objectPath: '${assignment.studentId}/$certCode.pdf',
+                bytes: pdfBytes,
+                contentType: 'application/pdf',
+              );
+            } catch (e) {
+              debugPrint('Certificate PDF cloud upload warning: $e');
+            }
+
             await supabase.from('certificates').insert({
               'certificate_id': certCode,
               'student_id': assignment.studentId,
               'student_name': assignment.studentName,
               'student_university': assignment.studentUniversity,
               'student_degree': assignment.studentDegree,
-              if (SupabaseHelper.isUuid(assignment.companyId))
-                'company_id': assignment.companyId,
+              'company_id': ?resolvedCompanyId,
               'company_name': companyDisplay,
               if (SupabaseHelper.isUuid(assignment.projectId))
                 'project_id': assignment.projectId,
@@ -322,7 +348,7 @@ class CompanyAssignmentService {
               'certificate_title': certificateTitle,
               'certificate_type': 'completion',
               'issuer': companyDisplay,
-              'issue_date': SupabaseHelper.formatDate(DateTime.now()),
+              'issue_date': issueDateStr,
               'overall_rating': overallRating,
               'recommendation_letter': cleanFeedback,
               'signatory_name': profile.contactPersonName.isNotEmpty
@@ -335,6 +361,7 @@ class CompanyAssignmentService {
               'verification_url': ShareService.buildCertificateShareLink({
                 'id': certCode,
               }),
+              if (pdfUrl != null && pdfUrl.isNotEmpty) 'pdf_url': pdfUrl,
             });
           }
         }

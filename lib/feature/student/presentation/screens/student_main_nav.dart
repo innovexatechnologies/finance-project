@@ -13,6 +13,7 @@ import 'package:link_vibe/feature/student/certificates/presentation/screens/cert
 import 'package:link_vibe/feature/student/home/presentation/screens/student_home_screen.dart';
 import 'package:link_vibe/feature/student/explore/presentation/screens/explore_projects_screen.dart';
 import 'package:link_vibe/feature/student/my_projects/presentation/screens/my_projects_screen.dart';
+import 'package:link_vibe/feature/student/payment_methods/presentation/screens/payment_methods_screen.dart';
 import 'package:link_vibe/feature/student/profile/presentation/screens/student_profile_screen.dart';
 import 'package:link_vibe/feature/student/saved/presentation/screens/saved_projects_screen.dart';
 import 'package:link_vibe/feature/student/settings/presentation/screens/settings_screen.dart';
@@ -440,6 +441,14 @@ class _StudentMainNavState extends State<StudentMainNav> {
                           badgeCount: certCount,
                           onTap: () =>
                               _openDrawerScreen(const CertificatesScreen()),
+                        ),
+                        const SizedBox(height: 4),
+                        _buildDrawerMenuRow(
+                          icon: Icons.account_balance_wallet_outlined,
+                          accentColor: AppColors.teal,
+                          title: 'Payment Methods',
+                          onTap: () =>
+                              _openDrawerScreen(const PaymentMethodsScreen()),
                         ),
                         const SizedBox(height: 4),
                         _buildDrawerMenuRow(

@@ -28,7 +28,7 @@ class _MyProjectsScreenState extends State<MyProjectsScreen>
   @override
   void initState() {
     super.initState();
-    _tabController = TabController(length: 2, vsync: this);
+    _tabController = TabController(length: 3, vsync: this);
   }
 
   @override
@@ -57,11 +57,12 @@ class _MyProjectsScreenState extends State<MyProjectsScreen>
               syncError != null
                   ? SupabaseHelper.friendlyError(syncError)
                   : hasClient
-                      ? 'Projects and statuses refreshed.'
-                      : 'Refreshed local projects.',
+                  ? 'Projects and statuses refreshed.'
+                  : 'Refreshed local projects.',
             ),
-            backgroundColor:
-                syncError != null ? AppColors.statusClosed : AppColors.statusOpen,
+            backgroundColor: syncError != null
+                ? AppColors.statusClosed
+                : AppColors.statusOpen,
             duration: const Duration(seconds: 2),
           ),
         );
@@ -310,7 +311,7 @@ class _MyProjectsScreenState extends State<MyProjectsScreen>
       builder: (context, _) {
         final allApps = AppDataService.instance.getApplications();
 
-        final activeList = allApps
+        final myProjects = allApps
             .where((a) {
               final s = (a['status'] ?? '').toString().toLowerCase();
               return s == 'in progress' ||
@@ -319,14 +320,26 @@ class _MyProjectsScreenState extends State<MyProjectsScreen>
                   s == 'revision requested' ||
                   s == 'accepted' ||
                   s == 'shortlisted' ||
+                  s == 'completed' ||
                   s == 'delivered' ||
                   s == 'disputed' ||
-                  s == 'ready_for_payout';
+                  s == 'ready_for_payout' ||
+                  a['isAssignedProject'] == true;
             })
             .toList();
 
-        final completedList = allApps
-            .where((a) => (a['status'] ?? '').toString().toLowerCase() == 'completed')
+        final awaitingConfirmation = myProjects
+            .where(
+              (project) =>
+                  _paymentStatusLabel(project) != 'Received' &&
+                  _paymentStatusLabel(project) != 'Not Received',
+            )
+            .toList();
+        final receivedProjects = myProjects
+            .where((project) => _paymentStatusLabel(project) == 'Received')
+            .toList();
+        final notReceivedProjects = myProjects
+            .where((project) => _paymentStatusLabel(project) == 'Not Received')
             .toList();
 
         return Scaffold(
@@ -357,14 +370,16 @@ class _MyProjectsScreenState extends State<MyProjectsScreen>
             ),
             actions: [
               ExecutiveHeaderIconButton(
-                tooltip:
-                    _isRefreshing ? 'Syncing Projects...' : 'Refresh Projects',
+                tooltip: _isRefreshing
+                    ? 'Syncing Projects...'
+                    : 'Refresh Projects',
                 icon: Icons.refresh_rounded,
                 onPressed: _isRefreshing ? null : _refreshProjects,
               ),
             ],
             bottom: TabBar(
               controller: _tabController,
+              isScrollable: true,
               labelColor: AppColors.primaryBlue,
               unselectedLabelColor: AppColors.grayText,
               indicatorColor: AppColors.primaryBlue,
@@ -372,9 +387,10 @@ class _MyProjectsScreenState extends State<MyProjectsScreen>
                 fontWeight: FontWeight.w700,
                 fontSize: 13,
               ),
-              tabs: [
-                Tab(text: 'Active (${activeList.length})'),
-                Tab(text: 'Completed (${completedList.length})'),
+              tabs: const [
+                Tab(text: 'Awaiting Confirmation'),
+                Tab(text: 'Received'),
+                Tab(text: 'Not Received'),
               ],
             ),
           ),
@@ -384,55 +400,25 @@ class _MyProjectsScreenState extends State<MyProjectsScreen>
               child: TabBarView(
                 controller: _tabController,
                 children: [
-                  RefreshIndicator(
-                    color: AppColors.primaryBlue,
-                    onRefresh: _refreshProjects,
-                    child: activeList.isEmpty
-                        ? ListView(
-                            physics: const AlwaysScrollableScrollPhysics(),
-                            padding: const EdgeInsets.all(24),
-                            children: const [
-                              SizedBox(height: 40),
-                              AppEmptyState(
-                                icon: Icons.folder_shared_outlined,
-                                title: 'No Active Projects',
-                                subtitle:
-                                    'Apply for open projects from Explore and once a partner company shortlists or assigns you, it will appear here.',
-                              ),
-                            ],
-                          )
-                        : ListView.builder(
-                            physics: const AlwaysScrollableScrollPhysics(),
-                            padding: const EdgeInsets.all(16),
-                            itemCount: activeList.length,
-                            itemBuilder: (_, index) =>
-                                _buildProjectItem(activeList[index], false),
-                          ),
+                  _buildProjectsTab(
+                    projects: awaitingConfirmation,
+                    emptyIcon: Icons.hourglass_empty_rounded,
+                    emptyTitle: 'No Projects Awaiting Confirmation',
+                    emptySubtitle: 'Unassigned projects appear here with an Unassigned status. Assigned projects remain here until you confirm payment.',
                   ),
-                  RefreshIndicator(
-                    color: AppColors.primaryBlue,
-                    onRefresh: _refreshProjects,
-                    child: completedList.isEmpty
-                        ? ListView(
-                            physics: const AlwaysScrollableScrollPhysics(),
-                            padding: const EdgeInsets.all(24),
-                            children: const [
-                              SizedBox(height: 40),
-                              AppEmptyState(
-                                icon: Icons.verified_outlined,
-                                title: 'No Completed Projects Yet',
-                                subtitle:
-                                    'Finished projects approved by your company supervisor will appear here alongside your verified certificates.',
-                              ),
-                            ],
-                          )
-                        : ListView.builder(
-                            physics: const AlwaysScrollableScrollPhysics(),
-                            padding: const EdgeInsets.all(16),
-                            itemCount: completedList.length,
-                            itemBuilder: (_, index) =>
-                                _buildProjectItem(completedList[index], true),
-                          ),
+                  _buildProjectsTab(
+                    projects: receivedProjects,
+                    emptyIcon: Icons.check_circle_outline_rounded,
+                    emptyTitle: 'No Payments Confirmed as Received',
+                    emptySubtitle:
+                        'Projects you confirm as received will appear here.',
+                  ),
+                  _buildProjectsTab(
+                    projects: notReceivedProjects,
+                    emptyIcon: Icons.error_outline_rounded,
+                    emptyTitle: 'No Payments Marked Not Received',
+                    emptySubtitle:
+                        'Projects you report as not received will appear here.',
                   ),
                 ],
               ),
@@ -440,6 +426,40 @@ class _MyProjectsScreenState extends State<MyProjectsScreen>
           ),
         );
       },
+    );
+  }
+
+  Widget _buildProjectsTab({
+    required List<Map<String, dynamic>> projects,
+    required IconData emptyIcon,
+    required String emptyTitle,
+    required String emptySubtitle,
+  }) {
+    return RefreshIndicator(
+      color: AppColors.primaryBlue,
+      onRefresh: _refreshProjects,
+      child: projects.isEmpty
+          ? ListView(
+              physics: const AlwaysScrollableScrollPhysics(),
+              padding: const EdgeInsets.all(24),
+              children: [
+                const SizedBox(height: 40),
+                AppEmptyState(
+                  icon: emptyIcon,
+                  title: emptyTitle,
+                  subtitle: emptySubtitle,
+                ),
+              ],
+            )
+          : ListView.builder(
+              physics: const AlwaysScrollableScrollPhysics(),
+              padding: const EdgeInsets.all(16),
+              itemCount: projects.length,
+              itemBuilder: (_, index) => _buildProjectItem(
+                projects[index],
+                projects[index]['status'] == 'Completed',
+              ),
+            ),
     );
   }
 
@@ -456,11 +476,11 @@ class _MyProjectsScreenState extends State<MyProjectsScreen>
     final company = (project['company']?.toString().trim().isNotEmpty == true)
         ? project['company'].toString().trim()
         : 'Partner Company';
-    final pId = project['projectId']?.toString() ??
-        project['id']?.toString() ??
-        '';
+    final pId =
+        project['projectId']?.toString() ?? project['id']?.toString() ?? '';
     final hasSubmission = AppDataService.instance.getSubmission(pId) != null;
-    final assignedDate = project['appliedDate']?.toString().trim() ?? 'Recently';
+    final assignedDate =
+        project['appliedDate']?.toString().trim() ?? 'Recently';
     final feedback = project['companyFeedback']?.toString().trim() ?? '';
     final revisionNotes =
         (project['revision_notes'] ?? project['revisionNotes'] ?? feedback)
@@ -546,8 +566,11 @@ class _MyProjectsScreenState extends State<MyProjectsScreen>
                 Row(
                   mainAxisSize: MainAxisSize.min,
                   children: [
-                    const Icon(Icons.calendar_today_outlined,
-                        size: 13, color: AppColors.grayText),
+                    const Icon(
+                      Icons.calendar_today_outlined,
+                      size: 13,
+                      color: AppColors.grayText,
+                    ),
                     const SizedBox(width: 4),
                     Text(
                       'Updated: $assignedDate',
@@ -562,8 +585,11 @@ class _MyProjectsScreenState extends State<MyProjectsScreen>
                   Row(
                     mainAxisSize: MainAxisSize.min,
                     children: [
-                      const Icon(Icons.check_circle_rounded,
-                          size: 14, color: AppColors.statusOpen),
+                      const Icon(
+                        Icons.check_circle_rounded,
+                        size: 14,
+                        color: AppColors.statusOpen,
+                      ),
                       const SizedBox(width: 4),
                       Text(
                         'Work Uploaded',
@@ -575,6 +601,7 @@ class _MyProjectsScreenState extends State<MyProjectsScreen>
                       ),
                     ],
                   ),
+                _buildPaymentStatusChip(_paymentStatusLabel(project)),
               ],
             ),
 
@@ -726,7 +753,8 @@ class _MyProjectsScreenState extends State<MyProjectsScreen>
                   color: AppColors.warningBg,
                   borderRadius: BorderRadius.circular(10),
                   border: Border.all(
-                      color: AppColors.statusPending.withValues(alpha: 0.4)),
+                    color: AppColors.statusPending.withValues(alpha: 0.4),
+                  ),
                 ),
                 child: Text(
                   'Supervisor Note: $feedback',
@@ -749,7 +777,9 @@ class _MyProjectsScreenState extends State<MyProjectsScreen>
                 OutlinedButton(
                   style: OutlinedButton.styleFrom(
                     padding: const EdgeInsets.symmetric(
-                        horizontal: 14, vertical: 10),
+                      horizontal: 14,
+                      vertical: 10,
+                    ),
                   ),
                   onPressed: () {
                     Navigator.push(
@@ -765,7 +795,9 @@ class _MyProjectsScreenState extends State<MyProjectsScreen>
                 OutlinedButton.icon(
                   style: OutlinedButton.styleFrom(
                     padding: const EdgeInsets.symmetric(
-                        horizontal: 12, vertical: 10),
+                      horizontal: 12,
+                      vertical: 10,
+                    ),
                   ),
                   onPressed: () {
                     ShareService.shareProject(
@@ -827,7 +859,9 @@ class _MyProjectsScreenState extends State<MyProjectsScreen>
                           ? const Color(0xFFD97706)
                           : AppColors.primaryBlue,
                       padding: const EdgeInsets.symmetric(
-                          horizontal: 14, vertical: 10),
+                        horizontal: 14,
+                        vertical: 10,
+                      ),
                     ),
                     onPressed: () {
                       Navigator.push(
@@ -849,8 +883,8 @@ class _MyProjectsScreenState extends State<MyProjectsScreen>
                       status == 'Revision Requested'
                           ? 'Feedback'
                           : hasSubmission
-                              ? 'Update Work'
-                              : 'Submit Work',
+                          ? 'Update Work'
+                          : 'Submit Work',
                       style: GoogleFonts.poppins(
                         fontSize: 12.5,
                         fontWeight: FontWeight.w600,
@@ -862,7 +896,9 @@ class _MyProjectsScreenState extends State<MyProjectsScreen>
                     style: ElevatedButton.styleFrom(
                       backgroundColor: AppColors.teal,
                       padding: const EdgeInsets.symmetric(
-                          horizontal: 14, vertical: 10),
+                        horizontal: 14,
+                        vertical: 10,
+                      ),
                     ),
                     onPressed: () {
                       Navigator.push(
@@ -878,6 +914,55 @@ class _MyProjectsScreenState extends State<MyProjectsScreen>
               ],
             ),
           ],
+        ),
+      ),
+    );
+  }
+
+  String _paymentStatusLabel(Map<String, dynamic> project) {
+    if (project['paymentStatusAvailable'] != true) {
+      return 'Payment status unavailable';
+    }
+    if (project['isAssignedProject'] != true) return 'Unassigned';
+
+    final confirmation = project['paymentConfirmationStatus']?.toString();
+    if (confirmation == 'Received' || confirmation == 'Not Received') {
+      return confirmation!;
+    }
+    return 'Awaiting Confirmation';
+  }
+
+  Widget _buildPaymentStatusChip(String label) {
+    final color = switch (label) {
+      'Received' => const Color(0xFF166534),
+      'Not Received' => AppColors.statusClosed,
+      'Awaiting Confirmation' => const Color(0xFF92400E),
+      'Unassigned' => AppColors.grayText,
+      _ => AppColors.grayText,
+    };
+    final background = switch (label) {
+      'Received' => AppColors.successBg,
+      'Not Received' => AppColors.errorBg,
+      'Awaiting Confirmation' => AppColors.warningBg,
+      'Unassigned' => AppColors.surfaceAlt,
+      _ => AppColors.surfaceAlt,
+    };
+
+    return Container(
+      padding: const EdgeInsets.symmetric(horizontal: 9, vertical: 5),
+      decoration: BoxDecoration(
+        color: background,
+        borderRadius: BorderRadius.circular(9),
+        border: Border.all(color: color.withValues(alpha: 0.2)),
+      ),
+      child: Text(
+        label,
+        maxLines: 1,
+        overflow: TextOverflow.ellipsis,
+        style: GoogleFonts.inter(
+          fontSize: 11.5,
+          fontWeight: FontWeight.w600,
+          color: color,
         ),
       ),
     );

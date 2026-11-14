@@ -101,26 +101,7 @@ class CompanySettingsService {
             SupabaseHelper.endInteractiveAuth();
           }
         }
-        try {
-          await supabase.auth.updateUser(UserAttributes(password: trimmedNew));
-        } on AuthException catch (e) {
-          if (email != null &&
-              email.isNotEmpty &&
-              SupabaseHelper.isWeakPasswordError(e)) {
-            await SupabaseHelper.resetPasswordInApp(
-              email: email,
-              newPassword: trimmedNew,
-            );
-          } else {
-            rethrow;
-          }
-        }
-        if (email != null && email.isNotEmpty) {
-          await AppDataService.instance.updateAccountPassword(
-            email,
-            trimmedNew,
-          );
-        }
+        await supabase.auth.updateUser(UserAttributes(password: trimmedNew));
         return true;
       } on AuthException catch (e) {
         lastError = e.message;

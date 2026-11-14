@@ -18,6 +18,7 @@ class ProjectModel {
   final String? assignedStudent;
   final double progress;
   final String createdAt;
+  final bool paymentSent;
 
   // Upfront Custodial Escrow Fields
   final double escrowAmount;
@@ -65,6 +66,7 @@ class ProjectModel {
     this.assignedStudent,
     this.progress = 0.0,
     this.createdAt = 'Just now',
+    this.paymentSent = false,
     this.escrowAmount = 0.0,
     this.paymentMethodUsed,
     this.transactionId,
@@ -100,6 +102,10 @@ class ProjectModel {
   bool get isDisputed => status.toLowerCase() == 'disputed';
   bool get isReadyForPayout => status.toLowerCase() == 'ready_for_payout';
   bool get isCompleted => status.toLowerCase() == 'completed';
+
+  String get budget => escrowAmount > 0
+      ? 'PKR ${escrowAmount.toStringAsFixed(0)}'
+      : 'Academic Credit / Verified Certificate';
 
   int get remainingRevisions => (maxRevisions - revisionCount).clamp(0, maxRevisions);
   bool get canRequestRevision => revisionCount < maxRevisions;
@@ -140,6 +146,7 @@ class ProjectModel {
     String? assignedStudent,
     double? progress,
     String? createdAt,
+    bool? paymentSent,
     double? escrowAmount,
     String? paymentMethodUsed,
     String? transactionId,
@@ -182,6 +189,7 @@ class ProjectModel {
       assignedStudent: assignedStudent ?? this.assignedStudent,
       progress: progress ?? this.progress,
       createdAt: createdAt ?? this.createdAt,
+      paymentSent: paymentSent ?? this.paymentSent,
       escrowAmount: escrowAmount ?? this.escrowAmount,
       paymentMethodUsed: paymentMethodUsed ?? this.paymentMethodUsed,
       transactionId: transactionId ?? this.transactionId,
@@ -234,6 +242,7 @@ class ProjectModel {
       assignedStudent: json['assigned_student']?.toString(),
       progress: (json['progress'] as num?)?.toDouble() ?? 0.0,
       createdAt: (json['created_at'] ?? 'Recently').toString(),
+      paymentSent: json['payment_sent'] == true,
       escrowAmount: (json['escrow_amount'] as num?)?.toDouble() ?? 0.0,
       paymentMethodUsed: json['payment_method_used']?.toString(),
       transactionId: json['transaction_id']?.toString(),
@@ -281,6 +290,7 @@ class ProjectModel {
       'assigned_student': assignedStudent,
       'progress': progress,
       'created_at': createdAt,
+      'payment_sent': paymentSent,
       'escrow_amount': escrowAmount,
       'payment_method_used': paymentMethodUsed,
       'transaction_id': transactionId,

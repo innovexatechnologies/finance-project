@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_dotenv/flutter_dotenv.dart';
 import 'package:supabase_flutter/supabase_flutter.dart';
+
 import 'core/services/app_data_service.dart';
 import 'core/services/deep_link_service.dart';
 import 'core/services/supabase_helper.dart';
@@ -11,19 +12,30 @@ import 'feature/splash/presentation/screens/splash_screen.dart';
 void main() async {
   WidgetsFlutterBinding.ensureInitialized();
 
-  // Safely load .env and initialize Supabase if credentials are configured
+  // 1. Load .env asset bundled with the application
   try {
     await dotenv.load(fileName: ".env");
   } catch (e) {
     debugPrint('Notice: .env asset load fallback ($e).');
   }
 
-  final supabaseUrl = (dotenv.env['SUPABASE_URL'] ?? '')
+  // 2. Production fallback credentials if .env was not bundled or read
+  const defaultUrl = 'https://nosnzigmrxrdotiikjab.supabase.co';
+  const defaultAnonKey = 'sb_publishable_yX1bnVB7y-n-fZhelfJhjw_otuDqRlJ';
+
+  final envUrl = (dotenv.env['SUPABASE_URL'] ??
+          const String.fromEnvironment('SUPABASE_URL', defaultValue: ''))
       .trim()
       .replaceAll(RegExp(r'/+$'), '');
-  final anonKey = (dotenv.env['SUPABASE_ANON_KEY'] ?? '').trim();
-  final publishableKey = (dotenv.env['SUPABASE_PUBLISHABLE_KEY'] ?? '').trim();
-  final supabaseKey = anonKey.isNotEmpty ? anonKey : publishableKey;
+  final envKey = (dotenv.env['SUPABASE_ANON_KEY'] ??
+          dotenv.env['SUPABASE_PUBLISHABLE_KEY'] ??
+          const String.fromEnvironment('SUPABASE_ANON_KEY',
+              defaultValue: String.fromEnvironment('SUPABASE_PUBLISHABLE_KEY',
+                  defaultValue: '')))
+      .trim();
+
+  final supabaseUrl = envUrl.isNotEmpty ? envUrl : defaultUrl;
+  final supabaseKey = envKey.isNotEmpty ? envKey : defaultAnonKey;
 
   if (supabaseUrl.isNotEmpty &&
       supabaseKey.isNotEmpty &&
@@ -37,13 +49,13 @@ void main() async {
           authFlowType: AuthFlowType.implicit,
         ),
       );
-      debugPrint('Supabase initialized successfully.');
+      debugPrint('Supabase initialized successfully: $supabaseUrl');
     } catch (e) {
       debugPrint('Notice: Supabase initialization error: $e');
     }
   } else {
     debugPrint(
-      'Notice: Supabase credentials not configured in .env. Running with local storage fallback.',
+      'Notice: Supabase credentials not configured. Running with local storage fallback.',
     );
   }
 

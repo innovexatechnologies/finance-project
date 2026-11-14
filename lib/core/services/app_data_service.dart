@@ -1,9 +1,11 @@
 import 'dart:convert';
+import 'dart:math';
 import 'package:flutter/foundation.dart';
 import 'package:flutter/scheduler.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 import 'package:supabase_flutter/supabase_flutter.dart' show FileOptions;
 import 'package:link_vibe/core/services/supabase_helper.dart';
+import 'package:link_vibe/feature/admin/services/admin_hash_util.dart';
 
 /// Central Persistent & Supabase-Synchronized Data Service for SkillBridge.
 class AppDataService extends ChangeNotifier {
@@ -41,9 +43,11 @@ class AppDataService extends ChangeNotifier {
   String? _lastSyncError;
 
   // Entity caches (empty until fetched from Supabase or created by user)
+  static const int maxApplicationsPerProject = 10;
   List<Map<String, dynamic>> _savedProjects = [];
   List<Map<String, dynamic>> _applications = [];
   List<Map<String, dynamic>> _projects = [];
+  final Map<String, int> _projectApplicantCounts = {};
   Map<String, Map<String, dynamic>> _workSubmissions = {};
   Map<String, dynamic> _profile = {};
   List<String> _skills = [];
@@ -58,8 +62,9 @@ class AppDataService extends ChangeNotifier {
     'publicPortfolio': true,
   };
 
-  final Map<String, bool> _privacySettings =
-      Map<String, bool>.from(_defaultPrivacySettings);
+  final Map<String, bool> _privacySettings = Map<String, bool>.from(
+    _defaultPrivacySettings,
+  );
 
   // SharedPreferences keys
   static const _kIsLoggedIn = 'cc_is_logged_in_v1';
@@ -305,10 +310,12 @@ class AppDataService extends ChangeNotifier {
 
           final skills = SupabaseHelper.parseStringList(p['skills']);
 
+
           mappedProjects.add({
             'id': p['id']?.toString() ?? '',
             'title': p['title']?.toString() ?? 'Untitled Project',
-            'company': p['company_name']?.toString() ??
+            'company':
+                p['company_name']?.toString() ??
                 comp?['company_name']?.toString() ??
                 'Partner Company',
             'companyId': comp?['id']?.toString() ?? compId,
@@ -333,6 +340,30 @@ class AppDataService extends ChangeNotifier {
         }
         _projects = mappedProjects;
         await _prefs?.setString(_kCustomProjects, jsonEncode(_projects));
+
+        // Fetch aggregate applicant counts per project (safe RPC, no PII exposed)
+        try {
+          final countRows = await supabase.rpc('get_project_applicant_counts');
+          if (countRows is List) {
+            for (final raw in countRows) {
+              if (raw is Map) {
+                final pid = raw['project_id']?.toString() ?? '';
+                final cnt = (raw['applicant_count'] as num?)?.toInt() ?? 0;
+                if (pid.isNotEmpty) {
+                  _projectApplicantCounts[pid] = cnt;
+                }
+              }
+            }
+            for (final p in _projects) {
+              final pid = p['id']?.toString() ?? '';
+              if (_projectApplicantCounts.containsKey(pid)) {
+                p['applicantsCount'] = _projectApplicantCounts[pid];
+              }
+            }
+          }
+        } catch (e) {
+          debugPrint('Applicant counts RPC skipped: $e');
+        }
       } catch (e) {
         debugPrint('Error fetching projects: $e');
         _lastSyncError = e.toString();
@@ -379,8 +410,7 @@ class AppDataService extends ChangeNotifier {
             }
             _profile['phone'] =
                 prof['phone']?.toString() ?? _profile['phone'] ?? '';
-            _profile['bio'] =
-                prof['bio']?.toString() ?? _profile['bio'] ?? '';
+            _profile['bio'] = prof['bio']?.toString() ?? _profile['bio'] ?? '';
             _profile['avatarUrl'] = prof['avatar_url']?.toString();
             _profile['isVerified'] = prof['is_verified'] == true;
             _profile['accountStatus'] =
@@ -405,12 +435,10 @@ class AppDataService extends ChangeNotifier {
                 _userName = stu['full_name'].toString().trim();
                 _profile['name'] = _userName;
               }
-              _profile['university'] = stu['university']?.toString() ??
-                  _profile['university'] ??
-                  '';
-              _profile['department'] = stu['department']?.toString() ??
-                  _profile['department'] ??
-                  '';
+              _profile['university'] =
+                  stu['university']?.toString() ?? _profile['university'] ?? '';
+              _profile['department'] =
+                  stu['department']?.toString() ?? _profile['department'] ?? '';
               _profile['degree'] =
                   stu['degree']?.toString() ?? _profile['degree'] ?? '';
               _profile['semester'] =
@@ -425,16 +453,16 @@ class AppDataService extends ChangeNotifier {
                 _profile['bio'] = stu['bio'].toString();
               }
               _profile['githubUrl'] = stu['github_url']?.toString() ?? '';
-              _profile['portfolioUrl'] =
-                  stu['portfolio_url']?.toString() ?? '';
+              _profile['portfolioUrl'] = stu['portfolio_url']?.toString() ?? '';
               _profile['resumeUrl'] = stu['resume_url']?.toString() ?? '';
               _profile['verificationStatus'] =
                   stu['verification_status']?.toString() ?? 'pending';
               _profile['accountStatus'] =
                   stu['account_status']?.toString() ?? 'active';
 
-              final parsedSkills =
-                  SupabaseHelper.parseStringList(stu['skills']);
+              final parsedSkills = SupabaseHelper.parseStringList(
+                stu['skills'],
+              );
               if (parsedSkills.isNotEmpty) {
                 _skills = parsedSkills;
               }
@@ -456,7 +484,10 @@ class AppDataService extends ChangeNotifier {
             _savedProjects = _projects
                 .where((p) => savedIds.contains(p['id']?.toString()))
                 .toList();
-            await _prefs?.setString(_kSavedProjects, jsonEncode(_savedProjects));
+            await _prefs?.setString(
+              _kSavedProjects,
+              jsonEncode(_savedProjects),
+            );
           } catch (e) {
             debugPrint('Error fetching saved_projects: $e');
           }
@@ -468,6 +499,33 @@ class AppDataService extends ChangeNotifier {
                 .select()
                 .or('student_id.eq.${user.id},user_id.eq.${user.id}')
                 .order('submitted_at', ascending: false);
+
+            final Map<String, Map<String, dynamic>> paymentStatuses = {};
+            var paymentStatusAvailable = false;
+            if (_userRole.toLowerCase() == 'student') {
+              try {
+                final statusRows = await supabase.rpc(
+                  'get_student_assigned_project_payment_status',
+                );
+                if (statusRows is! List) {
+                  throw const FormatException(
+                    'Invalid assigned project payment status response.',
+                  );
+                }
+                for (final raw in statusRows) {
+                  if (raw is! Map) continue;
+                  final row = Map<String, dynamic>.from(raw);
+                  final projectId = row['project_id']?.toString() ?? '';
+                  if (projectId.isNotEmpty) {
+                    paymentStatuses[projectId] = row;
+                  }
+                }
+                paymentStatusAvailable = true;
+              } catch (e) {
+                debugPrint('Student project payment status load failed: $e');
+                _lastSyncError = e.toString();
+              }
+            }
 
             final List<Map<String, dynamic>> mappedApps = [];
             final Map<String, Map<String, dynamic>> mappedSubs = {};
@@ -497,29 +555,41 @@ class AppDataService extends ChangeNotifier {
               }
               if (status == 'Completed') timelineStep = 3;
 
-              final title = row['project_title']?.toString() ??
+              final title =
+                  row['project_title']?.toString() ??
                   matchingProject['title']?.toString() ??
                   'Project';
-              final company = row['company_name']?.toString() ??
+              final company =
+                  row['company_name']?.toString() ??
                   matchingProject['company']?.toString() ??
                   'Company Partner';
+              final paymentStatus = paymentStatuses[projectId];
 
               mappedApps.add({
                 'id': row['id']?.toString() ?? '',
+                'applicationId': row['id']?.toString() ?? '',
                 'projectId': projectId,
                 'title': title,
                 'company': company,
-                'companyUserId': matchingProject['companyUserId']?.toString() ?? '',
+                'companyUserId':
+                    matchingProject['companyUserId']?.toString() ?? '',
                 'status': status,
                 'appliedDate': _formatDbDate(row['submitted_at']),
                 'timelineStep': timelineStep,
                 'coverMessage': row['cover_letter']?.toString() ?? '',
-                'skills': SupabaseHelper.parseStringList(row['skills']).join(', '),
+                'skills': SupabaseHelper.parseStringList(row['skills'])
+                    .join(', '),
                 'availability': row['availability']?.toString() ?? '',
                 'portfolioLink': row['portfolio_link']?.toString() ?? '',
                 'companyFeedback': feedback,
                 'progress': (row['progress'] as num?)?.toDouble() ?? 0.0,
-                'deadline': matchingProject['deadline']?.toString() ?? 'Flexible',
+                'deadline':
+                    matchingProject['deadline']?.toString() ?? 'Flexible',
+                'isAssignedProject': paymentStatus != null,
+                'paymentStatusAvailable': paymentStatusAvailable,
+                'paymentSent': paymentStatus?['payment_sent'] == true,
+                'paymentConfirmationStatus':
+                    paymentStatus?['confirmation_status']?.toString(),
               });
 
               if (workUrl.isNotEmpty ||
@@ -543,8 +613,8 @@ class AppDataService extends ChangeNotifier {
                   'status': status == 'Completed'
                       ? 'Approved'
                       : (status == 'Revision Requested'
-                          ? 'Revision Requested'
-                          : 'Under Review'),
+                            ? 'Revision Requested'
+                            : 'Under Review'),
                   'feedback': feedback,
                 };
               }
@@ -572,17 +642,23 @@ class AppDataService extends ChangeNotifier {
             _certificates = certRows.map((raw) {
               final c = Map<String, dynamic>.from(raw);
               return {
-                'id': c['certificate_id']?.toString() ?? c['id']?.toString() ?? '',
+                'id':
+                    c['certificate_id']?.toString() ??
+                    c['id']?.toString() ??
+                    '',
                 'dbId': c['id']?.toString() ?? '',
                 'studentName': c['student_name']?.toString() ?? '',
-                'title': c['certificate_title']?.toString() ??
+                'title':
+                    c['certificate_title']?.toString() ??
                     'Certificate of Project Completion',
                 'project': c['project_title']?.toString() ?? 'Corporate Sprint',
-                'issuer': c['issuer']?.toString() ??
+                'issuer':
+                    c['issuer']?.toString() ??
                     c['company_name']?.toString() ??
                     'SkillBridge Partner',
                 'companyName': c['company_name']?.toString() ?? '',
-                'date': c['issue_date']?.toString() ??
+                'date':
+                    c['issue_date']?.toString() ??
                     _formatDbDate(c['created_at']),
                 'status': c['status']?.toString() ?? 'valid',
                 'rating': (c['overall_rating'] as num?)?.toDouble() ?? 5.0,
@@ -680,8 +756,9 @@ class AppDataService extends ChangeNotifier {
       List.unmodifiable(_savedProjects);
 
   bool isProjectSaved(String projectId) {
-    return _savedProjects
-        .any((p) => p['id']?.toString() == projectId.toString());
+    return _savedProjects.any(
+      (p) => p['id']?.toString() == projectId.toString(),
+    );
   }
 
   Future<void> toggleSaveProject(Map<String, dynamic> project) async {
@@ -732,9 +809,7 @@ class AppDataService extends ChangeNotifier {
 
     final supabase = SupabaseHelper.clientOrNull;
     final user = supabase?.auth.currentUser;
-    if (supabase != null &&
-        user != null &&
-        SupabaseHelper.isUuid(projectId)) {
+    if (supabase != null && user != null && SupabaseHelper.isUuid(projectId)) {
       try {
         await supabase
             .from('saved_projects')
@@ -754,9 +829,105 @@ class AppDataService extends ChangeNotifier {
   List<Map<String, dynamic>> getApplications() =>
       List.unmodifiable(_applications);
 
+  Future<String> confirmProjectPayment({
+    required String projectId,
+    required bool received,
+  }) async {
+    final supabase = SupabaseHelper.clientOrNull;
+    final user = supabase?.auth.currentUser;
+    if (supabase == null || user == null) {
+      throw StateError('A signed-in student account is required.');
+    }
+    if (!SupabaseHelper.isUuid(projectId)) {
+      throw ArgumentError.value(projectId, 'projectId', 'Must be a UUID.');
+    }
+
+    final result = await supabase.rpc(
+      'respond_to_project_payment',
+      params: {'p_project_id': projectId, 'p_received': received},
+    );
+    final confirmationStatus = result?.toString() ?? '';
+    if (confirmationStatus != 'Received' &&
+        confirmationStatus != 'Not Received') {
+      throw const FormatException(
+        'The server returned an invalid payment confirmation status.',
+      );
+    }
+
+    _applications = _applications.map((application) {
+      if (application['projectId']?.toString() == projectId &&
+          application['isAssignedProject'] == true) {
+        return {
+          ...application,
+          'paymentConfirmationStatus': confirmationStatus,
+        };
+      }
+      return application;
+    }).toList();
+    _safeNotifyListeners();
+    await _prefs?.setString(_kApplications, jsonEncode(_applications));
+
+    return confirmationStatus;
+  }
+
   bool hasApplied(String projectId) {
-    return _applications
-        .any((a) => a['projectId']?.toString() == projectId.toString());
+    return _applications.any(
+      (a) => a['projectId']?.toString() == projectId.toString(),
+    );
+  }
+
+  int getProjectApplicantsCount(String projectId) {
+    final pid = projectId.trim();
+    if (pid.isEmpty) return 0;
+    final fromMap = _projectApplicantCounts[pid];
+    if (fromMap != null) return fromMap;
+    for (final p in _projects) {
+      if (p['id']?.toString() == pid) {
+        final raw = p['applicantsCount'] ?? p['applicants_count'];
+        if (raw is num) return raw.toInt();
+        final parsed = int.tryParse(raw?.toString() ?? '');
+        if (parsed != null) return parsed;
+      }
+    }
+    return 0;
+  }
+
+  bool isProjectApplicationLimitReached(String projectId) {
+    return getProjectApplicantsCount(projectId) >= maxApplicationsPerProject;
+  }
+
+  @visibleForTesting
+  void setProjectApplicantsCountForTest(String projectId, int count) {
+    _projectApplicantCounts[projectId.trim()] = count;
+    _safeNotifyListeners();
+  }
+
+  Future<int> refreshProjectApplicantsCount(String projectId) async {
+    final pid = projectId.trim();
+    if (pid.isEmpty) return 0;
+    final supabase = SupabaseHelper.clientOrNull;
+    if (supabase != null && SupabaseHelper.isUuid(pid)) {
+      try {
+        final res = await supabase.rpc(
+          'get_project_applicant_count',
+          params: {'target_project_id': pid},
+        );
+        final cnt = (res is num)
+            ? res.toInt()
+            : (int.tryParse(res?.toString() ?? '') ?? getProjectApplicantsCount(pid));
+        _projectApplicantCounts[pid] = cnt;
+        for (final p in _projects) {
+          if (p['id']?.toString() == pid) {
+            p['applicantsCount'] = cnt;
+          }
+        }
+        _safeNotifyListeners();
+        return cnt;
+      } catch (e) {
+        debugPrint('refreshProjectApplicantsCount warning: $e');
+      }
+    }
+    return getProjectApplicantsCount(pid);
   }
 
   Future<void> addApplication({
@@ -765,15 +936,32 @@ class AppDataService extends ChangeNotifier {
     required String skills,
     required String availability,
     String? portfolioLink,
+    String? resumeLink,
   }) async {
-    final projectId = project['id']?.toString() ?? '';
+    final rawProjectId =
+        project['id']?.toString() ?? project['projectId']?.toString() ?? '';
+    final projectId = rawProjectId.trim();
     if (projectId.isNotEmpty && hasApplied(projectId)) return;
+
+    if (projectId.isNotEmpty) {
+      final currentCount = await refreshProjectApplicantsCount(projectId);
+      if (currentCount >= maxApplicationsPerProject) {
+        throw Exception(
+          'Application limit reached: maximum $maxApplicationsPerProject students can apply to this project.',
+        );
+      }
+    }
 
     final appId = SupabaseHelper.generateUuid();
     final companyName =
-        project['company']?.toString() ?? project['company_name']?.toString() ?? 'Company';
+        project['company']?.toString() ??
+        project['company_name']?.toString() ??
+        'Company';
     final projectTitle = project['title']?.toString() ?? 'Untitled Project';
     final companyUserId = project['companyUserId']?.toString() ?? '';
+    final effectiveResume = (resumeLink != null && resumeLink.trim().isNotEmpty)
+        ? resumeLink.trim()
+        : (_profile['resumeUrl']?.toString() ?? '');
 
     final newApp = {
       'id': appId,
@@ -788,19 +976,45 @@ class AppDataService extends ChangeNotifier {
       'skills': skills,
       'availability': availability,
       'portfolioLink': portfolioLink ?? '',
+      'resumeLink': effectiveResume,
       'companyFeedback': '',
       'progress': 0.0,
       'deadline': project['deadline']?.toString() ?? 'Flexible',
     };
 
-    _applications.insert(0, newApp);
-    _safeNotifyListeners();
-
-    if (_prefs != null) {
-      await _prefs!.setString(_kApplications, jsonEncode(_applications));
+    // 1. Push to Supabase first; if it throws, do not corrupt local state
+    try {
+      await _pushApplicationToSupabase(newApp, project);
+    } catch (e) {
+      if (e.toString().toLowerCase().contains('already applied')) {
+        await syncFromSupabase(forceRefresh: true);
+        return;
+      }
+      rethrow;
     }
 
-    await _pushApplicationToSupabase(newApp, project);
+    // 2. Add to in-memory state and update applicant counts
+    _applications.insert(0, newApp);
+    if (projectId.isNotEmpty) {
+      _projectApplicantCounts[projectId] =
+          getProjectApplicantsCount(projectId) + 1;
+      for (final p in _projects) {
+        if (p['id']?.toString() == projectId ||
+            p['projectId']?.toString() == projectId) {
+          p['applicantsCount'] = _projectApplicantCounts[projectId];
+        }
+      }
+    }
+    _safeNotifyListeners();
+
+    // 3. Persist local cache
+    if (_prefs != null) {
+      try {
+        await _prefs!.setString(_kApplications, jsonEncode(_applications));
+      } catch (e) {
+        debugPrint('Application local persistence warning: $e');
+      }
+    }
   }
 
   Future<void> _pushApplicationToSupabase(
@@ -817,14 +1031,24 @@ class AppDataService extends ChangeNotifier {
               ? _profile['name'].toString().trim()
               : (_userName.isNotEmpty
                   ? _userName
-                  : (user.userMetadata?['name']?.toString() ?? 'Student'));
+                  : (user.userMetadata?['name']?.toString() ??
+                      user.userMetadata?['full_name']?.toString() ??
+                      'Student'));
       final university =
           (_profile['university']?.toString().trim().isNotEmpty == true)
               ? _profile['university'].toString().trim()
               : (user.userMetadata?['university']?.toString() ?? '');
       final skillsList = SupabaseHelper.parseStringList(app['skills']);
-      final projectId = project['id']?.toString();
-      final companyId = project['companyId']?.toString();
+      final projectId =
+          project['id']?.toString() ?? project['projectId']?.toString();
+      final companyId =
+          project['companyId']?.toString() ?? project['company_id']?.toString();
+      final resumeLink = (app['resumeLink']?.toString().trim().isNotEmpty == true)
+          ? app['resumeLink'].toString().trim()
+          : (_profile['resumeUrl']?.toString().trim() ?? '');
+
+      final studentEmail =
+          (_userEmail.isNotEmpty ? _userEmail : user.email) ?? '';
 
       await supabase.from('applications').insert({
         'id': app['id'],
@@ -834,8 +1058,10 @@ class AppDataService extends ChangeNotifier {
         'company_name': app['company'],
         'student_id': user.id,
         'user_id': user.id,
+        'name': studentName,
         'student_name': studentName,
-        'student_email': _userEmail.isNotEmpty ? _userEmail : user.email,
+        'email': studentEmail,
+        'student_email': studentEmail,
         'university': university,
         'student_degree': _profile['degree']?.toString() ?? 'BS Computer Science',
         'student_department':
@@ -846,13 +1072,14 @@ class AppDataService extends ChangeNotifier {
         'availability': app['availability'],
         'cover_letter': app['coverMessage'],
         'portfolio_link': app['portfolioLink'] ?? '',
-        'resume_link': _profile['resumeUrl']?.toString() ?? '',
+        'resume_link': resumeLink,
         'github_link': _profile['githubUrl']?.toString() ?? '',
         'status': 'Pending',
         'progress': 0.0,
       });
     } catch (e) {
       debugPrint('Supabase application insert failed: $e');
+      rethrow;
     }
   }
 
@@ -881,6 +1108,7 @@ class AppDataService extends ChangeNotifier {
     final fullProject = {
       ...project,
       'id': id,
+      'openings': 1,
       'createdAt': DateTime.now().toIso8601String(),
     };
 
@@ -910,7 +1138,7 @@ class AppDataService extends ChangeNotifier {
         'work_mode': p['workMode'] ?? 'Remote',
         'duration': p['duration'] ?? '3-4 Weeks',
         'deadline': p['deadline'] ?? 'Flexible',
-        'openings': p['openings'] ?? 1,
+        'openings': 1,
         'skills': SupabaseHelper.parseStringList(p['skills']),
         'company_name': p['company'] ?? p['company_name'] ?? 'Company',
         'status': p['status'] ?? 'Open',
@@ -919,6 +1147,24 @@ class AppDataService extends ChangeNotifier {
       });
     } catch (e) {
       debugPrint('Supabase addProject failed: $e');
+    }
+  }
+
+  void addProjectLocally(Map<String, dynamic> project) {
+    final id = project['id']?.toString() ?? '';
+    _projects.removeWhere((p) => (p['id']?.toString() ?? '') == id);
+    _projects.insert(0, Map<String, dynamic>.from(project));
+    _safeNotifyListeners();
+    if (_prefs != null) {
+      _prefs!.setString(_kCustomProjects, jsonEncode(_projects));
+    }
+  }
+
+  void removeProjectLocal(String projectId) {
+    _projects.removeWhere((p) => (p['id']?.toString() ?? '') == projectId);
+    _safeNotifyListeners();
+    if (_prefs != null) {
+      _prefs!.setString(_kCustomProjects, jsonEncode(_projects));
     }
   }
 
@@ -951,7 +1197,9 @@ class AppDataService extends ChangeNotifier {
 
     _workSubmissions[projectId] = subData;
 
-    final appIndex = _applications.indexWhere((a) => a['projectId'] == projectId);
+    final appIndex = _applications.indexWhere(
+      (a) => a['projectId'] == projectId,
+    );
     if (appIndex >= 0) {
       _applications[appIndex]['status'] = 'Under Review';
       _applications[appIndex]['progress'] = 0.85;
@@ -1119,10 +1367,13 @@ class AppDataService extends ChangeNotifier {
     final user = supabase?.auth.currentUser;
     if (supabase == null || user == null) return;
     try {
-      await supabase.from('students').update({
-        'skills': _skills,
-        'updated_at': DateTime.now().toIso8601String(),
-      }).eq('user_id', user.id);
+      await supabase
+          .from('students')
+          .update({
+            'skills': _skills,
+            'updated_at': DateTime.now().toIso8601String(),
+          })
+          .eq('user_id', user.id);
     } catch (e) {
       debugPrint('Supabase skills sync failed: $e');
     }
@@ -1138,10 +1389,9 @@ class AppDataService extends ChangeNotifier {
     Uint8List bytes, {
     String fileExtension = 'jpg',
   }) async {
-    final cleanExt =
-        fileExtension.toLowerCase().replaceAll('.', '').isNotEmpty
-            ? fileExtension.toLowerCase().replaceAll('.', '')
-            : 'jpg';
+    final cleanExt = fileExtension.toLowerCase().replaceAll('.', '').isNotEmpty
+        ? fileExtension.toLowerCase().replaceAll('.', '')
+        : 'jpg';
     final mimeType = cleanExt == 'png'
         ? 'image/png'
         : (cleanExt == 'webp' ? 'image/webp' : 'image/jpeg');
@@ -1161,15 +1411,14 @@ class AppDataService extends ChangeNotifier {
         'avatars/${user.id}_${DateTime.now().millisecondsSinceEpoch}.$cleanExt';
 
     String? uploadedUrl;
-    for (final bucket in const ['student-docs', 'public-files']) {
+    for (final bucket in const ['public-files', 'student-docs']) {
       try {
-        await supabase.storage.from(bucket).uploadBinary(
+        await supabase.storage
+            .from(bucket)
+            .uploadBinary(
               fileName,
               bytes,
-              fileOptions: FileOptions(
-                upsert: true,
-                contentType: mimeType,
-              ),
+              fileOptions: FileOptions(upsert: true, contentType: mimeType),
             );
         uploadedUrl = supabase.storage.from(bucket).getPublicUrl(fileName);
         break;
@@ -1185,10 +1434,13 @@ class AppDataService extends ChangeNotifier {
         await _prefs!.setString(_kProfile, jsonEncode(_profile));
       }
       try {
-        await supabase.from('profiles').update({
-          'avatar_url': uploadedUrl,
-          'updated_at': DateTime.now().toIso8601String(),
-        }).eq('id', user.id);
+        await supabase
+            .from('profiles')
+            .update({
+              'avatar_url': uploadedUrl,
+              'updated_at': DateTime.now().toIso8601String(),
+            })
+            .eq('id', user.id);
       } catch (e) {
         debugPrint('Supabase profile avatar_url update warning: $e');
       }
@@ -1210,12 +1462,40 @@ class AppDataService extends ChangeNotifier {
     final user = supabase?.auth.currentUser;
     if (supabase != null && user != null) {
       try {
-        await supabase.from('profiles').update({
-          'avatar_url': null,
-          'updated_at': DateTime.now().toIso8601String(),
-        }).eq('id', user.id);
+        await supabase
+            .from('profiles')
+            .update({
+              'avatar_url': null,
+              'updated_at': DateTime.now().toIso8601String(),
+            })
+            .eq('id', user.id);
       } catch (e) {
         debugPrint('Supabase profile avatar remove warning: $e');
+      }
+    }
+  }
+
+  /// Updates the student's CV / Resume URL locally and in Supabase `students`.
+  Future<void> updateStudentResume(String resumeUrl) async {
+    final cleanUrl = resumeUrl.trim();
+    _profile['resumeUrl'] = cleanUrl;
+    _safeNotifyListeners();
+
+    if (_prefs != null) {
+      await _prefs!.setString(_kProfile, jsonEncode(_profile));
+    }
+
+    final supabase = SupabaseHelper.clientOrNull;
+    final user = supabase?.auth.currentUser;
+    if (supabase != null && user != null) {
+      try {
+        await supabase.from('students').update({
+          'resume_url': cleanUrl,
+          'verification_doc': cleanUrl,
+          'updated_at': DateTime.now().toIso8601String(),
+        }).eq('user_id', user.id);
+      } catch (e) {
+        debugPrint('Supabase student resume_url update warning: $e');
       }
     }
   }
@@ -1258,40 +1538,83 @@ class AppDataService extends ChangeNotifier {
     required String category,
     required String subject,
     required String message,
+    String? email,
+    String? senderName,
   }) async {
     final ticketNumber = 'CC-${DateTime.now().millisecondsSinceEpoch % 100000}';
-    final ticketEmail =
-        _userEmail.isNotEmpty ? _userEmail : (_profile['email']?.toString() ?? '');
+    final user = SupabaseHelper.currentUser;
+
+    final resolvedEmail = (email != null && email.trim().isNotEmpty)
+        ? email.trim()
+        : (_userEmail.isNotEmpty
+            ? _userEmail
+            : ((user?.email?.isNotEmpty == true)
+                ? user!.email!
+                : (_profile['email']?.toString() ?? '')));
+
+    String resolvedName = (senderName != null && senderName.trim().isNotEmpty)
+        ? senderName.trim()
+        : (_userName.trim().isNotEmpty
+            ? _userName.trim()
+            : (_profile['name']?.toString().trim().isNotEmpty == true
+                ? _profile['name'].toString().trim()
+                : (user?.userMetadata?['name']?.toString().trim().isNotEmpty == true
+                    ? user!.userMetadata!['name'].toString().trim()
+                    : (user?.userMetadata?['full_name']?.toString().trim().isNotEmpty == true
+                        ? user!.userMetadata!['full_name'].toString().trim()
+                        : ''))));
+
+    final supabase = SupabaseHelper.clientOrNull;
+    if (resolvedName.isEmpty && supabase != null && user != null) {
+      try {
+        final prof = await supabase
+            .from('profiles')
+            .select('name')
+            .eq('id', user.id)
+            .maybeSingle();
+        if (prof != null && prof['name']?.toString().trim().isNotEmpty == true) {
+          resolvedName = prof['name'].toString().trim();
+          _profile['name'] = resolvedName;
+          _userName = resolvedName;
+        }
+      } catch (_) {}
+    }
+
+    if (resolvedName.isEmpty) {
+      resolvedName = 'Student';
+    }
+
     final ticket = {
       'id': ticketNumber,
       'category': category,
       'subject': subject,
       'message': message,
-      'email': ticketEmail,
+      'email': resolvedEmail,
+      'user_name': resolvedName,
+      'senderName': resolvedName,
       'createdAt': DateTime.now().toIso8601String(),
       'status': 'Open',
     };
 
     _supportTickets.insert(0, ticket);
-
     _safeNotifyListeners();
 
     if (_prefs != null) {
-      await _prefs!.setString(_kSupportTickets, jsonEncode(_supportTickets));
+      try {
+        await _prefs!.setString(_kSupportTickets, jsonEncode(_supportTickets));
+      } catch (e) {
+        debugPrint('Support ticket local persistence warning: $e');
+      }
     }
 
-    final supabase = SupabaseHelper.clientOrNull;
-    final user = supabase?.auth.currentUser;
     if (supabase != null && user != null) {
       try {
         await supabase.from('support_tickets').insert({
           'ticket_number': ticketNumber,
           'user_id': user.id,
-          'user_name': _userName.isNotEmpty
-              ? _userName
-              : (_profile['name']?.toString() ?? 'User'),
-          'user_email': ticketEmail,
-          'user_role': _userRole,
+          'user_name': resolvedName,
+          'user_email': resolvedEmail,
+          'user_role': _userRole.isNotEmpty ? _userRole : 'Student',
           'category': category,
           'subject': subject,
           'message': message,
@@ -1299,6 +1622,7 @@ class AppDataService extends ChangeNotifier {
         });
       } catch (e) {
         debugPrint('Supabase support ticket sync error: $e');
+        rethrow;
       }
     }
   }
@@ -1344,7 +1668,9 @@ class AppDataService extends ChangeNotifier {
     if (_prefs != null) {
       await _prefs!.setBool(_kIsLoggedIn, true);
       await _prefs!.setString(_kUserRole, _userRole);
-      if (_userEmail.isNotEmpty) await _prefs!.setString(_kUserEmail, _userEmail);
+      if (_userEmail.isNotEmpty) {
+        await _prefs!.setString(_kUserEmail, _userEmail);
+      }
       if (_userName.isNotEmpty) await _prefs!.setString(_kUserName, _userName);
       if (_userId.isNotEmpty) await _prefs!.setString(_kUserId, _userId);
       await _prefs!.setString(_kProfile, jsonEncode(_profile));
@@ -1399,6 +1725,12 @@ class AppDataService extends ChangeNotifier {
   // LOCAL OFFLINE USER REGISTRY (FOR UNIT TESTS / OFFLINE FORM PERSISTENCE)
   // ===========================================================================
 
+  String _generateLocalSalt() {
+    final rng = Random.secure();
+    final bytes = List<int>.generate(16, (_) => rng.nextInt(256));
+    return bytes.map((b) => b.toRadixString(16).padLeft(2, '0')).join();
+  }
+
   Future<void> registerUserAccount({
     required String email,
     required String password,
@@ -1410,10 +1742,13 @@ class AppDataService extends ChangeNotifier {
     final cleanName = name.trim();
     final cleanUni = university.trim();
     final cleanPass = password.trim();
+    final salt = _generateLocalSalt();
+    final passHash = AdminHashUtil.hashPassword(cleanPass, salt);
 
     _userAccounts[cleanEmail] = {
       'email': cleanEmail,
-      'password': cleanPass,
+      'passwordSalt': salt,
+      'passwordHash': passHash,
       'name': cleanName,
       'university': cleanUni,
       'role': role,
@@ -1448,22 +1783,47 @@ class AppDataService extends ChangeNotifier {
     final cleanPass = password.trim();
 
     final acc = _userAccounts[cleanEmail];
-    if (acc != null && acc['password'] == cleanPass) {
+    if (acc == null) return false;
+
+    final storedHash = acc['passwordHash']?.toString() ?? '';
+    final storedSalt = acc['passwordSalt']?.toString() ?? '';
+    if (storedHash.isNotEmpty && storedSalt.isNotEmpty) {
+      final candidate = AdminHashUtil.hashPassword(cleanPass, storedSalt);
+      return AdminHashUtil.secureCompare(candidate, storedHash);
+    }
+
+    // Legacy plaintext entry migration (only if upgrading old local storage)
+    final legacyPlain = acc['password']?.toString();
+    if (legacyPlain != null && AdminHashUtil.secureCompare(legacyPlain, cleanPass)) {
+      final salt = _generateLocalSalt();
+      acc['passwordSalt'] = salt;
+      acc['passwordHash'] = AdminHashUtil.hashPassword(cleanPass, salt);
+      acc.remove('password');
       return true;
     }
     return false;
   }
 
   Future<void> updateAccountPassword(String email, String newPassword) async {
+    // Do not persist user passwords locally when live Supabase Auth is active
+    if (SupabaseHelper.clientOrNull != null) {
+      return;
+    }
+
     final cleanEmail = email.trim().toLowerCase();
     final cleanPass = newPassword.trim();
+    final salt = _generateLocalSalt();
+    final passHash = AdminHashUtil.hashPassword(cleanPass, salt);
 
     if (_userAccounts.containsKey(cleanEmail)) {
-      _userAccounts[cleanEmail]!['password'] = cleanPass;
+      _userAccounts[cleanEmail]!.remove('password');
+      _userAccounts[cleanEmail]!['passwordSalt'] = salt;
+      _userAccounts[cleanEmail]!['passwordHash'] = passHash;
     } else {
       _userAccounts[cleanEmail] = {
         'email': cleanEmail,
-        'password': cleanPass,
+        'passwordSalt': salt,
+        'passwordHash': passHash,
         'name': _userName.isNotEmpty
             ? _userName
             : (_profile['name']?.toString() ?? 'Student'),
@@ -1514,11 +1874,13 @@ class AppDataService extends ChangeNotifier {
 
   int get activeProjectsCount {
     return _applications
-        .where((a) =>
-            a['status'] == 'In Progress' ||
-            a['status'] == 'Under Review' ||
-            a['status'] == 'Accepted' ||
-            a['status'] == 'Revision Requested')
+        .where(
+          (a) =>
+              a['status'] == 'In Progress' ||
+              a['status'] == 'Under Review' ||
+              a['status'] == 'Accepted' ||
+              a['status'] == 'Revision Requested',
+        )
         .length;
   }
 

@@ -10,6 +10,7 @@ import 'package:link_vibe/feature/admin/presentation/widgets/admin_top_navbar.da
 import 'package:link_vibe/feature/admin/services/admin_auth_service.dart';
 import 'package:link_vibe/feature/admin/services/admin_company_service.dart';
 import 'package:link_vibe/feature/admin/services/admin_project_service.dart';
+
 /// Enterprise Company Management Module for SkillBridge Admin Panel (Screen 36)
 /// Provides corporate registry overview, search filtering,
 /// project auditing, suspension controls, and audit trails.
@@ -121,6 +122,7 @@ class _CompanyManagementScreenState extends State<CompanyManagementScreen> {
       ),
     );
   }
+
 
   void _onRouteSelected(String routeId) {
     AdminSidebar.navigateToRoute(

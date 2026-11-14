@@ -15,10 +15,12 @@ class ChangePasswordScreen extends StatefulWidget {
 
 class _ChangePasswordScreenState extends State<ChangePasswordScreen> {
   final _emailController = TextEditingController();
+  final _currentPasswordController = TextEditingController();
   final _newPasswordController = TextEditingController();
   final _confirmPasswordController = TextEditingController();
 
   bool _isUpdatingPassword = false;
+  bool _obscureCurrentPass = true;
   bool _obscureNewPass = true;
   bool _obscureConfirmPass = true;
 
@@ -37,6 +39,7 @@ class _ChangePasswordScreenState extends State<ChangePasswordScreen> {
   @override
   void dispose() {
     _emailController.dispose();
+    _currentPasswordController.dispose();
     _newPasswordController.dispose();
     _confirmPasswordController.dispose();
     super.dispose();
@@ -44,6 +47,7 @@ class _ChangePasswordScreenState extends State<ChangePasswordScreen> {
 
   Future<void> _handleUpdatePassword() async {
     final email = _emailController.text.trim();
+    final currentPass = _currentPasswordController.text.trim();
     final newPass = _newPasswordController.text.trim();
     final confirmPass = _confirmPasswordController.text.trim();
 
@@ -67,38 +71,53 @@ class _ChangePasswordScreenState extends State<ChangePasswordScreen> {
       return;
     }
 
+    final supabase = SupabaseHelper.clientOrNull;
+    final user = supabase?.auth.currentUser;
+
+    if (supabase != null && newPass.length < 6) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(
+          content: Text('New password must be at least 6 characters'),
+          backgroundColor: Colors.redAccent,
+        ),
+      );
+      return;
+    }
+
+    if (supabase != null && user == null) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(
+          content: Text('Please sign in again before changing your password.'),
+          backgroundColor: Colors.redAccent,
+        ),
+      );
+      return;
+    }
+
     setState(() => _isUpdatingPassword = true);
 
     try {
-      final supabase = SupabaseHelper.clientOrNull;
-      final user = supabase?.auth.currentUser;
       if (supabase != null && user != null) {
-        try {
-          await supabase.auth.updateUser(UserAttributes(password: newPass));
-        } on AuthException catch (e) {
-          final targetEmail = email.isNotEmpty ? email : (user.email ?? '');
-          if (targetEmail.isNotEmpty &&
-              SupabaseHelper.isWeakPasswordError(e)) {
-            await SupabaseHelper.resetPasswordInApp(
-              email: targetEmail,
-              newPassword: newPass,
-            );
-          } else {
-            rethrow;
-          }
+        final accountEmail = user.email ?? email;
+        if (currentPass.isEmpty) {
+          throw const AuthException('Please enter your current password.');
         }
-      } else if (supabase != null && email.isNotEmpty) {
-        await SupabaseHelper.resetPasswordInApp(
-          email: email,
-          newPassword: newPass,
-        );
-      }
-
-      if (email.isNotEmpty) {
+        SupabaseHelper.beginInteractiveAuth();
+        try {
+          await supabase.auth.signInWithPassword(
+            email: accountEmail,
+            password: currentPass,
+          );
+        } finally {
+          SupabaseHelper.endInteractiveAuth();
+        }
+        await supabase.auth.updateUser(UserAttributes(password: newPass));
+      } else if (email.isNotEmpty) {
         await AppDataService.instance.updateAccountPassword(email, newPass);
       }
 
       if (!mounted) return;
+      _currentPasswordController.clear();
       _newPasswordController.clear();
       _confirmPasswordController.clear();
 
@@ -183,7 +202,7 @@ class _ChangePasswordScreenState extends State<ChangePasswordScreen> {
                             ),
                             const SizedBox(height: 2),
                             Text(
-                              'Update your SkillBridge password directly inside the app with no email verification required.',
+                              'Verify your current password to update your SkillBridge account password.',
                               style: GoogleFonts.inter(
                                 fontSize: 12,
                                 color: AppColors.darkText,
@@ -208,6 +227,7 @@ class _ChangePasswordScreenState extends State<ChangePasswordScreen> {
                 const SizedBox(height: 8),
                 TextField(
                   controller: _emailController,
+                  readOnly: SupabaseHelper.currentUser != null,
                   keyboardType: TextInputType.emailAddress,
                   decoration: InputDecoration(
                     hintText: 'Enter your account email',
@@ -221,6 +241,44 @@ class _ChangePasswordScreenState extends State<ChangePasswordScreen> {
                   ),
                 ),
                 const SizedBox(height: 16),
+
+                if (SupabaseHelper.clientOrNull != null) ...[
+                  Text(
+                    'Current Password',
+                    style: GoogleFonts.poppins(
+                      fontSize: 14,
+                      fontWeight: FontWeight.w600,
+                      color: AppColors.deepNavy,
+                    ),
+                  ),
+                  const SizedBox(height: 8),
+                  TextField(
+                    controller: _currentPasswordController,
+                    obscureText: _obscureCurrentPass,
+                    decoration: InputDecoration(
+                      hintText: 'Enter current password',
+                      prefixIcon: const Icon(
+                        Icons.lock_person_outlined,
+                        color: AppColors.primaryBlue,
+                      ),
+                      suffixIcon: IconButton(
+                        icon: Icon(
+                          _obscureCurrentPass
+                              ? Icons.visibility_off_outlined
+                              : Icons.visibility_outlined,
+                          color: AppColors.grayText,
+                        ),
+                        onPressed: () => setState(
+                          () => _obscureCurrentPass = !_obscureCurrentPass,
+                        ),
+                      ),
+                      border: OutlineInputBorder(
+                        borderRadius: BorderRadius.circular(12),
+                      ),
+                    ),
+                  ),
+                  const SizedBox(height: 16),
+                ],
 
                 Text(
                   'New Password',

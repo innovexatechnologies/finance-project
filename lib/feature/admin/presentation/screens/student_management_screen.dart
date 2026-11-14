@@ -9,6 +9,7 @@ import 'package:link_vibe/feature/admin/presentation/widgets/admin_top_navbar.da
 import 'package:link_vibe/feature/admin/services/admin_auth_service.dart';
 import 'package:link_vibe/feature/admin/services/admin_student_service.dart';
 
+
 /// Enterprise Student Management Screen (Screen 35)
 /// Features student registry overview, detailed profile inspection,
 /// and suspension controls.
@@ -71,6 +72,7 @@ class _StudentManagementScreenState extends State<StudentManagementScreen> {
       ),
     );
   }
+
 
   Future<void> _handleSignOut() async {
     final confirmed = await showDialog<bool>(

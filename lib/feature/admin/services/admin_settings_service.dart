@@ -1,5 +1,6 @@
 import 'package:flutter/material.dart';
 import 'package:supabase_flutter/supabase_flutter.dart';
+import 'package:link_vibe/core/services/app_data_service.dart';
 import 'package:link_vibe/core/services/supabase_helper.dart';
 import 'package:link_vibe/feature/admin/models/admin_settings_model.dart';
 import 'package:link_vibe/feature/admin/models/admin_user_model.dart';
@@ -208,6 +209,35 @@ class AdminSettingsService {
             category.toLowerCase().contains('plagiarism') ||
             ticketNo.toUpperCase().startsWith('CMP');
 
+        String senderName =
+            (row['user_name']?.toString().trim().isNotEmpty == true)
+                ? row['user_name'].toString().trim()
+                : '';
+        final senderEmail = row['user_email']?.toString().trim() ?? '';
+        final senderUserId = row['user_id']?.toString() ?? '';
+
+        // If the name is generic or missing, cross-reference against all registered students
+        if (senderName.isEmpty ||
+            senderName.toLowerCase() == 'user' ||
+            senderName.toLowerCase() == 'student' ||
+            senderName.toLowerCase() == 'platform user') {
+          final matchedStudent = students.where((s) {
+            if (senderUserId.isNotEmpty && s.id == senderUserId) return true;
+            if (senderEmail.isNotEmpty &&
+                s.email.toLowerCase() == senderEmail.toLowerCase()) {
+              return true;
+            }
+            return false;
+          }).firstOrNull;
+
+          if (matchedStudent != null && matchedStudent.name.trim().isNotEmpty) {
+            senderName = matchedStudent.name.trim();
+          }
+        }
+        if (senderName.isEmpty) {
+          senderName = senderEmail.isNotEmpty ? senderEmail : 'Student';
+        }
+
         if (isComplaint) {
           ComplaintStatus compStatus;
           if (rawStatus == 'resolved') {
@@ -225,8 +255,8 @@ class AdminSettingsService {
           complaintItems.add(
             ComplaintItem(
               id: id,
-              complainantName: row['user_name']?.toString() ?? 'Platform User',
-              complainantEmail: row['user_email']?.toString() ?? '',
+              complainantName: senderName,
+              complainantEmail: senderEmail,
               reportedEntityName: assignedTo ?? 'Platform Compliance',
               reportedEntityType:
                   (row['user_role']?.toString().toLowerCase() == 'company')
@@ -266,8 +296,8 @@ class AdminSettingsService {
           helpItems.add(
             HelpRequestItem(
               id: id,
-              senderName: row['user_name']?.toString() ?? 'Platform User',
-              senderEmail: row['user_email']?.toString() ?? '',
+              senderName: senderName,
+              senderEmail: senderEmail,
               userType:
                   (row['user_role']?.toString() ?? 'student').toLowerCase(),
               subject: subject,
@@ -282,6 +312,47 @@ class AdminSettingsService {
                   helpStatus == HelpRequestStatus.resolved ? updatedAt : null,
               resolutionNotes:
                   helpStatus == HelpRequestStatus.resolved ? adminResp : null,
+            ),
+          );
+        }
+      }
+
+      // Merge local AppDataService support tickets so new messages show instantly
+      final localTickets = AppDataService.instance.getSupportTickets();
+      for (final lt in localTickets) {
+        final ltId = lt['id']?.toString() ?? '';
+        final alreadyPresent =
+            helpItems.any((h) => h.id == ltId) ||
+            complaintItems.any((c) => c.id == ltId);
+        if (!alreadyPresent) {
+          final ltCat = lt['category']?.toString() ?? 'General';
+          final ltMsg = lt['message']?.toString() ?? '';
+          final ltSub = lt['subject']?.toString() ?? 'Support Inquiry';
+          final ltEmail = lt['email']?.toString() ??
+              lt['user_email']?.toString() ??
+              '';
+          final ltName =
+              (lt['senderName']?.toString().trim().isNotEmpty == true)
+                  ? lt['senderName'].toString().trim()
+                  : (lt['user_name']?.toString().trim().isNotEmpty == true
+                      ? lt['user_name'].toString().trim()
+                      : (ltEmail.isNotEmpty ? ltEmail : 'Student'));
+          final ltCreated =
+              DateTime.tryParse(lt['createdAt']?.toString() ?? '') ??
+              DateTime.now();
+
+          helpItems.add(
+            HelpRequestItem(
+              id: ltId,
+              senderName: ltName,
+              senderEmail: ltEmail,
+              userType: 'student',
+              subject: ltSub,
+              message: ltMsg,
+              category: ltCat,
+              status: HelpRequestStatus.pending,
+              priority: HelpRequestPriority.normal,
+              submittedAt: ltCreated,
             ),
           );
         }
@@ -1462,18 +1533,20 @@ class AdminSettingsService {
     final supabase = SupabaseHelper.clientOrNull;
     if (supabase != null && supabase.auth.currentUser != null) {
       try {
-        try {
-          await supabase.auth.updateUser(UserAttributes(password: trimmedNew));
-        } on AuthException catch (e) {
-          if (SupabaseHelper.isWeakPasswordError(e)) {
-            await SupabaseHelper.resetPasswordInApp(
-              email: adminEmail,
-              newPassword: trimmedNew,
+        if (currentPassword.trim().isNotEmpty) {
+          final currentEmail =
+              supabase.auth.currentUser?.email ?? adminEmail.trim();
+          SupabaseHelper.beginInteractiveAuth();
+          try {
+            await supabase.auth.signInWithPassword(
+              email: currentEmail,
+              password: currentPassword.trim(),
             );
-          } else {
-            rethrow;
+          } finally {
+            SupabaseHelper.endInteractiveAuth();
           }
         }
+        await supabase.auth.updateUser(UserAttributes(password: trimmedNew));
       } catch (e) {
         lastError = SupabaseHelper.friendlyError(e);
         debugPrint('AdminSettingsService changePassword error: $e');

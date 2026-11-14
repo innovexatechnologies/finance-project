@@ -9,10 +9,98 @@ import 'package:link_vibe/core/widgets/status_badge.dart';
 import 'package:link_vibe/feature/student/apply/presentation/screens/apply_project_screen.dart';
 import 'package:link_vibe/services/escrow_lifecycle_service.dart';
 
-class StudentProjectDetailsScreen extends StatelessWidget {
+class StudentProjectDetailsScreen extends StatefulWidget {
   final Map<String, dynamic> project;
 
   const StudentProjectDetailsScreen({super.key, required this.project});
+
+  @override
+  State<StudentProjectDetailsScreen> createState() =>
+      _StudentProjectDetailsScreenState();
+}
+
+class _StudentProjectDetailsScreenState
+    extends State<StudentProjectDetailsScreen> {
+  bool _isSubmittingPaymentConfirmation = false;
+  String? _savedPaymentConfirmationStatus;
+
+  @override
+  void initState() {
+    super.initState();
+    final id = widget.project['id']?.toString() ??
+        widget.project['projectId']?.toString() ??
+        '';
+    if (id.isNotEmpty) {
+      WidgetsBinding.instance.addPostFrameCallback((_) {
+        if (mounted) {
+          AppDataService.instance.refreshProjectApplicantsCount(id);
+        }
+      });
+    }
+  }
+
+  Map<String, dynamic>? _findCurrentApplication(String projectId) {
+    final applications = AppDataService.instance.getApplications();
+    final applicationId =
+        widget.project['applicationId']?.toString() ?? '';
+    for (final application in applications) {
+      if (applicationId.isNotEmpty &&
+          (application['applicationId']?.toString() ??
+                  application['id']?.toString()) ==
+              applicationId) {
+        return application;
+      }
+    }
+    for (final application in applications) {
+      if (application['projectId']?.toString() == projectId &&
+          application['isAssignedProject'] == true) {
+        return application;
+      }
+    }
+    for (final application in applications) {
+      if (application['projectId']?.toString() == projectId) {
+        return application;
+      }
+    }
+    return null;
+  }
+
+  Future<void> _submitPaymentConfirmation({
+    required String projectId,
+    required bool received,
+  }) async {
+    if (_isSubmittingPaymentConfirmation) return;
+    setState(() => _isSubmittingPaymentConfirmation = true);
+    try {
+      final response = await AppDataService.instance.confirmProjectPayment(
+        projectId: projectId,
+        received: received,
+      );
+      if (!mounted) return;
+      setState(() => _savedPaymentConfirmationStatus = response);
+      ScaffoldMessenger.of(context)
+        ..hideCurrentSnackBar()
+        ..showSnackBar(
+          SnackBar(
+            content: Text('Payment response saved: $response.'),
+            backgroundColor: AppColors.statusOpen,
+          ),
+        );
+    } catch (error) {
+      debugPrint('Student payment confirmation failed: $error');
+      if (!mounted) return;
+      ScaffoldMessenger.of(context)
+        ..hideCurrentSnackBar()
+        ..showSnackBar(
+          const SnackBar(
+            content: Text('Could not save your payment response. Try again.'),
+            backgroundColor: AppColors.statusClosed,
+          ),
+        );
+    } finally {
+      if (mounted) setState(() => _isSubmittingPaymentConfirmation = false);
+    }
+  }
 
   List<String> _splitLines(String raw) {
     return raw
@@ -259,9 +347,21 @@ class StudentProjectDetailsScreen extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
+    final project = widget.project;
     final id = project['id']?.toString() ??
         project['projectId']?.toString() ??
         '';
+    final currentApplication = _findCurrentApplication(id);
+    final isAssignedProject = project['isAssignedProject'] == true ||
+        currentApplication?['isAssignedProject'] == true;
+    final statusAvailable =
+        project['paymentStatusAvailable'] == true ||
+            currentApplication?['paymentStatusAvailable'] == true;
+    final paymentSent = project['paymentSent'] == true ||
+        currentApplication?['paymentSent'] == true;
+    final confirmationStatus = _savedPaymentConfirmationStatus ??
+        project['paymentConfirmationStatus']?.toString() ??
+        currentApplication?['paymentConfirmationStatus']?.toString();
     final title = (project['title']?.toString().trim().isNotEmpty == true)
         ? project['title'].toString().trim()
         : 'Untitled Project';
@@ -889,6 +989,15 @@ class StudentProjectDetailsScreen extends StatelessWidget {
                               ),
                             ),
                           ],
+                          if (isAssignedProject) ...[
+                            const SizedBox(height: 14),
+                            _buildPaymentConfirmationCard(
+                              projectId: id,
+                              statusAvailable: statusAvailable,
+                              paymentSent: paymentSent,
+                              confirmationStatus: confirmationStatus,
+                            ),
+                          ],
                           const SizedBox(height: 28),
                         ],
                       ),
@@ -1112,6 +1221,142 @@ class StudentProjectDetailsScreen extends StatelessWidget {
               ),
             ),
           ),
+        ],
+      ),
+    );
+  }
+
+  Widget _buildPaymentConfirmationCard({
+    required String projectId,
+    required bool statusAvailable,
+    required bool paymentSent,
+    required String? confirmationStatus,
+  }) {
+    final hasConfirmation = confirmationStatus == 'Received' ||
+        confirmationStatus == 'Not Received';
+    final statusLabel = hasConfirmation
+        ? confirmationStatus!
+        : !statusAvailable
+            ? 'Payment status unavailable'
+            : paymentSent
+                ? 'Payment Sent'
+                : 'Payment Pending';
+    final statusColor = switch (statusLabel) {
+      'Received' => const Color(0xFF166534),
+      'Not Received' => AppColors.statusClosed,
+      'Payment Sent' => AppColors.primaryBlue,
+      'Payment Pending' => const Color(0xFF92400E),
+      _ => AppColors.grayText,
+    };
+    final statusBackground = switch (statusLabel) {
+      'Received' => AppColors.successBg,
+      'Not Received' => AppColors.errorBg,
+      'Payment Sent' => AppColors.lightAqua,
+      'Payment Pending' => AppColors.warningBg,
+      _ => AppColors.surfaceAlt,
+    };
+    final canRespond =
+        statusAvailable && paymentSent && !hasConfirmation;
+
+    return _buildSectionCard(
+      title: 'Payment Confirmation',
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.stretch,
+        children: [
+          Wrap(
+            alignment: WrapAlignment.spaceBetween,
+            crossAxisAlignment: WrapCrossAlignment.center,
+            spacing: 8,
+            runSpacing: 8,
+            children: [
+              Text(
+                'Status',
+                style: GoogleFonts.inter(
+                  fontSize: 13,
+                  fontWeight: FontWeight.w600,
+                  color: AppColors.darkText,
+                ),
+              ),
+              Container(
+                padding: const EdgeInsets.symmetric(
+                  horizontal: 10,
+                  vertical: 5,
+                ),
+                decoration: BoxDecoration(
+                  color: statusBackground,
+                  borderRadius: BorderRadius.circular(9),
+                ),
+                child: Text(
+                  statusLabel,
+                  maxLines: 1,
+                  overflow: TextOverflow.ellipsis,
+                  style: GoogleFonts.inter(
+                    color: statusColor,
+                    fontSize: 12,
+                    fontWeight: FontWeight.w700,
+                  ),
+                ),
+              ),
+            ],
+          ),
+          if (canRespond) ...[
+            const SizedBox(height: 12),
+            SizedBox(
+              width: double.infinity,
+              child: ElevatedButton.icon(
+                style: ElevatedButton.styleFrom(
+                  backgroundColor: AppColors.statusOpen,
+                  foregroundColor: Colors.white,
+                  padding: const EdgeInsets.symmetric(
+                    horizontal: 10,
+                    vertical: 12,
+                  ),
+                ),
+                onPressed: _isSubmittingPaymentConfirmation
+                    ? null
+                    : () => _submitPaymentConfirmation(
+                          projectId: projectId,
+                          received: true,
+                        ),
+                icon: _isSubmittingPaymentConfirmation
+                    ? const SizedBox(
+                        width: 18,
+                        height: 18,
+                        child: CircularProgressIndicator(strokeWidth: 2),
+                      )
+                    : const Icon(Icons.check_circle_outline, size: 18),
+                label: const Text(
+                  'Yes, Payment Received',
+                  maxLines: 2,
+                ),
+              ),
+            ),
+            const SizedBox(height: 8),
+            SizedBox(
+              width: double.infinity,
+              child: OutlinedButton.icon(
+                style: OutlinedButton.styleFrom(
+                  foregroundColor: AppColors.statusClosed,
+                  padding: const EdgeInsets.symmetric(
+                    horizontal: 10,
+                    vertical: 12,
+                  ),
+                  side: const BorderSide(color: AppColors.statusClosed),
+                ),
+                onPressed: _isSubmittingPaymentConfirmation
+                    ? null
+                    : () => _submitPaymentConfirmation(
+                          projectId: projectId,
+                          received: false,
+                        ),
+                icon: const Icon(Icons.cancel_outlined, size: 18),
+                label: const Text(
+                  'No, Payment Not Received',
+                  maxLines: 2,
+                ),
+              ),
+            ),
+          ],
         ],
       ),
     );

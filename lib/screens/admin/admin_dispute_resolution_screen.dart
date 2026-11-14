@@ -1,4 +1,3 @@
-import 'dart:typed_data';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:google_fonts/google_fonts.dart';
@@ -616,7 +615,7 @@ class _AdminDisputeResolutionScreenState
                                     ? 'https://mock.storage/payouts/${project.id}/${receiptFile!.name}'
                                     : null,
                               );
-                              if (ok && mounted) {
+                              if (ok && ctx.mounted) {
                                 Navigator.pop(ctx);
                                 _showFeedback(
                                     'Payout finalized! Project marked completed.');
@@ -727,7 +726,7 @@ class _AdminDisputeResolutionScreenState
                           ValueListenableBuilder<List<ProjectModel>>(
                             valueListenable:
                                 _payoutService.disputedProjectsNotifier,
-                            builder: (_, list, __) => Tab(
+                            builder: (context, list, child) => Tab(
                               icon: const Icon(Icons.gavel_rounded, size: 18),
                               text: 'Dispute Cases (${list.length})',
                             ),
@@ -735,7 +734,7 @@ class _AdminDisputeResolutionScreenState
                           ValueListenableBuilder<List<ProjectModel>>(
                             valueListenable:
                                 _payoutService.payoutReadyProjectsNotifier,
-                            builder: (_, list, __) => Tab(
+                            builder: (context, list, child) => Tab(
                               icon: const Icon(Icons.payment_rounded, size: 18),
                               text: 'Ready for Payout (${list.length})',
                             ),
@@ -743,7 +742,7 @@ class _AdminDisputeResolutionScreenState
                           ValueListenableBuilder<List<AdminNotificationModel>>(
                             valueListenable:
                                 _payoutService.notificationsNotifier,
-                            builder: (_, list, __) {
+                            builder: (context, list, child) {
                               final unread = list.where((n) => !n.isRead).length;
                               return Tab(
                                 icon: const Icon(Icons.notifications_active_rounded,
@@ -785,7 +784,16 @@ class _AdminDisputeResolutionScreenState
     return ValueListenableBuilder<List<ProjectModel>>(
       valueListenable: _payoutService.disputedProjectsNotifier,
       builder: (context, projects, _) {
-        if (projects.isEmpty) {
+        final filteredList = _searchQuery.trim().isEmpty
+            ? projects
+            : projects.where((p) {
+                final q = _searchQuery.toLowerCase();
+                return p.title.toLowerCase().contains(q) ||
+                    (p.disputeCaseId ?? '').toLowerCase().contains(q) ||
+                    p.companyName.toLowerCase().contains(q);
+              }).toList();
+
+        if (filteredList.isEmpty) {
           return const Padding(
             padding: EdgeInsets.all(40),
             child: AppEmptyState(
@@ -799,9 +807,9 @@ class _AdminDisputeResolutionScreenState
 
         return ListView.builder(
           padding: const EdgeInsets.all(24),
-          itemCount: projects.length,
+          itemCount: filteredList.length,
           itemBuilder: (context, idx) {
-            final p = projects[idx];
+            final p = filteredList[idx];
             return Container(
               margin: const EdgeInsets.only(bottom: 16),
               padding: const EdgeInsets.all(20),
@@ -817,19 +825,24 @@ class _AdminDisputeResolutionScreenState
                   Row(
                     mainAxisAlignment: MainAxisAlignment.spaceBetween,
                     children: [
-                      Container(
-                        padding: const EdgeInsets.symmetric(
-                            horizontal: 10, vertical: 4),
-                        decoration: BoxDecoration(
-                          color: AppColors.errorBg,
-                          borderRadius: BorderRadius.circular(6),
-                        ),
-                        child: Text(
-                          p.disputeCaseId ?? '#SB-DISPUTE',
-                          style: GoogleFonts.jetBrainsMono(
-                            fontSize: 12,
-                            fontWeight: FontWeight.bold,
-                            color: AppColors.error,
+                      InkWell(
+                        onTap: () => _copyToClipboard(
+                            p.disputeCaseId ?? '#SB-DISPUTE', 'Dispute Case ID'),
+                        borderRadius: BorderRadius.circular(6),
+                        child: Container(
+                          padding: const EdgeInsets.symmetric(
+                              horizontal: 10, vertical: 4),
+                          decoration: BoxDecoration(
+                            color: AppColors.errorBg,
+                            borderRadius: BorderRadius.circular(6),
+                          ),
+                          child: Text(
+                            p.disputeCaseId ?? '#SB-DISPUTE',
+                            style: GoogleFonts.jetBrainsMono(
+                              fontSize: 12,
+                              fontWeight: FontWeight.bold,
+                              color: AppColors.error,
+                            ),
                           ),
                         ),
                       ),

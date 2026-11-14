@@ -2,6 +2,7 @@ import 'package:flutter/foundation.dart';
 import 'package:link_vibe/core/services/supabase_helper.dart';
 import 'package:link_vibe/feature/company/models/applicant_model.dart';
 import 'package:link_vibe/feature/company/models/project_model.dart';
+import 'package:link_vibe/feature/company/services/company_profile_service.dart';
 import 'package:link_vibe/feature/company/services/company_project_service.dart';
 
 class CompanyApplicantService {
@@ -31,13 +32,19 @@ class CompanyApplicantService {
   }
 
   int getAcceptedCount(String projectId) {
+    for (final project in CompanyProjectService().allProjects) {
+      if (project.id == projectId &&
+          project.assignedStudent?.trim().isNotEmpty == true) {
+        return 1;
+      }
+    }
+
     return applicantsNotifier.value
         .where(
           (a) =>
               a.projectId == projectId &&
               (a.status == 'Accepted' ||
                   a.status == 'In Progress' ||
-                  a.status == 'Under Review' ||
                   a.status == 'Revision Requested' ||
                   a.status == 'Completed'),
         )
@@ -79,8 +86,7 @@ class CompanyApplicantService {
           .order('submitted_at', ascending: false);
 
       final studentIds = appRows
-          .map((r) =>
-              (r['student_id'] ?? r['user_id'])?.toString() ?? '')
+          .map((r) => (r['student_id'] ?? r['user_id'])?.toString() ?? '')
           .where((id) => SupabaseHelper.isUuid(id))
           .toSet()
           .toList();
@@ -131,15 +137,20 @@ class CompanyApplicantService {
             if (c['status'] == 'revoked') continue;
             final sid = c['student_id']?.toString() ?? '';
             if (sid.isEmpty) continue;
-            certsByStudent.putIfAbsent(sid, () => []).add(
+            certsByStudent
+                .putIfAbsent(sid, () => [])
+                .add(
                   StudentCertificate(
                     id: c['id']?.toString() ?? '',
-                    title: c['certificate_title']?.toString() ??
+                    title:
+                        c['certificate_title']?.toString() ??
                         'Certificate of Project Completion',
-                    issuer: c['issuer']?.toString() ??
+                    issuer:
+                        c['issuer']?.toString() ??
                         c['company_name']?.toString() ??
                         'Corporate Partner',
-                    issueDate: c['issue_date']?.toString() ??
+                    issueDate:
+                        c['issue_date']?.toString() ??
                         SupabaseHelper.formatDate(
                           SupabaseHelper.parseDate(c['created_at']) ??
                               DateTime.now(),
@@ -195,7 +206,8 @@ class CompanyApplicantService {
           prof?['semester'],
         ]);
 
-        final cgpaVal = (r['student_cgpa'] as num?)?.toDouble() ??
+        final cgpaVal =
+            (r['student_cgpa'] as num?)?.toDouble() ??
             (stu?['cgpa'] as num?)?.toDouble() ??
             (prof?['cgpa'] as num?)?.toDouble() ??
             0.0;
@@ -214,10 +226,7 @@ class CompanyApplicantService {
           r['resume_link'],
           stu?['resume_url'],
         ]);
-        final bio = _firstNonEmpty([
-          stu?['bio'],
-          prof?['bio'],
-        ]);
+        final bio = _firstNonEmpty([stu?['bio'], prof?['bio']]);
 
         final verifStatus =
             stu?['verification_status']?.toString().toLowerCase() ?? '';
@@ -296,6 +305,8 @@ class CompanyApplicantService {
 
     final targetApplicant = currentList[targetIndex];
     final projectService = CompanyProjectService();
+    final supabase = SupabaseHelper.clientOrNull;
+    final user = supabase?.auth.currentUser;
 
     ProjectModel? matchedProject;
     for (final p in projectService.allProjects) {
@@ -306,15 +317,64 @@ class CompanyApplicantService {
     }
 
     if (newStatus == 'Accepted') {
-      final openings = matchedProject?.openings ?? 1;
-      final acceptedCount = getAcceptedCount(targetApplicant.projectId);
-      if (acceptedCount >= openings && targetApplicant.status != 'Accepted') {
-        return false;
+      if (targetApplicant.status == 'Accepted' ||
+          targetApplicant.status == 'Completed' ||
+          targetApplicant.status == 'In Progress') {
+        return true;
+      }
+
+      if ((supabase == null || user == null) &&
+          targetApplicant.status != 'Accepted') {
+        final openings = matchedProject?.openings ?? 1;
+        if (getAcceptedCount(targetApplicant.projectId) >= openings) {
+          return false;
+        }
       }
 
       final assignedLabel = targetApplicant.university.isNotEmpty
           ? '${targetApplicant.name} (${targetApplicant.university})'
           : targetApplicant.name;
+
+      if (supabase != null && user != null) {
+        if (!SupabaseHelper.isUuid(applicantId)) return false;
+        try {
+          await supabase.rpc(
+            'assign_applicant_to_project',
+            params: {
+              'p_application_id': applicantId,
+              'p_confirm_existing': false,
+            },
+          );
+        } catch (e) {
+          debugPrint('CompanyApplicantService assignment failed, using direct update: $e');
+          try {
+            await supabase
+                .from('applications')
+                .update({
+                  'status': 'Accepted',
+                  'progress': 0.15,
+                  'updated_at': DateTime.now().toIso8601String(),
+                })
+                .eq('id', applicantId);
+
+            if (targetApplicant.projectId.isNotEmpty &&
+                SupabaseHelper.isUuid(targetApplicant.projectId)) {
+              await supabase
+                  .from('projects')
+                  .update({
+                    'status': 'In Progress',
+                    'assigned_student': assignedLabel,
+                    'progress': 0.15,
+                    'updated_at': DateTime.now().toIso8601String(),
+                  })
+                  .eq('id', targetApplicant.projectId);
+            }
+          } catch (e2) {
+            debugPrint('Direct assignment update fallback error: $e2');
+          }
+        }
+      }
+
       if (matchedProject != null) {
         await projectService.updateProjectStatus(
           matchedProject.id,
@@ -323,27 +383,35 @@ class CompanyApplicantService {
           progress: 0.15,
         );
       }
-    }
-
-    final supabase = SupabaseHelper.clientOrNull;
-    final user = supabase?.auth.currentUser;
-    if (supabase != null &&
+    } else if (supabase != null &&
         user != null &&
         SupabaseHelper.isUuid(applicantId)) {
       try {
-        await supabase.from('applications').update({
-          'status': newStatus,
-          if (newStatus == 'Accepted') 'progress': 0.15,
-          'updated_at': DateTime.now().toIso8601String(),
-        }).eq('id', applicantId);
+        await supabase
+            .from('applications')
+            .update({
+              'status': newStatus,
+              'updated_at': DateTime.now().toIso8601String(),
+            })
+            .eq('id', applicantId);
       } catch (e) {
         debugPrint('CompanyApplicantService updateApplicantStatus error: $e');
+        return false;
       }
     }
 
-    final updatedList = List<ApplicantModel>.from(currentList);
-    updatedList[targetIndex] = targetApplicant.copyWith(status: newStatus);
-    applicantsNotifier.value = updatedList;
+    applicantsNotifier.value = currentList.map((applicant) {
+      if (applicant.id == applicantId) {
+        return targetApplicant.copyWith(status: newStatus);
+      }
+      if (newStatus == 'Accepted' &&
+          applicant.projectId == targetApplicant.projectId) {
+        return applicant.copyWith(status: 'Rejected');
+      }
+      return applicant;
+    }).toList();
+
+    await CompanyProfileService.persistLocalCache();
     return true;
   }
 

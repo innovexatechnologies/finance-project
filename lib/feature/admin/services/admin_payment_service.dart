@@ -136,8 +136,8 @@ class AdminPaymentService {
   /// Adds a new platform payment method to Supabase and local state.
   Future<bool> addPaymentMethod(PlatformPaymentMethodModel method) async {
     _lastError = null;
-    final cleanId = SupabaseHelper.isUuid(method.id)
-        ? method.id
+    final cleanId = method.id.trim().isNotEmpty
+        ? method.id.trim()
         : SupabaseHelper.generateUuid();
 
     final nowIso = DateTime.now().toIso8601String();

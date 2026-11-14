@@ -8,7 +8,8 @@ import 'package:link_vibe/feature/company/models/applicant_model.dart';
 import 'package:link_vibe/feature/company/models/project_model.dart';
 import 'package:link_vibe/feature/company/services/company_applicant_service.dart';
 import 'package:link_vibe/feature/company/services/company_project_service.dart';
-import 'package:url_launcher/url_launcher.dart';
+import 'package:link_vibe/core/services/cloud_storage_service.dart';
+import 'package:link_vibe/feature/company/presentation/widgets/assigned_student_payment_details_card.dart';
 
 class ApplicantDetailScreen extends StatefulWidget {
   final String applicantId;
@@ -43,29 +44,22 @@ class _ApplicantDetailScreenState extends State<ApplicantDetailScreen> {
     return null;
   }
 
-  Future<void> _openExternalUrl(String rawUrl, String label) async {
-    final trimmed = rawUrl.trim();
-    if (trimmed.isEmpty) return;
-    final normalized =
-        (trimmed.startsWith('http://') || trimmed.startsWith('https://'))
-            ? trimmed
-            : 'https://$trimmed';
-    final uri = Uri.tryParse(normalized);
-    if (uri != null) {
-      try {
-        final launched =
-            await launchUrl(uri, mode: LaunchMode.externalApplication);
-        if (launched) return;
-      } catch (_) {}
-    }
+  bool _isAssignedStatus(String status) {
+    return const {
+      'Accepted',
+      'In Progress',
+      'Revision Requested',
+      'Under Review',
+      'Completed',
+    }.contains(status.trim());
+  }
 
-    await Clipboard.setData(ClipboardData(text: trimmed));
-    if (!mounted) return;
-    ScaffoldMessenger.of(context).showSnackBar(
-      SnackBar(
-        content: Text('$label link copied to clipboard.'),
-        behavior: SnackBarBehavior.floating,
-      ),
+  Future<void> _openExternalUrl(String rawUrl, String label) async {
+    await CloudStorageService.openUrl(
+      context,
+      rawUrl,
+      label: label,
+      copyFallback: true,
     );
   }
 
@@ -90,45 +84,6 @@ class _ApplicantDetailScreenState extends State<ApplicantDetailScreen> {
 
   Future<void> _handleAccept(ApplicantModel applicant) async {
     final project = _findProject(applicant.projectId);
-    final openings = project?.openings ?? 1;
-    final acceptedCount =
-        _applicantService.getAcceptedCount(applicant.projectId);
-
-    if (acceptedCount >= openings && applicant.status != 'Accepted') {
-      if (!mounted) return;
-      showDialog<void>(
-        context: context,
-        builder: (ctx) => AlertDialog(
-          shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(18)),
-          title: Row(
-            children: [
-              const Icon(Icons.warning_amber_rounded,
-                  color: AppColors.statusPending),
-              const SizedBox(width: 8),
-              Text(
-                'Openings Full',
-                style: GoogleFonts.poppins(
-                  fontSize: 17,
-                  fontWeight: FontWeight.w700,
-                ),
-              ),
-            ],
-          ),
-          content: Text(
-            'All $openings student opening(s) for "${project?.title ?? applicant.projectTitle}" are already filled.\n\nTo accept additional candidates, edit student openings in project settings.',
-            style: GoogleFonts.inter(fontSize: 13.5, height: 1.45),
-          ),
-          actions: [
-            TextButton(
-              onPressed: () => Navigator.pop(ctx),
-              child: const Text('OK'),
-            ),
-          ],
-        ),
-      );
-      return;
-    }
-
     final confirm = await showDialog<bool>(
       context: context,
       builder: (ctx) => AlertDialog(
@@ -183,6 +138,15 @@ class _ApplicantDetailScreenState extends State<ApplicantDetailScreen> {
               '${applicant.name} has been accepted and assigned to the project.',
             ),
             backgroundColor: AppColors.statusOpen,
+            behavior: SnackBarBehavior.floating,
+          ),
+        );
+      } else if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(
+            content: Text(
+              'Could not assign this student. Refresh and try again.',
+            ),
             behavior: SnackBarBehavior.floating,
           ),
         );
@@ -275,8 +239,10 @@ class _ApplicantDetailScreenState extends State<ApplicantDetailScreen> {
           );
         }
 
-        final bool canDecide =
-            applicant.status != 'Accepted' && applicant.status != 'Rejected';
+        final bool isAssigned = _isAssignedStatus(applicant.status);
+        final bool isDeclined = applicant.status == 'Rejected' ||
+            applicant.status == 'Withdrawn';
+        final bool canDecide = !isAssigned && !isDeclined;
         final bool isShortlisted = applicant.status == 'Shortlisted';
 
         return Scaffold(
@@ -323,6 +289,13 @@ class _ApplicantDetailScreenState extends State<ApplicantDetailScreen> {
                 if (applicant.bio.trim().isNotEmpty) ...[
                   const SizedBox(height: 16),
                   _buildBioCard(applicant),
+                ],
+                if (_isAssignedStatus(applicant.status)) ...[
+                  const SizedBox(height: 16),
+                  AssignedStudentPaymentDetailsCard(
+                    key: ValueKey(applicant.id),
+                    applicationId: applicant.id,
+                  ),
                 ],
                 const SizedBox(height: 20),
                 if (canDecide)
@@ -793,7 +766,8 @@ class _ApplicantDetailScreenState extends State<ApplicantDetailScreen> {
   }
 
   Widget _buildStatusFooter(ApplicantModel applicant) {
-    final isAccepted = applicant.status == 'Accepted';
+    final isAccepted = _isAssignedStatus(applicant.status);
+    final isCompleted = applicant.status.toLowerCase() == 'completed';
     return Container(
       width: double.infinity,
       padding: const EdgeInsets.all(16),
@@ -810,9 +784,11 @@ class _ApplicantDetailScreenState extends State<ApplicantDetailScreen> {
           const SizedBox(width: 10),
           Expanded(
             child: Text(
-              isAccepted
-                  ? '${applicant.name} has been accepted and assigned to "${applicant.projectTitle}".'
-                  : 'This application was declined.',
+              isCompleted
+                  ? '${applicant.name} has completed "${applicant.projectTitle}".'
+                  : (isAccepted
+                      ? '${applicant.name} has been accepted and assigned to "${applicant.projectTitle}".'
+                      : 'This application was declined.'),
               style: GoogleFonts.inter(
                 fontSize: 13,
                 fontWeight: FontWeight.w600,

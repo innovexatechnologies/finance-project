@@ -20,7 +20,7 @@ publish_to: 'none' # Remove this line if you wish to publish to pub.dev
 version: 1.0.0+1
 
 environment:
-  sdk: ^3.13.7
+  sdk: ^3.13.2
 
 # Dependencies specify other packages that your package needs in order to work.
 # To automatically upgrade your package dependencies to the latest versions
@@ -46,6 +46,7 @@ dependencies:
   open_filex: ^5.0.0
   url_launcher: ^6.3.3
   image_picker: ^1.2.4
+  file_picker: ^13.3.3
 
 dev_dependencies:
   flutter_test:
@@ -70,7 +71,7 @@ flutter:
   # included in the application.
   uses-material-design: true
 
-  # Assets section for .env and brand assets
+  # Assets section for brand assets
   assets:
     - .env
     - assets/skillbridge.png

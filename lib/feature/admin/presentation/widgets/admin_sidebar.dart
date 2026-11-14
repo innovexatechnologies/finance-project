@@ -2,14 +2,20 @@ import 'package:flutter/material.dart';
 import 'package:google_fonts/google_fonts.dart';
 import 'package:link_vibe/core/constants/app_colors.dart';
 import 'package:link_vibe/core/widgets/skillbridge_logo.dart';
+import 'package:link_vibe/feature/admin/models/admin_settings_model.dart';
 import 'package:link_vibe/feature/admin/presentation/screens/admin_dashboard_screen.dart';
+import 'package:link_vibe/feature/admin/presentation/screens/admin_settings_screen.dart';
+import 'package:link_vibe/feature/admin/presentation/screens/application_monitoring_screen.dart';
+import 'package:link_vibe/feature/admin/presentation/screens/certificate_management_screen.dart';
 import 'package:link_vibe/feature/admin/presentation/screens/company_management_screen.dart';
+import 'package:link_vibe/feature/admin/presentation/screens/company_verifications_screen.dart';
 import 'package:link_vibe/feature/admin/presentation/screens/project_management_screen.dart';
 import 'package:link_vibe/feature/admin/presentation/screens/reports_analytics_screen.dart';
 import 'package:link_vibe/feature/admin/presentation/screens/student_management_screen.dart';
 import 'package:link_vibe/feature/admin/services/admin_auth_service.dart';
 import 'package:link_vibe/feature/admin/services/admin_company_service.dart';
 import 'package:link_vibe/feature/admin/services/admin_project_service.dart';
+import 'package:link_vibe/feature/admin/services/admin_settings_service.dart';
 import 'package:link_vibe/feature/admin/services/admin_student_service.dart';
 
 /// Navigation item model for Admin Sidebar
@@ -47,30 +53,45 @@ class AdminSidebar extends StatelessWidget {
     this.onToggleCollapse,
   });
 
-  /// Normalizes legacy/alias route IDs onto the 5 active Admin drawer routes.
+  /// Normalizes legacy route IDs used by the Admin navigation.
   static String normalizeRouteId(String routeId) {
     switch (routeId) {
       case 'students':
+      case 'student_credentials':
       case 'student_verifications':
         return 'student_verifications';
+      case 'company_verifications':
+        return 'company_verifications';
       case 'company':
       case 'companies':
       case 'company_management':
-      case 'company_verifications':
         return 'company_management';
       case 'projects':
       case 'projects_audit':
         return 'projects_audit';
+      case 'compliance':
+      case 'application_monitoring':
+        return 'application_monitoring';
+      case 'audit_logs':
+      case 'certificates':
+        return 'audit_logs';
       case 'reports':
       case 'analytics':
         return 'analytics';
+      case 'support':
+      case 'support_desk':
+      case 'support_queries':
+      case 'queries':
+        return 'support_desk';
+      case 'settings':
+        return 'settings';
       case 'dashboard':
       default:
         return 'dashboard';
     }
   }
 
-  /// Shared drawer/card route navigator across all 5 Admin screens.
+  /// Keeps Platform Overview beneath admin pages for predictable back navigation.
   static void navigateToRoute(
     BuildContext context, {
     required GlobalKey<ScaffoldState> scaffoldKey,
@@ -84,10 +105,20 @@ class AdminSidebar extends StatelessWidget {
     final next = normalizeRouteId(targetRouteId);
     if (current == next) return;
 
+    if (next == 'dashboard') {
+      if (current != 'dashboard' && Navigator.of(context).canPop()) {
+        Navigator.of(context).pop();
+      }
+      return;
+    }
+
     final Widget destination;
     switch (next) {
       case 'student_verifications':
         destination = const StudentManagementScreen();
+        break;
+      case 'company_verifications':
+        destination = const CompanyVerificationsScreen();
         break;
       case 'company_management':
         destination = const CompanyManagementScreen();
@@ -95,8 +126,20 @@ class AdminSidebar extends StatelessWidget {
       case 'projects_audit':
         destination = const ProjectManagementScreen();
         break;
+      case 'application_monitoring':
+        destination = const ApplicationMonitoringScreen();
+        break;
+      case 'audit_logs':
+        destination = const CertificateManagementScreen();
+        break;
       case 'analytics':
         destination = const ReportsAnalyticsScreen();
+        break;
+      case 'support_desk':
+        destination = const AdminSettingsScreen(initialTabIndex: 2);
+        break;
+      case 'settings':
+        destination = const AdminSettingsScreen();
         break;
       case 'dashboard':
       default:
@@ -104,16 +147,23 @@ class AdminSidebar extends StatelessWidget {
         break;
     }
 
-    Navigator.pushReplacement(
-      context,
-      MaterialPageRoute(builder: (_) => destination),
-    );
+    final route = MaterialPageRoute(builder: (_) => destination);
+    if (current == 'dashboard') {
+      Navigator.push(context, route);
+    } else {
+      Navigator.pushReplacement(context, route);
+    }
   }
 
   List<AdminNavItem> _buildLiveNavItems() {
     final studentCount = AdminStudentService().totalCount;
     final companyCount = AdminCompanyService().totalCount;
     final projectCount = AdminProjectService().totalCount;
+    final pendingSupportCount = AdminSettingsService()
+        .helpRequestsNotifier
+        .value
+        .where((t) => t.status == HelpRequestStatus.pending)
+        .length;
 
     return [
       const AdminNavItem(
@@ -149,6 +199,13 @@ class AdminSidebar extends StatelessWidget {
         badgeText: 'Live',
         badgeColor: AppColors.accentTeal,
       ),
+      AdminNavItem(
+        title: 'Support & Inquiries',
+        icon: Icons.support_agent_rounded,
+        routeId: 'support_desk',
+        badgeText: pendingSupportCount > 0 ? '$pendingSupportCount' : null,
+        badgeColor: AppColors.error,
+      ),
     ];
   }
 
@@ -159,6 +216,7 @@ class AdminSidebar extends StatelessWidget {
       AdminStudentService().studentsNotifier,
       AdminCompanyService().companiesNotifier,
       AdminProjectService().projectsNotifier,
+      AdminSettingsService().helpRequestsNotifier,
     ]);
 
     return ListenableBuilder(

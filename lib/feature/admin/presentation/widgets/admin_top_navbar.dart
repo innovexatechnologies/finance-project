@@ -3,6 +3,7 @@ import 'package:google_fonts/google_fonts.dart';
 import 'package:link_vibe/core/constants/app_colors.dart';
 import 'package:link_vibe/core/widgets/skillbridge_logo.dart';
 import 'package:link_vibe/feature/admin/models/admin_user_model.dart';
+import 'package:link_vibe/feature/admin/presentation/screens/admin_settings_screen.dart';
 import 'package:link_vibe/feature/admin/services/admin_auth_service.dart';
 
 /// Clean Enterprise Top Navigation Bar with Admin Session Badge
@@ -225,6 +226,14 @@ class AdminTopNavbar extends StatelessWidget implements PreferredSizeWidget {
                 onSelected: (val) {
                   if (val == 'logout') {
                     onSignOut();
+                  } else if (val == 'support') {
+                    Navigator.push(
+                      context,
+                      MaterialPageRoute(
+                        builder: (_) =>
+                            const AdminSettingsScreen(initialTabIndex: 2),
+                      ),
+                    );
                   }
                 },
                 itemBuilder: (ctx) => [
@@ -265,6 +274,28 @@ class AdminTopNavbar extends StatelessWidget implements PreferredSizeWidget {
                               fontWeight: FontWeight.bold,
                               color: AppColors.primary,
                             ),
+                          ),
+                        ),
+                      ],
+                    ),
+                  ),
+                  const PopupMenuDivider(),
+                  const PopupMenuItem(
+                    value: 'support',
+                    child: Row(
+                      children: [
+                        Icon(
+                          Icons.support_agent_rounded,
+                          size: 18,
+                          color: AppColors.primary,
+                        ),
+                        SizedBox(width: 10),
+                        Text(
+                          'Help & Support Desk',
+                          style: TextStyle(
+                            fontSize: 12.5,
+                            color: AppColors.deepNavy,
+                            fontWeight: FontWeight.w600,
                           ),
                         ),
                       ],
