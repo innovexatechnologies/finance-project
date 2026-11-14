@@ -105,7 +105,6 @@ void main() {
     await AppDataService.instance.addProject({
       'title': 'Full-Stack GraphQL API',
       'description': 'Develop scalable backend GraphQL services with subscriptions.',
-      'stipend': '35-50K',
       'company': 'InnovateTech',
       'category': 'Development',
       'duration': '7 days',
@@ -121,7 +120,7 @@ void main() {
     expect(AppDataService.instance.getAllProjects().length, equals(initialCount + 1));
     final proj = AppDataService.instance.getAllProjects().firstWhere((p) => p['title'] == 'Full-Stack GraphQL API');
     expect(proj['company'], equals('InnovateTech'));
-    expect(proj['stipend'], equals('35-50K'));
+    expect(proj['workMode'], equals('Remote'));
   });
 
   test('Persistent Profile & Skills across app restarts', () async {

@@ -421,7 +421,7 @@ class _ProjectManagementScreenState extends State<ProjectManagementScreen> {
               _buildInfoRow(Icons.hourglass_bottom_rounded, 'Estimated Duration', project.duration),
               _buildInfoRow(Icons.event_available_rounded, 'Application Deadline', project.deadline),
               _buildInfoRow(Icons.group_outlined, 'Available Student Openings', '${project.openings} Seat(s)'),
-              _buildInfoRow(Icons.people_outline_rounded, 'Received Applications', '${project.applicantsCount} student(s) applied'),
+              _buildInfoRow(Icons.people_outline_rounded, 'Student Applications', '${project.applicantsCount} student(s) applied'),
               if (project.assignedStudent != null)
                 _buildInfoRow(Icons.person_pin_rounded, 'Assigned Student', project.assignedStudent!),
               _buildInfoRow(Icons.trending_up_rounded, 'Milestone Progress', '${(project.progress * 100).toInt()}% delivered'),

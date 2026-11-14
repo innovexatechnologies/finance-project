@@ -446,7 +446,6 @@ class _ExploreProjectsScreenState extends State<ExploreProjectsScreen> {
     final isVerified = project['isVerified'] == true;
     final duration = project['duration']?.toString().trim() ?? 'Flexible';
     final workMode = project['workMode']?.toString().trim() ?? 'Remote';
-    final stipend = project['stipend']?.toString().trim() ?? '';
     final status = project['status']?.toString() ?? 'Open';
     final category = project['category']?.toString().trim() ?? '';
 
@@ -619,12 +618,6 @@ class _ExploreProjectsScreenState extends State<ExploreProjectsScreen> {
                           workMode,
                           AppColors.grayText,
                         ),
-                        if (stipend.isNotEmpty)
-                          _metaItem(
-                            Icons.workspace_premium_outlined,
-                            stipend,
-                            AppColors.statusOpen,
-                          ),
                       ],
                     ),
                   ),

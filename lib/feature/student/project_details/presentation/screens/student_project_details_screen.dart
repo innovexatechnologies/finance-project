@@ -58,9 +58,6 @@ class StudentProjectDetailsScreen extends StatelessWidget {
             : 'Remote';
     final deadline = project['deadline']?.toString().trim() ?? '';
     final openings = project['openings']?.toString().trim() ?? '';
-    final stipend = (project['stipend']?.toString().trim().isNotEmpty == true)
-        ? project['stipend'].toString().trim()
-        : (project['budget']?.toString().trim() ?? '');
     final description =
         (project['description']?.toString().trim().isNotEmpty == true)
             ? project['description'].toString().trim()
@@ -310,12 +307,6 @@ class StudentProjectDetailsScreen extends StatelessWidget {
                                 workMode,
                                 AppColors.primaryBlue,
                               ),
-                              if (stipend.isNotEmpty)
-                                _buildMetaBadge(
-                                  Icons.workspace_premium_outlined,
-                                  stipend,
-                                  AppColors.statusOpen,
-                                ),
                               if (deadline.isNotEmpty)
                                 _buildMetaBadge(
                                   Icons.event_outlined,

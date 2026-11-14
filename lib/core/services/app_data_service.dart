@@ -303,11 +303,6 @@ class AppDataService extends ChangeNotifier {
           final comp = companiesByUserId[postedBy] ?? companiesById[compId];
 
           final skills = SupabaseHelper.parseStringList(p['skills']);
-          final stipend = (p['stipend']?.toString().trim().isNotEmpty == true)
-              ? p['stipend'].toString()
-              : (p['budget']?.toString().trim().isNotEmpty == true
-                  ? p['budget'].toString()
-                  : 'Academic Credit / Verified Certificate');
 
           mappedProjects.add({
             'id': p['id']?.toString() ?? '',
@@ -322,8 +317,6 @@ class AppDataService extends ChangeNotifier {
             'workMode': p['work_mode']?.toString() ?? 'Remote',
             'deadline': p['deadline']?.toString() ?? 'Flexible',
             'status': status,
-            'stipend': stipend,
-            'budget': p['budget']?.toString() ?? stipend,
             'description': p['description']?.toString() ?? '',
             'requirements': p['requirements']?.toString() ?? '',
             'deliverables': p['deliverables']?.toString() ?? '',
@@ -918,8 +911,6 @@ class AppDataService extends ChangeNotifier {
         'deadline': p['deadline'] ?? 'Flexible',
         'openings': p['openings'] ?? 1,
         'skills': SupabaseHelper.parseStringList(p['skills']),
-        'stipend': p['stipend'] ?? p['budget'] ?? 'Competitive',
-        'budget': p['budget'] ?? p['stipend'] ?? 'Competitive',
         'company_name': p['company'] ?? p['company_name'] ?? 'Company',
         'status': p['status'] ?? 'Open',
         'posted_by': user.id,

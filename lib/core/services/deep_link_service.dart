@@ -381,10 +381,6 @@ class DeepLinkService {
       'workMode': p.projectType,
       'deadline': p.deadline,
       'status': p.status,
-      'stipend': p.budget.isNotEmpty
-          ? p.budget
-          : 'Academic Credit / Verified Certificate',
-      'budget': p.budget,
       'description': p.description,
       'requirements': p.requirements,
       'deliverables': p.deliverables,
@@ -431,12 +427,6 @@ class DeepLinkService {
             }
           } catch (_) {}
 
-          final stipend = (p['stipend']?.toString().trim().isNotEmpty == true)
-              ? p['stipend'].toString()
-              : (p['budget']?.toString().trim().isNotEmpty == true
-                  ? p['budget'].toString()
-                  : 'Academic Credit / Verified Certificate');
-
           return {
             'id': p['id']?.toString() ?? '',
             'title': p['title']?.toString() ?? 'Untitled Project',
@@ -450,8 +440,6 @@ class DeepLinkService {
             'workMode': p['work_mode']?.toString() ?? 'Remote',
             'deadline': p['deadline']?.toString() ?? 'Flexible',
             'status': p['status']?.toString() ?? 'Open',
-            'stipend': stipend,
-            'budget': p['budget']?.toString() ?? stipend,
             'description': p['description']?.toString() ?? '',
             'requirements': p['requirements']?.toString() ?? '',
             'deliverables': p['deliverables']?.toString() ?? '',

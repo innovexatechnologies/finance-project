@@ -14,7 +14,6 @@ class ProjectModel {
   final String companyId;
   final String status; // 'Draft', 'Open', 'In Progress', 'Completed', 'Closed', 'Cancelled'
   final String duration;
-  final String budget; // Strictly excluded from UI
   final int applicantsCount;
   final String? assignedStudent;
   final double progress;
@@ -36,7 +35,6 @@ class ProjectModel {
     this.companyId = '',
     required this.status,
     this.duration = '3-4 weeks',
-    this.budget = '',
     this.applicantsCount = 0,
     this.assignedStudent,
     this.progress = 0.0,
@@ -59,7 +57,6 @@ class ProjectModel {
     String? companyId,
     String? status,
     String? duration,
-    String? budget,
     int? applicantsCount,
     String? assignedStudent,
     double? progress,
@@ -82,7 +79,6 @@ class ProjectModel {
       companyId: companyId ?? this.companyId,
       status: status ?? this.status,
       duration: duration ?? this.duration,
-      budget: budget ?? this.budget,
       applicantsCount: applicantsCount ?? this.applicantsCount,
       assignedStudent: assignedStudent ?? this.assignedStudent,
       progress: progress ?? this.progress,
@@ -113,7 +109,6 @@ class ProjectModel {
       companyId: (json['company_id'] ?? '').toString(),
       status: (json['status'] ?? 'Open').toString(),
       duration: (json['duration'] ?? '3-4 weeks').toString(),
-      budget: (json['budget'] ?? '').toString(),
       applicantsCount: (json['applicants_count'] as num?)?.toInt() ?? 0,
       assignedStudent: json['assigned_student']?.toString(),
       progress: (json['progress'] as num?)?.toDouble() ?? 0.0,
@@ -138,7 +133,6 @@ class ProjectModel {
       'company_id': companyId,
       'status': status,
       'duration': duration,
-      'budget': budget,
       'applicants_count': applicantsCount,
       'assigned_student': assignedStudent,
       'progress': progress,

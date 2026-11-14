@@ -975,7 +975,6 @@ void main() {
             companyId: 'comp-row-1',
             status: 'Open',
             duration: '4 weeks',
-            budget: 'Paid',
           ),
         ];
 
@@ -1035,7 +1034,6 @@ void main() {
             companyId: 'comp-nav-1',
             status: 'Open',
             duration: '4 weeks',
-            budget: 'Paid',
           ),
         ];
         CompanyApplicantService().applicantsNotifier.value = [
@@ -1280,7 +1278,7 @@ void main() {
           'cc_user_id_v1': 'stu-dl-1',
           'cc_user_name_v1': 'Hina Khan',
           'cc_custom_projects_v1':
-              '[{"id":"proj-dl-1","title":"Deep Link Mobile App","company":"Acme Labs","category":"Development","duration":"4 Weeks","workMode":"Remote","status":"Open","stipend":"PKR 25,000"}]',
+              '[{"id":"proj-dl-1","title":"Deep Link Mobile App","company":"Acme Labs","category":"Development","duration":"4 Weeks","workMode":"Remote","status":"Open"}]',
           'cc_applications_v1':
               '[{"id":"app-dl-1","projectId":"proj-dl-1","title":"Deep Link Mobile App","company":"Acme Labs","status":"Pending","appliedDate":"Today","timelineStep":1}]',
           'cc_certificates_v1':
