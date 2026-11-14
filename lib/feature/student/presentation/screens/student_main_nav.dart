@@ -3,7 +3,6 @@ import 'package:flutter/services.dart';
 import 'package:google_fonts/google_fonts.dart';
 import 'package:link_vibe/core/constants/app_colors.dart';
 import 'package:link_vibe/core/services/app_data_service.dart';
-import 'package:link_vibe/core/services/deep_link_service.dart';
 import 'package:link_vibe/core/services/share_service.dart';
 import 'package:link_vibe/core/widgets/student_avatar.dart';
 import 'package:link_vibe/feature/admin/services/admin_auth_service.dart';
@@ -40,11 +39,6 @@ class _StudentMainNavState extends State<StudentMainNav> {
     _currentIndex = widget.initialIndex;
     _tabHistory.clear();
     _tabHistory.add(widget.initialIndex);
-    WidgetsBinding.instance.addPostFrameCallback((_) {
-      if (mounted) {
-        DeepLinkService.instance.markWorkspaceReadyAndConsume();
-      }
-    });
   }
 
   void _onTabChange(int index) {
@@ -71,10 +65,7 @@ class _StudentMainNavState extends State<StudentMainNav> {
     _closeDrawer();
     Future.delayed(const Duration(milliseconds: 140), () {
       if (!mounted) return;
-      Navigator.push(
-        context,
-        MaterialPageRoute(builder: (_) => screen),
-      );
+      Navigator.push(context, MaterialPageRoute(builder: (_) => screen));
     });
   }
 
@@ -157,10 +148,7 @@ class _StudentMainNavState extends State<StudentMainNav> {
     final drawerWidth = (screenWidth * 0.80).clamp(260.0, 320.0).toDouble();
 
     final screens = [
-      StudentHomeScreen(
-        onTabChange: _onTabChange,
-        onOpenDrawer: _openDrawer,
-      ),
+      StudentHomeScreen(onTabChange: _onTabChange, onOpenDrawer: _openDrawer),
       const ExploreProjectsScreen(),
       const MyProjectsScreen(),
       StudentProfileScreen(onTabChange: _onTabChange),
@@ -338,7 +326,9 @@ class _StudentMainNavState extends State<StudentMainNav> {
                       ? AppDataService.instance.userEmail
                       : 'Verified Talent Profile');
 
-            final savedCount = AppDataService.instance.getSavedProjects().length;
+            final savedCount = AppDataService.instance
+                .getSavedProjects()
+                .length;
             final certCount = AppDataService.instance.certificatesCount;
 
             return Column(
@@ -395,9 +385,7 @@ class _StudentMainNavState extends State<StudentMainNav> {
                             height: 34,
                             decoration: BoxDecoration(
                               borderRadius: BorderRadius.circular(10),
-                              border: Border.all(
-                                color: AppColors.borderLight,
-                              ),
+                              border: Border.all(color: AppColors.borderLight),
                             ),
                             child: const Icon(
                               Icons.close_rounded,
@@ -633,4 +621,3 @@ class _StudentMainNavState extends State<StudentMainNav> {
     );
   }
 }
-

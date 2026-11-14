@@ -2552,7 +2552,8 @@ BEGIN
     AND lower(COALESCE(a.status, 'pending')) <> 'withdrawn';
 
   IF active_count >= 10 THEN
-    RAISE EXCEPTION 'Application limit reached: maximum 10 students can apply to this project.';
+    RAISE EXCEPTION 'PROJECT_APPLICATION_LIMIT_REACHED: Application limit reached: maximum 10 students can apply to this project.'
+      USING ERRCODE = 'P0001';
   END IF;
 
   RETURN NEW;

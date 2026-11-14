@@ -4,7 +4,8 @@ import 'dart:math';
 import 'package:flutter/foundation.dart';
 import 'package:flutter/scheduler.dart';
 import 'package:shared_preferences/shared_preferences.dart';
-import 'package:supabase_flutter/supabase_flutter.dart' show FileOptions;
+import 'package:supabase_flutter/supabase_flutter.dart'
+    show FileOptions, PostgrestException;
 import 'package:link_vibe/core/services/supabase_helper.dart';
 import 'package:link_vibe/feature/admin/services/admin_hash_util.dart';
 
@@ -931,7 +932,7 @@ class AppDataService extends ChangeNotifier {
     return getProjectApplicantsCount(pid);
   }
 
-  Future<void> addApplication({
+  Future<bool> addApplication({
     required Map<String, dynamic> project,
     required String coverMessage,
     required String skills,
@@ -942,7 +943,7 @@ class AppDataService extends ChangeNotifier {
     final rawProjectId =
         project['id']?.toString() ?? project['projectId']?.toString() ?? '';
     final projectId = rawProjectId.trim();
-    if (projectId.isNotEmpty && hasApplied(projectId)) return;
+    if (projectId.isNotEmpty && hasApplied(projectId)) return false;
 
     if (projectId.isNotEmpty) {
       final currentCount = await refreshProjectApplicantsCount(projectId);
@@ -987,9 +988,15 @@ class AppDataService extends ChangeNotifier {
     try {
       await _pushApplicationToSupabase(newApp, project);
     } catch (e) {
+      if (e is PostgrestException &&
+          e.message.contains('PROJECT_APPLICATION_LIMIT_REACHED')) {
+        throw StateError(
+          'This project has reached the maximum of 10 student applications.',
+        );
+      }
       if (e.toString().toLowerCase().contains('already applied')) {
         await syncFromSupabase(forceRefresh: true);
-        return;
+        return false;
       }
       rethrow;
     }
@@ -1016,6 +1023,7 @@ class AppDataService extends ChangeNotifier {
         debugPrint('Application local persistence warning: $e');
       }
     }
+    return true;
   }
 
   Future<void> _pushApplicationToSupabase(
@@ -1024,7 +1032,10 @@ class AppDataService extends ChangeNotifier {
   ) async {
     final supabase = SupabaseHelper.clientOrNull;
     final user = supabase?.auth.currentUser;
-    if (supabase == null || user == null) return;
+    if (supabase == null) return;
+    if (user == null) {
+      throw StateError('Sign in with Supabase before applying to a project.');
+    }
 
     try {
       final studentName =
@@ -1054,7 +1065,7 @@ class AppDataService extends ChangeNotifier {
 
       await supabase.from('applications').insert({
         'id': app['id'],
-        if (SupabaseHelper.isUuid(projectId)) 'project_id': projectId,
+        'project_id': projectId,
         'project_title': app['title'],
         if (SupabaseHelper.isUuid(companyId)) 'company_id': companyId,
         'company_name': app['company'],

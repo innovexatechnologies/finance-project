@@ -15,9 +15,9 @@ class ShareService {
   /// Registered by DeepLinkService so share previews and pasted links open
   /// directly inside the app.
   static Future<bool> Function(String uri, {BuildContext? context})?
-      deepLinkOpener;
+  deepLinkOpener;
   static Future<bool> Function(String rawText, {BuildContext? context})?
-      deepLinkTextOpener;
+  deepLinkTextOpener;
 
   static String _slugify(String raw, {String fallback = 'item'}) {
     final cleaned = raw
@@ -29,8 +29,9 @@ class ShareService {
   }
 
   static String buildProjectShareLink(Map<String, dynamic> project) {
-    final rawId =
-        (project['projectId'] ?? project['id'] ?? '').toString().trim();
+    final rawId = (project['projectId'] ?? project['id'] ?? '')
+        .toString()
+        .trim();
     final title = (project['title'] ?? '').toString().trim();
 
     if (rawId.isNotEmpty) {
@@ -47,9 +48,7 @@ class ShareService {
       pathSegments: [
         _slugify(title.isEmpty ? 'project' : title, fallback: 'project'),
       ],
-      queryParameters: {
-        if (title.isNotEmpty) 'title': title,
-      },
+      queryParameters: {if (title.isNotEmpty) 'title': title},
     ).toString();
   }
 
@@ -66,11 +65,11 @@ class ShareService {
     final targetId = rawId.isNotEmpty
         ? rawId
         : (projectId.isNotEmpty
-            ? projectId
-            : _slugify(
-                title.isEmpty ? 'application' : title,
-                fallback: 'application',
-              ));
+              ? projectId
+              : _slugify(
+                  title.isEmpty ? 'application' : title,
+                  fallback: 'application',
+                ));
 
     final query = <String, String>{
       if (projectId.isNotEmpty && projectId != targetId) 'projectId': projectId,
@@ -85,12 +84,13 @@ class ShareService {
   }
 
   static String buildCertificateShareLink(Map<String, dynamic> certificate) {
-    final certId = (certificate['id'] ??
-            certificate['certificateId'] ??
-            certificate['dbId'] ??
-            'SB-CERT')
-        .toString()
-        .trim();
+    final certId =
+        (certificate['id'] ??
+                certificate['certificateId'] ??
+                certificate['dbId'] ??
+                'SB-CERT')
+            .toString()
+            .trim();
     return Uri(
       scheme: appScheme,
       host: 'certificate',
@@ -108,6 +108,11 @@ class ShareService {
     final category = project['category']?.toString().trim() ?? 'General';
     final workMode = project['workMode']?.toString().trim() ?? 'Remote';
     final duration = project['duration']?.toString().trim() ?? 'Flexible';
+    final stipend = project['stipend']?.toString().trim().isNotEmpty == true
+        ? project['stipend'].toString().trim()
+        : (project['budget']?.toString().trim().isNotEmpty == true
+              ? project['budget'].toString().trim()
+              : 'Academic Credit / Verified Certificate');
     final description = project['description']?.toString().trim() ?? '';
     final projectLink = buildProjectShareLink(project);
 
@@ -120,7 +125,8 @@ class ShareService {
 
     final buffer = StringBuffer()
       ..writeln('*$title* — $company')
-      ..writeln('Category: $category • $workMode • $duration');
+      ..writeln('Category: $category • $workMode • $duration')
+      ..writeln('Stipend: $stipend');
     if (skills.isNotEmpty) {
       buffer.writeln('Skills: $skills');
     }
@@ -145,9 +151,9 @@ class ShareService {
         : 'Partner Company';
     final status = application['status']?.toString().trim() ?? 'Pending';
     final stage = application['timelineStep']?.toString() ?? '1';
-    final appliedDate = application['appliedDate']?.toString().trim() ?? 'Recently';
-    final availability =
-        application['availability']?.toString().trim() ?? '';
+    final appliedDate =
+        application['appliedDate']?.toString().trim() ?? 'Recently';
+    final availability = application['availability']?.toString().trim() ?? '';
     final skills = application['skills']?.toString().trim() ?? '';
     final appLink = buildApplicationShareLink(application);
 
@@ -167,23 +173,23 @@ class ShareService {
   }
 
   static String buildCertificateShareText(Map<String, dynamic> certificate) {
-    final title =
-        certificate['title']?.toString().trim().isNotEmpty == true
-            ? certificate['title'].toString().trim()
-            : 'Project Completion Certificate';
-    final project = certificate['project']?.toString().trim() ?? 'Corporate Project';
+    final title = certificate['title']?.toString().trim().isNotEmpty == true
+        ? certificate['title'].toString().trim()
+        : 'Project Completion Certificate';
+    final project =
+        certificate['project']?.toString().trim() ?? 'Corporate Project';
     final certId = certificate['id']?.toString().trim() ?? 'SB-CERT';
-    final issuer = certificate['issuer']?.toString().trim() ?? 'SkillBridge Partner';
+    final issuer =
+        certificate['issuer']?.toString().trim() ?? 'SkillBridge Partner';
     final date = certificate['date']?.toString().trim() ?? '2026';
     final verifyLink = buildCertificateShareLink(certificate);
-    final explicitStudent =
-        certificate['studentName']?.toString().trim() ?? '';
+    final explicitStudent = certificate['studentName']?.toString().trim() ?? '';
     final studentName = explicitStudent.isNotEmpty
         ? explicitStudent
         : (AppDataService.instance.userName.isNotEmpty
-                ? AppDataService.instance.userName
-                : (AppDataService.instance.getProfile()['name'] ?? 'Student'))
-            .toString();
+                  ? AppDataService.instance.userName
+                  : (AppDataService.instance.getProfile()['name'] ?? 'Student'))
+              .toString();
 
     final buffer = StringBuffer()
       ..writeln('*$title*')
@@ -299,8 +305,8 @@ class ShareService {
         : 'Project Application';
     final company =
         (application['company']?.toString().trim().isNotEmpty == true)
-            ? application['company'].toString().trim()
-            : 'Partner Company';
+        ? application['company'].toString().trim()
+        : 'Partner Company';
     final status = application['status']?.toString().trim() ?? 'Pending';
     final stage = application['timelineStep']?.toString() ?? '1';
     final shareMsg = buildApplicationShareText(application);
@@ -326,14 +332,12 @@ class ShareService {
     required Map<String, dynamic> certificate,
     Rect? sharePositionOrigin,
   }) async {
-    final title =
-        (certificate['title']?.toString().trim().isNotEmpty == true)
-            ? certificate['title'].toString().trim()
-            : 'Project Completion Certificate';
-    final issuer =
-        (certificate['issuer']?.toString().trim().isNotEmpty == true)
-            ? certificate['issuer'].toString().trim()
-            : 'SkillBridge Partner';
+    final title = (certificate['title']?.toString().trim().isNotEmpty == true)
+        ? certificate['title'].toString().trim()
+        : 'Project Completion Certificate';
+    final issuer = (certificate['issuer']?.toString().trim().isNotEmpty == true)
+        ? certificate['issuer'].toString().trim()
+        : 'SkillBridge Partner';
     final date = certificate['date']?.toString().trim() ?? '2026';
     final certId = certificate['id']?.toString().trim() ?? 'SB-CERT';
     final shareMsg = buildCertificateShareText(certificate);
@@ -701,7 +705,8 @@ class _OpenSharedLinkDialogState extends State<_OpenSharedLinkDialog> {
     final hostContext = widget.hostContext;
     final navigator = Navigator.of(context);
 
-    final opener = ShareService.deepLinkTextOpener ?? ShareService.deepLinkOpener;
+    final opener =
+        ShareService.deepLinkTextOpener ?? ShareService.deepLinkOpener;
     if (opener == null) {
       if (mounted) {
         setState(() {

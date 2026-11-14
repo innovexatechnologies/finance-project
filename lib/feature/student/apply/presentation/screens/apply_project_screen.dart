@@ -43,7 +43,8 @@ class _ApplyProjectScreenState extends State<ApplyProjectScreen> {
       _skillsController.text = savedSkills.join(', ');
     }
     final profile = AppDataService.instance.getProfile();
-    final link = profile['portfolioUrl']?.toString().trim() ??
+    final link =
+        profile['portfolioUrl']?.toString().trim() ??
         profile['githubUrl']?.toString().trim() ??
         '';
     if (link.isNotEmpty) {
@@ -153,7 +154,7 @@ class _ApplyProjectScreenState extends State<ApplyProjectScreen> {
     setState(() => _isSubmitting = true);
 
     try {
-      await AppDataService.instance.addApplication(
+      final submitted = await AppDataService.instance.addApplication(
         project: widget.project,
         coverMessage: cover,
         skills: _skillsController.text.trim(),
@@ -163,12 +164,25 @@ class _ApplyProjectScreenState extends State<ApplyProjectScreen> {
       );
 
       if (!mounted) return;
+      if (!submitted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(
+            content: Text(
+              'You have already applied to this project. Check My Applications.',
+            ),
+            backgroundColor: AppColors.statusPending,
+          ),
+        );
+        return;
+      }
 
       showDialog(
         context: context,
         barrierDismissible: false,
         builder: (dialogCtx) => AlertDialog(
-          shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(20)),
+          shape: RoundedRectangleBorder(
+            borderRadius: BorderRadius.circular(20),
+          ),
           content: Column(
             mainAxisSize: MainAxisSize.min,
             children: [
@@ -195,7 +209,7 @@ class _ApplyProjectScreenState extends State<ApplyProjectScreen> {
               ),
               const SizedBox(height: 8),
               Text(
-                'Your application has been sent to ${widget.project['company'] ?? 'the partner company'} and saved to Supabase. Track review stages in My Applications.',
+                'Your application has been sent to ${widget.project['company'] ?? 'the partner company'}. Track review stages in My Applications.',
                 textAlign: TextAlign.center,
                 style: GoogleFonts.inter(
                   fontSize: 13,
@@ -222,7 +236,11 @@ class _ApplyProjectScreenState extends State<ApplyProjectScreen> {
       if (!mounted) return;
       ScaffoldMessenger.of(context).showSnackBar(
         SnackBar(
-          content: Text(SupabaseHelper.friendlyError(e)),
+          content: Text(
+            e is StateError
+                ? e.message.toString()
+                : SupabaseHelper.friendlyError(e),
+          ),
           backgroundColor: AppColors.statusClosed,
         ),
       );
@@ -238,15 +256,12 @@ class _ApplyProjectScreenState extends State<ApplyProjectScreen> {
     final title = widget.project['title']?.toString() ?? 'Project';
     final company =
         (widget.project['company']?.toString().trim().isNotEmpty == true)
-            ? widget.project['company'].toString().trim()
-            : 'Partner Company';
+        ? widget.project['company'].toString().trim()
+        : 'Partner Company';
 
     return Scaffold(
       backgroundColor: AppColors.background,
-      appBar: ExecutiveAppBar(
-        title: 'Apply for Project',
-        subtitle: company,
-      ),
+      appBar: ExecutiveAppBar(title: 'Apply for Project', subtitle: company),
       body: SingleChildScrollView(
         padding: const EdgeInsets.all(20),
         child: Center(
@@ -336,8 +351,7 @@ class _ApplyProjectScreenState extends State<ApplyProjectScreen> {
                         controller: _coverMessageController,
                         maxLines: 4,
                         decoration: const InputDecoration(
-                          hintText:
-                              'Explain why you are a strong fit and how you plan to tackle the project deliverables...',
+                          hintText: 'Explain why you are a strong fit and how you plan to tackle the project deliverables...',
                         ),
                         validator: (value) {
                           final v = value?.trim() ?? '';
@@ -392,8 +406,10 @@ class _ApplyProjectScreenState extends State<ApplyProjectScreen> {
                         runSpacing: 6,
                         children: _availabilityPresets.map((preset) {
                           return ActionChip(
-                            label: Text(preset,
-                                style: GoogleFonts.inter(fontSize: 11)),
+                            label: Text(
+                              preset,
+                              style: GoogleFonts.inter(fontSize: 11),
+                            ),
                             onPressed: () {
                               _availabilityController.text = preset;
                             },
@@ -424,7 +440,9 @@ class _ApplyProjectScreenState extends State<ApplyProjectScreen> {
                       ),
                       const SizedBox(height: 16),
 
-                      _fieldLabel('CV / Resume Attachment (Optional — PDF / DOCX)'),
+                      _fieldLabel(
+                        'CV / Resume Attachment (Optional — PDF / DOCX)',
+                      ),
                       const SizedBox(height: 6),
                       Container(
                         padding: const EdgeInsets.all(12),
@@ -452,8 +470,8 @@ class _ApplyProjectScreenState extends State<ApplyProjectScreen> {
                               child: Text(
                                 _resumeUrl.isNotEmpty
                                     ? (_resumeFileName.isNotEmpty
-                                        ? _resumeFileName
-                                        : 'Resume attached')
+                                          ? _resumeFileName
+                                          : 'Resume attached')
                                     : 'No CV attached yet',
                                 maxLines: 1,
                                 overflow: TextOverflow.ellipsis,
@@ -496,7 +514,9 @@ class _ApplyProjectScreenState extends State<ApplyProjectScreen> {
                                       ),
                                     )
                                   : Text(
-                                      _resumeUrl.isNotEmpty ? 'Replace' : 'Upload CV',
+                                      _resumeUrl.isNotEmpty
+                                          ? 'Replace'
+                                          : 'Upload CV',
                                     ),
                             ),
                           ],

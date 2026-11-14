@@ -33,8 +33,9 @@ class MyApplicationsScreen extends StatefulWidget {
     final skills = app['skills']?.toString().trim() ?? '';
     final coverMessage = app['coverMessage']?.toString().trim() ?? '';
     final feedback = app['companyFeedback']?.toString().trim() ?? '';
-    final projectId =
-        (app['projectId'] ?? app['project_id'] ?? '').toString().trim();
+    final projectId = (app['projectId'] ?? app['project_id'] ?? '')
+        .toString()
+        .trim();
 
     showModalBottomSheet<void>(
       context: context,
@@ -233,8 +234,8 @@ class MyApplicationsScreen extends StatefulWidget {
                         label: const Text('View Project'),
                         onPressed: () async {
                           Navigator.pop(sheetCtx);
-                          final projects =
-                              AppDataService.instance.getAllProjects();
+                          final projects = AppDataService.instance
+                              .getAllProjects();
                           final match = projects.firstWhere(
                             (p) => p['id']?.toString() == projectId,
                             orElse: () => <String, dynamic>{},
@@ -248,18 +249,6 @@ class MyApplicationsScreen extends StatefulWidget {
                               ),
                             );
                             return;
-                          }
-                          if (projectId.isNotEmpty &&
-                              ShareService.deepLinkOpener != null) {
-                            final opened =
-                                await ShareService.deepLinkOpener!.call(
-                              ShareService.buildProjectShareLink({
-                                'id': projectId,
-                                'title': title,
-                              }),
-                              context: context,
-                            );
-                            if (opened) return;
                           }
                           if (context.mounted) {
                             ScaffoldMessenger.of(context).showSnackBar(
@@ -394,7 +383,9 @@ class _MyApplicationsScreenState extends State<MyApplicationsScreen> {
                     child: ListView.builder(
                       scrollDirection: Axis.horizontal,
                       padding: const EdgeInsets.symmetric(
-                          horizontal: 16, vertical: 8),
+                        horizontal: 16,
+                        vertical: 8,
+                      ),
                       itemCount: _filters.length,
                       itemBuilder: (context, index) {
                         final filter = _filters[index];
@@ -438,8 +429,9 @@ class _MyApplicationsScreenState extends State<MyApplicationsScreen> {
                   Expanded(
                     child: RefreshIndicator(
                       color: AppColors.primaryBlue,
-                      onRefresh: () => AppDataService.instance
-                          .syncFromSupabase(forceRefresh: true),
+                      onRefresh: () => AppDataService.instance.syncFromSupabase(
+                        forceRefresh: true,
+                      ),
                       child: filteredApps.isEmpty
                           ? ListView(
                               physics: const AlwaysScrollableScrollPhysics(),
@@ -458,7 +450,8 @@ class _MyApplicationsScreenState extends State<MyApplicationsScreen> {
                                   onAction: _selectedFilter == 'All'
                                       ? null
                                       : () => setState(
-                                          () => _selectedFilter = 'All'),
+                                          () => _selectedFilter = 'All',
+                                        ),
                                 ),
                               ],
                             )
@@ -493,7 +486,8 @@ class _MyApplicationsScreenState extends State<MyApplicationsScreen> {
     final title = app['title']?.toString() ?? 'Project';
     final appliedDate = app['appliedDate']?.toString().trim() ?? 'Recently';
     final feedback = app['companyFeedback']?.toString().trim() ?? '';
-    final canWork = status == 'Accepted' ||
+    final canWork =
+        status == 'Accepted' ||
         status == 'In Progress' ||
         status == 'Under Review' ||
         status == 'Revision Requested';
@@ -502,10 +496,8 @@ class _MyApplicationsScreenState extends State<MyApplicationsScreen> {
       margin: const EdgeInsets.only(bottom: 14),
       clipBehavior: Clip.antiAlias,
       child: InkWell(
-        onTap: () => MyApplicationsScreen.showApplicationDetailsSheet(
-          context,
-          app,
-        ),
+        onTap: () =>
+            MyApplicationsScreen.showApplicationDetailsSheet(context, app),
         child: Padding(
           padding: const EdgeInsets.all(16),
           child: Column(
@@ -614,7 +606,8 @@ class _MyApplicationsScreenState extends State<MyApplicationsScreen> {
                   color: AppColors.warningBg,
                   borderRadius: BorderRadius.circular(10),
                   border: Border.all(
-                      color: AppColors.statusPending.withValues(alpha: 0.4)),
+                      color: AppColors.statusPending.withValues(alpha: 0.4),
+                    ),
                 ),
                 child: Text(
                   'Company Feedback: $feedback',
@@ -636,7 +629,9 @@ class _MyApplicationsScreenState extends State<MyApplicationsScreen> {
                   ElevatedButton.icon(
                     style: ElevatedButton.styleFrom(
                       padding: const EdgeInsets.symmetric(
-                          horizontal: 14, vertical: 9),
+                          horizontal: 14,
+                          vertical: 9,
+                        ),
                     ),
                     onPressed: () {
                       if (status == 'Revision Requested') {

@@ -1,4 +1,5 @@
 import 'dart:math';
+
 import 'package:flutter/foundation.dart';
 import 'package:link_vibe/core/services/certificate_pdf_service.dart';
 import 'package:link_vibe/core/services/cloud_storage_service.dart';
@@ -17,9 +18,9 @@ class CompanyAssignmentService {
   factory CompanyAssignmentService() => _instance;
 
   CompanyAssignmentService._internal() {
-    CompanyApplicantService()
-        .applicantsNotifier
-        .addListener(_syncWithAcceptedApplicants);
+    CompanyApplicantService().applicantsNotifier.addListener(
+      _syncWithAcceptedApplicants,
+    );
   }
 
   final ValueNotifier<List<AssignmentModel>> assignmentsNotifier =
@@ -81,13 +82,15 @@ class CompanyAssignmentService {
         final fileName = r['file_name']?.toString().trim() ?? '';
         final subNotes = r['submission_notes']?.toString().trim() ?? '';
         final subTitle = r['submission_title']?.toString().trim() ?? '';
-        final hasWorkSubmitted = workUrl.isNotEmpty ||
+        final hasWorkSubmitted =
+            workUrl.isNotEmpty ||
             fileName.isNotEmpty ||
             subNotes.isNotEmpty ||
             subTitle.isNotEmpty ||
             r['work_submitted_at'] != null;
 
-        final isAssignment = status == 'Accepted' ||
+        final isAssignment =
+            status == 'Accepted' ||
             status == 'In Progress' ||
             status == 'Revision Requested' ||
             status == 'Completed' ||
@@ -125,7 +128,9 @@ class CompanyAssignmentService {
           for (final item in rawHistory) {
             if (item is Map) {
               history.add(
-                SubmissionReviewRecord.fromJson(Map<String, dynamic>.from(item)),
+                SubmissionReviewRecord.fromJson(
+                  Map<String, dynamic>.from(item),
+                ),
               );
             }
           }
@@ -139,10 +144,10 @@ class CompanyAssignmentService {
             final fileType = lower.endsWith('.apk')
                 ? 'APK'
                 : lower.endsWith('.pdf')
-                    ? 'PDF'
-                    : lower.endsWith('.zip')
-                        ? 'ZIP'
-                        : 'FILE';
+                ? 'PDF'
+                : lower.endsWith('.zip')
+                ? 'ZIP'
+                : 'FILE';
             files.add(
               SubmissionFileAttachment(
                 fileName: fileName,
@@ -178,9 +183,8 @@ class CompanyAssignmentService {
             id: r['id']?.toString() ?? '',
             companyId: r['company_id']?.toString() ?? company.id,
             projectId: pid,
-            projectTitle: r['project_title']?.toString() ??
-                project?.title ??
-                'Project',
+            projectTitle:
+                r['project_title']?.toString() ?? project?.title ?? 'Project',
             projectCategory: project?.category ?? 'Development',
             projectStatus: projStatus,
             startDate: SupabaseHelper.formatDate(
@@ -192,12 +196,13 @@ class CompanyAssignmentService {
             studentName: studentName,
             studentUniversity: r['university']?.toString() ?? '',
             studentDegree: r['student_degree']?.toString() ?? '',
-            studentAvatarInitial:
-                SupabaseHelper.initialsFor(studentName, fallback: 'ST'),
-            progress: (r['progress'] as num?)?.toDouble() ??
-                (status == 'Completed'
-                    ? 1.0
-                    : (hasWorkSubmitted ? 0.85 : 0.2)),
+            studentAvatarInitial: SupabaseHelper.initialsFor(
+              studentName,
+              fallback: 'ST',
+            ),
+            progress:
+                (r['progress'] as num?)?.toDouble() ??
+                (status == 'Completed' ? 1.0 : (hasWorkSubmitted ? 0.85 : 0.2)),
             hasSubmission: hasWorkSubmitted,
             submissionStatus: uiSubmissionStatus,
             latestSubmission: latestSubmission,
@@ -237,11 +242,12 @@ class CompanyAssignmentService {
     final cleanFeedback = (feedback != null && feedback.trim().isNotEmpty)
         ? feedback.trim()
         : (newStatus == 'Approved'
-            ? 'Work deliverable approved with commendation.'
-            : 'Revision requested. Please review mentor feedback.');
+              ? 'Work deliverable approved with commendation.'
+              : 'Revision requested. Please review mentor feedback.');
 
-    final history =
-        List<SubmissionReviewRecord>.from(currentSubmission.reviewHistory);
+    final history = List<SubmissionReviewRecord>.from(
+      currentSubmission.reviewHistory,
+    );
     history.insert(
       0,
       SubmissionReviewRecord(
@@ -284,24 +290,27 @@ class CompanyAssignmentService {
     if (supabase != null && user != null) {
       try {
         if (SupabaseHelper.isUuid(assignment.id)) {
-          await supabase.from('applications').update({
-            'status': dbAppStatus,
-            'company_feedback': cleanFeedback,
-            'progress': newProgress,
-            'review_history': history.map((h) => h.toJson()).toList(),
-            'updated_at': DateTime.now().toIso8601String(),
-          }).eq('id', assignment.id);
+          await supabase
+              .from('applications')
+              .update({
+                'status': dbAppStatus,
+                'company_feedback': cleanFeedback,
+                'progress': newProgress,
+                'review_history': history.map((h) => h.toJson()).toList(),
+                'updated_at': DateTime.now().toIso8601String(),
+              })
+              .eq('id', assignment.id);
         }
 
         if (newStatus == 'Approved' &&
             SupabaseHelper.isUuid(assignment.studentId)) {
           final existingCert = SupabaseHelper.isUuid(assignment.projectId)
               ? await supabase
-                  .from('certificates')
-                  .select('id')
-                  .eq('student_id', assignment.studentId)
-                  .eq('project_id', assignment.projectId)
-                  .maybeSingle()
+                    .from('certificates')
+                    .select('id')
+                    .eq('student_id', assignment.studentId)
+                    .eq('project_id', assignment.projectId)
+                    .maybeSingle()
               : null;
 
           if (existingCert == null) {
@@ -310,20 +319,22 @@ class CompanyAssignmentService {
             final issueDateStr = SupabaseHelper.formatDate(DateTime.now());
             final hashInput =
                 '$certCode:${assignment.studentId}:${assignment.projectId}';
-            final resolvedCompanyId = SupabaseHelper.isUuid(assignment.companyId)
+            final resolvedCompanyId =
+                SupabaseHelper.isUuid(assignment.companyId)
                 ? assignment.companyId
                 : (SupabaseHelper.isUuid(profile.id) ? profile.id : null);
 
             String? pdfUrl;
             try {
-              final pdfBytes = await CertificatePdfService.generateCertificatePdf(
-                studentName: assignment.studentName,
-                projectTitle: assignment.projectTitle,
-                certificateTitle: certificateTitle,
-                issuer: companyDisplay,
-                certId: certCode,
-                issueDate: issueDateStr,
-              );
+              final pdfBytes =
+                  await CertificatePdfService.generateCertificatePdf(
+                    studentName: assignment.studentName,
+                    projectTitle: assignment.projectTitle,
+                    certificateTitle: certificateTitle,
+                    issuer: companyDisplay,
+                    certId: certCode,
+                    issueDate: issueDateStr,
+                  );
               pdfUrl = await CloudStorageService.uploadBytes(
                 bucket: 'certificates',
                 objectPath: '${assignment.studentId}/$certCode.pdf',
@@ -386,8 +397,7 @@ class CompanyAssignmentService {
 
   void _syncWithAcceptedApplicants() {
     final company = CompanyProfileService().currentProfile;
-    final acceptedApplicants = CompanyApplicantService()
-        .allApplicants
+    final acceptedApplicants = CompanyApplicantService().allApplicants
         .where((a) => a.status == 'Accepted')
         .toList();
 
