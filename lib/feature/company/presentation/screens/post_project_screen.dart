@@ -5,6 +5,8 @@ import 'package:link_vibe/core/services/supabase_helper.dart';
 import 'package:link_vibe/feature/company/models/project_model.dart';
 import 'package:link_vibe/feature/company/services/company_profile_service.dart';
 import 'package:link_vibe/feature/company/services/company_project_service.dart';
+import 'package:link_vibe/screens/company/company_escrow_payment_screen.dart';
+import 'package:link_vibe/services/company_escrow_service.dart';
 
 class PostProjectScreen extends StatefulWidget {
   final ProjectModel? existingProject;
@@ -26,6 +28,7 @@ class _PostProjectScreenState extends State<PostProjectScreen> {
   final _requirementsController = TextEditingController();
   final _deliverablesController = TextEditingController();
   final _openingsController = TextEditingController(text: '1');
+  final _escrowAmountController = TextEditingController(text: '15000');
   final _instructionsController = TextEditingController();
   final _customSkillController = TextEditingController();
 
@@ -280,6 +283,9 @@ class _PostProjectScreenState extends State<PostProjectScreen> {
       _requirementsController.text = existing.requirements;
       _deliverablesController.text = existing.deliverables;
       _openingsController.text = '1';
+      if (existing.escrowAmount > 0) {
+        _escrowAmountController.text = existing.escrowAmount.toStringAsFixed(0);
+      }
       _instructionsController.text = existing.additionalInstructions;
       if (_categories.contains(existing.category)) {
         _selectedCategory = existing.category;
@@ -312,6 +318,7 @@ class _PostProjectScreenState extends State<PostProjectScreen> {
     _requirementsController.dispose();
     _deliverablesController.dispose();
     _openingsController.dispose();
+    _escrowAmountController.dispose();
     _instructionsController.dispose();
     _customSkillController.dispose();
     super.dispose();
@@ -415,10 +422,16 @@ class _PostProjectScreenState extends State<PostProjectScreen> {
           : (existing?.companyId ?? ''),
       status: status,
       applicantsCount: existing?.applicantsCount ?? 0,
+      budget: _escrowAmountController.text.trim().replaceAll(',', ''),
       assignedStudent: existing?.assignedStudent,
       progress: existing?.progress ?? 0.0,
       createdAt: existing?.createdAt ?? 'Just now',
       paymentSent: existing?.paymentSent ?? false,
+      escrowAmount:
+          double.tryParse(
+            _escrowAmountController.text.trim().replaceAll(',', ''),
+          ) ??
+          15000.0,
     );
   }
 
@@ -528,7 +541,9 @@ class _PostProjectScreenState extends State<PostProjectScreen> {
               const SizedBox(width: 12),
               Expanded(
                 child: Text(
-                  _isEditMode ? 'Update Project?' : 'Publish Project?',
+                  _isEditMode
+                      ? 'Update Project?'
+                      : 'Proceed to Escrow Deposit?',
                   style: GoogleFonts.poppins(
                     fontSize: 17,
                     fontWeight: FontWeight.w700,
@@ -541,7 +556,7 @@ class _PostProjectScreenState extends State<PostProjectScreen> {
           content: Text(
             _isEditMode
                 ? 'Save updates to "${_titleController.text.trim()}" and keep it open for university candidates?'
-                : 'Publish "${_titleController.text.trim()}" to the live SkillBridge catalog for verified university students?',
+                : 'Project "${_titleController.text.trim()}" will be saved and you will proceed to the Escrow Deposit screen to transfer funds (PKR ${_escrowAmountController.text.trim()}) to Admin escrow.',
             style: GoogleFonts.inter(
               fontSize: 13.5,
               color: AppColors.grayText,
@@ -555,7 +570,9 @@ class _PostProjectScreenState extends State<PostProjectScreen> {
             ),
             ElevatedButton(
               onPressed: () => Navigator.pop(ctx, true),
-              child: Text(_isEditMode ? 'Save & Publish' : 'Confirm & Publish'),
+              child: Text(
+                _isEditMode ? 'Save Updates' : 'Proceed to Escrow Payment',
+              ),
             ),
           ],
         );
@@ -567,32 +584,54 @@ class _PostProjectScreenState extends State<PostProjectScreen> {
     setState(() => _isPublishing = true);
 
     try {
-      final projectPayload = _buildProjectFromForm(status: 'Open');
+      final escrowAmount =
+          double.tryParse(
+            _escrowAmountController.text.trim().replaceAll(',', ''),
+          ) ??
+          15000.0;
+
       if (_isEditMode) {
+        final projectPayload = _buildProjectFromForm(
+          status: widget.existingProject?.status ?? 'Open',
+        );
         await _projectService.updateProject(projectPayload);
-      } else {
-        await _projectService.publishProject(projectPayload);
-      }
-
-      if (!mounted) return;
-      setState(() => _isPublishing = false);
-
-      ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(
-          content: Text(
-            _isEditMode
-                ? 'Project "${projectPayload.title}" updated.'
-                : 'Project "${projectPayload.title}" published to SkillBridge.',
+        if (!mounted) return;
+        setState(() => _isPublishing = false);
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(
+            content: Text('Project "${projectPayload.title}" updated.'),
+            backgroundColor: AppColors.statusOpen,
           ),
-          backgroundColor: AppColors.statusOpen,
-        ),
-      );
+        );
+        if (Navigator.canPop(context)) {
+          Navigator.pop(context, true);
+        }
+      } else {
+        // Upfront Escrow: create project draft with status 'pending_payment'
+        final projectPayload = _buildProjectFromForm(status: 'pending_payment');
+        final createdProject = await CompanyEscrowService().createProjectDraft(
+          project: projectPayload,
+          escrowAmount: escrowAmount,
+        );
 
-      if (widget.onTabChange != null) {
+        if (!mounted) return;
+        setState(() => _isPublishing = false);
+
+        // Immediately direct to Escrow Payment screen
+        await Navigator.push(
+          context,
+          MaterialPageRoute(
+            builder: (_) => CompanyEscrowPaymentScreen(project: createdProject),
+          ),
+        );
+
+        if (!mounted) return;
         _resetForm();
-        widget.onTabChange!(1);
-      } else if (Navigator.canPop(context)) {
-        Navigator.pop(context, true);
+        if (widget.onTabChange != null) {
+          widget.onTabChange!(1);
+        } else if (Navigator.canPop(context)) {
+          Navigator.pop(context, true);
+        }
       }
     } catch (e) {
       if (!mounted) return;
@@ -613,6 +652,7 @@ class _PostProjectScreenState extends State<PostProjectScreen> {
     _requirementsController.clear();
     _deliverablesController.clear();
     _openingsController.text = '1';
+    _escrowAmountController.text = '15000';
     _instructionsController.clear();
     _customSkillController.clear();
     if (mounted) {
@@ -764,6 +804,8 @@ class _PostProjectScreenState extends State<PostProjectScreen> {
                         _buildProjectTypeSelector(),
                         const SizedBox(height: 18),
                         _buildOpeningsField(),
+                        const SizedBox(height: 18),
+                        _buildEscrowAmountField(),
                       ],
                     ),
                     const SizedBox(height: 18),
@@ -1299,6 +1341,33 @@ class _PostProjectScreenState extends State<PostProjectScreen> {
         labelText: 'Students Assigned Per Project',
         hintText: 'One student can be assigned',
         prefixIcon: Icons.people_outline_rounded,
+      ),
+    );
+  }
+
+  Widget _buildEscrowAmountField() {
+    return TextFormField(
+      controller: _escrowAmountController,
+      keyboardType: const TextInputType.numberWithOptions(decimal: true),
+      style: GoogleFonts.inter(
+        fontSize: 14,
+        fontWeight: FontWeight.w600,
+        color: AppColors.deepNavy,
+      ),
+      validator: (val) {
+        if (val == null || val.trim().isEmpty) {
+          return 'Project Escrow budget amount is required';
+        }
+        final parsed = double.tryParse(val.trim().replaceAll(',', ''));
+        if (parsed == null || parsed <= 0) {
+          return 'Enter a valid project budget (minimum PKR 1,000)';
+        }
+        return null;
+      },
+      decoration: _fieldDecoration(
+        labelText: 'Project Budget / Escrow Deposit (PKR) *',
+        hintText: 'e.g. 25000',
+        prefixIcon: Icons.account_balance_wallet_outlined,
       ),
     );
   }

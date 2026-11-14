@@ -17,7 +17,14 @@ import 'package:link_vibe/core/widgets/student_avatar.dart';
 import 'package:link_vibe/feature/admin/models/admin_company_model.dart';
 import 'package:link_vibe/feature/admin/models/admin_project_model.dart';
 import 'package:link_vibe/feature/admin/models/admin_student_model.dart';
+import 'package:link_vibe/feature/admin/models/platform_payment_method_model.dart';
 import 'package:link_vibe/feature/admin/presentation/screens/admin_dashboard_screen.dart';
+import 'package:link_vibe/services/company_escrow_service.dart';
+import 'package:link_vibe/services/admin_project_approval_service.dart';
+import 'package:link_vibe/services/student_project_service.dart';
+import 'package:link_vibe/services/escrow_lifecycle_service.dart';
+import 'package:link_vibe/services/admin_dispute_payout_service.dart';
+import 'package:link_vibe/screens/admin/admin_dispute_resolution_screen.dart';
 import 'package:link_vibe/feature/admin/presentation/screens/admin_login_screen.dart';
 import 'package:link_vibe/feature/admin/presentation/screens/admin_settings_screen.dart';
 import 'package:link_vibe/feature/admin/presentation/screens/application_monitoring_screen.dart';
@@ -29,6 +36,7 @@ import 'package:link_vibe/feature/admin/presentation/screens/reports_analytics_s
 import 'package:link_vibe/feature/admin/presentation/screens/student_management_screen.dart';
 import 'package:link_vibe/feature/admin/services/admin_auth_service.dart';
 import 'package:link_vibe/feature/admin/services/admin_company_service.dart';
+import 'package:link_vibe/feature/admin/services/admin_payment_service.dart';
 import 'package:link_vibe/feature/admin/services/admin_project_service.dart';
 import 'package:link_vibe/feature/admin/services/admin_settings_service.dart';
 import 'package:link_vibe/feature/admin/services/admin_student_service.dart';
@@ -1027,7 +1035,6 @@ void main() {
             companyId: 'comp-nav-1',
             status: 'Open',
             duration: '4 weeks',
-            budget: 'Paid',
           ),
         ];
         CompanyApplicantService().applicantsNotifier.value = [
@@ -1731,5 +1738,375 @@ void main() {
         }
       },
     );
+
+    test('PlatformPaymentMethodModel serialization and properties', () {
+      const model = PlatformPaymentMethodModel(
+        id: 'ppm-test-01',
+        methodType: PlatformPaymentMethodType.bankAccount,
+        bankOrWalletName: 'Meezan Bank Ltd',
+        accountTitle: 'SkillBridge Escrow Services Pvt Ltd',
+        accountNumber: '01020304050607',
+        iban: 'PK36MEZN0001020304050607',
+        instructions: 'Include Project ID in memo.',
+        isActive: true,
+      );
+
+      final json = model.toJson();
+      expect(json['method_type'], PlatformPaymentMethodType.bankAccount);
+      expect(json['account_number'], '01020304050607');
+      expect(json['is_active'], isTrue);
+
+      final restored = PlatformPaymentMethodModel.fromJson(json);
+      expect(restored.id, 'ppm-test-01');
+      expect(restored.bankOrWalletName, 'Meezan Bank Ltd');
+      expect(restored.accountTitle, 'SkillBridge Escrow Services Pvt Ltd');
+      expect(restored.iban, 'PK36MEZN0001020304050607');
+      expect(restored.icon, Icons.account_balance_rounded);
+      expect(restored.brandColor, AppColors.primary);
+
+      final copied = restored.copyWith(isActive: false);
+      expect(copied.isActive, isFalse);
+      expect(copied.accountTitle, restored.accountTitle);
+    });
+
+    test('AdminPaymentService state and offline fallback operations', () async {
+      final service = AdminPaymentService();
+      await service.loadPaymentMethods();
+      expect(service.paymentMethodsNotifier.value.isNotEmpty, isTrue);
+
+      const customMethod = PlatformPaymentMethodModel(
+        id: 'ppm-custom-test',
+        methodType: PlatformPaymentMethodType.jazzCash,
+        bankOrWalletName: 'JazzCash Merchant',
+        accountTitle: 'SkillBridge Escrow JazzCash',
+        accountNumber: '03009988776',
+        isActive: true,
+      );
+
+      await service.addPaymentMethod(customMethod);
+      expect(
+        service.paymentMethodsNotifier.value.any(
+          (m) => m.id == 'ppm-custom-test',
+        ),
+        isTrue,
+      );
+
+      await service.toggleMethodStatus('ppm-custom-test', false);
+      final toggled = service.paymentMethodsNotifier.value.firstWhere(
+        (m) => m.id == 'ppm-custom-test',
+      );
+      expect(toggled.isActive, isFalse);
+
+      await service.deletePaymentMethod('ppm-custom-test');
+      expect(
+        service.paymentMethodsNotifier.value.any(
+          (m) => m.id == 'ppm-custom-test',
+        ),
+        isFalse,
+      );
+    });
+
+    test('CompanyEscrowService, AdminProjectApprovalService & StudentProjectService integration', () async {
+      final escrowService = CompanyEscrowService();
+      final approvalService = AdminProjectApprovalService();
+      final studentService = StudentProjectService();
+      const testEscrowProjectId = '11111111-2222-3333-4444-555555555555';
+
+      // 1. Company creates draft project with pending_payment
+      final draft = ProjectModel(
+        id: testEscrowProjectId,
+        title: 'Flutter Mobile App Challenge',
+        category: 'Mobile App Development',
+        description: 'Build enterprise flutter widgets with test cases.',
+        deadline: '2026-12-01',
+        companyName: 'TechCorp Pakistan',
+        companyId: 'company-uuid-1',
+        status: 'pending_payment',
+        escrowAmount: 25000.0,
+      );
+
+      final createdDraft = await escrowService.createProjectDraft(
+        project: draft,
+        escrowAmount: 25000.0,
+      );
+      expect(createdDraft.isPendingPayment, isTrue);
+      expect(createdDraft.escrowAmount, 25000.0);
+
+      // 2. Company fetches active payment accounts
+      final activeMethods = await escrowService
+          .getActivePlatformPaymentMethods();
+      expect(activeMethods.isNotEmpty, isTrue);
+
+      // 3. Company submits payment proof -> pending_verification
+      final proofSubmitted = await escrowService.submitPaymentProof(
+        projectId: testEscrowProjectId,
+        transactionId: 'TXN-99887766',
+        paymentMethodUsed: 'Meezan Bank Ltd',
+        receiptUrl:
+            'https://supabase.mock.storage/payment_receipts/receipt.jpg',
+      );
+      expect(proofSubmitted, isTrue);
+
+      // 4. Admin loads pending approvals
+      final pendingList = await approvalService.loadPendingApprovals();
+      expect(pendingList.any((p) => p.id == testEscrowProjectId), isTrue);
+
+      // 5. Admin approves -> status becomes Open, isEscrowVerified = true
+      final approved = await approvalService.markAsPaidAndPublish(
+        projectId: testEscrowProjectId,
+      );
+      expect(approved, isTrue);
+      expect(
+        approvalService.pendingApprovalsNotifier.value.any(
+          (p) => p.id == testEscrowProjectId,
+        ),
+        isFalse,
+      );
+
+      // 6. Student service fetches verified open projects
+      final verifiedOpen = await studentService.fetchVerifiedOpenProjects();
+      expect(
+        verifiedOpen.any(
+          (p) => p.id == testEscrowProjectId && p.isEscrowVerified,
+        ),
+        isTrue,
+      );
+
+      // 7. Verify filtering
+      final filtered = studentService.filterProjects(
+        category: 'Mobile App Development',
+        searchQuery: 'Flutter',
+      );
+      expect(filtered.any((p) => p.id == testEscrowProjectId), isTrue);
+    });
+
+    test('EscrowLifecycleService delivery, approval, and dispute lifecycle transitions', () async {
+      final lifecycle = EscrowLifecycleService();
+      const testEscrowProjectId = '11111111-2222-3333-4444-555555555555';
+
+      // Case ID generation
+      final caseId = lifecycle.generateCaseId();
+      expect(caseId.startsWith('#SB-'), isTrue);
+
+      // 1. Deliver Project
+      final delivered = await lifecycle.deliverProject(
+        projectId: testEscrowProjectId,
+        workUrl: 'https://github.com/student/solution',
+        summary: 'Completed all responsive widgets and tests.',
+      );
+      expect(delivered, isTrue);
+
+      final project = CompanyProjectService().allProjects.firstWhere(
+        (p) => p.id == testEscrowProjectId,
+      );
+      expect(project.isDelivered, isTrue);
+      expect(project.deliveredAt != null, isTrue);
+
+      // 2. Company approves and releases
+      final approved = await lifecycle.approveAndReleasePayment(
+        projectId: testEscrowProjectId,
+        companyFeedback: 'Outstanding work!',
+      );
+      expect(approved, isTrue);
+
+      final payoutReadyProject = CompanyProjectService().allProjects.firstWhere(
+        (p) => p.id == testEscrowProjectId,
+      );
+      expect(payoutReadyProject.isReadyForPayout, isTrue);
+      expect(payoutReadyProject.payoutType, 'full_student');
+      expect(payoutReadyProject.platformCommissionAmount, 2500.0);
+      expect(payoutReadyProject.studentPayoutAmount, 22500.0);
+      expect(payoutReadyProject.companyRefundAmount, 0.0);
+
+      // 3. Dispute transition test
+      final disputeCase = await lifecycle.raiseDispute(
+        projectId: testEscrowProjectId,
+        reason: 'Code submitted has failing tests.',
+        raisedByRole: 'Company (TechCorp Pakistan)',
+      );
+      expect(disputeCase != null && disputeCase.startsWith('#SB-'), isTrue);
+
+      final disputedProject = CompanyProjectService().allProjects.firstWhere(
+        (p) => p.id == testEscrowProjectId,
+      );
+      expect(disputedProject.isDisputed, isTrue);
+      expect(disputedProject.disputeCaseId, disputeCase);
+    });
+
+    test('AdminDisputePayoutService 3-way resolution calculations and final payout', () async {
+      final payoutService = AdminDisputePayoutService();
+      const testEscrowProjectId = '11111111-2222-3333-4444-555555555555';
+
+      // Load disputes
+      final disputes = await payoutService.loadDisputedProjects();
+      expect(disputes.any((p) => p.id == testEscrowProjectId), isTrue);
+      final disputedProject = disputes.firstWhere(
+        (p) => p.id == testEscrowProjectId,
+      );
+
+      // Decision 1: 50-50 Split
+      final splitApplied = await payoutService.resolveDisputeDecision(
+        projectId: testEscrowProjectId,
+        decisionType: 'split_50_50',
+        adminNotes: 'Partial work accepted, remainder refunded.',
+      );
+      expect(splitApplied, isTrue);
+
+      var p = payoutService.payoutReadyProjectsNotifier.value.firstWhere(
+        (p) => p.id == testEscrowProjectId,
+      );
+      expect(p.isReadyForPayout, isTrue);
+      expect(p.payoutType, 'split_50_50');
+      expect(p.platformCommissionAmount, 2500.0);
+      expect(p.studentPayoutAmount, 11250.0);
+      expect(p.companyRefundAmount, 11250.0);
+
+      // Decision 2: 100% Student
+      payoutService.disputedProjectsNotifier.value = [disputedProject];
+      final fullStudentApplied = await payoutService.resolveDisputeDecision(
+        projectId: testEscrowProjectId,
+        decisionType: 'full_student',
+        adminNotes: 'Deliverables verified compliant.',
+      );
+      expect(fullStudentApplied, isTrue);
+
+      p = payoutService.payoutReadyProjectsNotifier.value.firstWhere(
+        (p) => p.id == testEscrowProjectId,
+      );
+      expect(p.studentPayoutAmount, 22500.0);
+      expect(p.companyRefundAmount, 0.0);
+
+      // Decision 3: 100% Company Refund
+      payoutService.disputedProjectsNotifier.value = [disputedProject];
+      final fullRefundApplied = await payoutService.resolveDisputeDecision(
+        projectId: testEscrowProjectId,
+        decisionType: 'full_company_refund',
+        adminNotes: 'Deliverables failed requirements.',
+      );
+      expect(fullRefundApplied, isTrue);
+
+      p = payoutService.payoutReadyProjectsNotifier.value.firstWhere(
+        (p) => p.id == testEscrowProjectId,
+      );
+      expect(p.studentPayoutAmount, 0.0);
+      expect(p.companyRefundAmount, 25000.0);
+
+      // Final payout completion
+      final completed = await payoutService.completePayout(
+        projectId: testEscrowProjectId,
+        transactionId: 'PAYOUT-TXN-12345',
+        receiptUrl: 'https://storage.mock/receipts/payout.png',
+      );
+      expect(completed, isTrue);
+
+      final completedProject = CompanyProjectService().allProjects.firstWhere(
+        (p) => p.id == testEscrowProjectId,
+      );
+      expect(completedProject.isCompleted, isTrue);
+    });
+
+    testWidgets('AdminDisputeResolutionScreen renders tabs and UI cleanly', (
+      tester,
+    ) async {
+      await tester.pumpWidget(
+        const MaterialApp(home: AdminDisputeResolutionScreen()),
+      );
+      await tester.pump(const Duration(milliseconds: 200));
+      expect(find.byType(AdminDisputeResolutionScreen), findsOneWidget);
+      expect(find.text('Disputes & Escrow Payouts'), findsAtLeastNWidgets(1));
+    });
+
+    test('Project Revision flow with max 2 revisions limit', () async {
+      final lifecycle = EscrowLifecycleService();
+      const testEscrowProjectId = '11111111-2222-3333-4444-555555555555';
+
+      // Reset test project to delivered state
+      await lifecycle.deliverProject(
+        projectId: testEscrowProjectId,
+        workUrl: 'https://github.com/student/first-cut',
+        summary: 'Initial project submission.',
+      );
+
+      var p = CompanyProjectService().allProjects.firstWhere(
+        (p) => p.id == testEscrowProjectId,
+      );
+      expect(p.isDelivered, isTrue);
+      expect(p.revisionCount, 0);
+      expect(p.canRequestRevision, isTrue);
+      expect(p.remainingRevisions, 2);
+
+      // Revision 1
+      final rev1Success = await lifecycle.requestProjectRevision(
+        projectId: testEscrowProjectId,
+        revisionNotes: 'Please fix responsive layout on tablet screens.',
+      );
+      expect(rev1Success, isTrue);
+
+      p = CompanyProjectService().allProjects.firstWhere(
+        (p) => p.id == testEscrowProjectId,
+      );
+      expect(p.isRevisionRequested, isTrue);
+      expect(p.revisionCount, 1);
+      expect(p.canRequestRevision, isTrue);
+      expect(p.remainingRevisions, 1);
+      expect(
+        p.revisionNotes,
+        'Please fix responsive layout on tablet screens.',
+      );
+
+      // Student re-delivers after Revision 1
+      final redeliver1 = await lifecycle.reDeliverProject(
+        projectId: testEscrowProjectId,
+        workUrl: 'https://github.com/student/first-cut-rev1',
+        summary: 'Fixed tablet layout constraints.',
+      );
+      expect(redeliver1, isTrue);
+
+      p = CompanyProjectService().allProjects.firstWhere(
+        (p) => p.id == testEscrowProjectId,
+      );
+      expect(p.isDelivered, isTrue);
+      expect(p.revisionCount, 1);
+      expect(p.remainingRevisions, 1);
+
+      // Revision 2
+      final rev2Success = await lifecycle.requestProjectRevision(
+        projectId: testEscrowProjectId,
+        revisionNotes: 'Need dark mode styling adjustments.',
+      );
+      expect(rev2Success, isTrue);
+
+      p = CompanyProjectService().allProjects.firstWhere(
+        (p) => p.id == testEscrowProjectId,
+      );
+      expect(p.isRevisionRequested, isTrue);
+      expect(p.revisionCount, 2);
+      expect(p.canRequestRevision, isFalse);
+      expect(p.remainingRevisions, 0);
+
+      // Student re-delivers after Revision 2
+      final redeliver2 = await lifecycle.reDeliverProject(
+        projectId: testEscrowProjectId,
+        workUrl: 'https://github.com/student/first-cut-rev2',
+        summary: 'Dark mode adjusted.',
+      );
+      expect(redeliver2, isTrue);
+
+      p = CompanyProjectService().allProjects.firstWhere(
+        (p) => p.id == testEscrowProjectId,
+      );
+      expect(p.isDelivered, isTrue);
+      expect(p.revisionCount, 2);
+      expect(p.canRequestRevision, isFalse);
+      expect(p.remainingRevisions, 0);
+
+      // Revision 3 attempt MUST fail because limit is 2
+      final rev3Success = await lifecycle.requestProjectRevision(
+        projectId: testEscrowProjectId,
+        revisionNotes: 'Try another change.',
+      );
+      expect(rev3Success, isFalse);
+      expect(lifecycle.lastError, contains('Maximum limit of 2 revisions'));
+    });
   });
 }

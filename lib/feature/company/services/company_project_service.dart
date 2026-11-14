@@ -137,7 +137,6 @@ class CompanyProjectService {
           companyId: p['company_id']?.toString() ?? profile.id,
           status: p['status']?.toString() ?? 'Open',
           duration: p['duration']?.toString() ?? '3-4 weeks',
-          budget: p['budget']?.toString() ?? '',
           applicantsCount: appCounts[pid] ?? 0,
           assignedStudent: computedAssigned,
           progress: (p['progress'] as num?)?.toDouble() ?? 0.0,
@@ -219,10 +218,6 @@ class CompanyProjectService {
         'deadline': savedProject.deadline,
         'openings': 1,
         'skills': savedProject.skillsRequired,
-        'stipend': savedProject.budget.isNotEmpty
-            ? savedProject.budget
-            : 'Academic Credit / Verified Certificate',
-        'budget': savedProject.budget,
         'status': savedProject.status,
         'progress': savedProject.progress,
         'payment_sent': savedProject.paymentSent,

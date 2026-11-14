@@ -1,5 +1,6 @@
 import 'dart:convert';
 import 'dart:math';
+
 import 'package:flutter/foundation.dart';
 import 'package:flutter/scheduler.dart';
 import 'package:shared_preferences/shared_preferences.dart';
@@ -300,7 +301,8 @@ class AppDataService extends ChangeNotifier {
         for (final raw in projectRows) {
           final p = Map<String, dynamic>.from(raw);
           final status = p['status']?.toString() ?? 'Open';
-          if (status == 'Removed' || status == 'Flagged') continue;
+          final sLower = status.toLowerCase();
+          if (sLower != 'open') continue;
 
           final postedBy =
               p['posted_by']?.toString() ?? p['user_id']?.toString() ?? '';
@@ -308,11 +310,6 @@ class AppDataService extends ChangeNotifier {
           final comp = companiesByUserId[postedBy] ?? companiesById[compId];
 
           final skills = SupabaseHelper.parseStringList(p['skills']);
-          final stipend = (p['stipend']?.toString().trim().isNotEmpty == true)
-              ? p['stipend'].toString()
-              : (p['budget']?.toString().trim().isNotEmpty == true
-                    ? p['budget'].toString()
-                    : 'Academic Credit / Verified Certificate');
 
           mappedProjects.add({
             'id': p['id']?.toString() ?? '',
@@ -328,8 +325,6 @@ class AppDataService extends ChangeNotifier {
             'workMode': p['work_mode']?.toString() ?? 'Remote',
             'deadline': p['deadline']?.toString() ?? 'Flexible',
             'status': status,
-            'stipend': stipend,
-            'budget': p['budget']?.toString() ?? stipend,
             'description': p['description']?.toString() ?? '',
             'requirements': p['requirements']?.toString() ?? '',
             'deliverables': p['deliverables']?.toString() ?? '',
@@ -919,7 +914,8 @@ class AppDataService extends ChangeNotifier {
         );
         final cnt = (res is num)
             ? res.toInt()
-            : (int.tryParse(res?.toString() ?? '') ?? getProjectApplicantsCount(pid));
+            : (int.tryParse(res?.toString() ?? '') ??
+                  getProjectApplicantsCount(pid));
         _projectApplicantCounts[pid] = cnt;
         for (final p in _projects) {
           if (p['id']?.toString() == pid) {
@@ -1033,22 +1029,23 @@ class AppDataService extends ChangeNotifier {
     try {
       final studentName =
           (_profile['name']?.toString().trim().isNotEmpty == true)
-              ? _profile['name'].toString().trim()
-              : (_userName.isNotEmpty
-                  ? _userName
-                  : (user.userMetadata?['name']?.toString() ??
+          ? _profile['name'].toString().trim()
+          : (_userName.isNotEmpty
+                ? _userName
+                : (user.userMetadata?['name']?.toString() ??
                       user.userMetadata?['full_name']?.toString() ??
                       'Student'));
       final university =
           (_profile['university']?.toString().trim().isNotEmpty == true)
-              ? _profile['university'].toString().trim()
-              : (user.userMetadata?['university']?.toString() ?? '');
+          ? _profile['university'].toString().trim()
+          : (user.userMetadata?['university']?.toString() ?? '');
       final skillsList = SupabaseHelper.parseStringList(app['skills']);
       final projectId =
           project['id']?.toString() ?? project['projectId']?.toString();
       final companyId =
           project['companyId']?.toString() ?? project['company_id']?.toString();
-      final resumeLink = (app['resumeLink']?.toString().trim().isNotEmpty == true)
+      final resumeLink =
+          (app['resumeLink']?.toString().trim().isNotEmpty == true)
           ? app['resumeLink'].toString().trim()
           : (_profile['resumeUrl']?.toString().trim() ?? '');
 
@@ -1068,7 +1065,8 @@ class AppDataService extends ChangeNotifier {
         'email': studentEmail,
         'student_email': studentEmail,
         'university': university,
-        'student_degree': _profile['degree']?.toString() ?? 'BS Computer Science',
+        'student_degree':
+            _profile['degree']?.toString() ?? 'BS Computer Science',
         'student_department':
             _profile['department']?.toString() ?? 'Computer Science',
         'student_semester': _profile['semester']?.toString() ?? 'Senior',
@@ -1145,8 +1143,6 @@ class AppDataService extends ChangeNotifier {
         'deadline': p['deadline'] ?? 'Flexible',
         'openings': 1,
         'skills': SupabaseHelper.parseStringList(p['skills']),
-        'stipend': p['stipend'] ?? p['budget'] ?? 'Competitive',
-        'budget': p['budget'] ?? p['stipend'] ?? 'Competitive',
         'company_name': p['company'] ?? p['company_name'] ?? 'Company',
         'status': p['status'] ?? 'Open',
         'posted_by': user.id,
@@ -1496,19 +1492,21 @@ class AppDataService extends ChangeNotifier {
     final user = supabase?.auth.currentUser;
     if (supabase != null && user != null) {
       try {
-        await supabase.from('students').update({
-          'resume_url': cleanUrl,
-          'verification_doc': cleanUrl,
-          'updated_at': DateTime.now().toIso8601String(),
-        }).eq('user_id', user.id);
+        await supabase
+            .from('students')
+            .update({
+              'resume_url': cleanUrl,
+              'verification_doc': cleanUrl,
+              'updated_at': DateTime.now().toIso8601String(),
+            })
+            .eq('user_id', user.id);
       } catch (e) {
         debugPrint('Supabase student resume_url update warning: $e');
       }
     }
   }
 
-  Map<String, bool> getPrivacySettings() =>
-      Map.unmodifiable(_privacySettings);
+  Map<String, bool> getPrivacySettings() => Map.unmodifiable(_privacySettings);
 
   Future<void> updatePrivacySetting(String key, bool value) async {
     _privacySettings[key] = value;
@@ -1554,22 +1552,32 @@ class AppDataService extends ChangeNotifier {
     final resolvedEmail = (email != null && email.trim().isNotEmpty)
         ? email.trim()
         : (_userEmail.isNotEmpty
-            ? _userEmail
-            : ((user?.email?.isNotEmpty == true)
-                ? user!.email!
-                : (_profile['email']?.toString() ?? '')));
+              ? _userEmail
+              : ((user?.email?.isNotEmpty == true)
+                    ? user!.email!
+                    : (_profile['email']?.toString() ?? '')));
 
     String resolvedName = (senderName != null && senderName.trim().isNotEmpty)
         ? senderName.trim()
         : (_userName.trim().isNotEmpty
-            ? _userName.trim()
-            : (_profile['name']?.toString().trim().isNotEmpty == true
-                ? _profile['name'].toString().trim()
-                : (user?.userMetadata?['name']?.toString().trim().isNotEmpty == true
-                    ? user!.userMetadata!['name'].toString().trim()
-                    : (user?.userMetadata?['full_name']?.toString().trim().isNotEmpty == true
-                        ? user!.userMetadata!['full_name'].toString().trim()
-                        : ''))));
+              ? _userName.trim()
+              : (_profile['name']?.toString().trim().isNotEmpty == true
+                    ? _profile['name'].toString().trim()
+                    : (user?.userMetadata?['name']
+                                  ?.toString()
+                                  .trim()
+                                  .isNotEmpty ==
+                              true
+                          ? user!.userMetadata!['name'].toString().trim()
+                          : (user?.userMetadata?['full_name']
+                                        ?.toString()
+                                        .trim()
+                                        .isNotEmpty ==
+                                    true
+                                ? user!.userMetadata!['full_name']
+                                      .toString()
+                                      .trim()
+                                : ''))));
 
     final supabase = SupabaseHelper.clientOrNull;
     if (resolvedName.isEmpty && supabase != null && user != null) {
@@ -1579,7 +1587,8 @@ class AppDataService extends ChangeNotifier {
             .select('name')
             .eq('id', user.id)
             .maybeSingle();
-        if (prof != null && prof['name']?.toString().trim().isNotEmpty == true) {
+        if (prof != null &&
+            prof['name']?.toString().trim().isNotEmpty == true) {
           resolvedName = prof['name'].toString().trim();
           _profile['name'] = resolvedName;
           _userName = resolvedName;
@@ -1801,7 +1810,8 @@ class AppDataService extends ChangeNotifier {
 
     // Legacy plaintext entry migration (only if upgrading old local storage)
     final legacyPlain = acc['password']?.toString();
-    if (legacyPlain != null && AdminHashUtil.secureCompare(legacyPlain, cleanPass)) {
+    if (legacyPlain != null &&
+        AdminHashUtil.secureCompare(legacyPlain, cleanPass)) {
       final salt = _generateLocalSalt();
       acc['passwordSalt'] = salt;
       acc['passwordHash'] = AdminHashUtil.hashPassword(cleanPass, salt);

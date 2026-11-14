@@ -16,13 +16,22 @@ class AdminStudentService {
 
   int get totalCount => studentsNotifier.value.length;
   int get verifiedCount => studentsNotifier.value
-      .where((s) => s.verificationStatus == StudentVerificationStatus.verified)
+      .where(
+        (student) =>
+            student.verificationStatus == StudentVerificationStatus.verified,
+      )
       .length;
   int get pendingCount => studentsNotifier.value
-      .where((s) => s.verificationStatus == StudentVerificationStatus.pending)
+      .where(
+        (student) =>
+            student.verificationStatus == StudentVerificationStatus.pending,
+      )
       .length;
   int get rejectedCount => studentsNotifier.value
-      .where((s) => s.verificationStatus == StudentVerificationStatus.rejected)
+      .where(
+        (student) =>
+            student.verificationStatus == StudentVerificationStatus.rejected,
+      )
       .length;
   int get suspendedCount => studentsNotifier.value
       .where((s) => s.accountStatus == StudentAccountStatus.suspended)
@@ -55,7 +64,9 @@ class AdminStudentService {
           final id = p['id']?.toString() ?? '';
           if (id.isEmpty) continue;
           allProfilesById[id] = p;
-          final uType = (p['user_type']?.toString() ?? 'student').trim().toLowerCase();
+          final uType = (p['user_type']?.toString() ?? 'student')
+              .trim()
+              .toLowerCase();
           if (uType == 'student' || uType.isEmpty) {
             profilesById[id] = p;
           }
@@ -123,14 +134,17 @@ class AdminStudentService {
         final id = row['id']?.toString() ?? '';
         final userId = row['user_id']?.toString();
         final anyProf = userId != null ? allProfilesById[userId] : null;
-        final anyRole = (anyProf?['user_type']?.toString() ?? '').trim().toLowerCase();
+        final anyRole = (anyProf?['user_type']?.toString() ?? '')
+            .trim()
+            .toLowerCase();
         if (anyRole == 'company' || anyRole == 'admin') {
           continue;
         }
         if (userId != null && userId.isNotEmpty) seenUserIds.add(userId);
         final profile = userId != null ? profilesById[userId] : null;
 
-        final rowAccRaw = (row['account_status']?.toString().trim().toLowerCase() ??
+        final rowAccRaw =
+            (row['account_status']?.toString().trim().toLowerCase() ??
             profile?['account_status']?.toString().trim().toLowerCase() ??
             'active');
         final name = (row['full_name']?.toString().trim().isNotEmpty == true)
@@ -172,12 +186,12 @@ class AdminStudentService {
             : (resumeUrl.startsWith('http') ? resumeUrl : null);
         final docName = rawDoc.isNotEmpty
             ? (rawDoc.startsWith('http')
-                ? Uri.tryParse(rawDoc)?.pathSegments.lastWhere(
-                      (s) => s.isNotEmpty,
-                      orElse: () => 'Verification_Document.pdf',
-                    ) ??
-                    'Verification_Document.pdf'
-                : rawDoc)
+                  ? Uri.tryParse(rawDoc)?.pathSegments.lastWhere(
+                          (s) => s.isNotEmpty,
+                          orElse: () => 'Verification_Document.pdf',
+                        ) ??
+                        'Verification_Document.pdf'
+                  : rawDoc)
             : (resumeUrl.isNotEmpty ? 'Academic_Resume_Document' : '');
 
         final matchingLogs = auditRows
@@ -187,13 +201,15 @@ class AdminStudentService {
                   target.toLowerCase() == name.toLowerCase() ||
                   target.toLowerCase() == email.toLowerCase();
             })
-            .map((l) => StudentAuditRecord(
-                  id: l['id']?.toString() ?? '',
-                  action: l['action']?.toString() ?? 'Audit Event',
-                  adminName: l['admin_email']?.toString() ?? 'Administrator',
-                  timestamp: SupabaseHelper.formatRelativeTime(l['created_at']),
-                  note: l['details']?.toString(),
-                ))
+            .map(
+              (l) => StudentAuditRecord(
+                id: l['id']?.toString() ?? '',
+                action: l['action']?.toString() ?? 'Audit Event',
+                adminName: l['admin_email']?.toString() ?? 'Administrator',
+                timestamp: SupabaseHelper.formatRelativeTime(l['created_at']),
+                note: l['details']?.toString(),
+              ),
+            )
             .toList();
 
         loaded.add(
@@ -203,20 +219,23 @@ class AdminStudentService {
             name: name,
             email: email,
             avatarInitial: SupabaseHelper.initialsFor(name, fallback: 'ST'),
-            university: (row['university']?.toString().trim().isNotEmpty == true)
+            university:
+                (row['university']?.toString().trim().isNotEmpty == true)
                 ? row['university'].toString().trim()
                 : (profile?['university']?.toString().trim() ?? ''),
-            department: (row['department']?.toString().trim().isNotEmpty == true)
+            department:
+                (row['department']?.toString().trim().isNotEmpty == true)
                 ? row['department'].toString().trim()
                 : (profile?['department']?.toString().trim() ??
-                    'Computer Science'),
+                      'Computer Science'),
             degree: (row['degree']?.toString().trim().isNotEmpty == true)
                 ? row['degree'].toString().trim()
                 : (profile?['degree']?.toString().trim() ?? 'BS'),
             semester: (row['semester']?.toString().trim().isNotEmpty == true)
                 ? row['semester'].toString().trim()
                 : (profile?['semester']?.toString().trim() ?? '1st Semester'),
-            cgpa: (row['cgpa'] as num?)?.toDouble() ??
+            cgpa:
+                (row['cgpa'] as num?)?.toDouble() ??
                 (profile?['cgpa'] as num?)?.toDouble() ??
                 0.0,
             skills: SupabaseHelper.parseStringList(row['skills']),
@@ -236,17 +255,18 @@ class AdminStudentService {
             bio: (row['bio']?.toString().trim().isNotEmpty == true)
                 ? row['bio'].toString().trim()
                 : (profile?['bio']?.toString().trim() ?? ''),
-            applicationsCount: (userId != null ? totalAppsByKey[userId] : null) ??
+            applicationsCount:
+                (userId != null ? totalAppsByKey[userId] : null) ??
                 totalAppsByKey['email:${email.toLowerCase()}'] ??
                 0,
             projectsCompletedCount:
                 (userId != null ? completedByKey[userId] : null) ??
-                    completedByKey['email:${email.toLowerCase()}'] ??
-                    0,
+                completedByKey['email:${email.toLowerCase()}'] ??
+                0,
             activeProjectsCount:
                 (userId != null ? activeByKey[userId] : null) ??
-                    activeByKey['email:${email.toLowerCase()}'] ??
-                    0,
+                activeByKey['email:${email.toLowerCase()}'] ??
+                0,
             auditHistory: matchingLogs,
           ),
         );
@@ -263,8 +283,9 @@ class AdminStudentService {
             rawProfileName.toLowerCase() == 'deleted account') {
           continue;
         }
-        final name =
-            rawProfileName.isNotEmpty ? rawProfileName : 'Student Member';
+        final name = rawProfileName.isNotEmpty
+            ? rawProfileName
+            : 'Student Member';
         final createdDt =
             SupabaseHelper.parseDate(p['created_at']) ?? DateTime.now();
         final regDate =
@@ -288,8 +309,8 @@ class AdminStudentService {
                 : StudentVerificationStatus.pending,
             accountStatus:
                 (p['account_status']?.toString().toLowerCase() == 'suspended')
-                    ? StudentAccountStatus.suspended
-                    : StudentAccountStatus.active,
+                ? StudentAccountStatus.suspended
+                : StudentAccountStatus.active,
             registrationDate: regDate,
             registrationDateTime: createdDt,
             verificationDocumentName: '',
@@ -298,13 +319,16 @@ class AdminStudentService {
             portfolioUrl: '',
             githubUrl: '',
             bio: p['bio']?.toString() ?? '',
-            applicationsCount: totalAppsByKey[entry.key] ??
+            applicationsCount:
+                totalAppsByKey[entry.key] ??
                 totalAppsByKey['email:${(p['email']?.toString() ?? '').trim().toLowerCase()}'] ??
                 0,
-            projectsCompletedCount: completedByKey[entry.key] ??
+            projectsCompletedCount:
+                completedByKey[entry.key] ??
                 completedByKey['email:${(p['email']?.toString() ?? '').trim().toLowerCase()}'] ??
                 0,
-            activeProjectsCount: activeByKey[entry.key] ??
+            activeProjectsCount:
+                activeByKey[entry.key] ??
                 activeByKey['email:${(p['email']?.toString() ?? '').trim().toLowerCase()}'] ??
                 0,
             auditHistory: const [],
@@ -417,21 +441,17 @@ class AdminStudentService {
     required String adminName,
   }) async {
     final list = List<AdminStudentModel>.from(studentsNotifier.value);
-    final idx = list.indexWhere((s) => s.id == studentId || s.userId == studentId);
+    final idx = list.indexWhere(
+      (s) => s.id == studentId || s.userId == studentId,
+    );
     if (idx == -1) return false;
 
     final student = list[idx];
     final nowIso = DateTime.now().toIso8601String();
     final persisted = await _persistStudentUpdate(
       student,
-      studentFields: {
-        'verification_status': 'verified',
-        'updated_at': nowIso,
-      },
-      profileFields: {
-        'is_verified': true,
-        'updated_at': nowIso,
-      },
+      studentFields: {'verification_status': 'verified', 'updated_at': nowIso},
+      profileFields: {'is_verified': true, 'updated_at': nowIso},
       auditAction: 'STUDENT_VERIFICATION_APPROVED',
       auditDetails: 'Approved by $adminName.',
     );
@@ -445,7 +465,8 @@ class AdminStudentService {
         action: 'Verification Approved',
         adminName: adminName,
         timestamp: 'Just now',
-        note: 'University credentials authenticated by platform administration.',
+        note:
+            'University credentials authenticated by platform administration.',
       ),
     );
 
@@ -458,45 +479,40 @@ class AdminStudentService {
     return true;
   }
 
-  /// Reject student verification with mandatory reason.
+  /// Reject student verification with a recorded reason.
   Future<bool> rejectStudentVerification({
     required String studentId,
     required String reason,
     required String adminName,
   }) async {
     final list = List<AdminStudentModel>.from(studentsNotifier.value);
-    final idx = list.indexWhere((s) => s.id == studentId || s.userId == studentId);
+    final idx = list.indexWhere(
+      (s) => s.id == studentId || s.userId == studentId,
+    );
     if (idx == -1) return false;
 
     final student = list[idx];
     final nowIso = DateTime.now().toIso8601String();
     final persisted = await _persistStudentUpdate(
       student,
-      studentFields: {
-        'verification_status': 'rejected',
-        'updated_at': nowIso,
-      },
-      profileFields: {
-        'is_verified': false,
-        'updated_at': nowIso,
-      },
+      studentFields: {'verification_status': 'rejected', 'updated_at': nowIso},
+      profileFields: {'is_verified': false, 'updated_at': nowIso},
       auditAction: 'STUDENT_VERIFICATION_REJECTED',
       auditDetails: reason.trim(),
     );
     if (!persisted.ok) return false;
 
-    final history = List<StudentAuditRecord>.from(student.auditHistory);
-    history.insert(
-      0,
-      StudentAuditRecord(
-        id: 'aud_${DateTime.now().millisecondsSinceEpoch}',
-        action: 'Verification Rejected',
-        adminName: adminName,
-        timestamp: 'Just now',
-        note: reason.trim(),
-      ),
-    );
-
+    final history = List<StudentAuditRecord>.from(student.auditHistory)
+      ..insert(
+        0,
+        StudentAuditRecord(
+          id: 'aud_${DateTime.now().millisecondsSinceEpoch}',
+          action: 'Verification Rejected',
+          adminName: adminName,
+          timestamp: 'Just now',
+          note: reason.trim(),
+        ),
+      );
     list[idx] = student.copyWith(
       id: persisted.resolvedId,
       verificationStatus: StudentVerificationStatus.rejected,
@@ -513,34 +529,32 @@ class AdminStudentService {
     required String adminName,
   }) async {
     final list = List<AdminStudentModel>.from(studentsNotifier.value);
-    final idx = list.indexWhere((s) => s.id == studentId || s.userId == studentId);
+    final idx = list.indexWhere(
+      (s) => s.id == studentId || s.userId == studentId,
+    );
     if (idx == -1) return false;
 
     final student = list[idx];
     final nowIso = DateTime.now().toIso8601String();
     final persisted = await _persistStudentUpdate(
       student,
-      studentFields: {
-        'verification_status': 'pending',
-        'updated_at': nowIso,
-      },
+      studentFields: {'verification_status': 'pending', 'updated_at': nowIso},
       auditAction: 'STUDENT_DOCS_REQUESTED',
       auditDetails: instructions.trim(),
     );
     if (!persisted.ok) return false;
 
-    final history = List<StudentAuditRecord>.from(student.auditHistory);
-    history.insert(
-      0,
-      StudentAuditRecord(
-        id: 'aud_${DateTime.now().millisecondsSinceEpoch}',
-        action: 'Resubmission Requested',
-        adminName: adminName,
-        timestamp: 'Just now',
-        note: instructions.trim(),
-      ),
-    );
-
+    final history = List<StudentAuditRecord>.from(student.auditHistory)
+      ..insert(
+        0,
+        StudentAuditRecord(
+          id: 'aud_${DateTime.now().millisecondsSinceEpoch}',
+          action: 'Resubmission Requested',
+          adminName: adminName,
+          timestamp: 'Just now',
+          note: instructions.trim(),
+        ),
+      );
     list[idx] = student.copyWith(
       id: persisted.resolvedId,
       verificationStatus: StudentVerificationStatus.pending,
@@ -557,7 +571,9 @@ class AdminStudentService {
     required String adminName,
   }) async {
     final list = List<AdminStudentModel>.from(studentsNotifier.value);
-    final idx = list.indexWhere((s) => s.id == studentId || s.userId == studentId);
+    final idx = list.indexWhere(
+      (s) => s.id == studentId || s.userId == studentId,
+    );
     if (idx == -1) return false;
 
     final student = list[idx];
@@ -569,10 +585,7 @@ class AdminStudentService {
         'suspension_reason': reason.trim(),
         'updated_at': nowIso,
       },
-      profileFields: {
-        'account_status': 'suspended',
-        'updated_at': nowIso,
-      },
+      profileFields: {'account_status': 'suspended', 'updated_at': nowIso},
       auditAction: 'STUDENT_SUSPENDED',
       auditDetails: reason.trim(),
     );
@@ -606,7 +619,9 @@ class AdminStudentService {
     required String adminName,
   }) async {
     final list = List<AdminStudentModel>.from(studentsNotifier.value);
-    final idx = list.indexWhere((s) => s.id == studentId || s.userId == studentId);
+    final idx = list.indexWhere(
+      (s) => s.id == studentId || s.userId == studentId,
+    );
     if (idx == -1) return false;
 
     final student = list[idx];
@@ -618,10 +633,7 @@ class AdminStudentService {
         'suspension_reason': null,
         'updated_at': nowIso,
       },
-      profileFields: {
-        'account_status': 'active',
-        'updated_at': nowIso,
-      },
+      profileFields: {'account_status': 'active', 'updated_at': nowIso},
       auditAction: 'STUDENT_REACTIVATED',
       auditDetails: 'Reactivated by $adminName.',
     );
@@ -649,18 +661,19 @@ class AdminStudentService {
     return true;
   }
 
-  /// Bulk Approve multiple students sequentially against Supabase.
+  /// Bulk-approve students sequentially so each result is persisted and audited.
   Future<int> bulkApproveStudents({
     required List<String> studentIds,
     required String adminName,
   }) async {
     int approvedCount = 0;
     for (final id in studentIds) {
-      final ok = await approveStudentVerification(
+      if (await approveStudentVerification(
         studentId: id,
         adminName: adminName,
-      );
-      if (ok) approvedCount++;
+      )) {
+        approvedCount++;
+      }
     }
     return approvedCount;
   }
@@ -674,7 +687,8 @@ class AdminStudentService {
     if (supabase == null) return;
     try {
       await supabase.from('admin_audit_logs').insert({
-        'admin_email': SupabaseHelper.currentUser?.email ?? 'admin@skillbridge.edu.pk',
+        'admin_email':
+            SupabaseHelper.currentUser?.email ?? 'admin@skillbridge.edu.pk',
         'action': action,
         'target': target,
         'details': details,
@@ -687,12 +701,12 @@ class AdminStudentService {
   String exportPermittedStudentsCsv(List<AdminStudentModel> students) {
     final buffer = StringBuffer();
     buffer.writeln(
-      'ID,Full Name,Email,University,Department,Degree,Semester,CGPA,Verification Status,Account Status,Registration Date',
+      'ID,Full Name,Email,University,Department,Degree,Semester,CGPA,Account Status,Registration Date',
     );
 
     for (final s in students) {
       buffer.writeln(
-        '${s.id},"${s.name}","${s.email}","${s.university}","${s.department}","${s.degree}","${s.semester}",${s.cgpa},${s.verificationStatus.name},${s.accountStatus.name},${s.registrationDate}',
+        '${s.id},"${s.name}","${s.email}","${s.university}","${s.department}","${s.degree}","${s.semester}",${s.cgpa},${s.accountStatus.name},${s.registrationDate}',
       );
     }
     return buffer.toString();

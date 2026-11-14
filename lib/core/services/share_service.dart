@@ -106,11 +106,6 @@ class ShareService {
         ? project['company'].toString().trim()
         : 'Partner Company';
     final category = project['category']?.toString().trim() ?? 'General';
-    final stipend = project['stipend']?.toString().trim().isNotEmpty == true
-        ? project['stipend'].toString().trim()
-        : (project['budget']?.toString().trim().isNotEmpty == true
-            ? project['budget'].toString().trim()
-            : 'Academic Credit / Verified Certificate');
     final workMode = project['workMode']?.toString().trim() ?? 'Remote';
     final duration = project['duration']?.toString().trim() ?? 'Flexible';
     final description = project['description']?.toString().trim() ?? '';
@@ -125,8 +120,7 @@ class ShareService {
 
     final buffer = StringBuffer()
       ..writeln('*$title* — $company')
-      ..writeln('Category: $category • $workMode • $duration')
-      ..writeln('Stipend: $stipend');
+      ..writeln('Category: $category • $workMode • $duration');
     if (skills.isNotEmpty) {
       buffer.writeln('Skills: $skills');
     }
@@ -276,9 +270,7 @@ class ShareService {
         : 'Partner Company';
     final workMode = project['workMode']?.toString().trim() ?? 'Remote';
     final duration = project['duration']?.toString().trim() ?? 'Flexible';
-    final stipend = (project['stipend']?.toString().trim().isNotEmpty == true)
-        ? project['stipend'].toString().trim()
-        : (project['category']?.toString().trim() ?? 'Open');
+    final category = project['category']?.toString().trim() ?? 'Academic';
     final shareMsg = buildProjectShareText(project);
     final link = buildProjectShareLink(project);
 
@@ -287,7 +279,7 @@ class ShareService {
       sheetTitle: 'Share Project',
       itemTitle: title,
       itemSubtitle: '$company • $workMode • $duration',
-      badgeLabel: stipend,
+      badgeLabel: category,
       icon: Icons.work_outline_rounded,
       accentColor: AppColors.primaryBlue,
       shareLink: link,

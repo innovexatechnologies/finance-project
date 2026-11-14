@@ -202,8 +202,6 @@ CREATE TABLE IF NOT EXISTS public.projects (
   deadline TEXT DEFAULT 'Flexible',
   openings INTEGER DEFAULT 1,
   skills TEXT[] DEFAULT '{}',
-  stipend TEXT DEFAULT 'Academic Credit / Verified Certificate',
-  budget TEXT DEFAULT '',
   status TEXT DEFAULT 'Open',
   assigned_student TEXT,
   progress DOUBLE PRECISION DEFAULT 0.0,
@@ -230,8 +228,6 @@ ALTER TABLE public.projects ADD COLUMN IF NOT EXISTS duration TEXT DEFAULT '3-4 
 ALTER TABLE public.projects ADD COLUMN IF NOT EXISTS deadline TEXT DEFAULT 'Flexible';
 ALTER TABLE public.projects ADD COLUMN IF NOT EXISTS openings INTEGER DEFAULT 1;
 ALTER TABLE public.projects ADD COLUMN IF NOT EXISTS skills TEXT[] DEFAULT '{}';
-ALTER TABLE public.projects ADD COLUMN IF NOT EXISTS stipend TEXT DEFAULT 'Academic Credit / Verified Certificate';
-ALTER TABLE public.projects ADD COLUMN IF NOT EXISTS budget TEXT DEFAULT '';
 ALTER TABLE public.projects ADD COLUMN IF NOT EXISTS status TEXT DEFAULT 'Open';
 ALTER TABLE public.projects ADD COLUMN IF NOT EXISTS assigned_student TEXT;
 ALTER TABLE public.projects ADD COLUMN IF NOT EXISTS progress DOUBLE PRECISION DEFAULT 0.0;

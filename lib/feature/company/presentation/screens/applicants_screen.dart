@@ -1094,7 +1094,7 @@ class _ApplicantsScreenState extends State<ApplicantsScreen> {
             ),
             const SizedBox(height: 12),
             Text(
-              'No Applications Received Yet',
+              'No Applications Submitted Yet',
               textAlign: TextAlign.center,
               style: GoogleFonts.poppins(
                 fontSize: 19,
