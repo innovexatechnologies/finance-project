@@ -45,6 +45,7 @@ class AppDataService extends ChangeNotifier {
 
   // Entity caches (empty until fetched from Supabase or created by user)
   static const int maxApplicationsPerProject = 10;
+  static const String skillBridgeOfficialGmail = 'skillbridge.official@gmail.com';
   List<Map<String, dynamic>> _savedProjects = [];
   List<Map<String, dynamic>> _applications = [];
   List<Map<String, dynamic>> _projects = [];
@@ -1390,6 +1391,44 @@ class AppDataService extends ChangeNotifier {
       }
       _projects[projIndex]['completed_at'] = nowIso;
       _projects[projIndex]['paymentSent'] = true;
+    }
+
+    _safeNotifyListeners();
+
+    if (_prefs != null) {
+      await _prefs!.setString(_kApplications, jsonEncode(_applications));
+      await _prefs!.setString(_kCustomProjects, jsonEncode(_projects));
+    }
+  }
+
+  /// Records Company rejection & escrow dispute on deliverables.
+  /// Sets application and project status to 'Rejected' / 'disputed', and persists dispute metadata.
+  Future<void> recordDisputedProject({
+    required String projectId,
+    required String disputeCaseId,
+    required String disputeReason,
+  }) async {
+    final nowIso = DateTime.now().toIso8601String();
+
+    for (int i = 0; i < _applications.length; i++) {
+      final app = _applications[i];
+      final pId = app['projectId']?.toString() ?? app['id']?.toString() ?? '';
+      if (pId == projectId || app['id']?.toString() == projectId) {
+        _applications[i]['status'] = 'Rejected';
+        _applications[i]['dispute_case_id'] = disputeCaseId;
+        _applications[i]['dispute_reason'] = disputeReason;
+        _applications[i]['isDisputed'] = true;
+      }
+    }
+
+    final projIndex = _projects.indexWhere(
+      (p) => p['id']?.toString() == projectId,
+    );
+    if (projIndex >= 0) {
+      _projects[projIndex]['status'] = 'disputed';
+      _projects[projIndex]['dispute_case_id'] = disputeCaseId;
+      _projects[projIndex]['dispute_reason'] = disputeReason;
+      _projects[projIndex]['updated_at'] = nowIso;
     }
 
     _safeNotifyListeners();

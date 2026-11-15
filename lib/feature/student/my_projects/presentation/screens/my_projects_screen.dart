@@ -1,4 +1,5 @@
 import 'package:flutter/material.dart';
+import 'package:flutter/services.dart';
 import 'package:google_fonts/google_fonts.dart';
 import 'package:link_vibe/core/constants/app_colors.dart';
 import 'package:link_vibe/core/services/app_data_service.dart';
@@ -101,7 +102,9 @@ class _MyProjectsScreenState extends State<MyProjectsScreen>
                   s == 'completed' ||
                   s == 'delivered' ||
                   s == 'disputed' ||
+                  s == 'rejected' ||
                   s == 'ready_for_payout' ||
+                  a['isDisputed'] == true ||
                   a['isAssignedProject'] == true;
             })
             .toList();
@@ -270,7 +273,9 @@ class _MyProjectsScreenState extends State<MyProjectsScreen>
     final isReadyForPayout = statusLower == 'ready_for_payout';
     final isDelivered = statusLower == 'delivered';
     final isRevisionRequested = statusLower == 'revision_requested' || statusLower == 'revision requested';
-    final isDisputed = statusLower == 'disputed';
+    final isDisputed = statusLower == 'disputed' ||
+        statusLower == 'rejected' ||
+        project['isDisputed'] == true;
     final bool isAssigned = project['isAssignedProject'] == true;
     final payoutTid = (project['payout_transaction_id'] ??
             project['payoutTransactionId'] ??
@@ -358,7 +363,13 @@ class _MyProjectsScreenState extends State<MyProjectsScreen>
                   ),
                 ),
                 const SizedBox(width: 6),
-                StatusBadge(label: status),
+                StatusBadge(
+                  label: isDisputed
+                      ? 'Rejected'
+                      : (isReadyForPayout
+                          ? 'In Review'
+                          : (isDisbursed ? 'Paid' : status)),
+                ),
               ],
             ),
             const SizedBox(height: 12),
@@ -559,26 +570,81 @@ class _MyProjectsScreenState extends State<MyProjectsScreen>
               const SizedBox(height: 10),
               Container(
                 width: double.infinity,
-                padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 7),
+                padding:
+                    const EdgeInsets.symmetric(horizontal: 12, vertical: 10),
                 decoration: BoxDecoration(
                   color: const Color(0xFFFEF2F2),
-                  borderRadius: BorderRadius.circular(8),
+                  borderRadius: BorderRadius.circular(10),
                   border: Border.all(
-                    color: const Color(0xFFEF4444).withValues(alpha: 0.3),
+                    color: const Color(0xFFEF4444).withValues(alpha: 0.35),
                   ),
                 ),
-                child: const Row(
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
                   children: [
-                    Icon(Icons.gavel_rounded,
-                        size: 14, color: Color(0xFFDC2626)),
-                    SizedBox(width: 6),
-                    Expanded(
-                      child: Text(
-                        'Disputed: Skill Bridge Admin is mediating settlement',
-                        style: TextStyle(
-                          fontSize: 11,
-                          fontWeight: FontWeight.w600,
-                          color: Color(0xFF991B1B),
+                    Row(
+                      children: [
+                        const Icon(Icons.cancel_rounded,
+                            size: 16, color: Color(0xFFDC2626)),
+                        const SizedBox(width: 6),
+                        Expanded(
+                          child: Text(
+                            'Project Deliverables Rejected by Company',
+                            style: GoogleFonts.poppins(
+                              fontSize: 12,
+                              fontWeight: FontWeight.w700,
+                              color: const Color(0xFF991B1B),
+                            ),
+                          ),
+                        ),
+                      ],
+                    ),
+                    const SizedBox(height: 6),
+                    Text(
+                      'Please share evidence on our official Gmail: ${AppDataService.skillBridgeOfficialGmail}',
+                      style: GoogleFonts.inter(
+                        fontSize: 11.5,
+                        fontWeight: FontWeight.w500,
+                        color: const Color(0xFFB91C1C),
+                        height: 1.35,
+                      ),
+                    ),
+                    const SizedBox(height: 8),
+                    InkWell(
+                      onTap: () {
+                        Clipboard.setData(const ClipboardData(
+                            text: AppDataService.skillBridgeOfficialGmail));
+                        ScaffoldMessenger.of(context).showSnackBar(
+                          const SnackBar(
+                            content: Text('SkillBridge official Gmail copied!'),
+                            duration: Duration(seconds: 2),
+                            backgroundColor: Color(0xFFDC2626),
+                          ),
+                        );
+                      },
+                      child: Container(
+                        padding: const EdgeInsets.symmetric(
+                            horizontal: 8, vertical: 4),
+                        decoration: BoxDecoration(
+                          color: Colors.white,
+                          borderRadius: BorderRadius.circular(6),
+                          border: Border.all(color: const Color(0xFFFCA5A5)),
+                        ),
+                        child: const Row(
+                          mainAxisSize: MainAxisSize.min,
+                          children: [
+                            Icon(Icons.copy_rounded,
+                                size: 12, color: Color(0xFFDC2626)),
+                            SizedBox(width: 4),
+                            Text(
+                              'Copy Gmail',
+                              style: TextStyle(
+                                fontSize: 11,
+                                fontWeight: FontWeight.bold,
+                                color: Color(0xFFDC2626),
+                              ),
+                            ),
+                          ],
                         ),
                       ),
                     ),
@@ -701,6 +767,30 @@ class _MyProjectsScreenState extends State<MyProjectsScreen>
                         icon: const Icon(Icons.task_alt_rounded, size: 15),
                         label: Text(
                           'Approved (Awaiting Disbursal)',
+                          style: GoogleFonts.poppins(
+                            fontSize: 12.5,
+                            fontWeight: FontWeight.w600,
+                          ),
+                        ),
+                      ),
+                    ),
+                  ] else if (isDisputed) ...[
+                    Opacity(
+                      opacity: 0.75,
+                      child: ElevatedButton.icon(
+                        style: ElevatedButton.styleFrom(
+                          backgroundColor: const Color(0xFFDC2626),
+                          foregroundColor: Colors.white,
+                          padding: const EdgeInsets.symmetric(
+                            horizontal: 14,
+                            vertical: 10,
+                          ),
+                          elevation: 0,
+                        ),
+                        onPressed: null,
+                        icon: const Icon(Icons.gavel_rounded, size: 15),
+                        label: Text(
+                          'Rejected • Dispute Mediation',
                           style: GoogleFonts.poppins(
                             fontSize: 12.5,
                             fontWeight: FontWeight.w600,

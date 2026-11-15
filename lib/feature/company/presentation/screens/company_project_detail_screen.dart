@@ -1,6 +1,8 @@
 import 'package:flutter/material.dart';
+import 'package:flutter/services.dart';
 import 'package:google_fonts/google_fonts.dart';
 import 'package:link_vibe/core/constants/app_colors.dart';
+import 'package:link_vibe/core/services/app_data_service.dart';
 import 'package:link_vibe/core/widgets/app_empty_state.dart';
 import 'package:link_vibe/core/widgets/status_badge.dart';
 import 'package:link_vibe/feature/company/models/project_model.dart';
@@ -400,14 +402,18 @@ class _CompanyProjectDetailScreenState
       context: context,
       builder: (ctx) => AlertDialog(
         shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
-        title: const Row(
+        title: Row(
           children: [
-            Icon(Icons.gavel_rounded, color: AppColors.error),
-            SizedBox(width: 10),
+            const Icon(Icons.cancel_rounded, color: AppColors.error),
+            const SizedBox(width: 10),
             Expanded(
               child: Text(
-                'Raise Escrow Dispute',
-                style: TextStyle(fontSize: 17, fontWeight: FontWeight.bold),
+                'Reject Project Deliverables',
+                style: GoogleFonts.poppins(
+                  fontSize: 16.5,
+                  fontWeight: FontWeight.bold,
+                  color: AppColors.darkNavy,
+                ),
               ),
             ),
           ],
@@ -418,16 +424,112 @@ class _CompanyProjectDetailScreenState
             crossAxisAlignment: CrossAxisAlignment.start,
             children: [
               Text(
-                'Are deliverables for "${project.title}" incomplete or unsatisfactory? Raising a dispute halts auto-release and transfers the case to Skill Bridge Admin for mediation.',
+                'Are deliverables for "${project.title}" unsatisfactory? Deliverables will be marked as rejected and transferred to SkillBridge Admin Dispute Mediation.',
                 style: const TextStyle(fontSize: 13, height: 1.4),
+              ),
+              const SizedBox(height: 12),
+              Container(
+                padding: const EdgeInsets.all(12),
+                decoration: BoxDecoration(
+                  color: const Color(0xFFFEF2F2),
+                  borderRadius: BorderRadius.circular(10),
+                  border: Border.all(
+                    color: const Color(0xFFEF4444).withValues(alpha: 0.35),
+                  ),
+                ),
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    Row(
+                      children: [
+                        const Icon(Icons.mark_email_read_rounded,
+                            size: 18, color: Color(0xFFDC2626)),
+                        const SizedBox(width: 8),
+                        Expanded(
+                          child: Text(
+                            'Dispute Evidence Submission',
+                            style: GoogleFonts.poppins(
+                              fontSize: 12.5,
+                              fontWeight: FontWeight.w700,
+                              color: const Color(0xFF991B1B),
+                            ),
+                          ),
+                        ),
+                      ],
+                    ),
+                    const SizedBox(height: 6),
+                    const Text(
+                      'Please share evidence on our official Gmail:',
+                      style: TextStyle(
+                        fontSize: 11.5,
+                        fontWeight: FontWeight.w500,
+                        color: Color(0xFF7F1D1D),
+                      ),
+                    ),
+                    const SizedBox(height: 5),
+                    Row(
+                      children: [
+                        Expanded(
+                          child: SelectableText(
+                            AppDataService.skillBridgeOfficialGmail,
+                            style: GoogleFonts.jetBrainsMono(
+                              fontSize: 12,
+                              fontWeight: FontWeight.bold,
+                              color: const Color(0xFFDC2626),
+                            ),
+                          ),
+                        ),
+                        InkWell(
+                          onTap: () {
+                            Clipboard.setData(const ClipboardData(
+                              text: AppDataService.skillBridgeOfficialGmail,
+                            ));
+                            ScaffoldMessenger.of(context).showSnackBar(
+                              const SnackBar(
+                                content: Text('SkillBridge official Gmail copied to clipboard!'),
+                                duration: Duration(seconds: 2),
+                                backgroundColor: Color(0xFFDC2626),
+                              ),
+                            );
+                          },
+                          child: Container(
+                            padding: const EdgeInsets.symmetric(
+                                horizontal: 8, vertical: 4),
+                            decoration: BoxDecoration(
+                              color: Colors.white,
+                              borderRadius: BorderRadius.circular(6),
+                              border: Border.all(color: const Color(0xFFFCA5A5)),
+                            ),
+                            child: const Row(
+                              mainAxisSize: MainAxisSize.min,
+                              children: [
+                                Icon(Icons.copy_rounded,
+                                    size: 12, color: Color(0xFFDC2626)),
+                                SizedBox(width: 4),
+                                Text(
+                                  'Copy',
+                                  style: TextStyle(
+                                    fontSize: 11,
+                                    fontWeight: FontWeight.bold,
+                                    color: Color(0xFFDC2626),
+                                  ),
+                                ),
+                              ],
+                            ),
+                          ),
+                        ),
+                      ],
+                    ),
+                  ],
+                ),
               ),
               const SizedBox(height: 14),
               TextField(
                 controller: reasonController,
                 maxLines: 3,
                 decoration: InputDecoration(
-                  labelText: 'Dispute Reason / Details *',
-                  hintText: 'Explain the issue with deliverables in detail...',
+                  labelText: 'Rejection Reason / Issues *',
+                  hintText: 'Explain why the work is being rejected...',
                   border: OutlineInputBorder(borderRadius: BorderRadius.circular(10)),
                 ),
               ),
@@ -448,13 +550,13 @@ class _CompanyProjectDetailScreenState
             onPressed: () {
               if (reasonController.text.trim().isEmpty) {
                 ScaffoldMessenger.of(ctx).showSnackBar(
-                  const SnackBar(content: Text('Please describe the reason for dispute.')),
+                  const SnackBar(content: Text('Please describe the reason for rejection.')),
                 );
                 return;
               }
               Navigator.pop(ctx, true);
             },
-            child: const Text('Raise Dispute'),
+            child: const Text('Reject & Open Dispute'),
           ),
         ],
       ),
@@ -473,16 +575,51 @@ class _CompanyProjectDetailScreenState
           context: context,
           builder: (c) => AlertDialog(
             shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
-            title: const Row(
+            title: Row(
               children: [
-                Icon(Icons.info_outline_rounded, color: AppColors.primaryBlue),
-                SizedBox(width: 8),
-                Text('Dispute Registered'),
+                const Icon(Icons.cancel_rounded, color: AppColors.error),
+                const SizedBox(width: 8),
+                Text(
+                  'Deliverables Rejected',
+                  style: GoogleFonts.poppins(
+                    fontSize: 16,
+                    fontWeight: FontWeight.bold,
+                    color: AppColors.darkNavy,
+                  ),
+                ),
               ],
             ),
-            content: Text(
-              'Dispute has been logged under Case $caseId.\n\nSkill Bridge Administrator has been alerted and will review project submissions, communication logs, and issue a binding resolution (100% Student, 100% Refund, or 50-50 Split).',
-              style: const TextStyle(fontSize: 13.5, height: 1.45),
+            content: SingleChildScrollView(
+              child: Column(
+                mainAxisSize: MainAxisSize.min,
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  Text(
+                    'Dispute has been logged under Case $caseId.\n\nSkillBridge Administrator is meditating.',
+                    style: const TextStyle(fontSize: 13.5, height: 1.45),
+                  ),
+                  const SizedBox(height: 10),
+                  Container(
+                    width: double.infinity,
+                    padding: const EdgeInsets.all(10),
+                    decoration: BoxDecoration(
+                      color: const Color(0xFFFEF2F2),
+                      borderRadius: BorderRadius.circular(8),
+                      border: Border.all(
+                        color: const Color(0xFFEF4444).withValues(alpha: 0.3),
+                      ),
+                    ),
+                    child: Text(
+                      'Please share evidence on our official Gmail: ${AppDataService.skillBridgeOfficialGmail}',
+                      style: GoogleFonts.inter(
+                        fontSize: 12,
+                        fontWeight: FontWeight.bold,
+                        color: const Color(0xFFDC2626),
+                      ),
+                    ),
+                  ),
+                ],
+              ),
             ),
             actions: [
               TextButton(
@@ -1899,6 +2036,48 @@ class _CompanyProjectDetailScreenState
                     fontSize: 12.5,
                     color: const Color(0xFFB91C1C),
                     height: 1.4,
+                  ),
+                ),
+                const SizedBox(height: 10),
+                Container(
+                  padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 7),
+                  decoration: BoxDecoration(
+                    color: Colors.white,
+                    borderRadius: BorderRadius.circular(8),
+                    border: Border.all(color: const Color(0xFFFCA5A5)),
+                  ),
+                  child: Row(
+                    children: [
+                      const Icon(Icons.email_outlined,
+                          size: 15, color: Color(0xFFDC2626)),
+                      const SizedBox(width: 6),
+                      Expanded(
+                        child: Text(
+                          'Share evidence: ${AppDataService.skillBridgeOfficialGmail}',
+                          style: GoogleFonts.inter(
+                            fontSize: 11.5,
+                            fontWeight: FontWeight.bold,
+                            color: const Color(0xFFDC2626),
+                          ),
+                        ),
+                      ),
+                      InkWell(
+                        onTap: () {
+                          Clipboard.setData(const ClipboardData(
+                            text: AppDataService.skillBridgeOfficialGmail,
+                          ));
+                          ScaffoldMessenger.of(context).showSnackBar(
+                            const SnackBar(
+                              content: Text('SkillBridge official Gmail copied!'),
+                              duration: Duration(seconds: 1),
+                              backgroundColor: Color(0xFFDC2626),
+                            ),
+                          );
+                        },
+                        child: const Icon(Icons.copy_rounded,
+                            size: 14, color: Color(0xFFDC2626)),
+                      ),
+                    ],
                   ),
                 ),
               ],

@@ -106,7 +106,8 @@ class ProjectModel {
       status.toLowerCase() == 'in progress';
   bool get isDelivered => status.toLowerCase() == 'delivered';
   bool get isRevisionRequested => status.toLowerCase() == 'revision_requested';
-  bool get isDisputed => status.toLowerCase() == 'disputed';
+  bool get isDisputed =>
+      status.toLowerCase() == 'disputed' || status.toLowerCase() == 'rejected';
   bool get isReadyForPayout => status.toLowerCase() == 'ready_for_payout';
   bool get isCompleted => status.toLowerCase() == 'completed';
 

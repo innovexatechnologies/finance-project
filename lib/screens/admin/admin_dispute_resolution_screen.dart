@@ -1021,6 +1021,33 @@ class _AdminDisputeResolutionScreenState
                       ),
                     ),
                   ),
+                  const SizedBox(height: 8),
+                  Container(
+                    width: double.infinity,
+                    padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 7),
+                    decoration: BoxDecoration(
+                      color: const Color(0xFFEFF6FF),
+                      borderRadius: BorderRadius.circular(8),
+                      border: Border.all(color: const Color(0xFF93C5FD)),
+                    ),
+                    child: Row(
+                      children: [
+                        const Icon(Icons.mark_email_read_rounded,
+                            size: 15, color: Color(0xFF1D4ED8)),
+                        const SizedBox(width: 6),
+                        Expanded(
+                          child: Text(
+                            'Evidence Channel: Parties instructed to submit proof to skillbridge.official@gmail.com',
+                            style: GoogleFonts.inter(
+                              fontSize: 11.5,
+                              color: const Color(0xFF1E40AF),
+                              fontWeight: FontWeight.w500,
+                            ),
+                          ),
+                        ),
+                      ],
+                    ),
+                  ),
                   const SizedBox(height: 16),
                   LayoutBuilder(
                     builder: (context, cardConstraints) {

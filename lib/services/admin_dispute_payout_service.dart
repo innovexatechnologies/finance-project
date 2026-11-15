@@ -156,7 +156,7 @@ class AdminDisputePayoutService {
     if (supabase == null) {
       final local = CompanyProjectService()
           .allProjects
-          .where((p) => p.isDisputed)
+          .where((p) => p.isDisputed || p.status.toLowerCase() == 'rejected')
           .toList();
       disputedProjectsNotifier.value = local;
       isLoadingNotifier.value = false;
@@ -167,7 +167,7 @@ class AdminDisputePayoutService {
       final rows = await supabase
           .from('projects')
           .select()
-          .eq('status', 'disputed')
+          .or('status.eq.disputed,status.eq.rejected')
           .order('updated_at', ascending: false);
 
       final list = (rows as List<dynamic>)
@@ -181,7 +181,7 @@ class AdminDisputePayoutService {
       _lastError = SupabaseHelper.friendlyError(e);
       final local = CompanyProjectService()
           .allProjects
-          .where((p) => p.isDisputed)
+          .where((p) => p.isDisputed || p.status.toLowerCase() == 'rejected')
           .toList();
       disputedProjectsNotifier.value = local;
       return local;

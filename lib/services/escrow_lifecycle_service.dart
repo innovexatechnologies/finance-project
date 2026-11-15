@@ -1,8 +1,10 @@
 import 'dart:math';
 import 'package:flutter/foundation.dart';
+import 'package:link_vibe/core/services/app_data_service.dart';
 import 'package:link_vibe/core/services/supabase_helper.dart';
 import 'package:link_vibe/feature/company/models/project_model.dart';
 import 'package:link_vibe/feature/company/services/company_project_service.dart';
+import 'package:link_vibe/services/admin_dispute_payout_service.dart';
 
 /// Pure Service Layer for Escrow Lifecycle Transitions:
 /// - Student Project Delivery (`delivered`)
@@ -339,6 +341,16 @@ class EscrowLifecycleService {
       disputeCaseId: caseId,
       disputeReason: reason.trim(),
     );
+
+    // Synchronize AppDataService for Student Portal & persistence
+    await AppDataService.instance.recordDisputedProject(
+      projectId: projectId,
+      disputeCaseId: caseId,
+      disputeReason: reason.trim(),
+    );
+
+    // Refresh Admin Dispute service queue
+    AdminDisputePayoutService().loadDisputedProjects(forceRefresh: true);
 
     return caseId;
   }

@@ -229,6 +229,8 @@ class _StudentProjectDetailsScreenState
         appStatus == 'revision requested' ||
         appStatus == 'revision_requested' ||
         appStatus == 'ready_for_payout' ||
+        appStatus == 'disputed' ||
+        appStatus == 'rejected' ||
         appStatus == 'completed';
 
     final isAssignedProject = project['isAssignedProject'] == true ||
@@ -307,7 +309,10 @@ class _StudentProjectDetailsScreenState
         statusLower == 'under_review' ||
         hasDeliveredFlag;
     final isRevisionRequested = statusLower == 'revision_requested' || statusLower == 'revision requested';
-    final isDisputed = statusLower == 'disputed';
+    final isDisputed = statusLower == 'disputed' ||
+        statusLower == 'rejected' ||
+        project['isDisputed'] == true ||
+        currentApplication?['isDisputed'] == true;
     final payoutReceiptUrl = (project['payout_receipt_url'] ??
             project['paymentReceiptUrl'] ??
             currentApplication?['payout_receipt_url'] ??
@@ -490,7 +495,15 @@ class _StudentProjectDetailsScreenState
                                 ),
                               ),
                               const SizedBox(width: 8),
-                              StatusBadge(label: status),
+                              StatusBadge(
+                                label: isDisputed
+                                    ? 'Rejected'
+                                    : (isPaid
+                                        ? 'Paid'
+                                        : (isReadyForPayout
+                                            ? 'In Review'
+                                            : status)),
+                              ),
                             ],
                           ),
                           const SizedBox(height: 6),
@@ -755,41 +768,123 @@ class _StudentProjectDetailsScreenState
                                   color: const Color(0xFFEF4444).withValues(alpha: 0.35),
                                 ),
                               ),
-                              child: Row(
+                              child: Column(
                                 crossAxisAlignment: CrossAxisAlignment.start,
                                 children: [
-                                  Container(
-                                    padding: const EdgeInsets.all(7),
-                                    decoration: BoxDecoration(
-                                      color: const Color(0xFFEF4444).withValues(alpha: 0.15),
-                                      shape: BoxShape.circle,
-                                    ),
-                                    child: const Icon(
-                                      Icons.gavel_rounded,
-                                      color: Color(0xFFDC2626),
-                                      size: 20,
-                                    ),
+                                  Row(
+                                    crossAxisAlignment: CrossAxisAlignment.start,
+                                    children: [
+                                      Container(
+                                        padding: const EdgeInsets.all(7),
+                                        decoration: BoxDecoration(
+                                          color: const Color(0xFFEF4444).withValues(alpha: 0.15),
+                                          shape: BoxShape.circle,
+                                        ),
+                                        child: const Icon(
+                                          Icons.cancel_rounded,
+                                          color: Color(0xFFDC2626),
+                                          size: 20,
+                                        ),
+                                      ),
+                                      const SizedBox(width: 12),
+                                      Expanded(
+                                        child: Column(
+                                          crossAxisAlignment: CrossAxisAlignment.start,
+                                          children: [
+                                            Text(
+                                              'Project Deliverables Rejected by Company',
+                                              style: GoogleFonts.inter(
+                                                fontSize: 13.5,
+                                                fontWeight: FontWeight.w700,
+                                                color: const Color(0xFF991B1B),
+                                              ),
+                                            ),
+                                            const SizedBox(height: 3),
+                                            Text(
+                                              'Company has rejected the submitted deliverables. SkillBridge Admin is mediating this dispute (Case: ${project['dispute_case_id'] ?? project['disputeCaseId'] ?? '#SB-DISPUTE'}).',
+                                              style: const TextStyle(
+                                                fontSize: 11.5,
+                                                color: Color(0xFFB91C1C),
+                                                height: 1.35,
+                                              ),
+                                            ),
+                                          ],
+                                        ),
+                                      ),
+                                    ],
                                   ),
-                                  const SizedBox(width: 12),
-                                  Expanded(
-                                    child: Column(
-                                      crossAxisAlignment: CrossAxisAlignment.start,
+                                  const SizedBox(height: 12),
+                                  Container(
+                                    padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
+                                    decoration: BoxDecoration(
+                                      color: Colors.white,
+                                      borderRadius: BorderRadius.circular(10),
+                                      border: Border.all(color: const Color(0xFFFCA5A5)),
+                                    ),
+                                    child: Row(
                                       children: [
-                                        Text(
-                                          'Dispute Under Review: Case ${project['dispute_case_id'] ?? project['disputeCaseId'] ?? '#SB-PENDING'}',
-                                          style: GoogleFonts.inter(
-                                            fontSize: 13,
-                                            fontWeight: FontWeight.w700,
-                                            color: const Color(0xFF991B1B),
+                                        const Icon(Icons.email_rounded,
+                                            size: 16, color: Color(0xFFDC2626)),
+                                        const SizedBox(width: 8),
+                                        Expanded(
+                                          child: Column(
+                                            crossAxisAlignment: CrossAxisAlignment.start,
+                                            children: [
+                                              const Text(
+                                                'Share evidence on our official Gmail:',
+                                                style: TextStyle(
+                                                  fontSize: 11,
+                                                  fontWeight: FontWeight.w600,
+                                                  color: Color(0xFF7F1D1D),
+                                                ),
+                                              ),
+                                              Text(
+                                                AppDataService.skillBridgeOfficialGmail,
+                                                style: GoogleFonts.jetBrainsMono(
+                                                  fontSize: 12,
+                                                  fontWeight: FontWeight.bold,
+                                                  color: const Color(0xFFDC2626),
+                                                ),
+                                              ),
+                                            ],
                                           ),
                                         ),
-                                        const SizedBox(height: 3),
-                                        const Text(
-                                          'Skill Bridge Admin is mediating this project to decide 100% student, refund, or 50-50 split.',
-                                          style: TextStyle(
-                                            fontSize: 11.5,
-                                            color: Color(0xFFB91C1C),
-                                            height: 1.35,
+                                        InkWell(
+                                          onTap: () {
+                                            Clipboard.setData(const ClipboardData(
+                                                text: AppDataService.skillBridgeOfficialGmail));
+                                            ScaffoldMessenger.of(context).showSnackBar(
+                                              const SnackBar(
+                                                content: Text('SkillBridge official Gmail copied to clipboard!'),
+                                                duration: Duration(seconds: 2),
+                                                backgroundColor: Color(0xFFDC2626),
+                                              ),
+                                            );
+                                          },
+                                          child: Container(
+                                            padding: const EdgeInsets.symmetric(
+                                                horizontal: 8, vertical: 4),
+                                            decoration: BoxDecoration(
+                                              color: const Color(0xFFFEF2F2),
+                                              borderRadius: BorderRadius.circular(6),
+                                              border: Border.all(color: const Color(0xFFFCA5A5)),
+                                            ),
+                                            child: const Row(
+                                              mainAxisSize: MainAxisSize.min,
+                                              children: [
+                                                Icon(Icons.copy_rounded,
+                                                    size: 12, color: Color(0xFFDC2626)),
+                                                SizedBox(width: 4),
+                                                Text(
+                                                  'Copy',
+                                                  style: TextStyle(
+                                                    fontSize: 11,
+                                                    fontWeight: FontWeight.bold,
+                                                    color: Color(0xFFDC2626),
+                                                  ),
+                                                ),
+                                              ],
+                                            ),
                                           ),
                                         ),
                                       ],

@@ -46,6 +46,7 @@ class StatusBadge extends StatelessWidget {
       return AppColors.statusPending;
     }
     if (s.contains('reject') ||
+        s.contains('dispute') ||
         s.contains('suspend') ||
         s.contains('revoked') ||
         s.contains('flagged') ||
