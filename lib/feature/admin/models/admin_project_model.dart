@@ -60,6 +60,15 @@ class AdminProjectModel {
   final List<ProjectModerationRecord> moderationHistory;
   final bool isArchived; // Soft-retention flag to prevent unauthorized permanent destruction
 
+  // Upfront Escrow Payment Verification Fields
+  final double escrowAmount;
+  final bool isEscrowVerified;
+  final bool paymentSent;
+  final String? transactionId;
+  final String? paymentReceiptUrl;
+  final String? paymentMethodUsed;
+  final String rawDbStatus;
+
   const AdminProjectModel({
     required this.id,
     required this.title,
@@ -86,6 +95,13 @@ class AdminProjectModel {
     this.moderationReason,
     required this.moderationHistory,
     this.isArchived = false,
+    this.escrowAmount = 0.0,
+    this.isEscrowVerified = false,
+    this.paymentSent = false,
+    this.transactionId,
+    this.paymentReceiptUrl,
+    this.paymentMethodUsed,
+    this.rawDbStatus = 'Open',
   });
 
   AdminProjectModel copyWith({
@@ -114,6 +130,13 @@ class AdminProjectModel {
     String? moderationReason,
     List<ProjectModerationRecord>? moderationHistory,
     bool? isArchived,
+    double? escrowAmount,
+    bool? isEscrowVerified,
+    bool? paymentSent,
+    String? transactionId,
+    String? paymentReceiptUrl,
+    String? paymentMethodUsed,
+    String? rawDbStatus,
   }) {
     return AdminProjectModel(
       id: id ?? this.id,
@@ -142,10 +165,31 @@ class AdminProjectModel {
       moderationReason: moderationReason ?? this.moderationReason,
       moderationHistory: moderationHistory ?? this.moderationHistory,
       isArchived: isArchived ?? this.isArchived,
+      escrowAmount: escrowAmount ?? this.escrowAmount,
+      isEscrowVerified: isEscrowVerified ?? this.isEscrowVerified,
+      paymentSent: paymentSent ?? this.paymentSent,
+      transactionId: transactionId ?? this.transactionId,
+      paymentReceiptUrl: paymentReceiptUrl ?? this.paymentReceiptUrl,
+      paymentMethodUsed: paymentMethodUsed ?? this.paymentMethodUsed,
+      rawDbStatus: rawDbStatus ?? this.rawDbStatus,
     );
   }
 
+  bool get isPendingVerification =>
+      rawDbStatus.toLowerCase() == 'pending_verification' ||
+      rawDbStatus.toLowerCase() == 'pending verification';
+
+  bool get isPaymentRejected =>
+      rawDbStatus.toLowerCase() == 'payment_rejected' ||
+      rawDbStatus.toLowerCase() == 'payment rejected';
+
+  bool get isPendingPayment =>
+      rawDbStatus.toLowerCase() == 'pending_payment' ||
+      rawDbStatus.toLowerCase() == 'pending payment';
+
   String get statusDisplay {
+    if (isPendingVerification) return 'Pending Verification';
+    if (isPaymentRejected) return 'Payment Rejected';
     switch (status) {
       case AdminProjectStatus.draft:
         return 'Draft';

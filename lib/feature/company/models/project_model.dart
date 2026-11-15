@@ -27,6 +27,7 @@ class ProjectModel {
   final String? paymentReceiptUrl;
   final bool isEscrowVerified;
   final String? verifiedAt;
+  final String? rejectionReason;
 
   // Delivery, Auto-Release & Dispute Fields
   final String? deliveredAt;
@@ -73,6 +74,7 @@ class ProjectModel {
     this.paymentReceiptUrl,
     this.isEscrowVerified = false,
     this.verifiedAt,
+    this.rejectionReason,
     this.deliveredAt,
     this.disputeCaseId,
     this.disputeReason,
@@ -92,6 +94,9 @@ class ProjectModel {
   bool get isPendingPayment => status.toLowerCase() == 'pending_payment';
   bool get isPendingVerification =>
       status.toLowerCase() == 'pending_verification';
+  bool get isPaymentRejected =>
+      status.toLowerCase() == 'payment_rejected' ||
+      status.toLowerCase() == 'rejected';
   bool get isLiveVerified =>
       (status.toLowerCase() == 'open') && isEscrowVerified;
   bool get isInProgress =>
@@ -153,6 +158,7 @@ class ProjectModel {
     String? paymentReceiptUrl,
     bool? isEscrowVerified,
     String? verifiedAt,
+    String? rejectionReason,
     String? deliveredAt,
     String? disputeCaseId,
     String? disputeReason,
@@ -196,6 +202,7 @@ class ProjectModel {
       paymentReceiptUrl: paymentReceiptUrl ?? this.paymentReceiptUrl,
       isEscrowVerified: isEscrowVerified ?? this.isEscrowVerified,
       verifiedAt: verifiedAt ?? this.verifiedAt,
+      rejectionReason: rejectionReason ?? this.rejectionReason,
       deliveredAt: deliveredAt ?? this.deliveredAt,
       disputeCaseId: disputeCaseId ?? this.disputeCaseId,
       disputeReason: disputeReason ?? this.disputeReason,
@@ -249,6 +256,7 @@ class ProjectModel {
       paymentReceiptUrl: json['payment_receipt_url']?.toString(),
       isEscrowVerified: json['is_escrow_verified'] == true,
       verifiedAt: json['verified_at']?.toString(),
+      rejectionReason: json['rejection_reason']?.toString(),
       deliveredAt: json['delivered_at']?.toString(),
       disputeCaseId: json['dispute_case_id']?.toString(),
       disputeReason: json['dispute_reason']?.toString(),

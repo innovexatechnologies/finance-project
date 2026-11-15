@@ -70,7 +70,7 @@ class AdminProjectApprovalService {
   }
 
   /// 2. Approves payment, verifies escrow, and publishes project live to students.
-  /// Sets: status = 'open', is_escrow_verified = true, verified_at = now().
+  /// Sets: status = 'Open', is_escrow_verified = true, payment_sent = true, verified_at = now().
   Future<bool> markAsPaidAndPublish({
     required String projectId,
     String? notes,
@@ -86,6 +86,7 @@ class AdminProjectApprovalService {
             .update({
               'status': 'Open',
               'is_escrow_verified': true,
+              'payment_sent': true,
               'verified_at': nowIso,
               'updated_at': nowIso,
             })
@@ -117,7 +118,9 @@ class AdminProjectApprovalService {
         cList[idx] = cList[idx].copyWith(
           status: 'Open',
           isEscrowVerified: true,
+          paymentSent: true,
           verifiedAt: nowIso,
+          rejectionReason: null,
         );
         compProjService.projectsNotifier.value = cList;
       }
@@ -127,7 +130,7 @@ class AdminProjectApprovalService {
   }
 
   /// 3. Rejects payment proof with an explanation.
-  /// Sets: status = 'rejected', is_escrow_verified = false.
+  /// Sets: status = 'payment_rejected', is_escrow_verified = false, payment_sent = false.
   Future<bool> rejectPayment({
     required String projectId,
     required String rejectionReason,
@@ -141,9 +144,10 @@ class AdminProjectApprovalService {
         await supabase
             .from('projects')
             .update({
-              'status': 'rejected',
+              'status': 'payment_rejected',
               'is_escrow_verified': false,
-              'additional_instructions': 'Payment Verification Rejected: $rejectionReason',
+              'payment_sent': false,
+              'rejection_reason': rejectionReason.trim(),
               'updated_at': nowIso,
             })
             .eq('id', projectId);
@@ -166,12 +170,19 @@ class AdminProjectApprovalService {
       final idx = cList.indexWhere((p) => p.id == projectId);
       if (idx != -1) {
         cList[idx] = cList[idx].copyWith(
-          status: 'rejected',
+          status: 'payment_rejected',
           isEscrowVerified: false,
-          additionalInstructions: 'Payment Rejected: $rejectionReason',
+          paymentSent: false,
+          rejectionReason: rejectionReason.trim(),
         );
         compProjService.projectsNotifier.value = cList;
       }
+    } catch (_) {}
+
+    // Synchronize into AdminProjectService catalog
+    try {
+      final adminProjService = AdminProjectService();
+      await adminProjService.loadFromSupabase();
     } catch (_) {}
 
     return true;

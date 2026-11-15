@@ -205,6 +205,7 @@ class CompanyEscrowService {
               'transaction_id': transactionId.trim(),
               'payment_method_used': paymentMethodUsed.trim(),
               'payment_receipt_url': receiptUrl.trim(),
+              'rejection_reason': null,
               'updated_at': nowIso,
             })
             .eq('id', projectId);
@@ -225,6 +226,7 @@ class CompanyEscrowService {
         transactionId: transactionId.trim(),
         paymentMethodUsed: paymentMethodUsed.trim(),
         paymentReceiptUrl: receiptUrl.trim(),
+        rejectionReason: null,
       );
       companyProjService.projectsNotifier.value = list;
     }
