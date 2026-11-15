@@ -4,6 +4,7 @@ import 'package:flutter/services.dart';
 import 'package:google_fonts/google_fonts.dart';
 import 'package:image_picker/image_picker.dart';
 import 'package:link_vibe/core/constants/app_colors.dart';
+import 'package:link_vibe/core/services/supabase_helper.dart';
 import 'package:link_vibe/feature/admin/models/platform_payment_method_model.dart';
 import 'package:link_vibe/feature/company/models/project_model.dart';
 import 'package:link_vibe/services/company_escrow_service.dart';
@@ -228,7 +229,7 @@ class _CompanyEscrowPaymentScreenState
       setState(() => _isSubmitting = false);
       ScaffoldMessenger.of(context).showSnackBar(
         SnackBar(
-          content: Text('Error: $e'),
+          content: Text(SupabaseHelper.friendlyError(e)),
           backgroundColor: AppColors.error,
         ),
       );

@@ -255,9 +255,12 @@ class ProjectModel {
       createdAt: (json['created_at'] ?? 'Recently').toString(),
       paymentSent: json['payment_sent'] == true,
       escrowAmount: (json['escrow_amount'] as num?)?.toDouble() ?? 0.0,
-      paymentMethodUsed: json['payment_method_used']?.toString(),
-      transactionId: json['transaction_id']?.toString(),
-      paymentReceiptUrl: json['payment_receipt_url']?.toString(),
+      paymentMethodUsed: json['payment_method_used']?.toString() ??
+          _extractPaymentMethod(json['additional_instructions']?.toString()),
+      transactionId: json['transaction_id']?.toString() ??
+          _extractTransactionId(json['additional_instructions']?.toString()),
+      paymentReceiptUrl: json['payment_receipt_url']?.toString() ??
+          json['attachment_url']?.toString(),
       isEscrowVerified: json['is_escrow_verified'] == true,
       verifiedAt: json['verified_at']?.toString(),
       rejectionReason: json['rejection_reason']?.toString(),
@@ -332,5 +335,18 @@ class ProjectModel {
         'last_revision_requested_at': lastRevisionRequestedAt,
       if (revisionDeadline != null) 'revision_deadline': revisionDeadline,
     };
+  }
+
+  static String? _extractTransactionId(String? instructions) {
+    if (instructions == null || !instructions.contains('TID:')) return null;
+    final match = RegExp(r'TID:\s*([^\s|]+)').firstMatch(instructions);
+    return match?.group(1);
+  }
+
+  static String? _extractPaymentMethod(String? instructions) {
+    if (instructions == null || !instructions.contains('Payment')) return null;
+    final match =
+        RegExp(r'Payment(?:\s*Method)?:\s*([^|]+)').firstMatch(instructions);
+    return match?.group(1)?.trim();
   }
 }

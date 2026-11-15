@@ -68,6 +68,35 @@ BEGIN
     IF NOT EXISTS (SELECT 1 FROM information_schema.columns WHERE table_name = 'projects' AND column_name = 'completed_at') THEN
         ALTER TABLE projects ADD COLUMN completed_at TIMESTAMPTZ;
     END IF;
+
+    -- Escrow Deposit & Admin Verification Columns
+    IF NOT EXISTS (SELECT 1 FROM information_schema.columns WHERE table_name = 'projects' AND column_name = 'rejection_reason') THEN
+        ALTER TABLE projects ADD COLUMN rejection_reason TEXT;
+    END IF;
+
+    IF NOT EXISTS (SELECT 1 FROM information_schema.columns WHERE table_name = 'projects' AND column_name = 'transaction_id') THEN
+        ALTER TABLE projects ADD COLUMN transaction_id TEXT;
+    END IF;
+
+    IF NOT EXISTS (SELECT 1 FROM information_schema.columns WHERE table_name = 'projects' AND column_name = 'payment_method_used') THEN
+        ALTER TABLE projects ADD COLUMN payment_method_used TEXT;
+    END IF;
+
+    IF NOT EXISTS (SELECT 1 FROM information_schema.columns WHERE table_name = 'projects' AND column_name = 'payment_receipt_url') THEN
+        ALTER TABLE projects ADD COLUMN payment_receipt_url TEXT;
+    END IF;
+
+    IF NOT EXISTS (SELECT 1 FROM information_schema.columns WHERE table_name = 'projects' AND column_name = 'is_escrow_verified') THEN
+        ALTER TABLE projects ADD COLUMN is_escrow_verified BOOLEAN DEFAULT FALSE;
+    END IF;
+
+    IF NOT EXISTS (SELECT 1 FROM information_schema.columns WHERE table_name = 'projects' AND column_name = 'escrow_amount') THEN
+        ALTER TABLE projects ADD COLUMN escrow_amount NUMERIC(12,2) DEFAULT 0.0;
+    END IF;
+
+    IF NOT EXISTS (SELECT 1 FROM information_schema.columns WHERE table_name = 'projects' AND column_name = 'verified_at') THEN
+        ALTER TABLE projects ADD COLUMN verified_at TIMESTAMPTZ;
+    END IF;
 END $$;
 
 -- 2. Ensure applications table has corresponding sync columns for instant student reflection
@@ -221,4 +250,8 @@ EXCEPTION WHEN OTHERS THEN
     RETURN jsonb_build_object('success', false, 'error', SQLERRM);
 END;
 $$;
+
+-- 7. Reload PostgREST schema cache immediately
+NOTIFY pgrst, 'reload schema';
+
 
