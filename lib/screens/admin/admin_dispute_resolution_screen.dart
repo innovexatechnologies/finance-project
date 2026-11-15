@@ -3,12 +3,14 @@ import 'package:flutter/services.dart';
 import 'package:google_fonts/google_fonts.dart';
 import 'package:image_picker/image_picker.dart';
 import 'package:link_vibe/core/constants/app_colors.dart';
+import 'package:link_vibe/core/services/app_data_service.dart';
 import 'package:link_vibe/feature/admin/models/admin_notification_model.dart';
 import 'package:link_vibe/feature/admin/presentation/screens/admin_login_screen.dart';
 import 'package:link_vibe/feature/admin/presentation/widgets/admin_sidebar.dart';
 import 'package:link_vibe/feature/admin/presentation/widgets/admin_top_navbar.dart';
 import 'package:link_vibe/feature/admin/services/admin_auth_service.dart';
 import 'package:link_vibe/feature/company/models/project_model.dart';
+import 'package:link_vibe/feature/company/services/company_project_service.dart';
 import 'package:link_vibe/services/admin_dispute_payout_service.dart';
 
 /// Enterprise Admin Console for Dispute Resolution, Payout Execution, and Escrow Alerts.
@@ -31,6 +33,50 @@ class _AdminDisputeResolutionScreenState
   late TabController _tabController;
   String _searchQuery = '';
   bool _isSidebarCollapsed = false;
+
+  final Set<String> _resolvedProjectIds = {};
+  final Map<String, String> _resolvedActionLabels = {};
+  final Map<String, String> _resolvedTids = {};
+
+  bool _isProjectDisputeResolved(ProjectModel p) {
+    if (_resolvedProjectIds.contains(p.id)) return true;
+    final res = p.disputeResolution?.toLowerCase() ?? '';
+    if (res == 'paid_to_student' || res == 'refunded_to_company') return true;
+    final st = p.status.toLowerCase();
+    if (st == 'completed' || st == 'cancelled' || st == 'paid') return true;
+    final paySt = p.paymentStatus.toLowerCase();
+    if (paySt == 'paid' || paySt == 'refunded') return true;
+    if (p.payoutType == 'dispute_student_awarded' ||
+        p.payoutType == 'dispute_company_refunded' ||
+        p.payoutType == 'full_company_refund') {
+      return true;
+    }
+    if (p.payoutTransactionId != null &&
+        p.payoutTransactionId!.trim().isNotEmpty) {
+      return true;
+    }
+    if (p.refundTransactionId != null &&
+        p.refundTransactionId!.trim().isNotEmpty) {
+      return true;
+    }
+    return false;
+  }
+
+  bool _isDisputePaidToStudent(ProjectModel p) {
+    if (_resolvedActionLabels[p.id] == 'paid_to_student') return true;
+    if (_resolvedActionLabels[p.id] == 'refunded_to_company') return false;
+    final res = p.disputeResolution?.toLowerCase() ?? '';
+    if (res == 'paid_to_student') return true;
+    if (res == 'refunded_to_company') return false;
+    if (p.payoutType == 'dispute_company_refunded' ||
+        p.payoutType == 'full_company_refund' ||
+        p.status.toLowerCase() == 'cancelled' ||
+        (p.refundTransactionId != null &&
+            p.refundTransactionId!.trim().isNotEmpty)) {
+      return false;
+    }
+    return true;
+  }
 
   @override
   void initState() {
@@ -122,8 +168,47 @@ class _AdminDisputeResolutionScreenState
   // ===========================================================================
   // 2-OPTION DISPUTE RESOLUTION MODALS (PAY TO STUDENT & REFUND TO COMPANY)
   // ===========================================================================
+  double _resolveProjectEscrow(ProjectModel project) {
+    if (project.escrowAmount > 0) return project.escrowAmount;
+
+    try {
+      final p = CompanyProjectService().allProjects.firstWhere(
+        (e) =>
+            e.id == project.id ||
+            e.title.trim().toLowerCase() == project.title.trim().toLowerCase(),
+      );
+      if (p.escrowAmount > 0) return p.escrowAmount;
+    } catch (_) {}
+
+    try {
+      final p = AppDataService.instance.getAllProjects().firstWhere(
+        (e) =>
+            (e['id'] ?? e['projectId'])?.toString() == project.id ||
+            e['title']?.toString().trim().toLowerCase() ==
+                project.title.trim().toLowerCase(),
+      );
+      final raw = p['escrow_amount'] ??
+          p['escrowAmount'] ??
+          p['budgetAmount'] ??
+          p['budget'] ??
+          p['stipend'];
+      if (raw is num && raw > 0) return raw.toDouble();
+      if (raw != null) {
+        final cl = raw.toString().replaceAll(RegExp(r'[^0-9.]'), '');
+        final d = double.tryParse(cl);
+        if (d != null && d > 0) return d;
+      }
+    } catch (_) {}
+
+    final fromInst =
+        ProjectModel.extractEscrowAmount(project.additionalInstructions);
+    if (fromInst != null && fromInst > 0) return fromInst;
+
+    return 25000.0;
+  }
+
   Future<void> _openDisputePayToStudentModal(ProjectModel project) async {
-    final escrow = project.escrowAmount;
+    final escrow = _resolveProjectEscrow(project);
     final commission10 = double.parse((escrow * 0.10).toStringAsFixed(2));
     final netStudent = double.parse((escrow * 0.90).toStringAsFixed(2));
 
@@ -340,55 +425,38 @@ class _AdminDisputeResolutionScreenState
                   ),
                   const SizedBox(height: 14),
 
-                  // Escrow calculation box
+                  // 10% Platform Commission & 90% Net Student Award Calculation Breakdown
                   Container(
                     width: double.infinity,
-                    padding: const EdgeInsets.all(12),
+                    padding: const EdgeInsets.all(14),
                     decoration: BoxDecoration(
                       color: const Color(0xFFF0FDF4),
-                      borderRadius: BorderRadius.circular(12),
+                      borderRadius: BorderRadius.circular(14),
                       border: Border.all(
-                        color: const Color(0xFF10B981).withValues(alpha: 0.3),
+                        color: const Color(0xFF10B981).withValues(alpha: 0.35),
                       ),
                     ),
-                    child: Row(
-                      mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                    child: Column(
                       children: [
-                        Column(
-                          crossAxisAlignment: CrossAxisAlignment.start,
-                          children: [
-                            const Text(
-                              'Escrow (10% Fee Deducted)',
-                              style: TextStyle(
-                                fontSize: 11.5,
-                                color: Color(0xFF065F46),
-                              ),
-                            ),
-                            Text(
-                              'PKR ${netStudent.toStringAsFixed(0)} Net',
-                              style: GoogleFonts.poppins(
-                                fontSize: 17,
-                                fontWeight: FontWeight.bold,
-                                color: const Color(0xFF047857),
-                              ),
-                            ),
-                          ],
+                        _buildBreakdownRow(
+                          'Total Escrow Funded (Project Price)',
+                          'PKR ${escrow.toStringAsFixed(0)}',
+                          isBold: true,
                         ),
-                        Container(
-                          padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 5),
-                          decoration: BoxDecoration(
-                            color: Colors.white,
-                            borderRadius: BorderRadius.circular(8),
-                            border: Border.all(color: const Color(0xFFA7F3D0)),
-                          ),
-                          child: Text(
-                            'Platform: PKR ${commission10.toStringAsFixed(0)}',
-                            style: const TextStyle(
-                              fontSize: 11,
-                              fontWeight: FontWeight.bold,
-                              color: Color(0xFF047857),
-                            ),
-                          ),
+                        const SizedBox(height: 7),
+                        _buildBreakdownRow(
+                          'Platform Fee / Commission (10%)',
+                          '- PKR ${commission10.toStringAsFixed(0)}',
+                          color: AppColors.primary,
+                        ),
+                        const SizedBox(height: 7),
+                        const Divider(color: Color(0xFFA7F3D0)),
+                        const SizedBox(height: 7),
+                        _buildBreakdownRow(
+                          'Net Payable to Student (90%)',
+                          'PKR ${netStudent.toStringAsFixed(0)}',
+                          color: const Color(0xFF047857),
+                          isBold: true,
                         ),
                       ],
                     ),
@@ -499,6 +567,12 @@ class _AdminDisputeResolutionScreenState
                               Navigator.pop(ctx);
 
                               if (ok) {
+                                setState(() {
+                                  _resolvedProjectIds.add(project.id);
+                                  _resolvedActionLabels[project.id] =
+                                      'paid_to_student';
+                                  _resolvedTids[project.id] = tid;
+                                });
                                 _showFeedback(
                                   'Dispute Resolved: Payment sent to student. Status converted to Paid.',
                                 );
@@ -521,7 +595,9 @@ class _AdminDisputeResolutionScreenState
                             )
                           : const Icon(Icons.check_circle_rounded, size: 18),
                       label: Text(
-                        isSaving ? 'Processing Transfer...' : 'Confirm Payout to Student',
+                        isSaving
+                            ? 'Processing Transfer...'
+                            : 'Confirm Payout to Student (PKR ${netStudent.toStringAsFixed(0)})',
                         style: GoogleFonts.poppins(
                           fontWeight: FontWeight.bold,
                           fontSize: 14,
@@ -539,7 +615,7 @@ class _AdminDisputeResolutionScreenState
   }
 
   Future<void> _openDisputeRefundToCompanyModal(ProjectModel project) async {
-    final escrow = project.escrowAmount > 0 ? project.escrowAmount : 10000.0;
+    final escrow = _resolveProjectEscrow(project);
     final tidCtrl = TextEditingController();
     XFile? receiptFile;
     Uint8List? receiptBytes;
@@ -753,55 +829,39 @@ class _AdminDisputeResolutionScreenState
                   ),
                   const SizedBox(height: 14),
 
-                  // Refund Box
+                  // Total Escrow & Refund Breakdown Box (0% Platform Fee, 100% Return)
                   Container(
                     width: double.infinity,
-                    padding: const EdgeInsets.all(12),
+                    padding: const EdgeInsets.all(14),
                     decoration: BoxDecoration(
                       color: const Color(0xFFFEF2F2),
-                      borderRadius: BorderRadius.circular(12),
+                      borderRadius: BorderRadius.circular(14),
                       border: Border.all(
-                        color: const Color(0xFFEF4444).withValues(alpha: 0.3),
+                        color: const Color(0xFFEF4444).withValues(alpha: 0.35),
                       ),
                     ),
-                    child: Row(
-                      mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                    child: Column(
                       children: [
-                        Column(
-                          crossAxisAlignment: CrossAxisAlignment.start,
-                          children: [
-                            const Text(
-                              'Total Escrow Refund (100%)',
-                              style: TextStyle(
-                                fontSize: 11.5,
-                                color: Color(0xFF991B1B),
-                              ),
-                            ),
-                            Text(
-                              'PKR ${escrow.toStringAsFixed(0)}',
-                              style: GoogleFonts.poppins(
-                                fontSize: 17,
-                                fontWeight: FontWeight.bold,
-                                color: const Color(0xFFDC2626),
-                              ),
-                            ),
-                          ],
+                        _buildBreakdownRow(
+                          'Total Escrow Funded (Project Price)',
+                          'PKR ${escrow.toStringAsFixed(0)}',
+                          isBold: true,
                         ),
-                        Container(
-                          padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 5),
-                          decoration: BoxDecoration(
-                            color: Colors.white,
-                            borderRadius: BorderRadius.circular(8),
-                            border: Border.all(color: const Color(0xFFFCA5A5)),
-                          ),
-                          child: const Text(
-                            'Full Escrow Return',
-                            style: TextStyle(
-                              fontSize: 11,
-                              fontWeight: FontWeight.bold,
-                              color: Color(0xFFDC2626),
-                            ),
-                          ),
+                        const SizedBox(height: 7),
+                        _buildBreakdownRow(
+                          'Platform Fee / Commission (0%)',
+                          'PKR 0 (0% Commission)',
+                          color: const Color(0xFF16A34A),
+                          isBold: false,
+                        ),
+                        const SizedBox(height: 7),
+                        const Divider(color: Color(0xFFFECACA)),
+                        const SizedBox(height: 7),
+                        _buildBreakdownRow(
+                          'Refund Payable to Company (100% Full Escrow)',
+                          'PKR ${escrow.toStringAsFixed(0)}',
+                          color: const Color(0xFFDC2626),
+                          isBold: true,
                         ),
                       ],
                     ),
@@ -912,6 +972,12 @@ class _AdminDisputeResolutionScreenState
                               Navigator.pop(ctx);
 
                               if (ok) {
+                                setState(() {
+                                  _resolvedProjectIds.add(project.id);
+                                  _resolvedActionLabels[project.id] =
+                                      'refunded_to_company';
+                                  _resolvedTids[project.id] = tid;
+                                });
                                 _showFeedback(
                                   'Dispute Resolved: SkillBridge administration refunded payment to company. Project Cancelled.',
                                 );
@@ -934,7 +1000,9 @@ class _AdminDisputeResolutionScreenState
                             )
                           : const Icon(Icons.check_circle_rounded, size: 18),
                       label: Text(
-                        isSaving ? 'Processing Refund...' : 'Confirm Refund & Cancel Project',
+                        isSaving
+                            ? 'Processing Refund...'
+                            : 'Confirm Refund to Company (PKR ${escrow.toStringAsFixed(0)})',
                         style: GoogleFonts.poppins(
                           fontWeight: FontWeight.bold,
                           fontSize: 14,
@@ -955,6 +1023,10 @@ class _AdminDisputeResolutionScreenState
   // EXECUTE PAYOUT TRANSFER MODAL
   // ===========================================================================
   Future<void> _openCompletePayoutModal(ProjectModel project) async {
+    final escrow = _resolveProjectEscrow(project);
+    final fee = double.parse((escrow * 0.10).toStringAsFixed(2));
+    final netStudent = double.parse((escrow * 0.90).toStringAsFixed(2));
+
     final tidCtrl = TextEditingController();
     XFile? receiptFile;
     Uint8List? receiptBytes;
@@ -1205,20 +1277,20 @@ class _AdminDisputeResolutionScreenState
                     child: Column(
                       children: [
                         _buildBreakdownRow(
-                          'Total Escrow Deposit',
-                          'PKR ${project.escrowAmount.toStringAsFixed(0)}',
+                          'Total Escrow Funded (Project Price)',
+                          'PKR ${escrow.toStringAsFixed(0)}',
                           isBold: true,
                         ),
                         const SizedBox(height: 6),
                         _buildBreakdownRow(
                           'Platform Commission (10%)',
-                          'PKR ${(project.platformCommissionAmount ?? 0).toStringAsFixed(0)}',
+                          '- PKR ${fee.toStringAsFixed(0)}',
                           color: AppColors.primary,
                         ),
                         const SizedBox(height: 6),
                         _buildBreakdownRow(
                           'Net Student Payout (90%)',
-                          'PKR ${(project.escrowAmount * 0.90).toStringAsFixed(0)}',
+                          'PKR ${netStudent.toStringAsFixed(0)}',
                           color: AppColors.success,
                           isBold: true,
                         ),
@@ -1546,25 +1618,45 @@ class _AdminDisputeResolutionScreenState
                           padding: const EdgeInsets.symmetric(
                               horizontal: 10, vertical: 4),
                           decoration: BoxDecoration(
-                            color: AppColors.errorBg,
+                            color: _isProjectDisputeResolved(p)
+                                ? (_isDisputePaidToStudent(p)
+                                    ? const Color(0xFFDCFCE7)
+                                    : const Color(0xFFFEE2E2))
+                                : AppColors.errorBg,
                             borderRadius: BorderRadius.circular(6),
                           ),
                           child: Text(
-                            p.disputeCaseId ?? '#SB-DISPUTE',
+                            _isProjectDisputeResolved(p)
+                                ? (_isDisputePaidToStudent(p)
+                                    ? 'RESOLVED • PAID'
+                                    : 'RESOLVED • REFUNDED')
+                                : (p.disputeCaseId ?? '#SB-DISPUTE'),
                             style: GoogleFonts.jetBrainsMono(
                               fontSize: 12,
                               fontWeight: FontWeight.bold,
-                              color: AppColors.error,
+                              color: _isProjectDisputeResolved(p)
+                                  ? (_isDisputePaidToStudent(p)
+                                      ? const Color(0xFF15803D)
+                                      : const Color(0xFFB91C1C))
+                                  : AppColors.error,
                             ),
                           ),
                         ),
                       ),
                       Text(
-                        'PKR ${p.escrowAmount.toStringAsFixed(0)} Locked',
+                        _isProjectDisputeResolved(p)
+                            ? (_isDisputePaidToStudent(p)
+                                ? 'PKR ${_resolveProjectEscrow(p).toStringAsFixed(0)} Paid (90%)'
+                                : 'PKR ${_resolveProjectEscrow(p).toStringAsFixed(0)} Refunded (100%)')
+                            : 'PKR ${_resolveProjectEscrow(p).toStringAsFixed(0)} Locked',
                         style: GoogleFonts.poppins(
                           fontSize: 15,
                           fontWeight: FontWeight.bold,
-                          color: AppColors.darkNavy,
+                          color: _isProjectDisputeResolved(p)
+                              ? (_isDisputePaidToStudent(p)
+                                  ? const Color(0xFF047857)
+                                  : const Color(0xFFB91C1C))
+                              : AppColors.darkNavy,
                         ),
                       ),
                     ],
@@ -1631,93 +1723,183 @@ class _AdminDisputeResolutionScreenState
                     ),
                   ),
                   const SizedBox(height: 16),
-                  LayoutBuilder(
-                    builder: (context, cardConstraints) {
-                      final isMobileCard = cardConstraints.maxWidth < 500;
-                      if (isMobileCard) {
-                        return Column(
-                          crossAxisAlignment: CrossAxisAlignment.stretch,
-                          children: [
-                            ElevatedButton.icon(
-                              style: ElevatedButton.styleFrom(
-                                backgroundColor: const Color(0xFF059669),
-                                foregroundColor: Colors.white,
-                                padding: const EdgeInsets.symmetric(
-                                    horizontal: 16, vertical: 12),
-                                shape: RoundedRectangleBorder(
-                                  borderRadius: BorderRadius.circular(10),
+                  Builder(
+                    builder: (context) {
+                      if (_isProjectDisputeResolved(p)) {
+                        final isStudentAwarded = _isDisputePaidToStudent(p);
+                        final tid = (p.payoutTransactionId != null &&
+                                p.payoutTransactionId!.isNotEmpty)
+                            ? p.payoutTransactionId!
+                            : ((p.refundTransactionId != null &&
+                                    p.refundTransactionId!.isNotEmpty)
+                                ? p.refundTransactionId!
+                                : (_resolvedTids[p.id] ?? 'Confirmed'));
+                        final escrow = _resolveProjectEscrow(p);
+                        final commission10 = (escrow * 0.10).toStringAsFixed(0);
+                        final netStudent = (escrow * 0.90).toStringAsFixed(0);
+
+                        return Container(
+                          width: double.infinity,
+                          padding: const EdgeInsets.symmetric(
+                              horizontal: 14, vertical: 12),
+                          decoration: BoxDecoration(
+                            color: isStudentAwarded
+                                ? const Color(0xFFF0FDF4)
+                                : const Color(0xFFFEF2F2),
+                            borderRadius: BorderRadius.circular(12),
+                            border: Border.all(
+                              color: isStudentAwarded
+                                  ? const Color(0xFF86EFAC)
+                                  : const Color(0xFFFECACA),
+                            ),
+                          ),
+                          child: Row(
+                            crossAxisAlignment: CrossAxisAlignment.start,
+                            children: [
+                              Container(
+                                padding: const EdgeInsets.all(6),
+                                decoration: BoxDecoration(
+                                  color: isStudentAwarded
+                                      ? const Color(0xFFDCFCE7)
+                                      : const Color(0xFFFEE2E2),
+                                  shape: BoxShape.circle,
+                                ),
+                                child: Icon(
+                                  isStudentAwarded
+                                      ? Icons.check_circle_rounded
+                                      : Icons.replay_circle_filled_rounded,
+                                  size: 18,
+                                  color: isStudentAwarded
+                                      ? const Color(0xFF059669)
+                                      : const Color(0xFFDC2626),
                                 ),
                               ),
-                              icon: const Icon(Icons.payments_rounded, size: 17),
-                              label: const Text(
-                                'Pay to Student',
-                                style: TextStyle(fontWeight: FontWeight.bold),
-                              ),
-                              onPressed: () => _openDisputePayToStudentModal(p),
-                            ),
-                            const SizedBox(height: 8),
-                            ElevatedButton.icon(
-                              style: ElevatedButton.styleFrom(
-                                backgroundColor: const Color(0xFFDC2626),
-                                foregroundColor: Colors.white,
-                                padding: const EdgeInsets.symmetric(
-                                    horizontal: 16, vertical: 12),
-                                shape: RoundedRectangleBorder(
-                                  borderRadius: BorderRadius.circular(10),
+                              const SizedBox(width: 10),
+                              Expanded(
+                                child: Column(
+                                  crossAxisAlignment: CrossAxisAlignment.start,
+                                  children: [
+                                    Text(
+                                      isStudentAwarded
+                                          ? 'Dispute Resolved: Payment Sent to Student (PAID)'
+                                          : 'Dispute Resolved: 100% Refunded to Company (CANCELLED)',
+                                      style: GoogleFonts.inter(
+                                        fontSize: 13,
+                                        fontWeight: FontWeight.bold,
+                                        color: isStudentAwarded
+                                            ? const Color(0xFF065F46)
+                                            : const Color(0xFF991B1B),
+                                      ),
+                                    ),
+                                    const SizedBox(height: 3),
+                                    Text(
+                                      isStudentAwarded
+                                          ? '90% Net Payout (PKR $netStudent) sent to student • 10% Platform Fee (PKR $commission10) • TID: $tid'
+                                          : '100% Full Escrow (PKR ${escrow.toStringAsFixed(0)}) refunded to company • 0% Platform Fee (PKR 0) • Refund TID: $tid',
+                                      style: GoogleFonts.inter(
+                                        fontSize: 11.5,
+                                        color: isStudentAwarded
+                                            ? const Color(0xFF047857)
+                                            : const Color(0xFFB91C1C),
+                                      ),
+                                    ),
+                                  ],
                                 ),
                               ),
-                              icon: const Icon(Icons.replay_rounded, size: 17),
-                              label: const Text(
-                                'Refund to Company',
-                                style: TextStyle(fontWeight: FontWeight.bold),
-                              ),
-                              onPressed: () => _openDisputeRefundToCompanyModal(p),
-                            ),
-                          ],
+                            ],
+                          ),
                         );
                       }
-                      return Row(
-                        children: [
-                          Expanded(
-                            child: ElevatedButton.icon(
-                              style: ElevatedButton.styleFrom(
-                                backgroundColor: const Color(0xFF059669),
-                                foregroundColor: Colors.white,
-                                padding: const EdgeInsets.symmetric(
-                                    horizontal: 16, vertical: 12),
-                                shape: RoundedRectangleBorder(
-                                  borderRadius: BorderRadius.circular(10),
+
+                      return LayoutBuilder(
+                        builder: (context, cardConstraints) {
+                          final isMobileCard = cardConstraints.maxWidth < 500;
+                          if (isMobileCard) {
+                            return Column(
+                              crossAxisAlignment: CrossAxisAlignment.stretch,
+                              children: [
+                                ElevatedButton.icon(
+                                  style: ElevatedButton.styleFrom(
+                                    backgroundColor: const Color(0xFF059669),
+                                    foregroundColor: Colors.white,
+                                    padding: const EdgeInsets.symmetric(
+                                        horizontal: 16, vertical: 12),
+                                    shape: RoundedRectangleBorder(
+                                      borderRadius: BorderRadius.circular(10),
+                                    ),
+                                  ),
+                                  icon: const Icon(Icons.payments_rounded, size: 17),
+                                  label: const Text(
+                                    'Pay to Student',
+                                    style: TextStyle(fontWeight: FontWeight.bold),
+                                  ),
+                                  onPressed: () => _openDisputePayToStudentModal(p),
+                                ),
+                                const SizedBox(height: 8),
+                                ElevatedButton.icon(
+                                  style: ElevatedButton.styleFrom(
+                                    backgroundColor: const Color(0xFFDC2626),
+                                    foregroundColor: Colors.white,
+                                    padding: const EdgeInsets.symmetric(
+                                        horizontal: 16, vertical: 12),
+                                    shape: RoundedRectangleBorder(
+                                      borderRadius: BorderRadius.circular(10),
+                                    ),
+                                  ),
+                                  icon: const Icon(Icons.replay_rounded, size: 17),
+                                  label: const Text(
+                                    'Refund to Company',
+                                    style: TextStyle(fontWeight: FontWeight.bold),
+                                  ),
+                                  onPressed: () => _openDisputeRefundToCompanyModal(p),
+                                ),
+                              ],
+                            );
+                          }
+                          return Row(
+                            children: [
+                              Expanded(
+                                child: ElevatedButton.icon(
+                                  style: ElevatedButton.styleFrom(
+                                    backgroundColor: const Color(0xFF059669),
+                                    foregroundColor: Colors.white,
+                                    padding: const EdgeInsets.symmetric(
+                                        horizontal: 16, vertical: 12),
+                                    shape: RoundedRectangleBorder(
+                                      borderRadius: BorderRadius.circular(10),
+                                    ),
+                                  ),
+                                  icon: const Icon(Icons.payments_rounded, size: 17),
+                                  label: const Text(
+                                    'Pay to Student',
+                                    style: TextStyle(fontWeight: FontWeight.bold),
+                                  ),
+                                  onPressed: () => _openDisputePayToStudentModal(p),
                                 ),
                               ),
-                              icon: const Icon(Icons.payments_rounded, size: 17),
-                              label: const Text(
-                                'Pay to Student',
-                                style: TextStyle(fontWeight: FontWeight.bold),
-                              ),
-                              onPressed: () => _openDisputePayToStudentModal(p),
-                            ),
-                          ),
-                          const SizedBox(width: 12),
-                          Expanded(
-                            child: ElevatedButton.icon(
-                              style: ElevatedButton.styleFrom(
-                                backgroundColor: const Color(0xFFDC2626),
-                                foregroundColor: Colors.white,
-                                padding: const EdgeInsets.symmetric(
-                                    horizontal: 16, vertical: 12),
-                                shape: RoundedRectangleBorder(
-                                  borderRadius: BorderRadius.circular(10),
+                              const SizedBox(width: 12),
+                              Expanded(
+                                child: ElevatedButton.icon(
+                                  style: ElevatedButton.styleFrom(
+                                    backgroundColor: const Color(0xFFDC2626),
+                                    foregroundColor: Colors.white,
+                                    padding: const EdgeInsets.symmetric(
+                                        horizontal: 16, vertical: 12),
+                                    shape: RoundedRectangleBorder(
+                                      borderRadius: BorderRadius.circular(10),
+                                    ),
+                                  ),
+                                  icon: const Icon(Icons.replay_rounded, size: 17),
+                                  label: const Text(
+                                    'Refund to Company',
+                                    style: TextStyle(fontWeight: FontWeight.bold),
+                                  ),
+                                  onPressed: () => _openDisputeRefundToCompanyModal(p),
                                 ),
                               ),
-                              icon: const Icon(Icons.replay_rounded, size: 17),
-                              label: const Text(
-                                'Refund to Company',
-                                style: TextStyle(fontWeight: FontWeight.bold),
-                              ),
-                              onPressed: () => _openDisputeRefundToCompanyModal(p),
-                            ),
-                          ),
-                        ],
+                            ],
+                          );
+                        },
                       );
                     },
                   ),
@@ -1744,8 +1926,9 @@ class _AdminDisputeResolutionScreenState
           itemCount: projects.length,
           itemBuilder: (context, idx) {
             final p = projects[idx];
-            final fee = double.parse((p.escrowAmount * 0.10).toStringAsFixed(2));
-            final netStudent = double.parse((p.escrowAmount * 0.90).toStringAsFixed(2));
+            final escrow = _resolveProjectEscrow(p);
+            final fee = double.parse((escrow * 0.10).toStringAsFixed(2));
+            final netStudent = double.parse((escrow * 0.90).toStringAsFixed(2));
 
             return Container(
               margin: const EdgeInsets.only(bottom: 16),

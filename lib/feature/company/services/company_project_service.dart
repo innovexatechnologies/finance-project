@@ -116,6 +116,26 @@ class CompanyProjectService {
             ? dbAssigned
             : assignedNames[pid];
 
+        final rawEscrow = p['escrow_amount'] ??
+            p['escrowAmount'] ??
+            p['budget_amount'] ??
+            p['budgetAmount'] ??
+            p['budget'] ??
+            p['stipend'];
+        double computedEscrow = 0.0;
+        if (rawEscrow is num && rawEscrow > 0) {
+          computedEscrow = rawEscrow.toDouble();
+        } else if (rawEscrow != null) {
+          final clean = rawEscrow.toString().replaceAll(RegExp(r'[^0-9.]'), '');
+          final val = double.tryParse(clean);
+          if (val != null && val > 0) computedEscrow = val;
+        }
+        if (computedEscrow <= 0) {
+          computedEscrow =
+              ProjectModel.extractEscrowAmount(p['additional_instructions']?.toString()) ??
+                  25000.0;
+        }
+
         return ProjectModel(
           id: pid,
           title: p['title']?.toString() ?? 'Untitled Project',
@@ -142,6 +162,14 @@ class CompanyProjectService {
           progress: (p['progress'] as num?)?.toDouble() ?? 0.0,
           createdAt: SupabaseHelper.formatRelativeTime(p['created_at']),
           paymentSent: p['payment_sent'] == true,
+          escrowAmount: computedEscrow,
+          disputeCaseId: p['dispute_case_id']?.toString(),
+          disputeReason: p['dispute_reason']?.toString(),
+          deliveredAt: p['delivered_at']?.toString(),
+          paymentReceiptUrl: p['payment_receipt_url']?.toString(),
+          transactionId: p['transaction_id']?.toString(),
+          paymentMethodUsed: p['payment_method_used']?.toString(),
+          isEscrowVerified: p['is_escrow_verified'] == true,
         );
       }).toList();
 
@@ -221,6 +249,9 @@ class CompanyProjectService {
         'status': savedProject.status,
         'progress': savedProject.progress,
         'payment_sent': savedProject.paymentSent,
+        'escrow_amount': savedProject.escrowAmount > 0
+            ? savedProject.escrowAmount
+            : 25000.0,
         'created_at': nowIso,
         'updated_at': nowIso,
       });

@@ -33,6 +33,7 @@ class ProjectModel {
   final String? deliveredAt;
   final String? disputeCaseId;
   final String? disputeReason;
+  final String? disputeResolution;
   final String? payoutType; // 'full_student', 'auto_released_student', 'full_company_refund', 'split_50_50'
   final double? studentPayoutAmount;
   final double? companyRefundAmount;
@@ -86,6 +87,7 @@ class ProjectModel {
     this.deliveredAt,
     this.disputeCaseId,
     this.disputeReason,
+    this.disputeResolution,
     this.payoutType,
     this.studentPayoutAmount,
     this.companyRefundAmount,
@@ -125,6 +127,15 @@ class ProjectModel {
   bool get isRevisionRequested => status.toLowerCase() == 'revision_requested';
   bool get isDisputed =>
       status.toLowerCase() == 'disputed' || status.toLowerCase() == 'rejected';
+  bool get isDisputeResolved =>
+      (disputeResolution != null && disputeResolution!.trim().isNotEmpty) ||
+      (status.toLowerCase() == 'completed' &&
+          payoutTransactionId != null &&
+          payoutTransactionId!.trim().isNotEmpty) ||
+      (status.toLowerCase() == 'cancelled' &&
+          ((refundTransactionId != null &&
+                  refundTransactionId!.trim().isNotEmpty) ||
+              payoutType == 'dispute_company_refunded'));
   bool get isReadyForPayout =>
       status.toLowerCase() == 'ready_for_payout' ||
       status.toLowerCase() == 'approved_by_company' ||
@@ -209,6 +220,7 @@ class ProjectModel {
     String? deliveredAt,
     String? disputeCaseId,
     String? disputeReason,
+    String? disputeResolution,
     String? payoutType,
     double? studentPayoutAmount,
     double? companyRefundAmount,
@@ -259,6 +271,7 @@ class ProjectModel {
       deliveredAt: deliveredAt ?? this.deliveredAt,
       disputeCaseId: disputeCaseId ?? this.disputeCaseId,
       disputeReason: disputeReason ?? this.disputeReason,
+      disputeResolution: disputeResolution ?? this.disputeResolution,
       payoutType: payoutType ?? this.payoutType,
       studentPayoutAmount: studentPayoutAmount ?? this.studentPayoutAmount,
       companyRefundAmount: companyRefundAmount ?? this.companyRefundAmount,
@@ -309,7 +322,7 @@ class ProjectModel {
       progress: (json['progress'] as num?)?.toDouble() ?? 0.0,
       createdAt: (json['created_at'] ?? 'Recently').toString(),
       paymentSent: json['payment_sent'] == true,
-      escrowAmount: (json['escrow_amount'] as num?)?.toDouble() ?? 0.0,
+      escrowAmount: _parseEscrowAmount(json),
       paymentMethodUsed: json['payment_method_used']?.toString() ??
           _extractPaymentMethod(json['additional_instructions']?.toString()),
       transactionId: json['transaction_id']?.toString() ??
@@ -322,6 +335,8 @@ class ProjectModel {
       deliveredAt: json['delivered_at']?.toString(),
       disputeCaseId: json['dispute_case_id']?.toString(),
       disputeReason: json['dispute_reason']?.toString(),
+      disputeResolution: json['dispute_resolution']?.toString() ??
+          json['disputeResolution']?.toString(),
       payoutType: json['payout_type']?.toString(),
       studentPayoutAmount:
           (json['student_payout_amount'] as num?)?.toDouble(),
@@ -383,6 +398,7 @@ class ProjectModel {
       if (deliveredAt != null) 'delivered_at': deliveredAt,
       if (disputeCaseId != null) 'dispute_case_id': disputeCaseId,
       if (disputeReason != null) 'dispute_reason': disputeReason,
+      if (disputeResolution != null) 'dispute_resolution': disputeResolution,
       if (payoutType != null) 'payout_type': payoutType,
       if (studentPayoutAmount != null)
         'student_payout_amount': studentPayoutAmount,
@@ -420,5 +436,40 @@ class ProjectModel {
     final match =
         RegExp(r'Payment(?:\s*Method)?:\s*([^|]+)').firstMatch(instructions);
     return match?.group(1)?.trim();
+  }
+
+  static double _parseEscrowAmount(Map<String, dynamic> json) {
+    final raw = json['escrow_amount'] ??
+        json['escrowAmount'] ??
+        json['budget_amount'] ??
+        json['budgetAmount'] ??
+        json['budget'] ??
+        json['stipend'] ??
+        json['amount'];
+    if (raw is num && raw > 0) return raw.toDouble();
+    if (raw != null) {
+      final clean = raw.toString().replaceAll(RegExp(r'[^0-9.]'), '');
+      final val = double.tryParse(clean);
+      if (val != null && val > 0) return val;
+    }
+    final fromInstructions =
+        extractEscrowAmount(json['additional_instructions']?.toString());
+    if (fromInstructions != null && fromInstructions > 0) {
+      return fromInstructions;
+    }
+    return 0.0;
+  }
+
+  static double? extractEscrowAmount(String? instructions) {
+    if (instructions == null || instructions.trim().isEmpty) return null;
+    final match = RegExp(
+      r'(?:escrow|amount|budget|deposit|price|fee|pkr)\s*[:=]?\s*(?:pkr)?\s*([0-9,]+(?:\.[0-9]+)?)',
+      caseSensitive: false,
+    ).firstMatch(instructions);
+    if (match != null) {
+      final clean = match.group(1)?.replaceAll(',', '');
+      return double.tryParse(clean ?? '');
+    }
+    return null;
   }
 }

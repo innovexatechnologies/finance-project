@@ -173,7 +173,12 @@ class AdminDisputePayoutService {
     if (supabase == null) {
       final local = CompanyProjectService()
           .allProjects
-          .where((p) => p.isDisputed || p.status.toLowerCase() == 'rejected')
+          .where((p) =>
+              p.isDisputed ||
+              p.status.toLowerCase() == 'rejected' ||
+              p.disputeResolution != null ||
+              p.payoutType == 'dispute_company_refunded' ||
+              p.payoutType == 'dispute_student_awarded')
           .toList();
       disputedProjectsNotifier.value = local;
       isLoadingNotifier.value = false;
@@ -184,21 +189,38 @@ class AdminDisputePayoutService {
       final rows = await supabase
           .from('projects')
           .select()
-          .or('status.eq.disputed,status.eq.rejected')
+          .or('status.eq.disputed,status.eq.rejected,status.eq.Rejected,status.eq.Disputed,dispute_resolution.not.is.null,payout_type.eq.dispute_student_awarded,payout_type.eq.dispute_company_refunded')
           .order('updated_at', ascending: false);
 
       final list = (rows as List<dynamic>)
           .map((r) => ProjectModel.fromJson(Map<String, dynamic>.from(r)))
           .toList();
 
-      disputedProjectsNotifier.value = list;
-      return list;
+      final local = CompanyProjectService()
+          .allProjects
+          .where((p) =>
+              (p.isDisputed ||
+                  p.status.toLowerCase() == 'rejected' ||
+                  p.disputeResolution != null ||
+                  p.payoutType == 'dispute_company_refunded' ||
+                  p.payoutType == 'dispute_student_awarded') &&
+              !list.any((rem) => rem.id == p.id))
+          .toList();
+
+      final combined = [...list, ...local];
+      disputedProjectsNotifier.value = combined;
+      return combined;
     } catch (e) {
       debugPrint('AdminDisputePayoutService loadDisputedProjects error: $e');
       _lastError = SupabaseHelper.friendlyError(e);
       final local = CompanyProjectService()
           .allProjects
-          .where((p) => p.isDisputed || p.status.toLowerCase() == 'rejected')
+          .where((p) =>
+              p.isDisputed ||
+              p.status.toLowerCase() == 'rejected' ||
+              p.disputeResolution != null ||
+              p.payoutType == 'dispute_company_refunded' ||
+              p.payoutType == 'dispute_student_awarded')
           .toList();
       disputedProjectsNotifier.value = local;
       return local;
@@ -606,10 +628,35 @@ class AdminDisputePayoutService {
 
     String projectTitle = 'Project';
     final existing = CompanyProjectService().allProjects;
+    double escrow = 0.0;
     try {
       final p = existing.firstWhere((p) => p.id == projectId);
       projectTitle = p.title;
+      escrow = p.escrowAmount;
     } catch (_) {}
+
+    if (escrow <= 0) {
+      try {
+        final allP = AppDataService.instance.getAllProjects();
+        final raw = allP.firstWhere(
+          (e) => (e['id'] ?? e['projectId'])?.toString() == projectId,
+        );
+        final amt = raw['escrow_amount'] ??
+            raw['escrowAmount'] ??
+            raw['budgetAmount'] ??
+            raw['budget'] ??
+            raw['stipend'];
+        if (amt is num && amt > 0) escrow = amt.toDouble();
+        if (amt != null && escrow <= 0) {
+          final cl = amt.toString().replaceAll(RegExp(r'[^0-9.]'), '');
+          final d = double.tryParse(cl);
+          if (d != null && d > 0) escrow = d;
+        }
+      } catch (_) {}
+    }
+    if (escrow <= 0) escrow = 25000.0;
+    final commission10 = double.parse((escrow * 0.10).toStringAsFixed(2));
+    final netStudent = double.parse((escrow * 0.90).toStringAsFixed(2));
 
     if (supabase != null && SupabaseHelper.isUuid(projectId)) {
       try {
@@ -617,7 +664,11 @@ class AdminDisputePayoutService {
             .from('projects')
             .update({
               'status': 'completed',
+              'payment_status': 'paid',
               'payout_type': 'dispute_student_awarded',
+              'student_payout_amount': netStudent,
+              'platform_commission_amount': commission10,
+              'company_refund_amount': 0.00,
               'payout_transaction_id': tid,
               if (receiptUrl != null && receiptUrl.trim().isNotEmpty)
                 'payout_receipt_url': receiptUrl.trim(),
@@ -669,24 +720,43 @@ class AdminDisputePayoutService {
     if (cIdx != -1) {
       compList[cIdx] = compList[cIdx].copyWith(
         status: 'completed',
+        paymentStatus: 'paid',
         payoutTransactionId: tid,
         payoutReceiptUrl: receiptUrl,
         payoutType: 'dispute_student_awarded',
+        disputeResolution: 'paid_to_student',
+        studentPayoutAmount: netStudent,
+        platformCommissionAmount: commission10,
+        companyRefundAmount: 0.00,
       );
       CompanyProjectService().projectsNotifier.value = compList;
     }
 
-    // Refresh queue
-    disputedProjectsNotifier.value = disputedProjectsNotifier.value
-        .where((p) => p.id != projectId)
-        .toList();
+    // Update in-memory disputed list in-place so buttons hide immediately on card
+    final dList = List<ProjectModel>.from(disputedProjectsNotifier.value);
+    final dIdx = dList.indexWhere((p) => p.id == projectId);
+    if (dIdx != -1) {
+      dList[dIdx] = dList[dIdx].copyWith(
+        status: 'completed',
+        paymentStatus: 'paid',
+        payoutTransactionId: tid,
+        payoutReceiptUrl: receiptUrl,
+        payoutType: 'dispute_student_awarded',
+        disputeResolution: 'paid_to_student',
+        studentPayoutAmount: netStudent,
+        platformCommissionAmount: commission10,
+        companyRefundAmount: 0.00,
+      );
+      disputedProjectsNotifier.value = dList;
+    }
+
     loadDisputedProjects(forceRefresh: true);
     loadPayoutReadyProjects(forceRefresh: true);
 
     return true;
   }
 
-  /// Admin Option 2: Refunds Escrow to Company, cancels project,
+  /// Admin Option 2: Refunds Escrow to Company (0% Commission, 100% full return), cancels project,
   /// immediately sets status to 'cancelled' and notifies both parties.
   Future<bool> executeDisputeRefundToCompany({
     required String projectId,
@@ -701,10 +771,33 @@ class AdminDisputePayoutService {
 
     String projectTitle = 'Project';
     final existing = CompanyProjectService().allProjects;
+    double escrow = 0.0;
     try {
       final p = existing.firstWhere((p) => p.id == projectId);
       projectTitle = p.title;
+      escrow = p.escrowAmount;
     } catch (_) {}
+
+    if (escrow <= 0) {
+      try {
+        final allP = AppDataService.instance.getAllProjects();
+        final raw = allP.firstWhere(
+          (e) => (e['id'] ?? e['projectId'])?.toString() == projectId,
+        );
+        final amt = raw['escrow_amount'] ??
+            raw['escrowAmount'] ??
+            raw['budgetAmount'] ??
+            raw['budget'] ??
+            raw['stipend'];
+        if (amt is num && amt > 0) escrow = amt.toDouble();
+        if (amt != null && escrow <= 0) {
+          final cl = amt.toString().replaceAll(RegExp(r'[^0-9.]'), '');
+          final d = double.tryParse(cl);
+          if (d != null && d > 0) escrow = d;
+        }
+      } catch (_) {}
+    }
+    if (escrow <= 0) escrow = 15000.0;
 
     if (supabase != null && SupabaseHelper.isUuid(projectId)) {
       try {
@@ -712,7 +805,11 @@ class AdminDisputePayoutService {
             .from('projects')
             .update({
               'status': 'cancelled',
+              'payment_status': 'refunded',
               'payout_type': 'dispute_company_refunded',
+              'company_refund_amount': escrow,
+              'student_payout_amount': 0.00,
+              'platform_commission_amount': 0.00,
               'refund_transaction_id': tid,
               if (receiptUrl != null && receiptUrl.trim().isNotEmpty)
                 'refund_receipt_url': receiptUrl.trim(),
@@ -761,15 +858,36 @@ class AdminDisputePayoutService {
     if (cIdx != -1) {
       compList[cIdx] = compList[cIdx].copyWith(
         status: 'cancelled',
+        paymentStatus: 'refunded',
         payoutType: 'dispute_company_refunded',
+        disputeResolution: 'refunded_to_company',
+        refundTransactionId: tid,
+        refundReceiptUrl: receiptUrl,
+        companyRefundAmount: escrow,
+        platformCommissionAmount: 0.00,
+        studentPayoutAmount: 0.00,
       );
       CompanyProjectService().projectsNotifier.value = compList;
     }
 
-    // Refresh queue
-    disputedProjectsNotifier.value = disputedProjectsNotifier.value
-        .where((p) => p.id != projectId)
-        .toList();
+    // Update in-memory disputed list in-place so buttons hide immediately on card
+    final dList = List<ProjectModel>.from(disputedProjectsNotifier.value);
+    final dIdx = dList.indexWhere((p) => p.id == projectId);
+    if (dIdx != -1) {
+      dList[dIdx] = dList[dIdx].copyWith(
+        status: 'cancelled',
+        paymentStatus: 'refunded',
+        payoutType: 'dispute_company_refunded',
+        disputeResolution: 'refunded_to_company',
+        refundTransactionId: tid,
+        refundReceiptUrl: receiptUrl,
+        companyRefundAmount: escrow,
+        platformCommissionAmount: 0.00,
+        studentPayoutAmount: 0.00,
+      );
+      disputedProjectsNotifier.value = dList;
+    }
+
     loadDisputedProjects(forceRefresh: true);
     loadPayoutReadyProjects(forceRefresh: true);
 

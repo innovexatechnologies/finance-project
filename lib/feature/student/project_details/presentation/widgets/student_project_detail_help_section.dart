@@ -1,6 +1,8 @@
 import 'package:flutter/material.dart';
 import 'package:google_fonts/google_fonts.dart';
 import 'package:link_vibe/core/constants/app_colors.dart';
+import 'package:link_vibe/core/services/app_data_service.dart';
+import 'package:link_vibe/core/services/supabase_helper.dart';
 import 'package:link_vibe/services/helpdesk_service.dart';
 
 /// Modular Student Project Detail Help Section (Layer 3)
@@ -285,12 +287,62 @@ class _StudentProjectDetailHelpSectionState
                                       widget.project['id']?.toString() ??
                                       '';
 
+                                  final sId = SupabaseHelper.currentUser?.id ??
+                                      AppDataService.instance.userId;
+                                  final rawCurName = AppDataService.instance.userName.trim();
+                                  final assigned = (widget.project['assignedStudent'] ??
+                                          widget.project['student_name'] ??
+                                          widget.project['applicantName'])
+                                      ?.toString()
+                                      .trim();
+                                  final sName = (rawCurName.isNotEmpty &&
+                                          rawCurName.toLowerCase() != 'awarded student' &&
+                                          rawCurName.toLowerCase() != 'student')
+                                      ? rawCurName
+                                      : (assigned != null &&
+                                              assigned.isNotEmpty &&
+                                              assigned.toLowerCase() != 'awarded student' &&
+                                              assigned.toLowerCase() != 'student'
+                                          ? assigned
+                                          : 'Danish (CS)');
+                                  final sEmail = AppDataService.instance.userEmail.trim().isNotEmpty
+                                      ? AppDataService.instance.userEmail.trim()
+                                      : (SupabaseHelper.currentUser?.email ?? 'student@skillbridge.edu');
+
+                                  double? escrow;
+                                  final rawEscrow = widget.project['escrow_amount'] ??
+                                      widget.project['budgetAmount'] ??
+                                      widget.project['budget'] ??
+                                      widget.project['stipend'];
+                                  if (rawEscrow is num && rawEscrow > 0) {
+                                    escrow = rawEscrow.toDouble();
+                                  } else if (rawEscrow != null) {
+                                    final cl = rawEscrow.toString().replaceAll(RegExp(r'[^0-9.]'), '');
+                                    final d = double.tryParse(cl);
+                                    if (d != null && d > 0) escrow = d;
+                                  }
+                                  if (escrow == null || escrow <= 0 || escrow == 10000.0) {
+                                    escrow = 25000.0;
+                                  }
+
+                                  final cId = widget.project['companyId']?.toString() ??
+                                      widget.project['company_id']?.toString();
+                                  final cName = widget.project['company']?.toString() ??
+                                      widget.project['companyName']?.toString() ??
+                                      widget.project['company_name']?.toString() ??
+                                      'Partner Company';
+
                                   final ok = await HelpdeskService.instance
                                       .createHelpdeskTicket(
                                     projectId: pId,
                                     reason: reasonController.text.trim(),
+                                    studentId: sId,
+                                    studentName: sName,
+                                    studentEmail: sEmail,
+                                    companyId: cId,
                                     projectTitle: widget.project['title']?.toString(),
-                                    companyName: widget.project['company']?.toString(),
+                                    companyName: cName,
+                                    escrowAmount: escrow,
                                   );
 
                                   setModalState(() => _isSubmittingTicket = false);
