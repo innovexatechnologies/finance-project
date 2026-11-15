@@ -393,144 +393,6 @@ class _CompanyProjectDetailScreenState
     }
   }
 
-  Future<void> _handleRequestRevision(ProjectModel project) async {
-    if (!project.canRequestRevision) {
-      ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(
-          content: Text('Only 1 review request is allowed. Maximum limit reached for this project.'),
-          backgroundColor: AppColors.error,
-          behavior: SnackBarBehavior.floating,
-        ),
-      );
-      return;
-    }
-
-    final notesController = TextEditingController();
-
-    final confirmed = await showDialog<bool>(
-      context: context,
-      builder: (ctx) => AlertDialog(
-        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
-        title: Row(
-          children: [
-            Container(
-              padding: const EdgeInsets.all(8),
-              decoration: BoxDecoration(
-                color: const Color(0xFFDBEAFE),
-                borderRadius: BorderRadius.circular(10),
-              ),
-              child: const Icon(Icons.rate_review_rounded, color: Color(0xFF2563EB)),
-            ),
-            const SizedBox(width: 10),
-            const Expanded(
-              child: Text(
-                'Request Improvement',
-                style: TextStyle(fontSize: 17, fontWeight: FontWeight.bold),
-              ),
-            ),
-          ],
-        ),
-        content: SingleChildScrollView(
-          child: Column(
-            mainAxisSize: MainAxisSize.min,
-            crossAxisAlignment: CrossAxisAlignment.start,
-            children: [
-              Text(
-                'Specify the required improvements. The student will have strictly 2 Days (48 Hours) to re-deliver revised work.',
-                style: GoogleFonts.inter(fontSize: 13, height: 1.4),
-              ),
-              const SizedBox(height: 10),
-              Container(
-                padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 8),
-                decoration: BoxDecoration(
-                  color: const Color(0xFFEFF6FF),
-                  borderRadius: BorderRadius.circular(8),
-                  border: Border.all(color: const Color(0xFF3B82F6).withValues(alpha: 0.3)),
-                ),
-                child: const Row(
-                  children: [
-                    Icon(Icons.info_outline_rounded, size: 16, color: Color(0xFF1D4ED8)),
-                    SizedBox(width: 6),
-                    Expanded(
-                      child: Text(
-                        'Important: Only 1 review request is allowed. Student has strictly 2 Days (48 Hours) deadline. After re-delivery, options will strictly be Approve or Reject.',
-                        style: TextStyle(
-                          fontSize: 11,
-                          fontWeight: FontWeight.w600,
-                          color: Color(0xFF1D4ED8),
-                          height: 1.35,
-                        ),
-                      ),
-                    ),
-                  ],
-                ),
-              ),
-              const SizedBox(height: 14),
-              TextField(
-                controller: notesController,
-                maxLines: 3,
-                decoration: InputDecoration(
-                  labelText: 'Required Improvements / Feedback *',
-                  hintText: 'Describe missing criteria, bug fixes, or deliverables needed...',
-                  border: OutlineInputBorder(borderRadius: BorderRadius.circular(10)),
-                ),
-              ),
-            ],
-          ),
-        ),
-        actions: [
-          TextButton(
-            onPressed: () => Navigator.pop(ctx, false),
-            child: const Text('Cancel'),
-          ),
-          ElevatedButton(
-            style: ElevatedButton.styleFrom(
-              backgroundColor: const Color(0xFF2563EB),
-              foregroundColor: Colors.white,
-              shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(10)),
-            ),
-            onPressed: () {
-              if (notesController.text.trim().isEmpty) {
-                ScaffoldMessenger.of(ctx).showSnackBar(
-                  const SnackBar(content: Text('Please describe the required improvements.')),
-                );
-                return;
-              }
-              Navigator.pop(ctx, true);
-            },
-            child: const Text('Send Improvement Request (2 Days)'),
-          ),
-        ],
-      ),
-    );
-
-    if (confirmed == true && mounted) {
-      final success = await EscrowLifecycleService().requestProjectRevision(
-        projectId: project.id,
-        revisionNotes: notesController.text.trim(),
-      );
-
-      if (!mounted) return;
-      if (success) {
-        ScaffoldMessenger.of(context).showSnackBar(
-          const SnackBar(
-            content: Text('Improvement requested! Student has strictly 2 days (48 hours) to re-deliver.'),
-            backgroundColor: Color(0xFF2563EB),
-            behavior: SnackBarBehavior.floating,
-          ),
-        );
-      } else {
-        ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(
-            content: Text(EscrowLifecycleService().lastError ?? 'Failed to request revision.'),
-            backgroundColor: AppColors.error,
-            behavior: SnackBarBehavior.floating,
-          ),
-        );
-      }
-    }
-  }
-
   Future<void> _handleRaiseDispute(ProjectModel project) async {
     final reasonController = TextEditingController();
 
@@ -1410,22 +1272,6 @@ class _CompanyProjectDetailScreenState
               label: const Text('Approve & Release Payment'),
             ),
           ),
-          if (project.canRequestRevision) ...[
-            const SizedBox(height: 8),
-            SizedBox(
-              width: double.infinity,
-              child: OutlinedButton.icon(
-                style: OutlinedButton.styleFrom(
-                  foregroundColor: const Color(0xFF2563EB),
-                  side: const BorderSide(color: Color(0xFF2563EB)),
-                  padding: const EdgeInsets.symmetric(vertical: 12),
-                ),
-                onPressed: () => _handleRequestRevision(project),
-                icon: const Icon(Icons.rate_review_rounded, size: 18),
-                label: const Text('Request Improvement (1 Review Allowed • 2 Days)'),
-              ),
-            ),
-          ],
           const SizedBox(height: 8),
           SizedBox(
             width: double.infinity,
@@ -1884,7 +1730,7 @@ class _CompanyProjectDetailScreenState
             ),
           ),
           const SizedBox(height: 16),
-          // 3 Options on 1st submission, Strictly 2 Options on 2nd submission
+          // Strictly 2 Options: Accept & Release OR Reject & Dispute (No Improvement option)
           Row(
             children: [
               Expanded(
@@ -1892,50 +1738,31 @@ class _CompanyProjectDetailScreenState
                   style: ElevatedButton.styleFrom(
                     backgroundColor: const Color(0xFF059669),
                     foregroundColor: Colors.white,
-                    padding: const EdgeInsets.symmetric(vertical: 12),
+                    padding: const EdgeInsets.symmetric(vertical: 13),
                     shape: RoundedRectangleBorder(
                       borderRadius: BorderRadius.circular(10),
                     ),
                   ),
                   icon: const Icon(Icons.check_circle_outline_rounded, size: 18),
-                  label: const Text('Approve & Release Payment'),
+                  label: Text(
+                    'Approve & Release Payment',
+                    maxLines: 1,
+                    overflow: TextOverflow.ellipsis,
+                    style: GoogleFonts.poppins(
+                      fontWeight: FontWeight.bold,
+                      fontSize: 13,
+                    ),
+                  ),
                   onPressed: () => _handleApproveAndRelease(project),
                 ),
               ),
-            ],
-          ),
-          const SizedBox(height: 10),
-          Row(
-            children: [
-              if (project.canRequestRevision) ...[
-                Expanded(
-                  child: OutlinedButton.icon(
-                    style: OutlinedButton.styleFrom(
-                      foregroundColor: const Color(0xFF2563EB),
-                      side: const BorderSide(color: Color(0xFF2563EB)),
-                      padding: const EdgeInsets.symmetric(vertical: 12),
-                      shape: RoundedRectangleBorder(
-                        borderRadius: BorderRadius.circular(10),
-                      ),
-                    ),
-                    icon: const Icon(Icons.rate_review_rounded, size: 18),
-                    label: Text(
-                      'Improvement (2 Days)',
-                      maxLines: 1,
-                      overflow: TextOverflow.ellipsis,
-                      style: GoogleFonts.inter(fontWeight: FontWeight.w600, fontSize: 12.5),
-                    ),
-                    onPressed: () => _handleRequestRevision(project),
-                  ),
-                ),
-                const SizedBox(width: 10),
-              ],
+              const SizedBox(width: 10),
               Expanded(
                 child: OutlinedButton.icon(
                   style: OutlinedButton.styleFrom(
                     foregroundColor: AppColors.error,
-                    side: const BorderSide(color: AppColors.error),
-                    padding: const EdgeInsets.symmetric(vertical: 12),
+                    side: const BorderSide(color: AppColors.error, width: 1.2),
+                    padding: const EdgeInsets.symmetric(vertical: 13),
                     shape: RoundedRectangleBorder(
                       borderRadius: BorderRadius.circular(10),
                     ),
@@ -1945,7 +1772,10 @@ class _CompanyProjectDetailScreenState
                     'Reject & Dispute',
                     maxLines: 1,
                     overflow: TextOverflow.ellipsis,
-                    style: GoogleFonts.inter(fontWeight: FontWeight.w600, fontSize: 12.5),
+                    style: GoogleFonts.poppins(
+                      fontWeight: FontWeight.w600,
+                      fontSize: 13,
+                    ),
                   ),
                   onPressed: () => _handleRaiseDispute(project),
                 ),

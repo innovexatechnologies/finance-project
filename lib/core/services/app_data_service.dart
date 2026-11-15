@@ -6,6 +6,7 @@ import 'package:shared_preferences/shared_preferences.dart';
 import 'package:supabase_flutter/supabase_flutter.dart' show FileOptions;
 import 'package:link_vibe/core/services/supabase_helper.dart';
 import 'package:link_vibe/feature/admin/services/admin_hash_util.dart';
+import 'package:link_vibe/services/escrow_lifecycle_service.dart';
 
 /// Central Persistent & Supabase-Synchronized Data Service for SkillBridge.
 class AppDataService extends ChangeNotifier {
@@ -1298,6 +1299,18 @@ class AppDataService extends ChangeNotifier {
     if (appIndex >= 0) {
       _applications[appIndex]['status'] = 'Under Review';
       _applications[appIndex]['progress'] = 0.85;
+      _applications[appIndex]['isDelivered'] = true;
+    }
+
+    final projIndex = _projects.indexWhere(
+      (p) => p['id']?.toString() == projectId,
+    );
+    if (projIndex >= 0) {
+      _projects[projIndex]['status'] = 'delivered';
+      _projects[projIndex]['delivered_at'] = DateTime.now().toIso8601String();
+      if (workLink.isNotEmpty) {
+        _projects[projIndex]['attachmentUrl'] = workLink;
+      }
     }
 
     _safeNotifyListeners();
@@ -1305,6 +1318,18 @@ class AppDataService extends ChangeNotifier {
     if (_prefs != null) {
       await _prefs!.setString(_kSubmissions, jsonEncode(_workSubmissions));
       await _prefs!.setString(_kApplications, jsonEncode(_applications));
+      await _prefs!.setString(_kCustomProjects, jsonEncode(_projects));
+    }
+
+    // Synchronize to Supabase projects and notify company
+    try {
+      await EscrowLifecycleService().deliverProject(
+        projectId: projectId,
+        workUrl: workLink,
+        summary: summary,
+      );
+    } catch (e) {
+      debugPrint('EscrowLifecycleService delivery sync error: $e');
     }
 
     final supabase = SupabaseHelper.clientOrNull;

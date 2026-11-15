@@ -9,7 +9,7 @@ import 'package:link_vibe/core/services/share_service.dart';
 import 'package:link_vibe/core/services/supabase_helper.dart';
 import 'package:link_vibe/core/widgets/status_badge.dart';
 import 'package:link_vibe/feature/student/apply/presentation/screens/apply_project_screen.dart';
-import 'package:link_vibe/services/escrow_lifecycle_service.dart';
+import 'package:link_vibe/feature/student/submissions/presentation/screens/submit_work_screen.dart';
 
 class StudentProjectDetailsScreen extends StatefulWidget {
   final Map<String, dynamic> project;
@@ -193,226 +193,6 @@ class _StudentProjectDetailsScreenState
     );
   }
 
-  Future<void> _handleDeliverProject(
-    BuildContext context,
-    String projectId,
-    String title,
-  ) async {
-    final notesController = TextEditingController();
-    final urlController = TextEditingController();
-
-    final confirmed = await showDialog<bool>(
-      context: context,
-      builder: (ctx) => AlertDialog(
-        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
-        title: Row(
-          children: [
-            Container(
-              padding: const EdgeInsets.all(8),
-              decoration: BoxDecoration(
-                color: const Color(0xFF10B981).withValues(alpha: 0.15),
-                borderRadius: BorderRadius.circular(10),
-              ),
-              child: const Icon(Icons.send_rounded, color: Color(0xFF059669)),
-            ),
-            const SizedBox(width: 10),
-            const Expanded(
-              child: Text(
-                'Deliver Project',
-                style: TextStyle(fontSize: 18, fontWeight: FontWeight.bold),
-              ),
-            ),
-          ],
-        ),
-        content: SingleChildScrollView(
-          child: Column(
-            mainAxisSize: MainAxisSize.min,
-            crossAxisAlignment: CrossAxisAlignment.start,
-            children: [
-              Text(
-                'Ready to submit completed deliverables for "$title"? Skill Bridge will notify the company. They have 5 days to review, after which payment is automatically released.',
-                style: const TextStyle(fontSize: 13, height: 1.4),
-              ),
-              const SizedBox(height: 14),
-              TextField(
-                controller: urlController,
-                decoration: InputDecoration(
-                  labelText: 'Deliverables Link / GitHub / Drive (Optional)',
-                  hintText: 'https://github.com/...',
-                  border: OutlineInputBorder(borderRadius: BorderRadius.circular(10)),
-                  prefixIcon: const Icon(Icons.link_rounded),
-                ),
-              ),
-              const SizedBox(height: 12),
-              TextField(
-                controller: notesController,
-                maxLines: 2,
-                decoration: InputDecoration(
-                  labelText: 'Delivery Notes (Optional)',
-                  hintText: 'Summary of completed work and notes for the supervisor...',
-                  border: OutlineInputBorder(borderRadius: BorderRadius.circular(10)),
-                ),
-              ),
-            ],
-          ),
-        ),
-        actions: [
-          TextButton(
-            onPressed: () => Navigator.pop(ctx, false),
-            child: const Text('Cancel'),
-          ),
-          ElevatedButton(
-            style: ElevatedButton.styleFrom(
-              backgroundColor: const Color(0xFF059669),
-              foregroundColor: Colors.white,
-              shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(10)),
-            ),
-            onPressed: () => Navigator.pop(ctx, true),
-            child: const Text('Confirm Delivery'),
-          ),
-        ],
-      ),
-    );
-
-    if (confirmed == true && context.mounted) {
-      final success = await EscrowLifecycleService().deliverProject(
-        projectId: projectId,
-        workUrl: urlController.text.trim().isEmpty ? null : urlController.text.trim(),
-        summary: notesController.text.trim().isEmpty ? null : notesController.text.trim(),
-      );
-
-      if (!context.mounted) return;
-      if (success) {
-        ScaffoldMessenger.of(context).showSnackBar(
-          const SnackBar(
-            content: Text('Project delivered successfully! 5-day review period started.'),
-            backgroundColor: Color(0xFF059669),
-            behavior: SnackBarBehavior.floating,
-          ),
-        );
-        Navigator.pop(context);
-      } else {
-        ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(
-            content: Text(EscrowLifecycleService().lastError ?? 'Failed to deliver project.'),
-            backgroundColor: AppColors.error,
-            behavior: SnackBarBehavior.floating,
-          ),
-        );
-      }
-    }
-  }
-
-  Future<void> _handleReDeliverProject(
-    BuildContext context,
-    String projectId,
-    String title,
-  ) async {
-    final notesController = TextEditingController();
-    final urlController = TextEditingController();
-
-    final confirmed = await showDialog<bool>(
-      context: context,
-      builder: (ctx) => AlertDialog(
-        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
-        title: Row(
-          children: [
-            Container(
-              padding: const EdgeInsets.all(8),
-              decoration: BoxDecoration(
-                color: const Color(0xFF2563EB).withValues(alpha: 0.15),
-                borderRadius: BorderRadius.circular(10),
-              ),
-              child: const Icon(Icons.refresh_rounded, color: Color(0xFF2563EB)),
-            ),
-            const SizedBox(width: 10),
-            const Expanded(
-              child: Text(
-                'Re-Deliver Project',
-                style: TextStyle(fontSize: 18, fontWeight: FontWeight.bold),
-              ),
-            ),
-          ],
-        ),
-        content: SingleChildScrollView(
-          child: Column(
-            mainAxisSize: MainAxisSize.min,
-            crossAxisAlignment: CrossAxisAlignment.start,
-            children: [
-              Text(
-                'Submit revised deliverables for "$title"? The 5-day review timer will reset and restart from 0 for company inspection.',
-                style: const TextStyle(fontSize: 13, height: 1.4),
-              ),
-              const SizedBox(height: 14),
-              TextField(
-                controller: urlController,
-                decoration: InputDecoration(
-                  labelText: 'Updated Work Link / GitHub / Drive (Optional)',
-                  hintText: 'https://github.com/...',
-                  border: OutlineInputBorder(borderRadius: BorderRadius.circular(10)),
-                  prefixIcon: const Icon(Icons.link_rounded),
-                ),
-              ),
-              const SizedBox(height: 12),
-              TextField(
-                controller: notesController,
-                maxLines: 2,
-                decoration: InputDecoration(
-                  labelText: 'Revision Changelog / Notes (Optional)',
-                  hintText: 'Summary of fixes applied based on supervisor notes...',
-                  border: OutlineInputBorder(borderRadius: BorderRadius.circular(10)),
-                ),
-              ),
-            ],
-          ),
-        ),
-        actions: [
-          TextButton(
-            onPressed: () => Navigator.pop(ctx, false),
-            child: const Text('Cancel'),
-          ),
-          ElevatedButton(
-            style: ElevatedButton.styleFrom(
-              backgroundColor: const Color(0xFF2563EB),
-              foregroundColor: Colors.white,
-              shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(10)),
-            ),
-            onPressed: () => Navigator.pop(ctx, true),
-            child: const Text('Re-Deliver Work'),
-          ),
-        ],
-      ),
-    );
-
-    if (confirmed == true && context.mounted) {
-      final success = await EscrowLifecycleService().reDeliverProject(
-        projectId: projectId,
-        workUrl: urlController.text.trim().isEmpty ? null : urlController.text.trim(),
-        summary: notesController.text.trim().isEmpty ? null : notesController.text.trim(),
-      );
-
-      if (!context.mounted) return;
-      if (success) {
-        ScaffoldMessenger.of(context).showSnackBar(
-          const SnackBar(
-            content: Text('Revised work submitted! 5-day review countdown restarted.'),
-            backgroundColor: Color(0xFF059669),
-            behavior: SnackBarBehavior.floating,
-          ),
-        );
-        Navigator.pop(context);
-      } else {
-        ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(
-            content: Text(EscrowLifecycleService().lastError ?? 'Failed to re-deliver project.'),
-            backgroundColor: AppColors.error,
-            behavior: SnackBarBehavior.floating,
-          ),
-        );
-      }
-    }
-  }
-
   @override
   Widget build(BuildContext context) {
     final project = widget.project;
@@ -504,8 +284,19 @@ class _StudentProjectDetailsScreenState
     final statusLower = status.toLowerCase();
     final isPaid = statusLower == 'completed' || statusLower == 'paid' || paymentSent == true;
     final isReadyForPayout = statusLower == 'ready_for_payout';
-    final isInProgress = statusLower == 'in_progress' || statusLower == 'in progress';
-    final isDelivered = statusLower == 'delivered';
+    final hasDeliveredFlag = project['isDelivered'] == true ||
+        currentApplication?['isDelivered'] == true ||
+        (currentApplication?['submissionUrl'] != null &&
+            currentApplication!['submissionUrl'].toString().isNotEmpty) ||
+        (project['submissionUrl'] != null &&
+            project['submissionUrl'].toString().isNotEmpty) ||
+        (project['delivered_at'] != null &&
+            project['delivered_at'].toString().isNotEmpty) ||
+        AppDataService.instance.getSubmission(id) != null;
+    final isDelivered = statusLower == 'delivered' ||
+        statusLower == 'under review' ||
+        statusLower == 'under_review' ||
+        hasDeliveredFlag;
     final isRevisionRequested = statusLower == 'revision_requested' || statusLower == 'revision requested';
     final isDisputed = statusLower == 'disputed';
     final payoutTid = (project['payout_transaction_id'] ??
@@ -1415,101 +1206,74 @@ class _StudentProjectDetailsScreenState
                                     ),
                                   ),
                                 )
-                              : isRevisionRequested
-                              ? ElevatedButton.icon(
-                                  style: ElevatedButton.styleFrom(
-                                    backgroundColor: const Color(0xFF2563EB),
-                                    foregroundColor: Colors.white,
-                                    shape: RoundedRectangleBorder(
-                                      borderRadius: BorderRadius.circular(14),
+                              : isDelivered
+                              ? Opacity(
+                                  opacity: 0.55,
+                                  child: ElevatedButton.icon(
+                                    style: ElevatedButton.styleFrom(
+                                      backgroundColor: AppColors.grayText,
+                                      foregroundColor: Colors.white,
+                                      shape: RoundedRectangleBorder(
+                                        borderRadius: BorderRadius.circular(14),
+                                      ),
+                                      elevation: 0,
                                     ),
-                                  ),
-                                  onPressed: () =>
-                                      _handleReDeliverProject(context, id, title),
-                                  icon: const Icon(Icons.refresh_rounded, size: 18),
-                                  label: Text(
-                                    'Re-Deliver Work (2-Day Deadline)',
-                                    style: GoogleFonts.poppins(
-                                      fontSize: 14,
-                                      fontWeight: FontWeight.bold,
+                                    onPressed: null,
+                                    icon: const Icon(Icons.hourglass_top_rounded, size: 18),
+                                    label: Text(
+                                      'Submitted (Under Review)',
+                                      style: GoogleFonts.poppins(
+                                        fontSize: 14,
+                                        fontWeight: FontWeight.w600,
+                                      ),
                                     ),
                                   ),
                                 )
-                              : isInProgress
+                              : isDisputed
                               ? ElevatedButton.icon(
                                   style: ElevatedButton.styleFrom(
-                                    backgroundColor: const Color(0xFF059669),
+                                    backgroundColor: const Color(0xFFDC2626),
                                     foregroundColor: Colors.white,
                                     shape: RoundedRectangleBorder(
                                       borderRadius: BorderRadius.circular(14),
                                     ),
                                   ),
-                                  onPressed: () => _handleDeliverProject(context, id, title),
-                                  icon: const Icon(Icons.send_rounded, size: 18),
+                                  onPressed: null,
+                                  icon: const Icon(Icons.gavel_rounded, size: 18),
                                   label: Text(
-                                    'Deliver Project',
+                                    'Disputed (In Mediation)',
+                                    style: GoogleFonts.poppins(
+                                      fontSize: 14,
+                                      fontWeight: FontWeight.w600,
+                                    ),
+                                  ),
+                                )
+                              : ElevatedButton.icon(
+                                  style: ElevatedButton.styleFrom(
+                                    backgroundColor: AppColors.primaryBlue,
+                                    foregroundColor: Colors.white,
+                                    shape: RoundedRectangleBorder(
+                                      borderRadius: BorderRadius.circular(14),
+                                    ),
+                                  ),
+                                  onPressed: () async {
+                                    await Navigator.push(
+                                      context,
+                                      MaterialPageRoute(
+                                        builder: (_) => SubmitWorkScreen(project: project),
+                                      ),
+                                    );
+                                    if (mounted) setState(() {});
+                                  },
+                                  icon: const Icon(Icons.upload_file_rounded, size: 18),
+                                  label: Text(
+                                    'Submit Project',
                                     style: GoogleFonts.poppins(
                                       fontSize: 15,
                                       fontWeight: FontWeight.bold,
                                     ),
                                   ),
-                                )
-                              : isDelivered
-                                  ? ElevatedButton.icon(
-                                      style: ElevatedButton.styleFrom(
-                                        backgroundColor: const Color(0xFFD97706),
-                                        foregroundColor: Colors.white,
-                                        shape: RoundedRectangleBorder(
-                                          borderRadius: BorderRadius.circular(14),
-                                        ),
-                                      ),
-                                      onPressed: null,
-                                      icon: const Icon(Icons.hourglass_top_rounded, size: 18),
-                                      label: Text(
-                                        'Delivered (Under Review)',
-                                        style: GoogleFonts.poppins(
-                                          fontSize: 14,
-                                          fontWeight: FontWeight.w600,
-                                        ),
-                                      ),
-                                    )
-                                  : isDisputed
-                                      ? ElevatedButton.icon(
-                                          style: ElevatedButton.styleFrom(
-                                            backgroundColor: const Color(0xFFDC2626),
-                                            foregroundColor: Colors.white,
-                                            shape: RoundedRectangleBorder(
-                                              borderRadius: BorderRadius.circular(14),
-                                            ),
-                                          ),
-                                          onPressed: null,
-                                          icon: const Icon(Icons.gavel_rounded, size: 18),
-                                          label: Text(
-                                            'Disputed (In Mediation)',
-                                            style: GoogleFonts.poppins(
-                                              fontSize: 14,
-                                              fontWeight: FontWeight.w600,
-                                            ),
-                                          ),
-                                        )
-                                      : ElevatedButton.icon(
-                                          style: ElevatedButton.styleFrom(
-                                            backgroundColor: const Color(0xFF059669),
-                                            foregroundColor: Colors.white,
-                                            shape: RoundedRectangleBorder(
-                                              borderRadius: BorderRadius.circular(14),
-                                            ),
-                                          ),
-                                          onPressed: () => _handleDeliverProject(context, id, title),
-                                          icon: const Icon(Icons.send_rounded, size: 18),
-                                          label: Text(
-                                            'Deliver Project',
-                                            style: GoogleFonts.poppins(
-                                              fontSize: 15,
-                                              fontWeight: FontWeight.bold,
-                                            ),
-                                          ),
-                                        ))
+                                ))
                           : ElevatedButton(
                                       style: ElevatedButton.styleFrom(
                                         backgroundColor: hasApplied
