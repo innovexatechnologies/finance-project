@@ -6,6 +6,9 @@ import 'package:link_vibe/core/constants/app_colors.dart';
 import 'package:link_vibe/feature/admin/models/admin_dashboard_model.dart';
 import 'package:link_vibe/feature/admin/models/admin_user_model.dart';
 import 'package:link_vibe/feature/admin/presentation/screens/admin_login_screen.dart';
+import 'package:link_vibe/feature/admin/presentation/screens/admin_payment_methods_screen.dart';
+import 'package:link_vibe/screens/admin/admin_project_approvals_screen.dart';
+import 'package:link_vibe/screens/admin/admin_dispute_resolution_screen.dart';
 import 'package:link_vibe/feature/admin/presentation/widgets/admin_sidebar.dart';
 import 'package:link_vibe/feature/admin/presentation/widgets/admin_top_navbar.dart';
 import 'package:link_vibe/feature/admin/services/admin_auth_service.dart';
@@ -288,6 +291,8 @@ class _AdminDashboardScreenState extends State<AdminDashboardScreen> {
                                           ),
                                           const SizedBox(height: 24),
                                           _buildQuantitiesLayout(metrics),
+                                          const SizedBox(height: 24),
+                                          _buildEscrowFinanceSection(isDesktop),
                                           const SizedBox(height: 18),
                                         ],
                                       ),
@@ -307,6 +312,232 @@ class _AdminDashboardScreenState extends State<AdminDashboardScreen> {
           ),
         );
       },
+    );
+  }
+
+  Widget _buildEscrowFinanceSection(bool isDesktop) {
+    return Container(
+      width: double.infinity,
+      padding: const EdgeInsets.all(20),
+      decoration: BoxDecoration(
+        color: Colors.white,
+        borderRadius: BorderRadius.circular(20),
+        border: Border.all(color: AppColors.border, width: 1.2),
+        boxShadow: AppColors.softShadow,
+      ),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Row(
+            children: [
+              Container(
+                padding: const EdgeInsets.all(10),
+                decoration: BoxDecoration(
+                  gradient: const LinearGradient(
+                    colors: [Color(0xFF0EA5E9), Color(0xFF2563EB)],
+                  ),
+                  borderRadius: BorderRadius.circular(12),
+                ),
+                child: const Icon(
+                  Icons.account_balance_wallet_rounded,
+                  color: Colors.white,
+                  size: 20,
+                ),
+              ),
+              const SizedBox(width: 14),
+              Expanded(
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    Text(
+                      'Platform Escrow & Financial Governance',
+                      maxLines: 1,
+                      overflow: TextOverflow.ellipsis,
+                      style: GoogleFonts.poppins(
+                        fontSize: 16,
+                        fontWeight: FontWeight.w700,
+                        color: AppColors.darkNavy,
+                      ),
+                    ),
+                    const SizedBox(height: 2),
+                    Text(
+                      'Configure admin bank accounts, verify company deposit receipts, and resolve payout disputes.',
+                      maxLines: 2,
+                      overflow: TextOverflow.ellipsis,
+                      style: GoogleFonts.inter(
+                        fontSize: 12,
+                        color: AppColors.textSecondary,
+                      ),
+                    ),
+                  ],
+                ),
+              ),
+            ],
+          ),
+          const SizedBox(height: 18),
+          const Divider(color: AppColors.border, height: 1),
+          const SizedBox(height: 16),
+          LayoutBuilder(
+            builder: (context, constraints) {
+              final isWide = constraints.maxWidth >= 760;
+              final cards = [
+                _buildFinanceActionCard(
+                  icon: Icons.account_balance_rounded,
+                  color: AppColors.teal,
+                  badge: 'Escrow Accounts',
+                  title: 'Payment Methods',
+                  subtitle: 'Add, view & edit Bank, JazzCash, EasyPaisa, NayaPay',
+                  onTap: () => Navigator.push(
+                    context,
+                    MaterialPageRoute(
+                      builder: (_) => const AdminPaymentMethodsScreen(),
+                    ),
+                  ),
+                ),
+                _buildFinanceActionCard(
+                  icon: Icons.verified_user_rounded,
+                  color: const Color(0xFFD97706),
+                  badge: 'Audit Receipts',
+                  title: 'Payment Approvals',
+                  subtitle: 'Verify company deposit slips & mark projects published',
+                  onTap: () => Navigator.push(
+                    context,
+                    MaterialPageRoute(
+                      builder: (_) => const AdminProjectApprovalsScreen(),
+                    ),
+                  ),
+                ),
+                _buildFinanceActionCard(
+                  icon: Icons.gavel_rounded,
+                  color: AppColors.error,
+                  badge: 'Mediation',
+                  title: 'Disputes & Payouts',
+                  subtitle: '100% Student, 100% Refund, or 50-50 Split decisions',
+                  onTap: () => Navigator.push(
+                    context,
+                    MaterialPageRoute(
+                      builder: (_) => const AdminDisputeResolutionScreen(),
+                    ),
+                  ),
+                ),
+              ];
+
+              if (isWide) {
+                return Row(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    for (int i = 0; i < cards.length; i++) ...[
+                      if (i > 0) const SizedBox(width: 14),
+                      Expanded(child: cards[i]),
+                    ],
+                  ],
+                );
+              }
+
+              return Column(
+                children: [
+                  for (int i = 0; i < cards.length; i++) ...[
+                    if (i > 0) const SizedBox(height: 12),
+                    cards[i],
+                  ],
+                ],
+              );
+            },
+          ),
+        ],
+      ),
+    );
+  }
+
+  Widget _buildFinanceActionCard({
+    required IconData icon,
+    required Color color,
+    required String badge,
+    required String title,
+    required String subtitle,
+    required VoidCallback onTap,
+  }) {
+    return InkWell(
+      onTap: onTap,
+      borderRadius: BorderRadius.circular(14),
+      child: Container(
+        padding: const EdgeInsets.all(14),
+        decoration: BoxDecoration(
+          color: AppColors.surfaceAlt,
+          borderRadius: BorderRadius.circular(14),
+          border: Border.all(color: AppColors.border),
+        ),
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            Row(
+              mainAxisAlignment: MainAxisAlignment.spaceBetween,
+              children: [
+                Container(
+                  padding: const EdgeInsets.all(8),
+                  decoration: BoxDecoration(
+                    color: color.withValues(alpha: 0.12),
+                    borderRadius: BorderRadius.circular(10),
+                  ),
+                  child: Icon(icon, color: color, size: 20),
+                ),
+                Container(
+                  padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 3),
+                  decoration: BoxDecoration(
+                    color: color.withValues(alpha: 0.1),
+                    borderRadius: BorderRadius.circular(6),
+                  ),
+                  child: Text(
+                    badge,
+                    style: GoogleFonts.inter(
+                      fontSize: 10.5,
+                      fontWeight: FontWeight.w700,
+                      color: color,
+                    ),
+                  ),
+                ),
+              ],
+            ),
+            const SizedBox(height: 12),
+            Text(
+              title,
+              maxLines: 1,
+              overflow: TextOverflow.ellipsis,
+              style: GoogleFonts.poppins(
+                fontSize: 14.5,
+                fontWeight: FontWeight.bold,
+                color: AppColors.darkNavy,
+              ),
+            ),
+            const SizedBox(height: 4),
+            Text(
+              subtitle,
+              maxLines: 2,
+              overflow: TextOverflow.ellipsis,
+              style: GoogleFonts.inter(
+                fontSize: 11.5,
+                color: AppColors.textSecondary,
+                height: 1.35,
+              ),
+            ),
+            const SizedBox(height: 10),
+            Row(
+              children: [
+                Text(
+                  'Open Screen',
+                  style: GoogleFonts.inter(
+                    fontSize: 12,
+                    fontWeight: FontWeight.w600,
+                    color: color,
+                  ),
+                ),
+                const SizedBox(width: 4),
+                Icon(Icons.arrow_forward_rounded, size: 14, color: color),
+              ],
+            ),
+          ],
+        ),
+      ),
     );
   }
 

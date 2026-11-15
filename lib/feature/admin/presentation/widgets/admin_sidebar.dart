@@ -10,13 +10,19 @@ import 'package:link_vibe/feature/admin/presentation/screens/certificate_managem
 import 'package:link_vibe/feature/admin/presentation/screens/company_management_screen.dart';
 import 'package:link_vibe/feature/admin/presentation/screens/company_verifications_screen.dart';
 import 'package:link_vibe/feature/admin/presentation/screens/project_management_screen.dart';
+import 'package:link_vibe/feature/admin/presentation/screens/admin_payment_methods_screen.dart';
 import 'package:link_vibe/feature/admin/presentation/screens/reports_analytics_screen.dart';
 import 'package:link_vibe/feature/admin/presentation/screens/student_management_screen.dart';
+import 'package:link_vibe/screens/admin/admin_project_approvals_screen.dart';
+import 'package:link_vibe/screens/admin/admin_dispute_resolution_screen.dart';
 import 'package:link_vibe/feature/admin/services/admin_auth_service.dart';
 import 'package:link_vibe/feature/admin/services/admin_company_service.dart';
+import 'package:link_vibe/feature/admin/services/admin_payment_service.dart';
 import 'package:link_vibe/feature/admin/services/admin_project_service.dart';
 import 'package:link_vibe/feature/admin/services/admin_settings_service.dart';
 import 'package:link_vibe/feature/admin/services/admin_student_service.dart';
+import 'package:link_vibe/services/admin_project_approval_service.dart';
+import 'package:link_vibe/services/admin_dispute_payout_service.dart';
 
 /// Navigation item model for Admin Sidebar
 class AdminNavItem {
@@ -69,6 +75,18 @@ class AdminSidebar extends StatelessWidget {
       case 'projects':
       case 'projects_audit':
         return 'projects_audit';
+      case 'payment_methods':
+      case 'escrow_accounts':
+      case 'platform_payment_methods':
+        return 'payment_methods';
+      case 'payment_approvals':
+      case 'project_approvals':
+      case 'escrow_approvals':
+        return 'payment_approvals';
+      case 'disputes':
+      case 'disputes_payouts':
+      case 'dispute_resolution':
+        return 'disputes_payouts';
       case 'compliance':
       case 'application_monitoring':
         return 'application_monitoring';
@@ -126,6 +144,15 @@ class AdminSidebar extends StatelessWidget {
       case 'projects_audit':
         destination = const ProjectManagementScreen();
         break;
+      case 'payment_methods':
+        destination = const AdminPaymentMethodsScreen();
+        break;
+      case 'payment_approvals':
+        destination = const AdminProjectApprovalsScreen();
+        break;
+      case 'disputes_payouts':
+        destination = const AdminDisputeResolutionScreen();
+        break;
       case 'application_monitoring':
         destination = const ApplicationMonitoringScreen();
         break;
@@ -159,6 +186,19 @@ class AdminSidebar extends StatelessWidget {
     final studentCount = AdminStudentService().totalCount;
     final companyCount = AdminCompanyService().totalCount;
     final projectCount = AdminProjectService().totalCount;
+    final activePaymentCount = AdminPaymentService()
+        .paymentMethodsNotifier
+        .value
+        .where((m) => m.isActive)
+        .length;
+    final pendingApprovalsCount = AdminProjectApprovalService()
+        .pendingApprovalsNotifier
+        .value
+        .length;
+    final disputedCount = AdminDisputePayoutService()
+        .disputedProjectsNotifier
+        .value
+        .length;
     final pendingSupportCount = AdminSettingsService()
         .helpRequestsNotifier
         .value
@@ -192,6 +232,27 @@ class AdminSidebar extends StatelessWidget {
         badgeText: projectCount > 0 ? '$projectCount' : null,
         badgeColor: const Color(0xFF6366F1),
       ),
+      AdminNavItem(
+        title: 'Payment Methods',
+        icon: Icons.account_balance_wallet_rounded,
+        routeId: 'payment_methods',
+        badgeText: activePaymentCount > 0 ? '$activePaymentCount Active' : null,
+        badgeColor: AppColors.accentTeal,
+      ),
+      AdminNavItem(
+        title: 'Payment Approvals',
+        icon: Icons.verified_user_rounded,
+        routeId: 'payment_approvals',
+        badgeText: pendingApprovalsCount > 0 ? '$pendingApprovalsCount' : null,
+        badgeColor: const Color(0xFFD97706),
+      ),
+      AdminNavItem(
+        title: 'Disputes & Payouts',
+        icon: Icons.gavel_rounded,
+        routeId: 'disputes_payouts',
+        badgeText: disputedCount > 0 ? '$disputedCount' : null,
+        badgeColor: AppColors.error,
+      ),
       const AdminNavItem(
         title: 'Reports and Analytics',
         icon: Icons.insights_rounded,
@@ -217,6 +278,9 @@ class AdminSidebar extends StatelessWidget {
       AdminCompanyService().companiesNotifier,
       AdminProjectService().projectsNotifier,
       AdminSettingsService().helpRequestsNotifier,
+      AdminPaymentService().paymentMethodsNotifier,
+      AdminProjectApprovalService().pendingApprovalsNotifier,
+      AdminDisputePayoutService().disputedProjectsNotifier,
     ]);
 
     return ListenableBuilder(

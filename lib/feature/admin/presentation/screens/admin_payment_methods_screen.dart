@@ -133,7 +133,7 @@ class _AdminPaymentMethodsScreenState extends State<AdminPaymentMethodsScreen> {
     AdminSidebar.navigateToRoute(
       context,
       scaffoldKey: _scaffoldKey,
-      currentRouteId: 'settings',
+      currentRouteId: 'payment_methods',
       targetRouteId: routeId,
     );
   }
@@ -302,7 +302,7 @@ class _AdminPaymentMethodsScreenState extends State<AdminPaymentMethodsScreen> {
               : Drawer(
                   backgroundColor: AppColors.darkNavy,
                   child: AdminSidebar(
-                    activeRouteId: 'settings',
+                    activeRouteId: 'payment_methods',
                     onRouteSelected: _onRouteSelected,
                     onSignOut: _handleSignOut,
                     isCollapsed: false,
@@ -312,7 +312,7 @@ class _AdminPaymentMethodsScreenState extends State<AdminPaymentMethodsScreen> {
             children: [
               if (isDesktop)
                 AdminSidebar(
-                  activeRouteId: 'settings',
+                  activeRouteId: 'payment_methods',
                   onRouteSelected: _onRouteSelected,
                   onSignOut: _handleSignOut,
                   isCollapsed: _isSidebarCollapsed,

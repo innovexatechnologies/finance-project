@@ -100,6 +100,12 @@ class CompanyEscrowService {
     final supabase = SupabaseHelper.clientOrNull;
 
     if (supabase == null) {
+      final activeConfigured = AdminPaymentService()
+          .paymentMethodsNotifier
+          .value
+          .where((m) => m.isActive)
+          .toList();
+      if (activeConfigured.isNotEmpty) return activeConfigured;
       return AdminPaymentService.defaultFallbackMethods
           .where((m) => m.isActive)
           .toList();
@@ -118,6 +124,12 @@ class CompanyEscrowService {
           .toList();
 
       if (list.isEmpty) {
+        final activeConfigured = AdminPaymentService()
+            .paymentMethodsNotifier
+            .value
+            .where((m) => m.isActive)
+            .toList();
+        if (activeConfigured.isNotEmpty) return activeConfigured;
         return AdminPaymentService.defaultFallbackMethods
             .where((m) => m.isActive)
             .toList();
@@ -126,6 +138,12 @@ class CompanyEscrowService {
     } catch (e) {
       debugPrint('CompanyEscrowService getActivePlatformPaymentMethods error: $e');
       _lastError = SupabaseHelper.friendlyError(e);
+      final activeConfigured = AdminPaymentService()
+          .paymentMethodsNotifier
+          .value
+          .where((m) => m.isActive)
+          .toList();
+      if (activeConfigured.isNotEmpty) return activeConfigured;
       return AdminPaymentService.defaultFallbackMethods
           .where((m) => m.isActive)
           .toList();
