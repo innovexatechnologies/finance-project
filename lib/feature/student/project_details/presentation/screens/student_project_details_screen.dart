@@ -313,6 +313,9 @@ class _StudentProjectDetailsScreenState
         statusLower == 'rejected' ||
         project['isDisputed'] == true ||
         currentApplication?['isDisputed'] == true;
+    final isCancelled = statusLower == 'cancelled' ||
+        project['isCancelled'] == true ||
+        currentApplication?['isCancelled'] == true;
     final payoutReceiptUrl = (project['payout_receipt_url'] ??
             project['paymentReceiptUrl'] ??
             currentApplication?['payout_receipt_url'] ??
@@ -496,13 +499,15 @@ class _StudentProjectDetailsScreenState
                               ),
                               const SizedBox(width: 8),
                               StatusBadge(
-                                label: isDisputed
-                                    ? 'Rejected'
-                                    : (isPaid
-                                        ? 'Paid'
-                                        : (isReadyForPayout
-                                            ? 'In Review'
-                                            : status)),
+                                label: isCancelled
+                                    ? 'Cancelled'
+                                    : (isDisputed
+                                        ? 'Rejected'
+                                        : (isPaid
+                                            ? 'Paid'
+                                            : (isReadyForPayout
+                                                ? 'In Review'
+                                                : status))),
                               ),
                             ],
                           ),
@@ -594,7 +599,62 @@ class _StudentProjectDetailsScreenState
 
                           // Escrow & Lifecycle Status Banners (Strictly for Awarded/Assigned Student ONLY)
                           if (isAssignedProject) ...[
-                            if (isPaid) ...[
+                            if (isCancelled) ...[
+                              Container(
+                                width: double.infinity,
+                                margin: const EdgeInsets.only(bottom: 16),
+                                padding: const EdgeInsets.all(16),
+                                decoration: BoxDecoration(
+                                  color: const Color(0xFFFEF2F2),
+                                  borderRadius: BorderRadius.circular(16),
+                                  border: Border.all(
+                                    color: const Color(0xFFEF4444).withValues(alpha: 0.45),
+                                    width: 1.2,
+                                  ),
+                                ),
+                                child: Row(
+                                  children: [
+                                    Container(
+                                      padding: const EdgeInsets.all(8),
+                                      decoration: BoxDecoration(
+                                        color: const Color(0xFFEF4444).withValues(alpha: 0.15),
+                                        shape: BoxShape.circle,
+                                      ),
+                                      child: const Icon(
+                                        Icons.cancel_rounded,
+                                        color: Color(0xFFDC2626),
+                                        size: 22,
+                                      ),
+                                    ),
+                                    const SizedBox(width: 12),
+                                    Expanded(
+                                      child: Column(
+                                        crossAxisAlignment: CrossAxisAlignment.start,
+                                        children: [
+                                          Text(
+                                            'Project Cancelled (Refunded)',
+                                            style: GoogleFonts.poppins(
+                                              fontSize: 14.5,
+                                              fontWeight: FontWeight.bold,
+                                              color: const Color(0xFF991B1B),
+                                            ),
+                                          ),
+                                          const SizedBox(height: 3),
+                                          Text(
+                                            'SkillBridge administration payment refund to company. Project Cancelled.',
+                                            style: GoogleFonts.inter(
+                                              fontSize: 12,
+                                              color: const Color(0xFFB91C1C),
+                                              height: 1.35,
+                                            ),
+                                          ),
+                                        ],
+                                      ),
+                                    ),
+                                  ],
+                                ),
+                              ),
+                            ] else if (isPaid) ...[
                             Container(
                               width: double.infinity,
                               margin: const EdgeInsets.only(bottom: 16),
@@ -1265,7 +1325,26 @@ class _StudentProjectDetailsScreenState
                     child: SizedBox(
                       height: 48,
                       child: isAssignedProject
-                          ? (isPaid
+                          ? (isCancelled
+                              ? ElevatedButton.icon(
+                                  style: ElevatedButton.styleFrom(
+                                    backgroundColor: AppColors.statusClosed,
+                                    foregroundColor: Colors.white,
+                                    shape: RoundedRectangleBorder(
+                                      borderRadius: BorderRadius.circular(14),
+                                    ),
+                                  ),
+                                  onPressed: null,
+                                  icon: const Icon(Icons.cancel_outlined, size: 18),
+                                  label: Text(
+                                    'Project Cancelled',
+                                    style: GoogleFonts.poppins(
+                                      fontSize: 14.5,
+                                      fontWeight: FontWeight.bold,
+                                    ),
+                                  ),
+                                )
+                              : isPaid
                               ? ElevatedButton.icon(
                                   style: ElevatedButton.styleFrom(
                                     backgroundColor: const Color(0xFF059669),

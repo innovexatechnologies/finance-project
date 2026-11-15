@@ -24,6 +24,23 @@ class StudentDisbursalDetails {
   });
 }
 
+/// Assigned Company Refund Information Model
+class CompanyRefundDetails {
+  final String companyName;
+  final String companyEmail;
+  final String paymentMethod;
+  final String accountNumber;
+  final String accountTitle;
+
+  const CompanyRefundDetails({
+    required this.companyName,
+    required this.companyEmail,
+    required this.paymentMethod,
+    required this.accountNumber,
+    required this.accountTitle,
+  });
+}
+
 /// Pure Service Layer for Admin Escrow Disputes & Payout Execution:
 /// - Admin Notifications (Approvals, 5-Day Auto-Releases, Disputes)
 /// - Disputed Projects & 3-Way Decisions (100% Student, 100% Refund, 50-50 Split)
@@ -485,6 +502,247 @@ class AdminDisputePayoutService {
       accountNumber: accountNum,
       accountTitle: accountTitle,
     );
+  }
+
+  /// Fetches Company Refund bank / wallet information for escrow dispute refund.
+  Future<CompanyRefundDetails> getCompanyRefundDetails(ProjectModel project) async {
+    String name = project.companyName.trim().isNotEmpty
+        ? project.companyName.trim()
+        : 'Corporate Partner';
+    String email = 'company@partner.com';
+    String method = 'Bank Account';
+    String accountNum = 'PK36MEZN0009876543210123';
+    String accountTitle = name;
+
+    final supabase = SupabaseHelper.clientOrNull;
+    if (supabase != null) {
+      try {
+        final compId = project.companyId.isNotEmpty ? project.companyId : project.id;
+        final pmRows = await supabase
+            .from('company_payment_methods')
+            .select()
+            .or('user_id.eq.$compId,company_id.eq.$compId')
+            .order('updated_at', ascending: false)
+            .limit(1);
+
+        if (pmRows.isNotEmpty) {
+          final pm = pmRows.first;
+          method = (pm['provider'] ?? method).toString();
+          accountNum = (pm['account_number'] ?? accountNum).toString();
+          accountTitle = (pm['account_title'] ?? name).toString();
+        }
+      } catch (e) {
+        debugPrint('getCompanyRefundDetails query warning: $e');
+      }
+    }
+
+    // Local cached company payment method fallback
+    try {
+      final prefs = await SharedPreferences.getInstance();
+      final localProvider = prefs.getString('company_payment_provider');
+      final localAccount = prefs.getString('company_payment_account');
+      final localTitle = prefs.getString('company_payment_title');
+      if (localAccount != null && localAccount.trim().isNotEmpty) {
+        accountNum = localAccount.trim();
+        method = localProvider ?? method;
+        if (localTitle != null && localTitle.trim().isNotEmpty) {
+          accountTitle = localTitle.trim();
+        }
+      }
+    } catch (_) {}
+
+    return CompanyRefundDetails(
+      companyName: name,
+      companyEmail: email,
+      paymentMethod: method,
+      accountNumber: accountNum,
+      accountTitle: accountTitle,
+    );
+  }
+
+  /// Admin Option 1: Pays Student, marks status as 'completed' / 'paid',
+  /// immediately converts Student's rejected status to Paid, and notifies both parties.
+  Future<bool> executeDisputePayToStudent({
+    required String projectId,
+    required String transactionId,
+    String? receiptUrl,
+    String? notes,
+  }) async {
+    _lastError = null;
+    final nowIso = DateTime.now().toIso8601String();
+    final supabase = SupabaseHelper.clientOrNull;
+    final tid = transactionId.trim();
+
+    String projectTitle = 'Project';
+    final existing = CompanyProjectService().allProjects;
+    try {
+      final p = existing.firstWhere((p) => p.id == projectId);
+      projectTitle = p.title;
+    } catch (_) {}
+
+    if (supabase != null && SupabaseHelper.isUuid(projectId)) {
+      try {
+        await supabase
+            .from('projects')
+            .update({
+              'status': 'completed',
+              'payout_type': 'dispute_student_awarded',
+              'payout_transaction_id': tid,
+              if (receiptUrl != null && receiptUrl.trim().isNotEmpty)
+                'payout_receipt_url': receiptUrl.trim(),
+              'dispute_resolution': 'paid_to_student',
+              'completed_at': nowIso,
+              'updated_at': nowIso,
+            })
+            .eq('id', projectId);
+
+        try {
+          await supabase
+              .from('applications')
+              .update({
+                'status': 'completed',
+                'payout_transaction_id': tid,
+                if (receiptUrl != null && receiptUrl.trim().isNotEmpty)
+                  'payout_receipt_url': receiptUrl.trim(),
+                'updated_at': nowIso,
+              })
+              .eq('project_id', projectId);
+        } catch (_) {}
+
+        // Notify both parties
+        await supabase.from('admin_notifications').insert({
+          'project_id': projectId,
+          'title': 'Dispute Resolved: Payment Sent to Student',
+          'message':
+              'SkillBridge administration sent payment to student (TID: $tid) for "$projectTitle".',
+          'notification_type': 'payout_completed',
+          'is_read': false,
+          'created_at': nowIso,
+        });
+      } catch (e) {
+        debugPrint('executeDisputePayToStudent error: $e');
+        _lastError = SupabaseHelper.friendlyError(e);
+      }
+    }
+
+    // Synchronize AppDataService for Student and Company
+    await AppDataService.instance.recordDisbursedPayout(
+      projectId: projectId,
+      transactionId: tid,
+      receiptUrl: receiptUrl,
+    );
+
+    // Update in-memory CompanyProjectService
+    final compList = List<ProjectModel>.from(CompanyProjectService().allProjects);
+    final cIdx = compList.indexWhere((p) => p.id == projectId);
+    if (cIdx != -1) {
+      compList[cIdx] = compList[cIdx].copyWith(
+        status: 'completed',
+        payoutTransactionId: tid,
+        payoutReceiptUrl: receiptUrl,
+        payoutType: 'dispute_student_awarded',
+      );
+      CompanyProjectService().projectsNotifier.value = compList;
+    }
+
+    // Refresh queue
+    disputedProjectsNotifier.value = disputedProjectsNotifier.value
+        .where((p) => p.id != projectId)
+        .toList();
+    loadDisputedProjects(forceRefresh: true);
+    loadPayoutReadyProjects(forceRefresh: true);
+
+    return true;
+  }
+
+  /// Admin Option 2: Refunds Escrow to Company, cancels project,
+  /// immediately sets status to 'cancelled' and notifies both parties.
+  Future<bool> executeDisputeRefundToCompany({
+    required String projectId,
+    required String transactionId,
+    String? receiptUrl,
+    String? notes,
+  }) async {
+    _lastError = null;
+    final nowIso = DateTime.now().toIso8601String();
+    final supabase = SupabaseHelper.clientOrNull;
+    final tid = transactionId.trim();
+
+    String projectTitle = 'Project';
+    final existing = CompanyProjectService().allProjects;
+    try {
+      final p = existing.firstWhere((p) => p.id == projectId);
+      projectTitle = p.title;
+    } catch (_) {}
+
+    if (supabase != null && SupabaseHelper.isUuid(projectId)) {
+      try {
+        await supabase
+            .from('projects')
+            .update({
+              'status': 'cancelled',
+              'payout_type': 'dispute_company_refunded',
+              'refund_transaction_id': tid,
+              if (receiptUrl != null && receiptUrl.trim().isNotEmpty)
+                'refund_receipt_url': receiptUrl.trim(),
+              'dispute_resolution': 'refunded_to_company',
+              'updated_at': nowIso,
+            })
+            .eq('id', projectId);
+
+        try {
+          await supabase
+              .from('applications')
+              .update({
+                'status': 'cancelled',
+                'refund_transaction_id': tid,
+                'updated_at': nowIso,
+              })
+              .eq('project_id', projectId);
+        } catch (_) {}
+
+        // Notify both parties
+        await supabase.from('admin_notifications').insert({
+          'project_id': projectId,
+          'title': 'Dispute Resolved: Refunded to Company ($projectTitle)',
+          'message':
+              'SkillBridge administration payment refund to company (TID: $tid). Project Cancelled.',
+          'notification_type': 'dispute_resolved',
+          'is_read': false,
+          'created_at': nowIso,
+        });
+      } catch (e) {
+        debugPrint('executeDisputeRefundToCompany error: $e');
+        _lastError = SupabaseHelper.friendlyError(e);
+      }
+    }
+
+    // Synchronize AppDataService for Student and Company
+    await AppDataService.instance.recordCancelledRefund(
+      projectId: projectId,
+      refundTransactionId: tid,
+      refundReceiptUrl: receiptUrl,
+    );
+
+    // Update in-memory CompanyProjectService
+    final compList = List<ProjectModel>.from(CompanyProjectService().allProjects);
+    final cIdx = compList.indexWhere((p) => p.id == projectId);
+    if (cIdx != -1) {
+      compList[cIdx] = compList[cIdx].copyWith(
+        status: 'cancelled',
+        payoutType: 'dispute_company_refunded',
+      );
+      CompanyProjectService().projectsNotifier.value = compList;
+    }
+
+    // Refresh queue
+    disputedProjectsNotifier.value = disputedProjectsNotifier.value
+        .where((p) => p.id != projectId)
+        .toList();
+    loadDisputedProjects(forceRefresh: true);
+    loadPayoutReadyProjects(forceRefresh: true);
+
+    return true;
   }
 
   /// Uploads Admin payout receipt screenshot to Supabase Storage with offline fallback.

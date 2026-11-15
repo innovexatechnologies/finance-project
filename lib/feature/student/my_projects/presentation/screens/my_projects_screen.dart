@@ -104,6 +104,8 @@ class _MyProjectsScreenState extends State<MyProjectsScreen>
                   s == 'disputed' ||
                   s == 'rejected' ||
                   s == 'ready_for_payout' ||
+                  s == 'cancelled' ||
+                  a['isCancelled'] == true ||
                   a['isDisputed'] == true ||
                   a['isAssignedProject'] == true;
             })
@@ -119,7 +121,8 @@ class _MyProjectsScreenState extends State<MyProjectsScreen>
               .isNotEmpty;
           final isDisbursed = (s == 'completed' || s == 'paid') &&
               (hasDisbursalTid || p['isPaidByAdmin'] == true);
-          return !isDisbursed;
+          final isCancelled = s == 'cancelled' || p['isCancelled'] == true;
+          return !isDisbursed && !isCancelled;
         }).toList();
 
         final paidProjects = myProjects.where((p) {
@@ -276,6 +279,7 @@ class _MyProjectsScreenState extends State<MyProjectsScreen>
     final isDisputed = statusLower == 'disputed' ||
         statusLower == 'rejected' ||
         project['isDisputed'] == true;
+    final isCancelled = statusLower == 'cancelled' || project['isCancelled'] == true;
     final bool isAssigned = project['isAssignedProject'] == true;
     final payoutTid = (project['payout_transaction_id'] ??
             project['payoutTransactionId'] ??
@@ -364,11 +368,13 @@ class _MyProjectsScreenState extends State<MyProjectsScreen>
                 ),
                 const SizedBox(width: 6),
                 StatusBadge(
-                  label: isDisputed
+                  label: isCancelled
+                      ? 'Cancelled'
+                      : (isDisputed
                       ? 'Rejected'
                       : (isReadyForPayout
                           ? 'In Review'
-                          : (isDisbursed ? 'Paid' : status)),
+                          : (isDisbursed ? 'Paid' : status))),
                 ),
               ],
             ),
@@ -566,6 +572,68 @@ class _MyProjectsScreenState extends State<MyProjectsScreen>
                   ],
                 ),
               ),
+            ] else if (isCancelled) ...[
+              const SizedBox(height: 10),
+              Container(
+                width: double.infinity,
+                padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 10),
+                decoration: BoxDecoration(
+                  color: const Color(0xFFFEF2F2),
+                  borderRadius: BorderRadius.circular(10),
+                  border: Border.all(
+                    color: const Color(0xFFEF4444).withValues(alpha: 0.35),
+                  ),
+                ),
+                child: Row(
+                  children: [
+                    const Icon(Icons.cancel_rounded,
+                        size: 16, color: Color(0xFFDC2626)),
+                    const SizedBox(width: 8),
+                    Expanded(
+                      child: Text(
+                        'SkillBridge administration payment refund to company. Project Cancelled.',
+                        style: GoogleFonts.poppins(
+                          fontSize: 11.5,
+                          fontWeight: FontWeight.w600,
+                          color: const Color(0xFF991B1B),
+                        ),
+                      ),
+                    ),
+                  ],
+                ),
+              ),
+            ] else if (isDisbursed) ...[
+              const SizedBox(height: 10),
+              Container(
+                width: double.infinity,
+                padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 10),
+                decoration: BoxDecoration(
+                  color: const Color(0xFFECFDF5),
+                  borderRadius: BorderRadius.circular(10),
+                  border: Border.all(
+                    color: const Color(0xFF10B981).withValues(alpha: 0.35),
+                  ),
+                ),
+                child: Row(
+                  children: [
+                    const Icon(Icons.check_circle_rounded,
+                        size: 16, color: Color(0xFF059669)),
+                    const SizedBox(width: 8),
+                    Expanded(
+                      child: Text(
+                        payoutTid.isNotEmpty
+                            ? 'SkillBridge administration sent payment to student (TID: $payoutTid)'
+                            : 'SkillBridge administration sent payment to student',
+                        style: GoogleFonts.poppins(
+                          fontSize: 11.5,
+                          fontWeight: FontWeight.w600,
+                          color: const Color(0xFF065F46),
+                        ),
+                      ),
+                    ),
+                  ],
+                ),
+              ),
             ] else if (isDisputed) ...[
               const SizedBox(height: 10),
               Container(
@@ -749,7 +817,31 @@ class _MyProjectsScreenState extends State<MyProjectsScreen>
                   icon: const Icon(Icons.share_outlined, size: 15),
                   label: const Text('Share'),
                 ),
-                if (!isCompleted) ...[
+                if (isCancelled) ...[
+                  Opacity(
+                    opacity: 0.75,
+                    child: ElevatedButton.icon(
+                      style: ElevatedButton.styleFrom(
+                        backgroundColor: AppColors.statusClosed,
+                        foregroundColor: Colors.white,
+                        padding: const EdgeInsets.symmetric(
+                          horizontal: 14,
+                          vertical: 10,
+                        ),
+                        elevation: 0,
+                      ),
+                      onPressed: null,
+                      icon: const Icon(Icons.cancel_outlined, size: 15),
+                      label: Text(
+                        'Project Cancelled',
+                        style: GoogleFonts.poppins(
+                          fontSize: 12.5,
+                          fontWeight: FontWeight.w600,
+                        ),
+                      ),
+                    ),
+                  ),
+                ] else if (!isCompleted) ...[
                   if (isReadyForPayout) ...[
                     Opacity(
                       opacity: 0.75,

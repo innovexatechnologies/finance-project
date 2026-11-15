@@ -1439,6 +1439,47 @@ class AppDataService extends ChangeNotifier {
     }
   }
 
+  /// Records Admin refund to company and cancellation of disputed project.
+  Future<void> recordCancelledRefund({
+    required String projectId,
+    required String refundTransactionId,
+    String? refundReceiptUrl,
+  }) async {
+    final nowIso = DateTime.now().toIso8601String();
+
+    for (int i = 0; i < _applications.length; i++) {
+      final app = _applications[i];
+      final pId = app['projectId']?.toString() ?? app['id']?.toString() ?? '';
+      if (pId == projectId || app['id']?.toString() == projectId) {
+        _applications[i]['status'] = 'Cancelled';
+        _applications[i]['refund_transaction_id'] = refundTransactionId;
+        if (refundReceiptUrl != null && refundReceiptUrl.isNotEmpty) {
+          _applications[i]['refund_receipt_url'] = refundReceiptUrl;
+        }
+        _applications[i]['isCancelled'] = true;
+      }
+    }
+
+    final projIndex = _projects.indexWhere(
+      (p) => p['id']?.toString() == projectId,
+    );
+    if (projIndex >= 0) {
+      _projects[projIndex]['status'] = 'cancelled';
+      _projects[projIndex]['refund_transaction_id'] = refundTransactionId;
+      if (refundReceiptUrl != null && refundReceiptUrl.isNotEmpty) {
+        _projects[projIndex]['refund_receipt_url'] = refundReceiptUrl;
+      }
+      _projects[projIndex]['updated_at'] = nowIso;
+    }
+
+    _safeNotifyListeners();
+
+    if (_prefs != null) {
+      await _prefs!.setString(_kApplications, jsonEncode(_applications));
+      await _prefs!.setString(_kCustomProjects, jsonEncode(_projects));
+    }
+  }
+
   // ===========================================================================
   // PROFILE & SKILLS
   // ===========================================================================

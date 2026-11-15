@@ -8,6 +8,7 @@ import 'package:link_vibe/feature/company/models/company_profile_model.dart';
 import 'package:link_vibe/feature/company/models/company_settings_model.dart';
 import 'package:link_vibe/feature/company/presentation/screens/company_profile_screen.dart';
 import 'package:link_vibe/feature/company/presentation/screens/company_verification_screen.dart';
+import 'package:link_vibe/feature/company/payment_methods/presentation/screens/company_payment_method_screen.dart';
 import 'package:link_vibe/feature/company/presentation/widgets/company_executive_app_bar.dart';
 import 'package:link_vibe/feature/company/services/company_profile_service.dart';
 import 'package:link_vibe/feature/company/services/company_settings_service.dart';
@@ -482,7 +483,7 @@ class _CompanySettingsScreenState extends State<CompanySettingsScreen> {
                                       ),
                                     ),
                                     Text(
-                                      '${t['id'] ?? ''} • ${t['category'] ?? ''}',
+                                      '${t['id'] ?? ''} \u2022 ${t['category'] ?? ''}',
                                       style: GoogleFonts.inter(
                                         fontSize: 11.5,
                                         color: AppColors.grayText,
@@ -721,6 +722,22 @@ class _CompanySettingsScreenState extends State<CompanySettingsScreen> {
                                     MaterialPageRoute(
                                       builder: (_) =>
                                           const CompanyVerificationScreen(),
+                                    ),
+                                  );
+                                },
+                              ),
+                              _buildRowDivider(),
+                              _buildActionTile(
+                                icon: Icons.account_balance_wallet_outlined,
+                                title: 'Refund & Payment Details',
+                                subtitle:
+                                    'Manage corporate bank account & wallets for escrow dispute refunds',
+                                onTap: () {
+                                  Navigator.push(
+                                    context,
+                                    MaterialPageRoute(
+                                      builder: (_) =>
+                                          const CompanyPaymentMethodScreen(),
                                     ),
                                   );
                                 },

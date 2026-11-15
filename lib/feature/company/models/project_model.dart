@@ -39,6 +39,8 @@ class ProjectModel {
   final double? platformCommissionAmount;
   final String? payoutTransactionId;
   final String? payoutReceiptUrl;
+  final String? refundTransactionId;
+  final String? refundReceiptUrl;
   final String? completedAt;
 
   // Revision Tracking Fields (Max 1 Revision with 2-day deadline)
@@ -85,6 +87,8 @@ class ProjectModel {
     this.platformCommissionAmount,
     this.payoutTransactionId,
     this.payoutReceiptUrl,
+    this.refundTransactionId,
+    this.refundReceiptUrl,
     this.completedAt,
     this.revisionCount = 0,
     this.maxRevisions = 1,
@@ -110,6 +114,7 @@ class ProjectModel {
       status.toLowerCase() == 'disputed' || status.toLowerCase() == 'rejected';
   bool get isReadyForPayout => status.toLowerCase() == 'ready_for_payout';
   bool get isCompleted => status.toLowerCase() == 'completed';
+  bool get isCancelled => status.toLowerCase() == 'cancelled';
 
   String get budget => escrowAmount > 0
       ? 'PKR ${escrowAmount.toStringAsFixed(0)}'
@@ -171,6 +176,8 @@ class ProjectModel {
     double? platformCommissionAmount,
     String? payoutTransactionId,
     String? payoutReceiptUrl,
+    String? refundTransactionId,
+    String? refundReceiptUrl,
     String? completedAt,
     int? revisionCount,
     int? maxRevisions,
@@ -217,6 +224,8 @@ class ProjectModel {
           platformCommissionAmount ?? this.platformCommissionAmount,
       payoutTransactionId: payoutTransactionId ?? this.payoutTransactionId,
       payoutReceiptUrl: payoutReceiptUrl ?? this.payoutReceiptUrl,
+      refundTransactionId: refundTransactionId ?? this.refundTransactionId,
+      refundReceiptUrl: refundReceiptUrl ?? this.refundReceiptUrl,
       completedAt: completedAt ?? this.completedAt,
       revisionCount: revisionCount ?? this.revisionCount,
       maxRevisions: maxRevisions ?? this.maxRevisions,
@@ -277,6 +286,8 @@ class ProjectModel {
           (json['platform_commission_amount'] as num?)?.toDouble(),
       payoutTransactionId: json['payout_transaction_id']?.toString(),
       payoutReceiptUrl: json['payout_receipt_url']?.toString(),
+      refundTransactionId: json['refund_transaction_id']?.toString(),
+      refundReceiptUrl: json['refund_receipt_url']?.toString(),
       completedAt: json['completed_at']?.toString(),
       revisionCount: (json['revision_count'] as num?)?.toInt() ?? 0,
       maxRevisions: (json['max_revisions'] as num?)?.toInt() ?? 1,
@@ -328,6 +339,9 @@ class ProjectModel {
       if (payoutTransactionId != null)
         'payout_transaction_id': payoutTransactionId,
       if (payoutReceiptUrl != null) 'payout_receipt_url': payoutReceiptUrl,
+      if (refundTransactionId != null)
+        'refund_transaction_id': refundTransactionId,
+      if (refundReceiptUrl != null) 'refund_receipt_url': refundReceiptUrl,
       if (completedAt != null) 'completed_at': completedAt,
       'revision_count': revisionCount,
       'max_revisions': maxRevisions,

@@ -47,6 +47,7 @@ class StatusBadge extends StatelessWidget {
     }
     if (s.contains('reject') ||
         s.contains('dispute') ||
+        s.contains('cancel') ||
         s.contains('suspend') ||
         s.contains('revoked') ||
         s.contains('flagged') ||

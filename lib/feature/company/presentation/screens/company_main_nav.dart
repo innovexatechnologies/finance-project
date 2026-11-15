@@ -18,6 +18,7 @@ import 'company_dashboard.dart';
 import 'company_profile_screen.dart';
 import 'company_projects_list_screen.dart';
 import 'company_settings_screen.dart';
+import 'package:link_vibe/feature/company/payment_methods/presentation/screens/company_payment_method_screen.dart';
 import 'post_project_screen.dart';
 
 class CompanyMainNav extends StatefulWidget {
@@ -609,6 +610,15 @@ class _CompanyMainNavState extends State<CompanyMainNav> {
                                     title: 'Company Profile',
                                     onTap: () => _openDrawerScreen(
                                       const CompanyProfileScreen(),
+                                    ),
+                                  ),
+                                  const SizedBox(height: 4),
+                                  _buildDrawerMenuRow(
+                                    icon: Icons.account_balance_wallet_outlined,
+                                    accentColor: AppColors.primaryBlue,
+                                    title: 'Payment Details',
+                                    onTap: () => _openDrawerScreen(
+                                      const CompanyPaymentMethodScreen(),
                                     ),
                                   ),
                                   const SizedBox(height: 4),
