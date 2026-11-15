@@ -145,3 +145,4 @@ CREATE POLICY "Company Can Re-Submit Payment Proof"
   );
 
 NOTIFY pgrst, 'reload schema';
+
