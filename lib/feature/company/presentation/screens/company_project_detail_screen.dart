@@ -9,6 +9,7 @@ import 'package:link_vibe/feature/company/models/project_model.dart';
 import 'package:link_vibe/feature/company/services/company_profile_service.dart';
 import 'package:link_vibe/feature/company/services/company_project_service.dart';
 import 'package:link_vibe/screens/company/company_escrow_payment_screen.dart';
+import 'package:link_vibe/feature/company/presentation/widgets/company_project_alert_banner.dart';
 import 'package:link_vibe/services/escrow_lifecycle_service.dart';
 import 'applicants_screen.dart';
 import 'assigned_projects_screen.dart';
@@ -822,6 +823,7 @@ class _CompanyProjectDetailScreenState
           body: ListView(
             padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 20),
             children: [
+              CompanyProjectAlertBanner(project: project),
               if (project.isCancelled) ...[
                 _buildCancelledStatusBanner(project),
                 const SizedBox(height: 16),

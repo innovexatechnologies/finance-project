@@ -1301,13 +1301,16 @@ class AppDataService extends ChangeNotifier {
       _applications[appIndex]['status'] = 'Under Review';
       _applications[appIndex]['progress'] = 0.85;
       _applications[appIndex]['isDelivered'] = true;
+      _applications[appIndex]['submitted_at'] = DateTime.now().toIso8601String();
+      _applications[appIndex]['submittedAt'] = DateTime.now().toIso8601String();
     }
 
     final projIndex = _projects.indexWhere(
       (p) => p['id']?.toString() == projectId,
     );
     if (projIndex >= 0) {
-      _projects[projIndex]['status'] = 'delivered';
+      _projects[projIndex]['status'] = 'submitted';
+      _projects[projIndex]['submitted_at'] = DateTime.now().toIso8601String();
       _projects[projIndex]['delivered_at'] = DateTime.now().toIso8601String();
       if (workLink.isNotEmpty) {
         _projects[projIndex]['attachmentUrl'] = workLink;
@@ -1469,6 +1472,86 @@ class AppDataService extends ChangeNotifier {
       if (refundReceiptUrl != null && refundReceiptUrl.isNotEmpty) {
         _projects[projIndex]['refund_receipt_url'] = refundReceiptUrl;
       }
+      _projects[projIndex]['updated_at'] = nowIso;
+    }
+
+    _safeNotifyListeners();
+
+    if (_prefs != null) {
+      await _prefs!.setString(_kApplications, jsonEncode(_applications));
+      await _prefs!.setString(_kCustomProjects, jsonEncode(_projects));
+    }
+  }
+
+  /// Records student HelpDesk escalation ticket submission after 48h
+  Future<void> recordHelpRequestSubmitted({
+    required String projectId,
+    required String reason,
+  }) async {
+    final nowIso = DateTime.now().toIso8601String();
+
+    for (int i = 0; i < _applications.length; i++) {
+      final app = _applications[i];
+      final pId = app['projectId']?.toString() ?? app['id']?.toString() ?? '';
+      if (pId == projectId || app['id']?.toString() == projectId) {
+        _applications[i]['has_help_request'] = true;
+        _applications[i]['hasHelpRequest'] = true;
+        _applications[i]['help_request_reason'] = reason;
+        _applications[i]['help_request_at'] = nowIso;
+      }
+    }
+
+    final projIndex = _projects.indexWhere(
+      (p) => p['id']?.toString() == projectId,
+    );
+    if (projIndex >= 0) {
+      _projects[projIndex]['has_help_request'] = true;
+      _projects[projIndex]['hasHelpRequest'] = true;
+      _projects[projIndex]['help_request_reason'] = reason;
+      _projects[projIndex]['help_request_at'] = nowIso;
+      _projects[projIndex]['updated_at'] = nowIso;
+    }
+
+    _safeNotifyListeners();
+
+    if (_prefs != null) {
+      await _prefs!.setString(_kApplications, jsonEncode(_applications));
+      await _prefs!.setString(_kCustomProjects, jsonEncode(_projects));
+    }
+  }
+
+  /// Records Admin direct HelpDesk payout to student, moving project to Completed/Paid
+  Future<void> recordHelpdeskPayoutCompleted({
+    required String projectId,
+    required String transactionId,
+  }) async {
+    final nowIso = DateTime.now().toIso8601String();
+
+    for (int i = 0; i < _applications.length; i++) {
+      final app = _applications[i];
+      final pId = app['projectId']?.toString() ?? app['id']?.toString() ?? '';
+      if (pId == projectId || app['id']?.toString() == projectId) {
+        _applications[i]['status'] = 'Completed';
+        _applications[i]['progress'] = 1.0;
+        _applications[i]['isPaidByAdmin'] = true;
+        _applications[i]['payout_transaction_id'] = transactionId;
+        _applications[i]['payoutTransactionId'] = transactionId;
+        _applications[i]['has_help_request'] = false;
+        _applications[i]['hasHelpRequest'] = false;
+        _applications[i]['updated_at'] = nowIso;
+      }
+    }
+
+    final projIndex = _projects.indexWhere(
+      (p) => p['id']?.toString() == projectId,
+    );
+    if (projIndex >= 0) {
+      _projects[projIndex]['status'] = 'completed';
+      _projects[projIndex]['payment_status'] = 'paid';
+      _projects[projIndex]['payout_transaction_id'] = transactionId;
+      _projects[projIndex]['has_help_request'] = false;
+      _projects[projIndex]['hasHelpRequest'] = false;
+      _projects[projIndex]['completed_at'] = nowIso;
       _projects[projIndex]['updated_at'] = nowIso;
     }
 

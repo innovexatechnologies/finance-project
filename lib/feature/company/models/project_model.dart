@@ -50,6 +50,11 @@ class ProjectModel {
   final String? lastRevisionRequestedAt;
   final String? revisionDeadline;
 
+  // HelpDesk & Escrow Escalation Fields
+  final String? submittedAt;
+  final bool hasHelpRequest;
+  final String paymentStatus;
+
   ProjectModel({
     required this.id,
     required this.title,
@@ -95,6 +100,9 @@ class ProjectModel {
     this.revisionNotes,
     this.lastRevisionRequestedAt,
     this.revisionDeadline,
+    this.submittedAt,
+    this.hasHelpRequest = false,
+    this.paymentStatus = 'escrow_held',
   });
 
   bool get isPendingPayment => status.toLowerCase() == 'pending_payment';
@@ -109,12 +117,31 @@ class ProjectModel {
       status.toLowerCase() == 'in_progress' ||
       status.toLowerCase() == 'in progress';
   bool get isDelivered => status.toLowerCase() == 'delivered';
+  bool get isSubmitted =>
+      status.toLowerCase() == 'submitted' || status.toLowerCase() == 'delivered';
   bool get isRevisionRequested => status.toLowerCase() == 'revision_requested';
   bool get isDisputed =>
       status.toLowerCase() == 'disputed' || status.toLowerCase() == 'rejected';
   bool get isReadyForPayout => status.toLowerCase() == 'ready_for_payout';
   bool get isCompleted => status.toLowerCase() == 'completed';
   bool get isCancelled => status.toLowerCase() == 'cancelled';
+
+  DateTime? get submittedAtDateTime => submittedAt != null
+      ? DateTime.tryParse(submittedAt!)
+      : deliveredAtDateTime;
+
+  bool get isHelpEligible {
+    if (!isSubmitted || submittedAtDateTime == null || hasHelpRequest) return false;
+    return DateTime.now().difference(submittedAtDateTime!).inHours >= 48;
+  }
+
+  Duration get helpEligibleRemaining {
+    if (submittedAtDateTime == null) return Duration.zero;
+    final diff = DateTime.now().difference(submittedAtDateTime!);
+    const twoDays = Duration(hours: 48);
+    if (diff >= twoDays) return Duration.zero;
+    return twoDays - diff;
+  }
 
   String get budget => escrowAmount > 0
       ? 'PKR ${escrowAmount.toStringAsFixed(0)}'
@@ -184,6 +211,9 @@ class ProjectModel {
     String? revisionNotes,
     String? lastRevisionRequestedAt,
     String? revisionDeadline,
+    String? submittedAt,
+    bool? hasHelpRequest,
+    String? paymentStatus,
   }) {
     return ProjectModel(
       id: id ?? this.id,
@@ -233,6 +263,9 @@ class ProjectModel {
       lastRevisionRequestedAt:
           lastRevisionRequestedAt ?? this.lastRevisionRequestedAt,
       revisionDeadline: revisionDeadline ?? this.revisionDeadline,
+      submittedAt: submittedAt ?? this.submittedAt,
+      hasHelpRequest: hasHelpRequest ?? this.hasHelpRequest,
+      paymentStatus: paymentStatus ?? this.paymentStatus,
     );
   }
 
@@ -295,6 +328,15 @@ class ProjectModel {
       lastRevisionRequestedAt: json['last_revision_requested_at']?.toString(),
       revisionDeadline: json['revision_deadline']?.toString() ??
           json['revisionDeadline']?.toString(),
+      submittedAt: json['submitted_at']?.toString() ??
+          json['submittedAt']?.toString() ??
+          json['delivered_at']?.toString(),
+      hasHelpRequest: json['has_help_request'] == true ||
+          json['hasHelpRequest'] == true,
+      paymentStatus: (json['payment_status'] ??
+              json['paymentStatus'] ??
+              'escrow_held')
+          .toString(),
     );
   }
 
@@ -349,6 +391,9 @@ class ProjectModel {
       if (lastRevisionRequestedAt != null)
         'last_revision_requested_at': lastRevisionRequestedAt,
       if (revisionDeadline != null) 'revision_deadline': revisionDeadline,
+      if (submittedAt != null) 'submitted_at': submittedAt,
+      'has_help_request': hasHelpRequest,
+      'payment_status': paymentStatus,
     };
   }
 

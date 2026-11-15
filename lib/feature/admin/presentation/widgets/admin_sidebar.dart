@@ -15,6 +15,7 @@ import 'package:link_vibe/feature/admin/presentation/screens/reports_analytics_s
 import 'package:link_vibe/feature/admin/presentation/screens/student_management_screen.dart';
 import 'package:link_vibe/screens/admin/admin_project_approvals_screen.dart';
 import 'package:link_vibe/screens/admin/admin_dispute_resolution_screen.dart';
+import 'package:link_vibe/screens/admin/admin_helpdesk_screen.dart';
 import 'package:link_vibe/feature/admin/services/admin_auth_service.dart';
 import 'package:link_vibe/feature/admin/services/admin_company_service.dart';
 import 'package:link_vibe/feature/admin/services/admin_payment_service.dart';
@@ -23,6 +24,7 @@ import 'package:link_vibe/feature/admin/services/admin_settings_service.dart';
 import 'package:link_vibe/feature/admin/services/admin_student_service.dart';
 import 'package:link_vibe/services/admin_project_approval_service.dart';
 import 'package:link_vibe/services/admin_dispute_payout_service.dart';
+import 'package:link_vibe/services/helpdesk_service.dart';
 
 /// Navigation item model for Admin Sidebar
 class AdminNavItem {
@@ -101,6 +103,10 @@ class AdminSidebar extends StatelessWidget {
       case 'support_queries':
       case 'queries':
         return 'support_desk';
+      case 'helpdesk':
+      case 'helpdesk_payouts':
+      case 'escrow_helpdesk':
+        return 'helpdesk';
       case 'settings':
         return 'settings';
       case 'dashboard':
@@ -165,6 +171,9 @@ class AdminSidebar extends StatelessWidget {
       case 'support_desk':
         destination = const AdminSettingsScreen(initialTabIndex: 2);
         break;
+      case 'helpdesk':
+        destination = const AdminHelpDeskScreen();
+        break;
       case 'settings':
         destination = const AdminSettingsScreen();
         break;
@@ -204,6 +213,7 @@ class AdminSidebar extends StatelessWidget {
         .value
         .where((t) => t.status == HelpRequestStatus.pending)
         .length;
+    final openHelpdeskCount = HelpdeskService.instance.openTickets.length;
 
     return [
       const AdminNavItem(
@@ -253,6 +263,13 @@ class AdminSidebar extends StatelessWidget {
         badgeText: disputedCount > 0 ? '$disputedCount' : null,
         badgeColor: AppColors.error,
       ),
+      AdminNavItem(
+        title: 'Escrow HelpDesk',
+        icon: Icons.headset_mic_rounded,
+        routeId: 'helpdesk',
+        badgeText: openHelpdeskCount > 0 ? '$openHelpdeskCount' : null,
+        badgeColor: const Color(0xFFF59E0B),
+      ),
       const AdminNavItem(
         title: 'Reports and Analytics',
         icon: Icons.insights_rounded,
@@ -281,6 +298,7 @@ class AdminSidebar extends StatelessWidget {
       AdminPaymentService().paymentMethodsNotifier,
       AdminProjectApprovalService().pendingApprovalsNotifier,
       AdminDisputePayoutService().disputedProjectsNotifier,
+      HelpdeskService.instance.ticketsNotifier,
     ]);
 
     return ListenableBuilder(

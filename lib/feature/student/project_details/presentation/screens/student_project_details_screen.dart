@@ -10,6 +10,7 @@ import 'package:link_vibe/core/services/supabase_helper.dart';
 import 'package:link_vibe/core/widgets/status_badge.dart';
 import 'package:link_vibe/feature/student/apply/presentation/screens/apply_project_screen.dart';
 import 'package:link_vibe/feature/student/submissions/presentation/screens/submit_work_screen.dart';
+import 'package:link_vibe/feature/student/project_details/presentation/widgets/student_project_detail_help_section.dart';
 
 class StudentProjectDetailsScreen extends StatefulWidget {
   final Map<String, dynamic> project;
@@ -1152,6 +1153,12 @@ class _StudentProjectDetailsScreenState
                               ),
                             ),
                           ],
+                          StudentProjectDetailHelpSection(
+                            project: project,
+                            onHelpRequested: () {
+                              if (mounted) setState(() {});
+                            },
+                          ),
                         ],
 
                           _buildSectionCard(

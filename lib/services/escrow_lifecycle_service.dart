@@ -5,6 +5,7 @@ import 'package:link_vibe/core/services/supabase_helper.dart';
 import 'package:link_vibe/feature/company/models/project_model.dart';
 import 'package:link_vibe/feature/company/services/company_project_service.dart';
 import 'package:link_vibe/services/admin_dispute_payout_service.dart';
+import 'package:link_vibe/services/helpdesk_service.dart';
 
 /// Pure Service Layer for Escrow Lifecycle Transitions:
 /// - Student Project Delivery (`delivered`)
@@ -282,6 +283,9 @@ class EscrowLifecycleService {
       refund: 0.00,
     );
 
+    // Resolve any open HelpDesk ticket for this project
+    await HelpdeskService.instance.onCompanyApprove(projectId);
+
     return true;
   }
 
@@ -351,6 +355,9 @@ class EscrowLifecycleService {
 
     // Refresh Admin Dispute service queue
     AdminDisputePayoutService().loadDisputedProjects(forceRefresh: true);
+
+    // Resolve any open HelpDesk ticket for this project
+    await HelpdeskService.instance.onCompanyReject(projectId);
 
     return caseId;
   }
