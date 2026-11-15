@@ -293,8 +293,24 @@ class _StudentProjectDetailsScreenState
         .toString()
         .trim();
     final hasDisbursalTid = payoutTid.isNotEmpty;
-    final isPaid = (statusLower == 'completed' || statusLower == 'paid') &&
-        (hasDisbursalTid || project['isPaidByAdmin'] == true || currentApplication?['isPaidByAdmin'] == true);
+    final pStatus = (project['payment_status'] ??
+            project['paymentStatus'] ??
+            currentApplication?['payment_status'] ??
+            currentApplication?['paymentStatus'] ??
+            '')
+        .toString()
+        .toLowerCase();
+    final isPaid = statusLower == 'paid' ||
+        pStatus == 'paid' ||
+        project['isPaid'] == true ||
+        project['is_paid'] == true ||
+        currentApplication?['isPaid'] == true ||
+        currentApplication?['is_paid'] == true ||
+        ((statusLower == 'completed' || statusLower == 'paid') &&
+            (hasDisbursalTid ||
+                project['isPaidByAdmin'] == true ||
+                currentApplication?['isPaidByAdmin'] == true ||
+                pStatus == 'paid'));
     final isReadyForPayout = statusLower == 'ready_for_payout';
     final hasDeliveredFlag = project['isDelivered'] == true ||
         currentApplication?['isDelivered'] == true ||

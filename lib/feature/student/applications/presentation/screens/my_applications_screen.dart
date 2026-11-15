@@ -25,7 +25,14 @@ class MyApplicationsScreen extends StatefulWidget {
     final company = (app['company']?.toString().trim().isNotEmpty == true)
         ? app['company'].toString().trim()
         : 'Partner Company';
-    final status = app['status']?.toString() ?? 'Pending';
+    final rawStatus = app['status']?.toString() ?? 'Pending';
+    final pStatus = (app['payment_status'] ?? app['paymentStatus'] ?? '').toString().toLowerCase();
+    final isPaid = rawStatus.toLowerCase() == 'completed' ||
+        rawStatus.toLowerCase() == 'paid' ||
+        pStatus == 'paid' ||
+        app['isPaid'] == true ||
+        app['isPaidByAdmin'] == true;
+    final status = isPaid ? 'Paid' : rawStatus;
     final stage = (app['timelineStep'] as int?) ?? 1;
     final appliedDate = app['appliedDate']?.toString().trim() ?? 'Recently';
     final deadline = app['deadline']?.toString().trim() ?? '';
@@ -485,7 +492,14 @@ class _MyApplicationsScreenState extends State<MyApplicationsScreen> {
   }
 
   Widget _buildApplicationCard(BuildContext context, Map<String, dynamic> app) {
-    final status = app['status']?.toString() ?? 'Pending';
+    final rawStatus = app['status']?.toString() ?? 'Pending';
+    final pStatus = (app['payment_status'] ?? app['paymentStatus'] ?? '').toString().toLowerCase();
+    final isPaid = rawStatus.toLowerCase() == 'completed' ||
+        rawStatus.toLowerCase() == 'paid' ||
+        pStatus == 'paid' ||
+        app['isPaid'] == true ||
+        app['isPaidByAdmin'] == true;
+    final status = isPaid ? 'Paid' : rawStatus;
     final timelineStep = (app['timelineStep'] as int?) ?? 1;
     final company = (app['company']?.toString().trim().isNotEmpty == true)
         ? app['company'].toString().trim()

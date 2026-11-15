@@ -111,31 +111,47 @@ class _MyProjectsScreenState extends State<MyProjectsScreen>
             })
             .toList();
 
-        final activeProjects = myProjects.where((p) {
-          final s = (p['status'] ?? '').toString().toLowerCase();
-          final hasDisbursalTid = (p['payout_transaction_id'] ??
-                  p['payoutTransactionId'] ??
-                  '')
-              .toString()
-              .trim()
-              .isNotEmpty;
-          final isDisbursed = (s == 'completed' || s == 'paid') &&
-              (hasDisbursalTid || p['isPaidByAdmin'] == true);
-          final isCancelled = s == 'cancelled' || p['isCancelled'] == true;
-          return !isDisbursed && !isCancelled;
-        }).toList();
-
         final paidProjects = myProjects.where((p) {
           final s = (p['status'] ?? '').toString().toLowerCase();
+          final pStatus = (p['payment_status'] ?? p['paymentStatus'] ?? '')
+              .toString()
+              .toLowerCase();
           final hasDisbursalTid = (p['payout_transaction_id'] ??
                   p['payoutTransactionId'] ??
                   '')
               .toString()
               .trim()
               .isNotEmpty;
-          final isDisbursed = (s == 'completed' || s == 'paid') &&
-              (hasDisbursalTid || p['isPaidByAdmin'] == true);
+          final isDisbursed = s == 'completed' ||
+              s == 'paid' ||
+              pStatus == 'paid' ||
+              p['isPaid'] == true ||
+              p['is_paid'] == true ||
+              p['isPaidByAdmin'] == true ||
+              hasDisbursalTid;
           return isDisbursed;
+        }).toList();
+
+        final activeProjects = myProjects.where((p) {
+          final s = (p['status'] ?? '').toString().toLowerCase();
+          final pStatus = (p['payment_status'] ?? p['paymentStatus'] ?? '')
+              .toString()
+              .toLowerCase();
+          final hasDisbursalTid = (p['payout_transaction_id'] ??
+                  p['payoutTransactionId'] ??
+                  '')
+              .toString()
+              .trim()
+              .isNotEmpty;
+          final isDisbursed = s == 'completed' ||
+              s == 'paid' ||
+              pStatus == 'paid' ||
+              p['isPaid'] == true ||
+              p['is_paid'] == true ||
+              p['isPaidByAdmin'] == true ||
+              hasDisbursalTid;
+          final isCancelled = s == 'cancelled' || p['isCancelled'] == true;
+          return !isDisbursed && !isCancelled;
         }).toList();
 
         return Scaffold(
@@ -186,7 +202,7 @@ class _MyProjectsScreenState extends State<MyProjectsScreen>
               ),
               tabs: [
                 Tab(text: 'Active (${activeProjects.length})'),
-                Tab(text: 'Paid (${paidProjects.length})'),
+                Tab(text: 'Completed / Paid (${paidProjects.length})'),
                 Tab(text: 'All (${myProjects.length})'),
               ],
             ),
@@ -270,8 +286,16 @@ class _MyProjectsScreenState extends State<MyProjectsScreen>
         .toString()
         .trim()
         .isNotEmpty;
-    final isDisbursed = (statusLower == 'completed' || statusLower == 'paid') &&
-        (hasDisbursalTid || project['isPaidByAdmin'] == true);
+    final pStatus = (project['payment_status'] ?? project['paymentStatus'] ?? '')
+        .toString()
+        .toLowerCase();
+    final isDisbursed = statusLower == 'completed' ||
+        statusLower == 'paid' ||
+        pStatus == 'paid' ||
+        project['isPaid'] == true ||
+        project['is_paid'] == true ||
+        project['isPaidByAdmin'] == true ||
+        hasDisbursalTid;
     final isCompleted = isDisbursed;
     final isReadyForPayout = statusLower == 'ready_for_payout';
     final isDelivered = statusLower == 'delivered';

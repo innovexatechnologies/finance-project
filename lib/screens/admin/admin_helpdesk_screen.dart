@@ -185,6 +185,71 @@ class _AdminHelpDeskScreenState extends State<AdminHelpDeskScreen>
     return 'Danish (CS)';
   }
 
+  bool _isTicketProjectPaid(HelpdeskTicket ticket) {
+    if (ticket.isResolved) return true;
+
+    try {
+      final p = CompanyProjectService().allProjects.firstWhere(
+        (e) =>
+            e.id == ticket.projectId ||
+            e.title.trim().toLowerCase() ==
+                ticket.projectTitle.trim().toLowerCase(),
+      );
+      if (p.paymentStatus.toLowerCase() == 'paid' ||
+          p.status.toLowerCase() == 'completed') {
+        return true;
+      }
+    } catch (_) {}
+
+    try {
+      final allP = AppDataService.instance.getAllProjects();
+      for (final ap in allP) {
+        final pId = (ap['id'] ?? ap['projectId'])?.toString();
+        final pTitle = ap['title']?.toString().trim().toLowerCase();
+        if (pId == ticket.projectId ||
+            (pTitle != null &&
+                pTitle == ticket.projectTitle.trim().toLowerCase())) {
+          final pStatus = (ap['payment_status'] ?? ap['paymentStatus'] ?? '')
+              .toString()
+              .toLowerCase();
+          final sStatus = (ap['status'] ?? '').toString().toLowerCase();
+          if (pStatus == 'paid' ||
+              sStatus == 'completed' ||
+              ap['isPaid'] == true ||
+              ap['isPaidByAdmin'] == true) {
+            return true;
+          }
+        }
+      }
+    } catch (_) {}
+
+    try {
+      final apps = AppDataService.instance.getApplications();
+      for (final a in apps) {
+        final aPId =
+            (a['projectId'] ?? a['id'] ?? a['project_id'])?.toString();
+        final aTitle =
+            (a['projectTitle'] ?? a['title'])?.toString().trim().toLowerCase();
+        if (aPId == ticket.projectId ||
+            (aTitle != null &&
+                aTitle == ticket.projectTitle.trim().toLowerCase())) {
+          final s = (a['status'] ?? '').toString().toLowerCase();
+          final pStatus = (a['payment_status'] ?? a['paymentStatus'] ?? '')
+              .toString()
+              .toLowerCase();
+          if (s == 'completed' ||
+              pStatus == 'paid' ||
+              a['isPaidByAdmin'] == true ||
+              a['isPaid'] == true) {
+            return true;
+          }
+        }
+      }
+    } catch (_) {}
+
+    return false;
+  }
+
   Future<void> _openPayoutConfirmationModal(HelpdeskTicket ticket) async {
     final tidController = TextEditingController(
       text: 'HD-TID-${DateTime.now().millisecondsSinceEpoch.toString().substring(5)}',
@@ -469,6 +534,7 @@ class _AdminHelpDeskScreenState extends State<AdminHelpDeskScreen>
                                     .executeHelpdeskPayout(
                                   ticketId: ticket.id,
                                   projectId: ticket.projectId,
+                                  projectTitle: ticket.projectTitle,
                                   transactionId: tidController.text.trim(),
                                 );
 
@@ -476,6 +542,7 @@ class _AdminHelpDeskScreenState extends State<AdminHelpDeskScreen>
 
                                 modalNav.pop();
                                 if (ok) {
+                                  await _helpdeskService.fetchTickets();
                                   if (mounted) setState(() {});
                                   messenger.showSnackBar(
                                     const SnackBar(
@@ -593,10 +660,13 @@ class _AdminHelpDeskScreenState extends State<AdminHelpDeskScreen>
                       child: ValueListenableBuilder<List<HelpdeskTicket>>(
                         valueListenable: _helpdeskService.ticketsNotifier,
                         builder: (context, allList, _) {
-                          final openList =
-                              allList.where((t) => t.isOpen).toList();
-                          final readyList =
-                              allList.where((t) => t.isReadyForPayout).toList();
+                          final openList = allList
+                              .where((t) => t.isOpen && !_isTicketProjectPaid(t))
+                              .toList();
+                          final readyList = allList
+                              .where((t) =>
+                                  t.isReadyForPayout && !_isTicketProjectPaid(t))
+                              .toList();
 
                           final filteredOpen = _searchQuery.isEmpty
                               ? openList
@@ -868,7 +938,8 @@ class _AdminHelpDeskScreenState extends State<AdminHelpDeskScreen>
   }
 
   Widget _buildTicketCard(HelpdeskTicket ticket) {
-    final isReady = ticket.isReadyForPayout;
+    final isPaid = _isTicketProjectPaid(ticket);
+    final isReady = ticket.isReadyForPayout && !isPaid;
 
     return Container(
       margin: const EdgeInsets.only(bottom: 14),
@@ -1004,8 +1075,34 @@ class _AdminHelpDeskScreenState extends State<AdminHelpDeskScreen>
           ),
           const SizedBox(height: 14),
 
-          // 1-Day Grace Period Action Logic
-          if (isReady)
+          // 1-Day Grace Period Action Logic (Hide action buttons once paid)
+          if (isPaid)
+            Container(
+              width: double.infinity,
+              padding: const EdgeInsets.symmetric(vertical: 12, horizontal: 16),
+              decoration: BoxDecoration(
+                color: const Color(0xFFECFDF5),
+                borderRadius: BorderRadius.circular(10),
+                border: Border.all(color: const Color(0xFF10B981)),
+              ),
+              child: Row(
+                mainAxisAlignment: MainAxisAlignment.center,
+                children: [
+                  const Icon(Icons.check_circle_rounded,
+                      color: Color(0xFF059669), size: 18),
+                  const SizedBox(width: 8),
+                  Text(
+                    'Payment Sent to Student • Project Completed',
+                    style: GoogleFonts.poppins(
+                      fontSize: 13,
+                      fontWeight: FontWeight.bold,
+                      color: const Color(0xFF065F46),
+                    ),
+                  ),
+                ],
+              ),
+            )
+          else if (isReady)
             SizedBox(
               width: double.infinity,
               height: 44,

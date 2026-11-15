@@ -1038,6 +1038,7 @@ class HelpdeskService {
   Future<bool> executeHelpdeskPayout({
     required String ticketId,
     required String projectId,
+    String? projectTitle,
     String? transactionId,
   }) async {
     _lastError = null;
@@ -1045,6 +1046,16 @@ class HelpdeskService {
     final tid = transactionId != null && transactionId.trim().isNotEmpty
         ? transactionId.trim()
         : 'HD-TID-${DateTime.now().millisecondsSinceEpoch}';
+
+    String effectiveTitle = projectTitle?.trim() ?? '';
+    if (effectiveTitle.isEmpty) {
+      try {
+        final t = ticketsNotifier.value.firstWhere(
+          (e) => e.id == ticketId || e.projectId == projectId,
+        );
+        effectiveTitle = t.projectTitle.trim();
+      } catch (_) {}
+    }
 
     final supabase = SupabaseHelper.clientOrNull;
 
@@ -1071,6 +1082,13 @@ class HelpdeskService {
                 'status': 'resolved',
               })
               .eq('id', ticketId);
+        } else {
+          await supabase
+              .from('helpdesk_tickets')
+              .update({
+                'status': 'resolved',
+              })
+              .eq('project_id', projectId);
         }
 
         // 3. Update applications table
@@ -1107,24 +1125,31 @@ class HelpdeskService {
     await AppDataService.instance.recordHelpdeskPayoutCompleted(
       projectId: projectId,
       transactionId: tid,
+      projectTitle: effectiveTitle,
     );
 
     // 6. Update CompanyProjectService
     final compList = List<ProjectModel>.from(CompanyProjectService().allProjects);
-    final cIdx = compList.indexWhere((p) => p.id == projectId);
-    if (cIdx != -1) {
-      compList[cIdx] = compList[cIdx].copyWith(
-        status: 'completed',
-        paymentStatus: 'paid',
-        payoutTransactionId: tid,
-        hasHelpRequest: false,
-      );
-      CompanyProjectService().projectsNotifier.value = compList;
+    for (int i = 0; i < compList.length; i++) {
+      if (compList[i].id == projectId ||
+          (effectiveTitle.isNotEmpty &&
+              compList[i].title.trim().toLowerCase() == effectiveTitle.toLowerCase())) {
+        compList[i] = compList[i].copyWith(
+          status: 'completed',
+          paymentStatus: 'paid',
+          payoutTransactionId: tid,
+          hasHelpRequest: false,
+        );
+      }
     }
+    CompanyProjectService().projectsNotifier.value = compList;
 
-    // 7. Update ticketsNotifier
+    // 7. Update ticketsNotifier (Marks ticket as resolved so it disappears from open queue and hides button)
     final updated = ticketsNotifier.value.map((t) {
-      if (t.id == ticketId || t.projectId == projectId) {
+      final matchesId = t.id == ticketId || t.projectId == projectId;
+      final matchesTitle = effectiveTitle.isNotEmpty &&
+          t.projectTitle.trim().toLowerCase() == effectiveTitle.toLowerCase();
+      if (matchesId || matchesTitle) {
         return t.copyWith(status: 'resolved');
       }
       return t;

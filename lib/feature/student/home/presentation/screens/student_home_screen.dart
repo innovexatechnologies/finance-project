@@ -779,6 +779,13 @@ class _StudentHomeScreenState extends State<StudentHomeScreen> {
     final duration = project['duration']?.toString().trim() ?? 'Flexible';
     final workMode = project['workMode']?.toString().trim() ?? 'Remote';
     final status = project['status']?.toString() ?? 'Open';
+    final pStatus = (project['payment_status'] ?? project['paymentStatus'] ?? '')
+        .toString()
+        .toLowerCase();
+    final isPaid = status.toLowerCase() == 'paid' ||
+        pStatus == 'paid' ||
+        project['isPaid'] == true ||
+        project['isPaidByAdmin'] == true;
 
     return Container(
       margin: const EdgeInsets.only(bottom: 12),
@@ -856,7 +863,7 @@ class _StudentHomeScreenState extends State<StudentHomeScreen> {
                   ),
                 ),
                 const SizedBox(width: 6),
-                StatusBadge(label: status),
+                StatusBadge(label: isPaid ? 'Paid' : status),
                 const SizedBox(width: 4),
                 IconButton(
                   constraints: const BoxConstraints(),

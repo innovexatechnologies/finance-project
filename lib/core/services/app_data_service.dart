@@ -1573,16 +1573,25 @@ class AppDataService extends ChangeNotifier {
   Future<void> recordHelpdeskPayoutCompleted({
     required String projectId,
     required String transactionId,
+    String? projectTitle,
   }) async {
     final nowIso = DateTime.now().toIso8601String();
+    final cleanTitle = projectTitle?.trim().toLowerCase();
 
     for (int i = 0; i < _applications.length; i++) {
       final app = _applications[i];
       final pId = app['projectId']?.toString() ?? app['id']?.toString() ?? '';
-      if (pId == projectId || app['id']?.toString() == projectId) {
+      final appTitle = (app['projectTitle'] ?? app['title'])?.toString().trim().toLowerCase();
+      final matchesTitle = cleanTitle != null && cleanTitle.isNotEmpty && appTitle == cleanTitle;
+
+      if (pId == projectId || app['id']?.toString() == projectId || matchesTitle) {
         _applications[i]['status'] = 'Completed';
-        _applications[i]['progress'] = 1.0;
+        _applications[i]['payment_status'] = 'paid';
+        _applications[i]['paymentStatus'] = 'paid';
+        _applications[i]['isPaid'] = true;
+        _applications[i]['is_paid'] = true;
         _applications[i]['isPaidByAdmin'] = true;
+        _applications[i]['progress'] = 1.0;
         _applications[i]['payout_transaction_id'] = transactionId;
         _applications[i]['payoutTransactionId'] = transactionId;
         _applications[i]['has_help_request'] = false;
@@ -1591,17 +1600,26 @@ class AppDataService extends ChangeNotifier {
       }
     }
 
-    final projIndex = _projects.indexWhere(
-      (p) => p['id']?.toString() == projectId,
-    );
-    if (projIndex >= 0) {
-      _projects[projIndex]['status'] = 'completed';
-      _projects[projIndex]['payment_status'] = 'paid';
-      _projects[projIndex]['payout_transaction_id'] = transactionId;
-      _projects[projIndex]['has_help_request'] = false;
-      _projects[projIndex]['hasHelpRequest'] = false;
-      _projects[projIndex]['completed_at'] = nowIso;
-      _projects[projIndex]['updated_at'] = nowIso;
+    for (int i = 0; i < _projects.length; i++) {
+      final p = _projects[i];
+      final pId = (p['id'] ?? p['projectId'])?.toString() ?? '';
+      final pTitle = p['title']?.toString().trim().toLowerCase();
+      final matchesTitle = cleanTitle != null && cleanTitle.isNotEmpty && pTitle == cleanTitle;
+
+      if (pId == projectId || matchesTitle) {
+        _projects[i]['status'] = 'completed';
+        _projects[i]['payment_status'] = 'paid';
+        _projects[i]['paymentStatus'] = 'paid';
+        _projects[i]['isPaid'] = true;
+        _projects[i]['is_paid'] = true;
+        _projects[i]['isPaidByAdmin'] = true;
+        _projects[i]['payout_transaction_id'] = transactionId;
+        _projects[i]['payoutTransactionId'] = transactionId;
+        _projects[i]['has_help_request'] = false;
+        _projects[i]['hasHelpRequest'] = false;
+        _projects[i]['completed_at'] = nowIso;
+        _projects[i]['updated_at'] = nowIso;
+      }
     }
 
     _safeNotifyListeners();
