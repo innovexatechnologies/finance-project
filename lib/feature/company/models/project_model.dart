@@ -41,11 +41,12 @@ class ProjectModel {
   final String? payoutReceiptUrl;
   final String? completedAt;
 
-  // Revision Tracking Fields (Max 2 Revisions)
+  // Revision Tracking Fields (Max 1 Revision with 2-day deadline)
   final int revisionCount;
   final int maxRevisions;
   final String? revisionNotes;
   final String? lastRevisionRequestedAt;
+  final String? revisionDeadline;
 
   ProjectModel({
     required this.id,
@@ -86,9 +87,10 @@ class ProjectModel {
     this.payoutReceiptUrl,
     this.completedAt,
     this.revisionCount = 0,
-    this.maxRevisions = 2,
+    this.maxRevisions = 1,
     this.revisionNotes,
     this.lastRevisionRequestedAt,
+    this.revisionDeadline,
   });
 
   bool get isPendingPayment => status.toLowerCase() == 'pending_payment';
@@ -173,6 +175,7 @@ class ProjectModel {
     int? maxRevisions,
     String? revisionNotes,
     String? lastRevisionRequestedAt,
+    String? revisionDeadline,
   }) {
     return ProjectModel(
       id: id ?? this.id,
@@ -219,6 +222,7 @@ class ProjectModel {
       revisionNotes: revisionNotes ?? this.revisionNotes,
       lastRevisionRequestedAt:
           lastRevisionRequestedAt ?? this.lastRevisionRequestedAt,
+      revisionDeadline: revisionDeadline ?? this.revisionDeadline,
     );
   }
 
@@ -271,9 +275,11 @@ class ProjectModel {
       payoutReceiptUrl: json['payout_receipt_url']?.toString(),
       completedAt: json['completed_at']?.toString(),
       revisionCount: (json['revision_count'] as num?)?.toInt() ?? 0,
-      maxRevisions: (json['max_revisions'] as num?)?.toInt() ?? 2,
+      maxRevisions: (json['max_revisions'] as num?)?.toInt() ?? 1,
       revisionNotes: json['revision_notes']?.toString(),
       lastRevisionRequestedAt: json['last_revision_requested_at']?.toString(),
+      revisionDeadline: json['revision_deadline']?.toString() ??
+          json['revisionDeadline']?.toString(),
     );
   }
 
@@ -324,6 +330,7 @@ class ProjectModel {
       if (revisionNotes != null) 'revision_notes': revisionNotes,
       if (lastRevisionRequestedAt != null)
         'last_revision_requested_at': lastRevisionRequestedAt,
+      if (revisionDeadline != null) 'revision_deadline': revisionDeadline,
     };
   }
 }

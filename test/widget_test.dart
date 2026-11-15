@@ -1946,7 +1946,7 @@ void main() {
       expect(find.text('Disputes & Escrow Payouts'), findsWidgets);
     });
 
-    test('Project Revision flow with max 2 revisions limit', () async {
+    test('Project Revision flow with strictly 1 review request limit and 2-day deadline', () async {
       final lifecycle = EscrowLifecycleService();
       const testEscrowProjectId = '11111111-2222-3333-4444-555555555555';
 
@@ -1961,69 +1961,44 @@ void main() {
       expect(p.isDelivered, isTrue);
       expect(p.revisionCount, 0);
       expect(p.canRequestRevision, isTrue);
-      expect(p.remainingRevisions, 2);
+      expect(p.remainingRevisions, 1);
 
-      // Revision 1
+      // Revision 1 (Allowed)
       final rev1Success = await lifecycle.requestProjectRevision(
         projectId: testEscrowProjectId,
-        revisionNotes: 'Please fix responsive layout on tablet screens.',
+        revisionNotes: 'Please fix responsive layout on mobile screens.',
       );
       expect(rev1Success, isTrue);
 
       p = CompanyProjectService().allProjects.firstWhere((p) => p.id == testEscrowProjectId);
       expect(p.isRevisionRequested, isTrue);
       expect(p.revisionCount, 1);
-      expect(p.canRequestRevision, isTrue);
-      expect(p.remainingRevisions, 1);
-      expect(p.revisionNotes, 'Please fix responsive layout on tablet screens.');
+      expect(p.canRequestRevision, isFalse);
+      expect(p.remainingRevisions, 0);
+      expect(p.revisionNotes, 'Please fix responsive layout on mobile screens.');
+      expect(p.revisionDeadline, isNotNull);
 
       // Student re-delivers after Revision 1
       final redeliver1 = await lifecycle.reDeliverProject(
         projectId: testEscrowProjectId,
         workUrl: 'https://github.com/student/first-cut-rev1',
-        summary: 'Fixed tablet layout constraints.',
+        summary: 'Fixed mobile layout constraints.',
       );
       expect(redeliver1, isTrue);
 
       p = CompanyProjectService().allProjects.firstWhere((p) => p.id == testEscrowProjectId);
       expect(p.isDelivered, isTrue);
       expect(p.revisionCount, 1);
-      expect(p.remainingRevisions, 1);
+      expect(p.canRequestRevision, isFalse); // On 2nd submission, ONLY Approve or Reject allowed
+      expect(p.remainingRevisions, 0);
 
-      // Revision 2
+      // Revision 2 attempt MUST fail because strictly only 1 revision is permitted
       final rev2Success = await lifecycle.requestProjectRevision(
-        projectId: testEscrowProjectId,
-        revisionNotes: 'Need dark mode styling adjustments.',
-      );
-      expect(rev2Success, isTrue);
-
-      p = CompanyProjectService().allProjects.firstWhere((p) => p.id == testEscrowProjectId);
-      expect(p.isRevisionRequested, isTrue);
-      expect(p.revisionCount, 2);
-      expect(p.canRequestRevision, isFalse);
-      expect(p.remainingRevisions, 0);
-
-      // Student re-delivers after Revision 2
-      final redeliver2 = await lifecycle.reDeliverProject(
-        projectId: testEscrowProjectId,
-        workUrl: 'https://github.com/student/first-cut-rev2',
-        summary: 'Dark mode adjusted.',
-      );
-      expect(redeliver2, isTrue);
-
-      p = CompanyProjectService().allProjects.firstWhere((p) => p.id == testEscrowProjectId);
-      expect(p.isDelivered, isTrue);
-      expect(p.revisionCount, 2);
-      expect(p.canRequestRevision, isFalse);
-      expect(p.remainingRevisions, 0);
-
-      // Revision 3 attempt MUST fail because limit is 2
-      final rev3Success = await lifecycle.requestProjectRevision(
         projectId: testEscrowProjectId,
         revisionNotes: 'Try another change.',
       );
-      expect(rev3Success, isFalse);
-      expect(lifecycle.lastError, contains('Maximum limit of 2 revisions'));
+      expect(rev2Success, isFalse);
+      expect(lifecycle.lastError, contains('1 review request'));
     });
   });
 }

@@ -397,7 +397,7 @@ class _CompanyProjectDetailScreenState
     if (!project.canRequestRevision) {
       ScaffoldMessenger.of(context).showSnackBar(
         const SnackBar(
-          content: Text('Maximum 2 revisions limit reached for this project.'),
+          content: Text('Only 1 review request is allowed. Maximum limit reached for this project.'),
           backgroundColor: AppColors.error,
           behavior: SnackBarBehavior.floating,
         ),
@@ -406,8 +406,6 @@ class _CompanyProjectDetailScreenState
     }
 
     final notesController = TextEditingController();
-    final remaining = project.remainingRevisions;
-    final revisionNumber = project.revisionCount + 1;
 
     final confirmed = await showDialog<bool>(
       context: context,
@@ -424,10 +422,10 @@ class _CompanyProjectDetailScreenState
               child: const Icon(Icons.rate_review_rounded, color: Color(0xFF2563EB)),
             ),
             const SizedBox(width: 10),
-            Expanded(
+            const Expanded(
               child: Text(
-                'Request Revision ($revisionNumber of 2)',
-                style: const TextStyle(fontSize: 17, fontWeight: FontWeight.bold),
+                'Request Improvement',
+                style: TextStyle(fontSize: 17, fontWeight: FontWeight.bold),
               ),
             ),
           ],
@@ -438,21 +436,33 @@ class _CompanyProjectDetailScreenState
             crossAxisAlignment: CrossAxisAlignment.start,
             children: [
               Text(
-                'Specify the changes or improvements required from the student. The 5-day auto-release countdown will pause until the student re-delivers.',
+                'Specify the required improvements. The student will have strictly 2 Days (48 Hours) to re-deliver revised work.',
                 style: GoogleFonts.inter(fontSize: 13, height: 1.4),
               ),
               const SizedBox(height: 10),
               Container(
-                padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 6),
+                padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 8),
                 decoration: BoxDecoration(
                   color: const Color(0xFFEFF6FF),
                   borderRadius: BorderRadius.circular(8),
                   border: Border.all(color: const Color(0xFF3B82F6).withValues(alpha: 0.3)),
                 ),
-                child: Text(
-                  'Remaining revisions after this request: ${remaining - 1} of 2',
-                  style: const TextStyle(
-                      fontSize: 11.5, fontWeight: FontWeight.w600, color: Color(0xFF1D4ED8)),
+                child: const Row(
+                  children: [
+                    Icon(Icons.info_outline_rounded, size: 16, color: Color(0xFF1D4ED8)),
+                    SizedBox(width: 6),
+                    Expanded(
+                      child: Text(
+                        'Important: Only 1 review request is allowed. Student has strictly 2 Days (48 Hours) deadline. After re-delivery, options will strictly be Approve or Reject.',
+                        style: TextStyle(
+                          fontSize: 11,
+                          fontWeight: FontWeight.w600,
+                          color: Color(0xFF1D4ED8),
+                          height: 1.35,
+                        ),
+                      ),
+                    ),
+                  ],
                 ),
               ),
               const SizedBox(height: 14),
@@ -488,7 +498,7 @@ class _CompanyProjectDetailScreenState
               }
               Navigator.pop(ctx, true);
             },
-            child: const Text('Submit Revision Request'),
+            child: const Text('Send Improvement Request (2 Days)'),
           ),
         ],
       ),
@@ -503,9 +513,9 @@ class _CompanyProjectDetailScreenState
       if (!mounted) return;
       if (success) {
         ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(
-            content: Text('Revision $revisionNumber requested! 5-day timer paused.'),
-            backgroundColor: const Color(0xFF2563EB),
+          const SnackBar(
+            content: Text('Improvement requested! Student has strictly 2 days (48 hours) to re-deliver.'),
+            backgroundColor: Color(0xFF2563EB),
             behavior: SnackBarBehavior.floating,
           ),
         );
@@ -1397,7 +1407,7 @@ class _CompanyProjectDetailScreenState
               ),
               onPressed: () => _handleApproveAndRelease(project),
               icon: const Icon(Icons.check_circle_outline_rounded, size: 18),
-              label: const Text('Approve & Release Payment to Student'),
+              label: const Text('Approve & Release Payment'),
             ),
           ),
           if (project.canRequestRevision) ...[
@@ -1412,22 +1422,7 @@ class _CompanyProjectDetailScreenState
                 ),
                 onPressed: () => _handleRequestRevision(project),
                 icon: const Icon(Icons.rate_review_rounded, size: 18),
-                label: Text('Request Revision (${project.remainingRevisions}/2 Remaining)'),
-              ),
-            ),
-          ] else ...[
-            const SizedBox(height: 8),
-            SizedBox(
-              width: double.infinity,
-              child: OutlinedButton.icon(
-                style: OutlinedButton.styleFrom(
-                  foregroundColor: AppColors.grayText,
-                  side: const BorderSide(color: AppColors.lightGray),
-                  padding: const EdgeInsets.symmetric(vertical: 12),
-                ),
-                onPressed: null,
-                icon: const Icon(Icons.lock_clock_rounded, size: 18),
-                label: const Text('2/2 Revisions Used (Max Limit Reached)'),
+                label: const Text('Request Improvement (1 Review Allowed • 2 Days)'),
               ),
             ),
           ],
@@ -1442,7 +1437,7 @@ class _CompanyProjectDetailScreenState
               ),
               onPressed: () => _handleRaiseDispute(project),
               icon: const Icon(Icons.gavel_rounded, size: 18),
-              label: const Text('Raise Dispute / Contest Deliverables'),
+              label: const Text('Reject Work & Open Dispute'),
             ),
           ),
         ],
@@ -1889,6 +1884,7 @@ class _CompanyProjectDetailScreenState
             ),
           ),
           const SizedBox(height: 16),
+          // 3 Options on 1st submission, Strictly 2 Options on 2nd submission
           Row(
             children: [
               Expanded(
@@ -1911,39 +1907,29 @@ class _CompanyProjectDetailScreenState
           const SizedBox(height: 10),
           Row(
             children: [
-              Expanded(
-                child: project.canRequestRevision
-                    ? OutlinedButton.icon(
-                        style: OutlinedButton.styleFrom(
-                          foregroundColor: const Color(0xFF2563EB),
-                          side: const BorderSide(color: Color(0xFF2563EB)),
-                          padding: const EdgeInsets.symmetric(vertical: 12),
-                          shape: RoundedRectangleBorder(
-                            borderRadius: BorderRadius.circular(10),
-                          ),
-                        ),
-                        icon: const Icon(Icons.rate_review_rounded, size: 18),
-                        label: Text(
-                          'Request Revision (${project.remainingRevisions}/2)',
-                          style: const TextStyle(fontWeight: FontWeight.w600),
-                        ),
-                        onPressed: () => _handleRequestRevision(project),
-                      )
-                    : OutlinedButton.icon(
-                        style: OutlinedButton.styleFrom(
-                          foregroundColor: AppColors.grayText,
-                          side: const BorderSide(color: AppColors.lightGray),
-                          padding: const EdgeInsets.symmetric(vertical: 12),
-                          shape: RoundedRectangleBorder(
-                            borderRadius: BorderRadius.circular(10),
-                          ),
-                        ),
-                        icon: const Icon(Icons.lock_clock_rounded, size: 18),
-                        label: const Text('2/2 Revisions Used'),
-                        onPressed: null,
+              if (project.canRequestRevision) ...[
+                Expanded(
+                  child: OutlinedButton.icon(
+                    style: OutlinedButton.styleFrom(
+                      foregroundColor: const Color(0xFF2563EB),
+                      side: const BorderSide(color: Color(0xFF2563EB)),
+                      padding: const EdgeInsets.symmetric(vertical: 12),
+                      shape: RoundedRectangleBorder(
+                        borderRadius: BorderRadius.circular(10),
                       ),
-              ),
-              const SizedBox(width: 10),
+                    ),
+                    icon: const Icon(Icons.rate_review_rounded, size: 18),
+                    label: Text(
+                      'Improvement (2 Days)',
+                      maxLines: 1,
+                      overflow: TextOverflow.ellipsis,
+                      style: GoogleFonts.inter(fontWeight: FontWeight.w600, fontSize: 12.5),
+                    ),
+                    onPressed: () => _handleRequestRevision(project),
+                  ),
+                ),
+                const SizedBox(width: 10),
+              ],
               Expanded(
                 child: OutlinedButton.icon(
                   style: OutlinedButton.styleFrom(
@@ -1955,7 +1941,12 @@ class _CompanyProjectDetailScreenState
                     ),
                   ),
                   icon: const Icon(Icons.gavel_rounded, size: 18),
-                  label: const Text('Raise Dispute'),
+                  label: Text(
+                    'Reject & Dispute',
+                    maxLines: 1,
+                    overflow: TextOverflow.ellipsis,
+                    style: GoogleFonts.inter(fontWeight: FontWeight.w600, fontSize: 12.5),
+                  ),
                   onPressed: () => _handleRaiseDispute(project),
                 ),
               ),
@@ -1997,15 +1988,15 @@ class _CompanyProjectDetailScreenState
                   crossAxisAlignment: CrossAxisAlignment.start,
                   children: [
                     Text(
-                      'Revision ${project.revisionCount} of 2 in Progress',
+                      'Improvement in Progress (Final Review Allowed)',
                       style: GoogleFonts.poppins(
-                        fontSize: 15,
+                        fontSize: 14.5,
                         fontWeight: FontWeight.w700,
                         color: const Color(0xFF1E40AF),
                       ),
                     ),
                     const Text(
-                      '5-Day Auto-Release Timer Paused',
+                      'Student has strictly 2 Days (48 Hours) to re-deliver',
                       style: TextStyle(
                         fontSize: 12,
                         fontWeight: FontWeight.w600,
@@ -2019,7 +2010,7 @@ class _CompanyProjectDetailScreenState
           ),
           const SizedBox(height: 12),
           Text(
-            'Requested Improvements: "${project.revisionNotes ?? "Deliverables need improvement"}". Waiting for student to submit revised work.',
+            'Requested Improvements: "${project.revisionNotes ?? "Deliverables need improvement"}". Student is preparing revised work under 48-hour deadline.',
             style: GoogleFonts.inter(
               fontSize: 12.5,
               color: const Color(0xFF1E3A8A),

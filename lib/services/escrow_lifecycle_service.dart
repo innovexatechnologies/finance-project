@@ -78,9 +78,10 @@ class EscrowLifecycleService {
     return _lastError == null;
   }
 
-  /// 2. Company requests revisions on delivered deliverables (Max 2 Revisions Limit).
+  /// 2. Company requests revisions on delivered deliverables (Strictly 1 Review Request & 2-Day Deadline).
   /// Sets: status = 'revision_requested', revision_count = currentCount + 1,
-  /// revision_notes = revisionNotes, last_revision_requested_at = now().
+  /// revision_notes = revisionNotes, last_revision_requested_at = now(),
+  /// revision_deadline = now + 2 days.
   /// Pauses 5-day auto-release countdown since status is no longer 'delivered'.
   Future<bool> requestProjectRevision({
     required String projectId,
@@ -88,6 +89,7 @@ class EscrowLifecycleService {
   }) async {
     _lastError = null;
     final nowIso = DateTime.now().toIso8601String();
+    final deadlineIso = DateTime.now().add(const Duration(days: 2)).toIso8601String();
     final supabase = SupabaseHelper.clientOrNull;
 
     int currentCount = 0;
@@ -99,9 +101,9 @@ class EscrowLifecycleService {
       projectTitle = p.title;
     } catch (_) {}
 
-    // Check maximum 2 revisions limit
-    if (currentCount >= 2) {
-      _lastError = 'Maximum limit of 2 revisions has already been reached for this project.';
+    // Enforce strictly 1 revision request policy
+    if (currentCount >= 1) {
+      _lastError = 'Only 1 review request is allowed. Maximum limit of 1 revision reached.';
       return false;
     }
 
@@ -116,6 +118,7 @@ class EscrowLifecycleService {
               'revision_count': newCount,
               'revision_notes': revisionNotes.trim(),
               'last_revision_requested_at': nowIso,
+              'revision_deadline': deadlineIso,
               'updated_at': nowIso,
             })
             .eq('id', projectId);
@@ -123,9 +126,9 @@ class EscrowLifecycleService {
         // Insert alert for Admin/Student
         await supabase.from('admin_notifications').insert({
           'project_id': projectId,
-          'title': 'Revision Requested ($newCount of 2): $projectTitle',
+          'title': 'Improvement Requested (1 Review Allowed): $projectTitle',
           'message':
-              'Company requested revisions. 5-day countdown paused. Notes: "${revisionNotes.trim()}".',
+              'Company requested improvement. Student has strictly 2 Days (48 Hours) to re-deliver work. Notes: "${revisionNotes.trim()}".',
           'notification_type': 'revision_requested',
           'is_read': false,
           'created_at': nowIso,
@@ -144,6 +147,7 @@ class EscrowLifecycleService {
       revisionCount: newCount,
       revisionNotes: revisionNotes.trim(),
       lastRevisionRequestedAt: nowIso,
+      revisionDeadline: deadlineIso,
     );
 
     return true;
@@ -400,6 +404,7 @@ class EscrowLifecycleService {
     int? revisionCount,
     String? revisionNotes,
     String? lastRevisionRequestedAt,
+    String? revisionDeadline,
   }) {
     final compProjService = CompanyProjectService();
     final list = List<ProjectModel>.from(compProjService.allProjects);
@@ -418,6 +423,7 @@ class EscrowLifecycleService {
         revisionNotes: revisionNotes ?? list[idx].revisionNotes,
         lastRevisionRequestedAt:
             lastRevisionRequestedAt ?? list[idx].lastRevisionRequestedAt,
+        revisionDeadline: revisionDeadline ?? list[idx].revisionDeadline,
       );
       compProjService.projectsNotifier.value = list;
     }

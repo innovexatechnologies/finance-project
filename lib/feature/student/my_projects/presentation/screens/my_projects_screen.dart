@@ -328,19 +328,19 @@ class _MyProjectsScreenState extends State<MyProjectsScreen>
             })
             .toList();
 
-        final awaitingConfirmation = myProjects
-            .where(
-              (project) =>
-                  _paymentStatusLabel(project) != 'Received' &&
-                  _paymentStatusLabel(project) != 'Not Received',
-            )
-            .toList();
-        final receivedProjects = myProjects
-            .where((project) => _paymentStatusLabel(project) == 'Received')
-            .toList();
-        final notReceivedProjects = myProjects
-            .where((project) => _paymentStatusLabel(project) == 'Not Received')
-            .toList();
+        final activeProjects = myProjects.where((p) {
+          final s = (p['status'] ?? '').toString().toLowerCase();
+          final isCompleted =
+              s == 'completed' || s == 'paid' || p['paymentSent'] == true;
+          return !isCompleted;
+        }).toList();
+
+        final paidProjects = myProjects.where((p) {
+          final s = (p['status'] ?? '').toString().toLowerCase();
+          final isCompleted =
+              s == 'completed' || s == 'paid' || p['paymentSent'] == true;
+          return isCompleted;
+        }).toList();
 
         return Scaffold(
           backgroundColor: AppColors.background,
@@ -379,18 +379,19 @@ class _MyProjectsScreenState extends State<MyProjectsScreen>
             ],
             bottom: TabBar(
               controller: _tabController,
-              isScrollable: true,
+              isScrollable: false,
               labelColor: AppColors.primaryBlue,
               unselectedLabelColor: AppColors.grayText,
               indicatorColor: AppColors.primaryBlue,
+              indicatorWeight: 3,
               labelStyle: GoogleFonts.poppins(
                 fontWeight: FontWeight.w700,
                 fontSize: 13,
               ),
-              tabs: const [
-                Tab(text: 'Awaiting Confirmation'),
-                Tab(text: 'Received'),
-                Tab(text: 'Not Received'),
+              tabs: [
+                Tab(text: 'Active (${activeProjects.length})'),
+                Tab(text: 'Paid (${paidProjects.length})'),
+                Tab(text: 'All (${myProjects.length})'),
               ],
             ),
           ),
@@ -401,24 +402,25 @@ class _MyProjectsScreenState extends State<MyProjectsScreen>
                 controller: _tabController,
                 children: [
                   _buildProjectsTab(
-                    projects: awaitingConfirmation,
+                    projects: activeProjects,
                     emptyIcon: Icons.hourglass_empty_rounded,
-                    emptyTitle: 'No Projects Awaiting Confirmation',
-                    emptySubtitle: 'Unassigned projects appear here with an Unassigned status. Assigned projects remain here until you confirm payment.',
+                    emptyTitle: 'No Active Projects in Progress',
+                    emptySubtitle:
+                        'Projects assigned to you will appear here with company-funded escrow protection and delivery tracking.',
                   ),
                   _buildProjectsTab(
-                    projects: receivedProjects,
+                    projects: paidProjects,
                     emptyIcon: Icons.check_circle_outline_rounded,
-                    emptyTitle: 'No Payments Confirmed as Received',
+                    emptyTitle: 'No Paid Deliverables Yet',
                     emptySubtitle:
-                        'Projects you confirm as received will appear here.',
+                        'Projects completed with verified Admin payout transfers and receipts will appear here.',
                   ),
                   _buildProjectsTab(
-                    projects: notReceivedProjects,
-                    emptyIcon: Icons.error_outline_rounded,
-                    emptyTitle: 'No Payments Marked Not Received',
+                    projects: myProjects,
+                    emptyIcon: Icons.business_center_outlined,
+                    emptyTitle: 'No Projects Found',
                     emptySubtitle:
-                        'Projects you report as not received will appear here.',
+                        'Explore verified projects and apply to start working on paid company challenges.',
                   ),
                 ],
               ),
@@ -466,13 +468,13 @@ class _MyProjectsScreenState extends State<MyProjectsScreen>
   Widget _buildProjectItem(Map<String, dynamic> project, bool isCompleted) {
     final status = project['status']?.toString() ?? 'In Progress';
     final statusLower = status.toLowerCase();
+    final isCompleted =
+        statusLower == 'completed' || statusLower == 'paid' || project['paymentSent'] == true;
     final isInProgress = statusLower == 'in progress' || statusLower == 'in_progress';
     final isDelivered = statusLower == 'delivered';
     final isRevisionRequested = statusLower == 'revision_requested' || statusLower == 'revision requested';
     final isDisputed = statusLower == 'disputed';
-    final revisionCount = (project['revision_count'] as num?)?.toInt() ??
-        (project['revisionCount'] as num?)?.toInt() ??
-        1;
+    final payoutTid = (project['payout_transaction_id'] ?? project['transactionId'] ?? '').toString().trim();
     final company = (project['company']?.toString().trim().isNotEmpty == true)
         ? project['company'].toString().trim()
         : 'Partner Company';
@@ -605,7 +607,7 @@ class _MyProjectsScreenState extends State<MyProjectsScreen>
               ],
             ),
 
-            if (isInProgress) ...[
+            if (isCompleted) ...[
               const SizedBox(height: 10),
               Container(
                 width: double.infinity,
@@ -614,24 +616,77 @@ class _MyProjectsScreenState extends State<MyProjectsScreen>
                   color: const Color(0xFFECFDF5),
                   borderRadius: BorderRadius.circular(8),
                   border: Border.all(
-                    color: const Color(0xFF10B981).withValues(alpha: 0.3),
+                    color: const Color(0xFF10B981).withValues(alpha: 0.35),
                   ),
                 ),
-                child: const Row(
+                child: Row(
                   children: [
-                    Icon(Icons.verified_user_rounded,
+                    const Icon(Icons.check_circle_rounded,
                         size: 14, color: Color(0xFF059669)),
-                    SizedBox(width: 6),
+                    const SizedBox(width: 6),
                     Expanded(
                       child: Text(
-                        'Escrow Protected: Funds securely held by Skill Bridge Admin',
-                        style: TextStyle(
+                        payoutTid.isNotEmpty
+                            ? 'Paid: Disbursed by Admin (TID: $payoutTid)'
+                            : 'Paid: Payout disbursed by Admin',
+                        maxLines: 1,
+                        overflow: TextOverflow.ellipsis,
+                        style: const TextStyle(
                           fontSize: 11,
                           fontWeight: FontWeight.w600,
                           color: Color(0xFF065F46),
                         ),
                       ),
                     ),
+                  ],
+                ),
+              ),
+            ] else if (isRevisionRequested) ...[
+              const SizedBox(height: 10),
+              Container(
+                width: double.infinity,
+                padding:
+                    const EdgeInsets.symmetric(horizontal: 10, vertical: 8),
+                decoration: BoxDecoration(
+                  color: const Color(0xFFEFF6FF),
+                  borderRadius: BorderRadius.circular(8),
+                  border: Border.all(
+                    color: const Color(0xFF3B82F6).withValues(alpha: 0.35),
+                  ),
+                ),
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    const Row(
+                      children: [
+                        Icon(Icons.rate_review_rounded,
+                            size: 15, color: Color(0xFF2563EB)),
+                        SizedBox(width: 6),
+                        Expanded(
+                          child: Text(
+                            'Improvement Requested (1 Review Allowed • 2 Days)',
+                            style: TextStyle(
+                              fontSize: 11.5,
+                              fontWeight: FontWeight.w700,
+                              color: Color(0xFF1E40AF),
+                            ),
+                          ),
+                        ),
+                      ],
+                    ),
+                    if (revisionNotes.isNotEmpty) ...[
+                      const SizedBox(height: 4),
+                      Text(
+                        'Notes: $revisionNotes',
+                        maxLines: 2,
+                        overflow: TextOverflow.ellipsis,
+                        style: const TextStyle(
+                          fontSize: 11,
+                          color: Color(0xFF1E3A8A),
+                          height: 1.35,
+                        ),
+                      ),
+                    ],
                   ],
                 ),
               ),
@@ -665,53 +720,6 @@ class _MyProjectsScreenState extends State<MyProjectsScreen>
                   ],
                 ),
               ),
-            ] else if (isRevisionRequested) ...[
-              const SizedBox(height: 10),
-              Container(
-                width: double.infinity,
-                padding:
-                    const EdgeInsets.symmetric(horizontal: 10, vertical: 8),
-                decoration: BoxDecoration(
-                  color: const Color(0xFFEFF6FF),
-                  borderRadius: BorderRadius.circular(8),
-                  border: Border.all(
-                    color: const Color(0xFF3B82F6).withValues(alpha: 0.35),
-                  ),
-                ),
-                child: Column(
-                  crossAxisAlignment: CrossAxisAlignment.start,
-                  children: [
-                    Row(
-                      children: [
-                        const Icon(Icons.rate_review_rounded,
-                            size: 15, color: Color(0xFF2563EB)),
-                        const SizedBox(width: 6),
-                        Expanded(
-                          child: Text(
-                            'Revision $revisionCount of 2 Requested (5-day timer paused)',
-                            style: const TextStyle(
-                              fontSize: 11.5,
-                              fontWeight: FontWeight.w700,
-                              color: Color(0xFF1E40AF),
-                            ),
-                          ),
-                        ),
-                      ],
-                    ),
-                    if (revisionNotes.isNotEmpty) ...[
-                      const SizedBox(height: 4),
-                      Text(
-                        'Notes: $revisionNotes',
-                        style: const TextStyle(
-                          fontSize: 11,
-                          color: Color(0xFF1E3A8A),
-                          height: 1.35,
-                        ),
-                      ),
-                    ],
-                  ],
-                ),
-              ),
             ] else if (isDisputed) ...[
               const SizedBox(height: 10),
               Container(
@@ -736,6 +744,38 @@ class _MyProjectsScreenState extends State<MyProjectsScreen>
                           fontSize: 11,
                           fontWeight: FontWeight.w600,
                           color: Color(0xFF991B1B),
+                        ),
+                      ),
+                    ),
+                  ],
+                ),
+              ),
+            ] else ...[
+              const SizedBox(height: 10),
+              Container(
+                width: double.infinity,
+                padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 7),
+                decoration: BoxDecoration(
+                  color: const Color(0xFFECFDF5),
+                  borderRadius: BorderRadius.circular(8),
+                  border: Border.all(
+                    color: const Color(0xFF10B981).withValues(alpha: 0.3),
+                  ),
+                ),
+                child: const Row(
+                  children: [
+                    Icon(Icons.verified_user_rounded,
+                        size: 14, color: Color(0xFF059669)),
+                    SizedBox(width: 6),
+                    Expanded(
+                      child: Text(
+                        'Company Sent Your Pay to Admin\'s Account (Escrow Funded)',
+                        maxLines: 1,
+                        overflow: TextOverflow.ellipsis,
+                        style: TextStyle(
+                          fontSize: 11,
+                          fontWeight: FontWeight.w600,
+                          color: Color(0xFF065F46),
                         ),
                       ),
                     ),

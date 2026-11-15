@@ -378,6 +378,12 @@ class _AdminDisputeResolutionScreenState
     Uint8List? receiptBytes;
     bool isSaving = false;
 
+    // Load student banking / wallet credentials asynchronously
+    final studentDetails =
+        await _payoutService.getStudentDisbursalDetails(project);
+
+    if (!mounted) return;
+
     await showModalBottomSheet(
       context: context,
       isScrollControlled: true,
@@ -387,8 +393,8 @@ class _AdminDisputeResolutionScreenState
           final viewInsets = MediaQuery.of(context).viewInsets;
 
           return Container(
-            margin: EdgeInsets.only(top: 60, bottom: viewInsets.bottom),
-            padding: const EdgeInsets.all(24),
+            margin: EdgeInsets.only(top: 40, bottom: viewInsets.bottom),
+            padding: const EdgeInsets.all(22),
             decoration: const BoxDecoration(
               color: Colors.white,
               borderRadius: BorderRadius.vertical(top: Radius.circular(24)),
@@ -437,6 +443,8 @@ class _AdminDisputeResolutionScreenState
                             ),
                             Text(
                               'Project: ${project.title}',
+                              maxLines: 1,
+                              overflow: TextOverflow.ellipsis,
                               style: GoogleFonts.inter(
                                 fontSize: 12,
                                 color: AppColors.textSecondary,
@@ -447,8 +455,161 @@ class _AdminDisputeResolutionScreenState
                       ),
                     ],
                   ),
-                  const SizedBox(height: 20),
+                  const SizedBox(height: 16),
                   const Divider(color: AppColors.border),
+                  const SizedBox(height: 12),
+
+                  // ASSIGNED STUDENT DISBURSAL DESTINATION CARD
+                  Container(
+                    padding: const EdgeInsets.all(14),
+                    decoration: BoxDecoration(
+                      color: const Color(0xFFF0FDF4),
+                      borderRadius: BorderRadius.circular(12),
+                      border: Border.all(
+                        color: const Color(0xFF10B981).withValues(alpha: 0.35),
+                      ),
+                    ),
+                    child: Column(
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      children: [
+                        Row(
+                          children: [
+                            Container(
+                              padding: const EdgeInsets.all(6),
+                              decoration: BoxDecoration(
+                                color: const Color(0xFF10B981).withValues(alpha: 0.15),
+                                borderRadius: BorderRadius.circular(8),
+                              ),
+                              child: const Icon(
+                                Icons.account_balance_wallet_rounded,
+                                color: Color(0xFF059669),
+                                size: 18,
+                              ),
+                            ),
+                            const SizedBox(width: 10),
+                            Expanded(
+                              child: Column(
+                                crossAxisAlignment: CrossAxisAlignment.start,
+                                children: [
+                                  Text(
+                                    'Disbursal Destination (Assigned Student)',
+                                    style: GoogleFonts.poppins(
+                                      fontSize: 12.5,
+                                      fontWeight: FontWeight.bold,
+                                      color: const Color(0xFF065F46),
+                                    ),
+                                  ),
+                                  Text(
+                                    '${studentDetails.studentName} • ${studentDetails.studentEmail}',
+                                    maxLines: 1,
+                                    overflow: TextOverflow.ellipsis,
+                                    style: GoogleFonts.inter(
+                                      fontSize: 11.5,
+                                      color: const Color(0xFF047857),
+                                    ),
+                                  ),
+                                ],
+                              ),
+                            ),
+                          ],
+                        ),
+                        const SizedBox(height: 10),
+                        const Divider(color: Color(0xFFD1FAE5), height: 1),
+                        const SizedBox(height: 10),
+                        Row(
+                          children: [
+                            Expanded(
+                              child: Column(
+                                crossAxisAlignment: CrossAxisAlignment.start,
+                                children: [
+                                  Text(
+                                    'Payment Method',
+                                    style: GoogleFonts.inter(
+                                      fontSize: 11,
+                                      color: AppColors.textSecondary,
+                                    ),
+                                  ),
+                                  Text(
+                                    studentDetails.paymentMethod,
+                                    maxLines: 1,
+                                    overflow: TextOverflow.ellipsis,
+                                    style: GoogleFonts.inter(
+                                      fontSize: 13,
+                                      fontWeight: FontWeight.w600,
+                                      color: AppColors.darkNavy,
+                                    ),
+                                  ),
+                                ],
+                              ),
+                            ),
+                            const SizedBox(width: 10),
+                            Expanded(
+                              child: Column(
+                                crossAxisAlignment: CrossAxisAlignment.start,
+                                children: [
+                                  Text(
+                                    'Account Title',
+                                    style: GoogleFonts.inter(
+                                      fontSize: 11,
+                                      color: AppColors.textSecondary,
+                                    ),
+                                  ),
+                                  Text(
+                                    studentDetails.accountTitle,
+                                    maxLines: 1,
+                                    overflow: TextOverflow.ellipsis,
+                                    style: GoogleFonts.inter(
+                                      fontSize: 13,
+                                      fontWeight: FontWeight.w600,
+                                      color: AppColors.darkNavy,
+                                    ),
+                                  ),
+                                ],
+                              ),
+                            ),
+                          ],
+                        ),
+                        const SizedBox(height: 8),
+                        Row(
+                          children: [
+                            Expanded(
+                              child: Column(
+                                crossAxisAlignment: CrossAxisAlignment.start,
+                                children: [
+                                  Text(
+                                    'Account Number / IBAN',
+                                    style: GoogleFonts.inter(
+                                      fontSize: 11,
+                                      color: AppColors.textSecondary,
+                                    ),
+                                  ),
+                                  Text(
+                                    studentDetails.accountNumber,
+                                    style: GoogleFonts.jetBrainsMono(
+                                      fontSize: 13.5,
+                                      fontWeight: FontWeight.bold,
+                                      color: const Color(0xFF065F46),
+                                    ),
+                                  ),
+                                ],
+                              ),
+                            ),
+                            IconButton(
+                              tooltip: 'Copy Account Number',
+                              icon: const Icon(Icons.copy_rounded,
+                                  size: 18, color: Color(0xFF059669)),
+                              onPressed: () {
+                                _copyToClipboard(
+                                  studentDetails.accountNumber,
+                                  'Student Account Number',
+                                );
+                              },
+                            ),
+                          ],
+                        ),
+                      ],
+                    ),
+                  ),
                   const SizedBox(height: 14),
 
                   // Financial Breakdown Card
@@ -475,7 +636,7 @@ class _AdminDisputeResolutionScreenState
                         const SizedBox(height: 6),
                         _buildBreakdownRow(
                           'Net Student Payout',
-                          'PKR ${(project.studentPayoutAmount ?? 0).toStringAsFixed(0)}',
+                          'PKR ${(project.studentPayoutAmount ?? (project.escrowAmount * 0.9)).toStringAsFixed(0)}',
                           color: AppColors.success,
                           isBold: true,
                         ),
@@ -490,7 +651,7 @@ class _AdminDisputeResolutionScreenState
                       ],
                     ),
                   ),
-                  const SizedBox(height: 18),
+                  const SizedBox(height: 16),
 
                   Text(
                     'Bank Transfer TID / Reference Number *',
@@ -514,7 +675,7 @@ class _AdminDisputeResolutionScreenState
 
                   // Receipt Upload
                   Text(
-                    'Transfer Receipt Screenshot (Optional)',
+                    'Transfer Receipt Screenshot Proof *',
                     style: GoogleFonts.inter(
                       fontSize: 12.5,
                       fontWeight: FontWeight.bold,
@@ -540,6 +701,8 @@ class _AdminDisputeResolutionScreenState
                           Expanded(
                             child: Text(
                               receiptFile?.name ?? 'receipt.jpg',
+                              maxLines: 1,
+                              overflow: TextOverflow.ellipsis,
                               style: const TextStyle(fontSize: 12),
                             ),
                           ),
@@ -572,7 +735,7 @@ class _AdminDisputeResolutionScreenState
                         }
                       },
                       icon: const Icon(Icons.upload_file_rounded),
-                      label: const Text('Attach Transfer Slip / Receipt'),
+                      label: const Text('Attach Transfer Slip / Receipt Screenshot'),
                     ),
 
                   const SizedBox(height: 24),
@@ -600,8 +763,8 @@ class _AdminDisputeResolutionScreenState
                           : const Icon(Icons.check_circle_outline_rounded),
                       label: Text(
                         isSaving
-                            ? 'Processing Payout...'
-                            : 'Mark Payout Completed & Finalize Project',
+                            ? 'Processing Transfer...'
+                            : 'Mark as Paid & Share Receipt with Student',
                         style: GoogleFonts.inter(fontWeight: FontWeight.bold),
                       ),
                       onPressed: isSaving
@@ -614,17 +777,27 @@ class _AdminDisputeResolutionScreenState
                                 return;
                               }
                               setSheetState(() => isSaving = true);
+
+                              String? uploadedUrl;
+                              if (receiptBytes != null) {
+                                uploadedUrl =
+                                    await _payoutService.uploadPayoutReceipt(
+                                  projectId: project.id,
+                                  bytes: receiptBytes!,
+                                  fileName: receiptFile?.name ?? 'receipt.jpg',
+                                );
+                              }
+
                               final ok = await _payoutService.completePayout(
                                 projectId: project.id,
                                 transactionId: tid,
-                                receiptUrl: receiptFile != null
-                                    ? 'https://mock.storage/payouts/${project.id}/${receiptFile!.name}'
-                                    : null,
+                                receiptUrl: uploadedUrl,
                               );
                               if (ok && ctx.mounted) {
                                 Navigator.pop(ctx);
                                 _showFeedback(
-                                    'Payout finalized! Project marked completed.');
+                                    'Payout completed! Transfer receipt sent to student.');
+                                await _refreshAllData();
                               } else {
                                 setSheetState(() => isSaving = false);
                                 _showFeedback(

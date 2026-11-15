@@ -1,4 +1,6 @@
+import 'dart:convert';
 import 'package:flutter/material.dart';
+import 'package:flutter/services.dart';
 import 'package:google_fonts/google_fonts.dart';
 import 'package:url_launcher/url_launcher.dart';
 import 'package:link_vibe/core/constants/app_colors.dart';
@@ -123,6 +125,72 @@ class _StudentProjectDetailsScreenState
         const SnackBar(content: Text('Could not open project attachment link.')),
       );
     }
+  }
+
+  Widget _buildReceiptImage(String url, {double? width, double? height, BoxFit fit = BoxFit.cover}) {
+    if (url.startsWith('data:image')) {
+      try {
+        final commaIdx = url.indexOf(',');
+        if (commaIdx != -1) {
+          final b64 = url.substring(commaIdx + 1);
+          final bytes = base64Decode(b64);
+          return Image.memory(bytes, width: width, height: height, fit: fit);
+        }
+      } catch (_) {}
+    }
+    return Image.network(
+      url,
+      width: width,
+      height: height,
+      fit: fit,
+      errorBuilder: (context, error, stackTrace) => const Icon(
+        Icons.receipt_long_rounded,
+        size: 32,
+        color: AppColors.primaryBlue,
+      ),
+    );
+  }
+
+  void _openReceiptViewer(BuildContext context, String imageUrl, String projectTitle) {
+    showDialog(
+      context: context,
+      builder: (ctx) => Dialog(
+        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
+        clipBehavior: Clip.antiAlias,
+        child: Column(
+          mainAxisSize: MainAxisSize.min,
+          crossAxisAlignment: CrossAxisAlignment.stretch,
+          children: [
+            AppBar(
+              backgroundColor: AppColors.deepNavy,
+              title: Text(
+                'Admin Transfer Slip: $projectTitle',
+                style: GoogleFonts.inter(
+                  fontSize: 14,
+                  fontWeight: FontWeight.bold,
+                  color: Colors.white,
+                ),
+              ),
+              automaticallyImplyLeading: false,
+              actions: [
+                IconButton(
+                  icon: const Icon(Icons.close_rounded, color: Colors.white),
+                  onPressed: () => Navigator.pop(ctx),
+                ),
+              ],
+            ),
+            ConstrainedBox(
+              constraints: const BoxConstraints(maxHeight: 520, maxWidth: 600),
+              child: InteractiveViewer(
+                minScale: 0.8,
+                maxScale: 4.0,
+                child: _buildReceiptImage(imageUrl, fit: BoxFit.contain),
+              ),
+            ),
+          ],
+        ),
+      ),
+    );
   }
 
   Future<void> _handleDeliverProject(
@@ -401,13 +469,33 @@ class _StudentProjectDetailsScreenState
         : double.tryParse(rawBudget.toString().replaceAll(RegExp(r'[^0-9.]'), '')) ?? 15000;
     final escrowFormatted = budgetNum.toStringAsFixed(0);
     final statusLower = status.toLowerCase();
+    final isPaid = statusLower == 'completed' || statusLower == 'paid' || paymentSent == true;
+    final isReadyForPayout = statusLower == 'ready_for_payout';
     final isInProgress = statusLower == 'in_progress' || statusLower == 'in progress';
     final isDelivered = statusLower == 'delivered';
     final isRevisionRequested = statusLower == 'revision_requested' || statusLower == 'revision requested';
     final isDisputed = statusLower == 'disputed';
-    final revisionCount = (project['revision_count'] as num?)?.toInt() ??
-        (project['revisionCount'] as num?)?.toInt() ??
-        1;
+    final payoutTid = (project['payout_transaction_id'] ??
+            project['transactionId'] ??
+            currentApplication?['payout_transaction_id'] ??
+            currentApplication?['transactionId'] ??
+            '')
+        .toString()
+        .trim();
+    final payoutReceiptUrl = (project['payout_receipt_url'] ??
+            project['paymentReceiptUrl'] ??
+            currentApplication?['payout_receipt_url'] ??
+            currentApplication?['paymentReceiptUrl'] ??
+            '')
+        .toString()
+        .trim();
+    final revisionDeadline = (project['revision_deadline'] ??
+            project['revisionDeadline'] ??
+            currentApplication?['revision_deadline'] ??
+            currentApplication?['revisionDeadline'] ??
+            '')
+        .toString()
+        .trim();
     final revisionNotes =
         (project['revision_notes'] ?? project['revisionNotes'] ?? '')
             .toString()
@@ -665,75 +753,26 @@ class _StudentProjectDetailsScreenState
                           ),
                           const SizedBox(height: 22),
 
-                          // Escrow Trust Banner for Awarded/In Progress/Delivered/Disputed Projects
-                          if (isInProgress || isDelivered) ...[
+                          // Escrow & Lifecycle Status Banners
+                          if (isPaid) ...[
                             Container(
                               width: double.infinity,
                               margin: const EdgeInsets.only(bottom: 16),
-                              padding: const EdgeInsets.all(14),
+                              padding: const EdgeInsets.all(16),
                               decoration: BoxDecoration(
-                                color: const Color(0xFFECFDF5),
-                                borderRadius: BorderRadius.circular(14),
+                                color: const Color(0xFFF0FDF4),
+                                borderRadius: BorderRadius.circular(16),
                                 border: Border.all(
-                                  color: const Color(0xFF10B981).withValues(alpha: 0.35),
+                                  color: const Color(0xFF10B981).withValues(alpha: 0.45),
+                                  width: 1.2,
                                 ),
-                              ),
-                              child: Row(
-                                crossAxisAlignment: CrossAxisAlignment.start,
-                                children: [
-                                  Container(
-                                    padding: const EdgeInsets.all(7),
-                                    decoration: BoxDecoration(
-                                      color: const Color(0xFF10B981).withValues(alpha: 0.15),
-                                      shape: BoxShape.circle,
-                                    ),
-                                    child: const Icon(
-                                      Icons.verified_user_rounded,
-                                      color: Color(0xFF059669),
-                                      size: 20,
-                                    ),
-                                  ),
-                                  const SizedBox(width: 12),
-                                  Expanded(
-                                    child: Column(
-                                      crossAxisAlignment: CrossAxisAlignment.start,
-                                      children: [
-                                        Text(
-                                          'Escrow Protected: PKR $escrowFormatted is securely held by Skill Bridge Admin',
-                                          style: GoogleFonts.inter(
-                                            fontSize: 13,
-                                            fontWeight: FontWeight.w700,
-                                            color: const Color(0xFF065F46),
-                                          ),
-                                        ),
-                                        const SizedBox(height: 3),
-                                        Text(
-                                          isDelivered
-                                              ? 'Deliverables submitted. Payout releases upon company approval or after 5-day review window.'
-                                              : 'Your payout is pre-funded and held in platform custody. Submit deliverables to trigger release.',
-                                          style: GoogleFonts.inter(
-                                            fontSize: 11.5,
-                                            color: const Color(0xFF047857),
-                                            height: 1.35,
-                                          ),
-                                        ),
-                                      ],
-                                    ),
+                                boxShadow: [
+                                  BoxShadow(
+                                    color: const Color(0xFF10B981).withValues(alpha: 0.08),
+                                    blurRadius: 10,
+                                    offset: const Offset(0, 3),
                                   ),
                                 ],
-                              ),
-                            ),
-                          ] else if (isRevisionRequested) ...[
-                            Container(
-                              width: double.infinity,
-                              margin: const EdgeInsets.only(bottom: 16),
-                              padding: const EdgeInsets.all(14),
-                              decoration: BoxDecoration(
-                                color: const Color(0xFFEFF6FF),
-                                borderRadius: BorderRadius.circular(14),
-                                border: Border.all(
-                                  color: const Color(0xFF3B82F6).withValues(alpha: 0.4),
-                                ),
                               ),
                               child: Column(
                                 crossAxisAlignment: CrossAxisAlignment.start,
@@ -742,15 +781,15 @@ class _StudentProjectDetailsScreenState
                                     crossAxisAlignment: CrossAxisAlignment.start,
                                     children: [
                                       Container(
-                                        padding: const EdgeInsets.all(7),
+                                        padding: const EdgeInsets.all(8),
                                         decoration: BoxDecoration(
-                                          color: const Color(0xFFDBEAFE),
+                                          color: const Color(0xFF10B981).withValues(alpha: 0.15),
                                           shape: BoxShape.circle,
                                         ),
                                         child: const Icon(
-                                          Icons.rate_review_rounded,
-                                          color: Color(0xFF2563EB),
-                                          size: 20,
+                                          Icons.check_circle_rounded,
+                                          color: Color(0xFF059669),
+                                          size: 22,
                                         ),
                                       ),
                                       const SizedBox(width: 12),
@@ -759,19 +798,19 @@ class _StudentProjectDetailsScreenState
                                           crossAxisAlignment: CrossAxisAlignment.start,
                                           children: [
                                             Text(
-                                              'Revision $revisionCount of 2 Requested by Company',
-                                              style: GoogleFonts.inter(
-                                                fontSize: 13.5,
-                                                fontWeight: FontWeight.w700,
-                                                color: const Color(0xFF1E40AF),
+                                              'Payment Disbursed by Admin (Paid) ✓',
+                                              style: GoogleFonts.poppins(
+                                                fontSize: 14.5,
+                                                fontWeight: FontWeight.bold,
+                                                color: const Color(0xFF065F46),
                                               ),
                                             ),
                                             const SizedBox(height: 3),
-                                            const Text(
-                                              '5-day auto-release timer is paused. Review requested improvements and click Re-Deliver when ready.',
-                                              style: TextStyle(
-                                                fontSize: 11.5,
-                                                color: Color(0xFF1D4ED8),
+                                            Text(
+                                              'Company approved your deliverables and SkillBridge Executive Administrator has disbursed your payment.',
+                                              style: GoogleFonts.inter(
+                                                fontSize: 12,
+                                                color: const Color(0xFF047857),
                                                 height: 1.35,
                                               ),
                                             ),
@@ -780,24 +819,96 @@ class _StudentProjectDetailsScreenState
                                       ),
                                     ],
                                   ),
-                                  if (revisionNotes.isNotEmpty) ...[
-                                    const SizedBox(height: 10),
+                                  if (payoutTid.isNotEmpty) ...[
+                                    const SizedBox(height: 12),
                                     Container(
-                                      width: double.infinity,
-                                      padding: const EdgeInsets.all(10),
+                                      padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 8),
                                       decoration: BoxDecoration(
                                         color: Colors.white,
-                                        borderRadius: BorderRadius.circular(8),
-                                        border: Border.all(
-                                          color: const Color(0xFFBFDBFE),
-                                        ),
+                                        borderRadius: BorderRadius.circular(10),
+                                        border: Border.all(color: const Color(0xFFD1FAE5)),
                                       ),
-                                      child: Text(
-                                        'Supervisor Feedback: "$revisionNotes"',
-                                        style: GoogleFonts.inter(
-                                          fontSize: 12.5,
-                                          color: const Color(0xFF1E3A8A),
-                                          height: 1.4,
+                                      child: Row(
+                                        children: [
+                                          const Icon(Icons.numbers_rounded, size: 16, color: Color(0xFF059669)),
+                                          const SizedBox(width: 6),
+                                          Expanded(
+                                            child: Text(
+                                              'Transfer TID: $payoutTid',
+                                              style: GoogleFonts.jetBrainsMono(
+                                                fontSize: 12,
+                                                fontWeight: FontWeight.bold,
+                                                color: const Color(0xFF065F46),
+                                              ),
+                                            ),
+                                          ),
+                                          InkWell(
+                                            onTap: () {
+                                              Clipboard.setData(ClipboardData(text: payoutTid));
+                                              ScaffoldMessenger.of(context).showSnackBar(
+                                                const SnackBar(
+                                                  content: Text('TID copied to clipboard'),
+                                                  duration: Duration(seconds: 1),
+                                                ),
+                                              );
+                                            },
+                                            child: const Icon(Icons.copy_rounded, size: 16, color: Color(0xFF059669)),
+                                          ),
+                                        ],
+                                      ),
+                                    ),
+                                  ],
+                                  if (payoutReceiptUrl.isNotEmpty) ...[
+                                    const SizedBox(height: 12),
+                                    InkWell(
+                                      onTap: () => _openReceiptViewer(context, payoutReceiptUrl, title),
+                                      borderRadius: BorderRadius.circular(10),
+                                      child: Container(
+                                        padding: const EdgeInsets.all(8),
+                                        decoration: BoxDecoration(
+                                          color: Colors.white,
+                                          borderRadius: BorderRadius.circular(10),
+                                          border: Border.all(color: const Color(0xFFD1FAE5)),
+                                        ),
+                                        child: Row(
+                                          children: [
+                                            ClipRRect(
+                                              borderRadius: BorderRadius.circular(6),
+                                              child: _buildReceiptImage(
+                                                payoutReceiptUrl,
+                                                width: 44,
+                                                height: 44,
+                                              ),
+                                            ),
+                                            const SizedBox(width: 10),
+                                            Expanded(
+                                              child: Column(
+                                                crossAxisAlignment: CrossAxisAlignment.start,
+                                                children: [
+                                                  Text(
+                                                    'Admin Bank Transfer Slip',
+                                                    style: GoogleFonts.inter(
+                                                      fontSize: 12.5,
+                                                      fontWeight: FontWeight.bold,
+                                                      color: const Color(0xFF065F46),
+                                                    ),
+                                                  ),
+                                                  Text(
+                                                    'Tap for full-size interactive zoom',
+                                                    style: GoogleFonts.inter(
+                                                      fontSize: 11,
+                                                      color: const Color(0xFF047857),
+                                                    ),
+                                                  ),
+                                                ],
+                                              ),
+                                            ),
+                                            const Icon(
+                                              Icons.fullscreen_rounded,
+                                              size: 20,
+                                              color: Color(0xFF059669),
+                                            ),
+                                          ],
                                         ),
                                       ),
                                     ),
@@ -851,6 +962,204 @@ class _StudentProjectDetailsScreenState
                                           style: TextStyle(
                                             fontSize: 11.5,
                                             color: Color(0xFFB91C1C),
+                                            height: 1.35,
+                                          ),
+                                        ),
+                                      ],
+                                    ),
+                                  ),
+                                ],
+                              ),
+                            ),
+                          ] else if (isRevisionRequested) ...[
+                            Container(
+                              width: double.infinity,
+                              margin: const EdgeInsets.only(bottom: 16),
+                              padding: const EdgeInsets.all(14),
+                              decoration: BoxDecoration(
+                                color: const Color(0xFFEFF6FF),
+                                borderRadius: BorderRadius.circular(14),
+                                border: Border.all(
+                                  color: const Color(0xFF3B82F6).withValues(alpha: 0.4),
+                                ),
+                              ),
+                              child: Column(
+                                crossAxisAlignment: CrossAxisAlignment.start,
+                                children: [
+                                  Row(
+                                    crossAxisAlignment: CrossAxisAlignment.start,
+                                    children: [
+                                      Container(
+                                        padding: const EdgeInsets.all(7),
+                                        decoration: BoxDecoration(
+                                          color: const Color(0xFFDBEAFE),
+                                          shape: BoxShape.circle,
+                                        ),
+                                        child: const Icon(
+                                          Icons.rate_review_rounded,
+                                          color: Color(0xFF2563EB),
+                                          size: 20,
+                                        ),
+                                      ),
+                                      const SizedBox(width: 12),
+                                      Expanded(
+                                        child: Column(
+                                          crossAxisAlignment: CrossAxisAlignment.start,
+                                          children: [
+                                            Text(
+                                              'Improvement Requested (Only 1 Review Allowed)',
+                                              style: GoogleFonts.inter(
+                                                fontSize: 13.5,
+                                                fontWeight: FontWeight.w700,
+                                                color: const Color(0xFF1E40AF),
+                                              ),
+                                            ),
+                                            const SizedBox(height: 3),
+                                            Text(
+                                              revisionDeadline.isNotEmpty
+                                                  ? '⚠️ You have strictly 2 Days (48 Hours) to re-deliver revised deliverables (Deadline: $revisionDeadline).'
+                                                  : '⚠️ You have strictly 2 Days (48 Hours) to re-deliver revised deliverables based on supervisor notes.',
+                                              style: const TextStyle(
+                                                fontSize: 11.5,
+                                                fontWeight: FontWeight.w600,
+                                                color: Color(0xFF1D4ED8),
+                                                height: 1.35,
+                                              ),
+                                            ),
+                                          ],
+                                        ),
+                                      ),
+                                    ],
+                                  ),
+                                  if (revisionNotes.isNotEmpty) ...[
+                                    const SizedBox(height: 10),
+                                    Container(
+                                      width: double.infinity,
+                                      padding: const EdgeInsets.all(10),
+                                      decoration: BoxDecoration(
+                                        color: Colors.white,
+                                        borderRadius: BorderRadius.circular(8),
+                                        border: Border.all(
+                                          color: const Color(0xFFBFDBFE),
+                                        ),
+                                      ),
+                                      child: Text(
+                                        'Company Feedback: "$revisionNotes"',
+                                        style: GoogleFonts.inter(
+                                          fontSize: 12.5,
+                                          color: const Color(0xFF1E3A8A),
+                                          height: 1.4,
+                                        ),
+                                      ),
+                                    ),
+                                  ],
+                                ],
+                              ),
+                            ),
+                          ] else if (isReadyForPayout) ...[
+                            Container(
+                              width: double.infinity,
+                              margin: const EdgeInsets.only(bottom: 16),
+                              padding: const EdgeInsets.all(14),
+                              decoration: BoxDecoration(
+                                color: const Color(0xFFEFF6FF),
+                                borderRadius: BorderRadius.circular(14),
+                                border: Border.all(
+                                  color: const Color(0xFF3B82F6).withValues(alpha: 0.4),
+                                ),
+                              ),
+                              child: Row(
+                                crossAxisAlignment: CrossAxisAlignment.start,
+                                children: [
+                                  Container(
+                                    padding: const EdgeInsets.all(7),
+                                    decoration: BoxDecoration(
+                                      color: const Color(0xFFDBEAFE),
+                                      shape: BoxShape.circle,
+                                    ),
+                                    child: const Icon(
+                                      Icons.verified_rounded,
+                                      color: Color(0xFF2563EB),
+                                      size: 20,
+                                    ),
+                                  ),
+                                  const SizedBox(width: 12),
+                                  Expanded(
+                                    child: Column(
+                                      crossAxisAlignment: CrossAxisAlignment.start,
+                                      children: [
+                                        Text(
+                                          'Deliverables Approved by Company!',
+                                          style: GoogleFonts.inter(
+                                            fontSize: 13.5,
+                                            fontWeight: FontWeight.w700,
+                                            color: const Color(0xFF1E40AF),
+                                          ),
+                                        ),
+                                        const SizedBox(height: 3),
+                                        Text(
+                                          'Company has approved your work. Platform payout has been sent to Admin queue for disbursal to your account.',
+                                          style: GoogleFonts.inter(
+                                            fontSize: 11.5,
+                                            color: const Color(0xFF1D4ED8),
+                                            height: 1.35,
+                                          ),
+                                        ),
+                                      ],
+                                    ),
+                                  ),
+                                ],
+                              ),
+                            ),
+                          ] else ...[
+                            // Real Escrow Funded Protection Notice
+                            Container(
+                              width: double.infinity,
+                              margin: const EdgeInsets.only(bottom: 16),
+                              padding: const EdgeInsets.all(14),
+                              decoration: BoxDecoration(
+                                color: const Color(0xFFECFDF5),
+                                borderRadius: BorderRadius.circular(14),
+                                border: Border.all(
+                                  color: const Color(0xFF10B981).withValues(alpha: 0.35),
+                                ),
+                              ),
+                              child: Row(
+                                crossAxisAlignment: CrossAxisAlignment.start,
+                                children: [
+                                  Container(
+                                    padding: const EdgeInsets.all(7),
+                                    decoration: BoxDecoration(
+                                      color: const Color(0xFF10B981).withValues(alpha: 0.15),
+                                      shape: BoxShape.circle,
+                                    ),
+                                    child: const Icon(
+                                      Icons.verified_user_rounded,
+                                      color: Color(0xFF059669),
+                                      size: 20,
+                                    ),
+                                  ),
+                                  const SizedBox(width: 12),
+                                  Expanded(
+                                    child: Column(
+                                      crossAxisAlignment: CrossAxisAlignment.start,
+                                      children: [
+                                        Text(
+                                          'Company Sent Your Pay to Admin\'s Account (Escrow Funded)',
+                                          style: GoogleFonts.inter(
+                                            fontSize: 13,
+                                            fontWeight: FontWeight.w700,
+                                            color: const Color(0xFF065F46),
+                                          ),
+                                        ),
+                                        const SizedBox(height: 3),
+                                        Text(
+                                          isDelivered
+                                              ? 'Deliverables submitted. Payout releases upon company approval or after 5-day review window.'
+                                              : 'PKR $escrowFormatted is safely held in SkillBridge platform custody. Your payout is 100% guaranteed upon deliverable approval.',
+                                          style: GoogleFonts.inter(
+                                            fontSize: 11.5,
+                                            color: const Color(0xFF047857),
                                             height: 1.35,
                                           ),
                                         ),
@@ -1032,7 +1341,45 @@ class _StudentProjectDetailsScreenState
                   Expanded(
                     child: SizedBox(
                       height: 48,
-                      child: isRevisionRequested
+                      child: isPaid
+                          ? ElevatedButton.icon(
+                              style: ElevatedButton.styleFrom(
+                                backgroundColor: const Color(0xFF059669),
+                                foregroundColor: Colors.white,
+                                shape: RoundedRectangleBorder(
+                                  borderRadius: BorderRadius.circular(14),
+                                ),
+                              ),
+                              onPressed: null,
+                              icon: const Icon(Icons.verified_rounded, size: 18),
+                              label: Text(
+                                'Payment Disbursed (Paid) ✓',
+                                style: GoogleFonts.poppins(
+                                  fontSize: 14.5,
+                                  fontWeight: FontWeight.bold,
+                                ),
+                              ),
+                            )
+                          : isReadyForPayout
+                          ? ElevatedButton.icon(
+                              style: ElevatedButton.styleFrom(
+                                backgroundColor: const Color(0xFF2563EB),
+                                foregroundColor: Colors.white,
+                                shape: RoundedRectangleBorder(
+                                  borderRadius: BorderRadius.circular(14),
+                                ),
+                              ),
+                              onPressed: null,
+                              icon: const Icon(Icons.task_alt_rounded, size: 18),
+                              label: Text(
+                                'Approved (Awaiting Disbursal)',
+                                style: GoogleFonts.poppins(
+                                  fontSize: 14,
+                                  fontWeight: FontWeight.w600,
+                                ),
+                              ),
+                            )
+                          : isRevisionRequested
                           ? ElevatedButton.icon(
                               style: ElevatedButton.styleFrom(
                                 backgroundColor: const Color(0xFF2563EB),
@@ -1045,9 +1392,9 @@ class _StudentProjectDetailsScreenState
                                   _handleReDeliverProject(context, id, title),
                               icon: const Icon(Icons.refresh_rounded, size: 18),
                               label: Text(
-                                'Re-Deliver Project (Revision $revisionCount/2)',
+                                'Re-Deliver Work (2-Day Deadline)',
                                 style: GoogleFonts.poppins(
-                                  fontSize: 14.5,
+                                  fontSize: 14,
                                   fontWeight: FontWeight.bold,
                                 ),
                               ),
