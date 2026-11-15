@@ -474,6 +474,7 @@ class _MyProjectsScreenState extends State<MyProjectsScreen>
     final isDelivered = statusLower == 'delivered';
     final isRevisionRequested = statusLower == 'revision_requested' || statusLower == 'revision requested';
     final isDisputed = statusLower == 'disputed';
+    final bool isAssigned = project['isAssignedProject'] == true;
     final payoutTid = (project['payout_transaction_id'] ?? project['transactionId'] ?? '').toString().trim();
     final company = (project['company']?.toString().trim().isNotEmpty == true)
         ? project['company'].toString().trim()
@@ -750,7 +751,7 @@ class _MyProjectsScreenState extends State<MyProjectsScreen>
                   ],
                 ),
               ),
-            ] else ...[
+            ] else if (isAssigned) ...[
               const SizedBox(height: 10),
               Container(
                 width: double.infinity,

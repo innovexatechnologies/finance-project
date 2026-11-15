@@ -420,8 +420,41 @@ class _StudentProjectDetailsScreenState
         project['projectId']?.toString() ??
         '';
     final currentApplication = _findCurrentApplication(id);
+
+    final assignedStudentRaw = (project['assigned_student'] ??
+            project['assignedStudent'] ??
+            currentApplication?['assigned_student'] ??
+            currentApplication?['assignedStudent'] ??
+            '')
+        .toString()
+        .trim();
+
+    final curUid = SupabaseHelper.currentUser?.id.trim().toLowerCase() ?? '';
+    final curName = AppDataService.instance.userName.trim().toLowerCase();
+    final curEmail = AppDataService.instance.userEmail.trim().toLowerCase();
+
+    final isAssignedDirectly = assignedStudentRaw.isNotEmpty &&
+        (assignedStudentRaw.toLowerCase() == curUid ||
+            (curName.isNotEmpty &&
+                assignedStudentRaw.toLowerCase() == curName) ||
+            (curEmail.isNotEmpty &&
+                assignedStudentRaw.toLowerCase() == curEmail));
+
+    final appStatus =
+        (currentApplication?['status'] ?? '').toString().trim().toLowerCase();
+    final isAppAwarded = appStatus == 'accepted' ||
+        appStatus == 'in progress' ||
+        appStatus == 'in_progress' ||
+        appStatus == 'delivered' ||
+        appStatus == 'revision requested' ||
+        appStatus == 'revision_requested' ||
+        appStatus == 'ready_for_payout' ||
+        appStatus == 'completed';
+
     final isAssignedProject = project['isAssignedProject'] == true ||
-        currentApplication?['isAssignedProject'] == true;
+        currentApplication?['isAssignedProject'] == true ||
+        isAppAwarded ||
+        isAssignedDirectly;
     final statusAvailable =
         project['paymentStatusAvailable'] == true ||
             currentApplication?['paymentStatusAvailable'] == true;
@@ -753,8 +786,9 @@ class _StudentProjectDetailsScreenState
                           ),
                           const SizedBox(height: 22),
 
-                          // Escrow & Lifecycle Status Banners
-                          if (isPaid) ...[
+                          // Escrow & Lifecycle Status Banners (Strictly for Awarded/Assigned Student ONLY)
+                          if (isAssignedProject) ...[
+                            if (isPaid) ...[
                             Container(
                               width: double.infinity,
                               margin: const EdgeInsets.only(bottom: 16),
@@ -1170,6 +1204,7 @@ class _StudentProjectDetailsScreenState
                               ),
                             ),
                           ],
+                        ],
 
                           _buildSectionCard(
                             title: 'About this Project',
@@ -1341,122 +1376,141 @@ class _StudentProjectDetailsScreenState
                   Expanded(
                     child: SizedBox(
                       height: 48,
-                      child: isPaid
-                          ? ElevatedButton.icon(
-                              style: ElevatedButton.styleFrom(
-                                backgroundColor: const Color(0xFF059669),
-                                foregroundColor: Colors.white,
-                                shape: RoundedRectangleBorder(
-                                  borderRadius: BorderRadius.circular(14),
-                                ),
-                              ),
-                              onPressed: null,
-                              icon: const Icon(Icons.verified_rounded, size: 18),
-                              label: Text(
-                                'Payment Disbursed (Paid) ✓',
-                                style: GoogleFonts.poppins(
-                                  fontSize: 14.5,
-                                  fontWeight: FontWeight.bold,
-                                ),
-                              ),
-                            )
-                          : isReadyForPayout
-                          ? ElevatedButton.icon(
-                              style: ElevatedButton.styleFrom(
-                                backgroundColor: const Color(0xFF2563EB),
-                                foregroundColor: Colors.white,
-                                shape: RoundedRectangleBorder(
-                                  borderRadius: BorderRadius.circular(14),
-                                ),
-                              ),
-                              onPressed: null,
-                              icon: const Icon(Icons.task_alt_rounded, size: 18),
-                              label: Text(
-                                'Approved (Awaiting Disbursal)',
-                                style: GoogleFonts.poppins(
-                                  fontSize: 14,
-                                  fontWeight: FontWeight.w600,
-                                ),
-                              ),
-                            )
-                          : isRevisionRequested
-                          ? ElevatedButton.icon(
-                              style: ElevatedButton.styleFrom(
-                                backgroundColor: const Color(0xFF2563EB),
-                                foregroundColor: Colors.white,
-                                shape: RoundedRectangleBorder(
-                                  borderRadius: BorderRadius.circular(14),
-                                ),
-                              ),
-                              onPressed: () =>
-                                  _handleReDeliverProject(context, id, title),
-                              icon: const Icon(Icons.refresh_rounded, size: 18),
-                              label: Text(
-                                'Re-Deliver Work (2-Day Deadline)',
-                                style: GoogleFonts.poppins(
-                                  fontSize: 14,
-                                  fontWeight: FontWeight.bold,
-                                ),
-                              ),
-                            )
-                          : isInProgress
-                          ? ElevatedButton.icon(
-                              style: ElevatedButton.styleFrom(
-                                backgroundColor: const Color(0xFF059669),
-                                foregroundColor: Colors.white,
-                                shape: RoundedRectangleBorder(
-                                  borderRadius: BorderRadius.circular(14),
-                                ),
-                              ),
-                              onPressed: () => _handleDeliverProject(context, id, title),
-                              icon: const Icon(Icons.send_rounded, size: 18),
-                              label: Text(
-                                'Deliver Project',
-                                style: GoogleFonts.poppins(
-                                  fontSize: 15,
-                                  fontWeight: FontWeight.bold,
-                                ),
-                              ),
-                            )
-                          : isDelivered
+                      child: isAssignedProject
+                          ? (isPaid
                               ? ElevatedButton.icon(
                                   style: ElevatedButton.styleFrom(
-                                    backgroundColor: const Color(0xFFD97706),
+                                    backgroundColor: const Color(0xFF059669),
                                     foregroundColor: Colors.white,
                                     shape: RoundedRectangleBorder(
                                       borderRadius: BorderRadius.circular(14),
                                     ),
                                   ),
                                   onPressed: null,
-                                  icon: const Icon(Icons.hourglass_top_rounded, size: 18),
+                                  icon: const Icon(Icons.verified_rounded, size: 18),
                                   label: Text(
-                                    'Delivered (Under Review)',
+                                    'Payment Disbursed (Paid) ✓',
+                                    style: GoogleFonts.poppins(
+                                      fontSize: 14.5,
+                                      fontWeight: FontWeight.bold,
+                                    ),
+                                  ),
+                                )
+                              : isReadyForPayout
+                              ? ElevatedButton.icon(
+                                  style: ElevatedButton.styleFrom(
+                                    backgroundColor: const Color(0xFF2563EB),
+                                    foregroundColor: Colors.white,
+                                    shape: RoundedRectangleBorder(
+                                      borderRadius: BorderRadius.circular(14),
+                                    ),
+                                  ),
+                                  onPressed: null,
+                                  icon: const Icon(Icons.task_alt_rounded, size: 18),
+                                  label: Text(
+                                    'Approved (Awaiting Disbursal)',
                                     style: GoogleFonts.poppins(
                                       fontSize: 14,
                                       fontWeight: FontWeight.w600,
                                     ),
                                   ),
                                 )
-                              : isDisputed
+                              : isRevisionRequested
+                              ? ElevatedButton.icon(
+                                  style: ElevatedButton.styleFrom(
+                                    backgroundColor: const Color(0xFF2563EB),
+                                    foregroundColor: Colors.white,
+                                    shape: RoundedRectangleBorder(
+                                      borderRadius: BorderRadius.circular(14),
+                                    ),
+                                  ),
+                                  onPressed: () =>
+                                      _handleReDeliverProject(context, id, title),
+                                  icon: const Icon(Icons.refresh_rounded, size: 18),
+                                  label: Text(
+                                    'Re-Deliver Work (2-Day Deadline)',
+                                    style: GoogleFonts.poppins(
+                                      fontSize: 14,
+                                      fontWeight: FontWeight.bold,
+                                    ),
+                                  ),
+                                )
+                              : isInProgress
+                              ? ElevatedButton.icon(
+                                  style: ElevatedButton.styleFrom(
+                                    backgroundColor: const Color(0xFF059669),
+                                    foregroundColor: Colors.white,
+                                    shape: RoundedRectangleBorder(
+                                      borderRadius: BorderRadius.circular(14),
+                                    ),
+                                  ),
+                                  onPressed: () => _handleDeliverProject(context, id, title),
+                                  icon: const Icon(Icons.send_rounded, size: 18),
+                                  label: Text(
+                                    'Deliver Project',
+                                    style: GoogleFonts.poppins(
+                                      fontSize: 15,
+                                      fontWeight: FontWeight.bold,
+                                    ),
+                                  ),
+                                )
+                              : isDelivered
                                   ? ElevatedButton.icon(
                                       style: ElevatedButton.styleFrom(
-                                        backgroundColor: const Color(0xFFDC2626),
+                                        backgroundColor: const Color(0xFFD97706),
                                         foregroundColor: Colors.white,
                                         shape: RoundedRectangleBorder(
                                           borderRadius: BorderRadius.circular(14),
                                         ),
                                       ),
                                       onPressed: null,
-                                      icon: const Icon(Icons.gavel_rounded, size: 18),
+                                      icon: const Icon(Icons.hourglass_top_rounded, size: 18),
                                       label: Text(
-                                        'Disputed (In Mediation)',
+                                        'Delivered (Under Review)',
                                         style: GoogleFonts.poppins(
                                           fontSize: 14,
                                           fontWeight: FontWeight.w600,
                                         ),
                                       ),
                                     )
-                                  : ElevatedButton(
+                                  : isDisputed
+                                      ? ElevatedButton.icon(
+                                          style: ElevatedButton.styleFrom(
+                                            backgroundColor: const Color(0xFFDC2626),
+                                            foregroundColor: Colors.white,
+                                            shape: RoundedRectangleBorder(
+                                              borderRadius: BorderRadius.circular(14),
+                                            ),
+                                          ),
+                                          onPressed: null,
+                                          icon: const Icon(Icons.gavel_rounded, size: 18),
+                                          label: Text(
+                                            'Disputed (In Mediation)',
+                                            style: GoogleFonts.poppins(
+                                              fontSize: 14,
+                                              fontWeight: FontWeight.w600,
+                                            ),
+                                          ),
+                                        )
+                                      : ElevatedButton.icon(
+                                          style: ElevatedButton.styleFrom(
+                                            backgroundColor: const Color(0xFF059669),
+                                            foregroundColor: Colors.white,
+                                            shape: RoundedRectangleBorder(
+                                              borderRadius: BorderRadius.circular(14),
+                                            ),
+                                          ),
+                                          onPressed: () => _handleDeliverProject(context, id, title),
+                                          icon: const Icon(Icons.send_rounded, size: 18),
+                                          label: Text(
+                                            'Deliver Project',
+                                            style: GoogleFonts.poppins(
+                                              fontSize: 15,
+                                              fontWeight: FontWeight.bold,
+                                            ),
+                                          ),
+                                        ))
+                          : ElevatedButton(
                                       style: ElevatedButton.styleFrom(
                                         backgroundColor: hasApplied
                                             ? AppColors.statusOpen
