@@ -108,16 +108,28 @@ class _MyProjectsScreenState extends State<MyProjectsScreen>
 
         final activeProjects = myProjects.where((p) {
           final s = (p['status'] ?? '').toString().toLowerCase();
-          final isCompleted =
-              s == 'completed' || s == 'paid' || p['paymentSent'] == true;
-          return !isCompleted;
+          final hasDisbursalTid = (p['payout_transaction_id'] ??
+                  p['payoutTransactionId'] ??
+                  '')
+              .toString()
+              .trim()
+              .isNotEmpty;
+          final isDisbursed = (s == 'completed' || s == 'paid') &&
+              (hasDisbursalTid || p['isPaidByAdmin'] == true);
+          return !isDisbursed;
         }).toList();
 
         final paidProjects = myProjects.where((p) {
           final s = (p['status'] ?? '').toString().toLowerCase();
-          final isCompleted =
-              s == 'completed' || s == 'paid' || p['paymentSent'] == true;
-          return isCompleted;
+          final hasDisbursalTid = (p['payout_transaction_id'] ??
+                  p['payoutTransactionId'] ??
+                  '')
+              .toString()
+              .trim()
+              .isNotEmpty;
+          final isDisbursed = (s == 'completed' || s == 'paid') &&
+              (hasDisbursalTid || p['isPaidByAdmin'] == true);
+          return isDisbursed;
         }).toList();
 
         return Scaffold(
@@ -246,13 +258,26 @@ class _MyProjectsScreenState extends State<MyProjectsScreen>
   Widget _buildProjectItem(Map<String, dynamic> project, bool isCompleted) {
     final status = project['status']?.toString() ?? 'In Progress';
     final statusLower = status.toLowerCase();
-    final isCompleted =
-        statusLower == 'completed' || statusLower == 'paid' || project['paymentSent'] == true;
+    final hasDisbursalTid = (project['payout_transaction_id'] ??
+            project['payoutTransactionId'] ??
+            '')
+        .toString()
+        .trim()
+        .isNotEmpty;
+    final isDisbursed = (statusLower == 'completed' || statusLower == 'paid') &&
+        (hasDisbursalTid || project['isPaidByAdmin'] == true);
+    final isCompleted = isDisbursed;
+    final isReadyForPayout = statusLower == 'ready_for_payout';
     final isDelivered = statusLower == 'delivered';
     final isRevisionRequested = statusLower == 'revision_requested' || statusLower == 'revision requested';
     final isDisputed = statusLower == 'disputed';
     final bool isAssigned = project['isAssignedProject'] == true;
-    final payoutTid = (project['payout_transaction_id'] ?? project['transactionId'] ?? '').toString().trim();
+    final payoutTid = (project['payout_transaction_id'] ??
+            project['payoutTransactionId'] ??
+            project['transactionId'] ??
+            '')
+        .toString()
+        .trim();
     final company = (project['company']?.toString().trim().isNotEmpty == true)
         ? project['company'].toString().trim()
         : 'Partner Company';
@@ -413,6 +438,38 @@ class _MyProjectsScreenState extends State<MyProjectsScreen>
                           fontSize: 11,
                           fontWeight: FontWeight.w600,
                           color: Color(0xFF065F46),
+                        ),
+                      ),
+                    ),
+                  ],
+                ),
+              ),
+            ] else if (isReadyForPayout) ...[
+              const SizedBox(height: 10),
+              Container(
+                width: double.infinity,
+                padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 7),
+                decoration: BoxDecoration(
+                  color: const Color(0xFFEFF6FF),
+                  borderRadius: BorderRadius.circular(8),
+                  border: Border.all(
+                    color: const Color(0xFF3B82F6).withValues(alpha: 0.35),
+                  ),
+                ),
+                child: const Row(
+                  children: [
+                    Icon(Icons.verified_rounded,
+                        size: 14, color: Color(0xFF2563EB)),
+                    SizedBox(width: 6),
+                    Expanded(
+                      child: Text(
+                        'Company Approved Work! Admin Disbursal in progress.',
+                        maxLines: 1,
+                        overflow: TextOverflow.ellipsis,
+                        style: TextStyle(
+                          fontSize: 11,
+                          fontWeight: FontWeight.w600,
+                          color: Color(0xFF1E40AF),
                         ),
                       ),
                     ),
@@ -627,7 +684,31 @@ class _MyProjectsScreenState extends State<MyProjectsScreen>
                   label: const Text('Share'),
                 ),
                 if (!isCompleted) ...[
-                  if (isDelivered ||
+                  if (isReadyForPayout) ...[
+                    Opacity(
+                      opacity: 0.75,
+                      child: ElevatedButton.icon(
+                        style: ElevatedButton.styleFrom(
+                          backgroundColor: const Color(0xFF2563EB),
+                          foregroundColor: Colors.white,
+                          padding: const EdgeInsets.symmetric(
+                            horizontal: 14,
+                            vertical: 10,
+                          ),
+                          elevation: 0,
+                        ),
+                        onPressed: null,
+                        icon: const Icon(Icons.task_alt_rounded, size: 15),
+                        label: Text(
+                          'Approved (Awaiting Disbursal)',
+                          style: GoogleFonts.poppins(
+                            fontSize: 12.5,
+                            fontWeight: FontWeight.w600,
+                          ),
+                        ),
+                      ),
+                    ),
+                  ] else if (isDelivered ||
                       hasSubmission ||
                       statusLower == 'under review' ||
                       statusLower == 'under_review' ||

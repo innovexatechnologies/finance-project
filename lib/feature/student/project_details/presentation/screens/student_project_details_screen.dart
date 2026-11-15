@@ -282,7 +282,16 @@ class _StudentProjectDetailsScreenState
         : double.tryParse(rawBudget.toString().replaceAll(RegExp(r'[^0-9.]'), '')) ?? 15000;
     final escrowFormatted = budgetNum.toStringAsFixed(0);
     final statusLower = status.toLowerCase();
-    final isPaid = statusLower == 'completed' || statusLower == 'paid' || paymentSent == true;
+    final payoutTid = (project['payout_transaction_id'] ??
+            project['payoutTransactionId'] ??
+            currentApplication?['payout_transaction_id'] ??
+            currentApplication?['payoutTransactionId'] ??
+            '')
+        .toString()
+        .trim();
+    final hasDisbursalTid = payoutTid.isNotEmpty;
+    final isPaid = (statusLower == 'completed' || statusLower == 'paid') &&
+        (hasDisbursalTid || project['isPaidByAdmin'] == true || currentApplication?['isPaidByAdmin'] == true);
     final isReadyForPayout = statusLower == 'ready_for_payout';
     final hasDeliveredFlag = project['isDelivered'] == true ||
         currentApplication?['isDelivered'] == true ||
@@ -299,13 +308,6 @@ class _StudentProjectDetailsScreenState
         hasDeliveredFlag;
     final isRevisionRequested = statusLower == 'revision_requested' || statusLower == 'revision requested';
     final isDisputed = statusLower == 'disputed';
-    final payoutTid = (project['payout_transaction_id'] ??
-            project['transactionId'] ??
-            currentApplication?['payout_transaction_id'] ??
-            currentApplication?['transactionId'] ??
-            '')
-        .toString()
-        .trim();
     final payoutReceiptUrl = (project['payout_receipt_url'] ??
             project['paymentReceiptUrl'] ??
             currentApplication?['payout_receipt_url'] ??

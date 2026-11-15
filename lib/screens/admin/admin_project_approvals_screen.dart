@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:google_fonts/google_fonts.dart';
+import 'package:image_picker/image_picker.dart';
 import 'package:link_vibe/core/constants/app_colors.dart';
 import 'package:link_vibe/core/widgets/app_empty_state.dart';
 import 'package:link_vibe/feature/admin/presentation/screens/admin_login_screen.dart';
@@ -8,10 +9,11 @@ import 'package:link_vibe/feature/admin/presentation/widgets/admin_sidebar.dart'
 import 'package:link_vibe/feature/admin/presentation/widgets/admin_top_navbar.dart';
 import 'package:link_vibe/feature/admin/services/admin_auth_service.dart';
 import 'package:link_vibe/feature/company/models/project_model.dart';
+import 'package:link_vibe/services/admin_dispute_payout_service.dart';
 import 'package:link_vibe/services/admin_project_approval_service.dart';
 
-/// Admin Screen for Reviewing and Approving Company Upfront Escrow Deposits.
-/// Strictly uses [AdminProjectApprovalService] — NO direct Supabase calls.
+/// Admin Screen for Reviewing and Approving Company Upfront Escrow Deposits & Student Payouts.
+/// Strictly uses pure service layers — NO direct Supabase calls.
 class AdminProjectApprovalsScreen extends StatefulWidget {
   const AdminProjectApprovalsScreen({super.key});
 
@@ -21,22 +23,46 @@ class AdminProjectApprovalsScreen extends StatefulWidget {
 }
 
 class _AdminProjectApprovalsScreenState
-    extends State<AdminProjectApprovalsScreen> {
+    extends State<AdminProjectApprovalsScreen>
+    with SingleTickerProviderStateMixin {
   final AdminProjectApprovalService _approvalService =
       AdminProjectApprovalService();
+  final AdminDisputePayoutService _payoutService = AdminDisputePayoutService();
   final AdminAuthService _authService = AdminAuthService();
   final GlobalKey<ScaffoldState> _scaffoldKey = GlobalKey<ScaffoldState>();
 
+  late TabController _tabController;
   String _searchQuery = '';
   bool _isSidebarCollapsed = false;
 
   @override
   void initState() {
     super.initState();
+    _tabController = TabController(length: 2, vsync: this);
+    _tabController.addListener(() {
+      if (!mounted) return;
+      if (_tabController.indexIsChanging ||
+          _tabController.animation?.value == _tabController.index) {
+        setState(() {});
+      }
+    });
     WidgetsBinding.instance.addPostFrameCallback((_) {
       if (!mounted) return;
-      _approvalService.loadPendingApprovals();
+      _refreshAllData();
     });
+  }
+
+  @override
+  void dispose() {
+    _tabController.dispose();
+    super.dispose();
+  }
+
+  Future<void> _refreshAllData() async {
+    await Future.wait([
+      _approvalService.loadPendingApprovals(forceRefresh: true),
+      _payoutService.loadPayoutReadyProjects(forceRefresh: true),
+    ]);
   }
 
   void _showFeedback(String message, {bool isError = false}) {
@@ -347,68 +373,20 @@ class _AdminProjectApprovalsScreenState
                   children: [
                     AdminTopNavbar(
                       pageTitle: 'Project Payment Approvals',
-                      breadcrumb: 'Escrow Verification Queue',
+                      breadcrumb: 'Escrow Verification & Disbursals',
                       onOpenDrawer: () =>
                           _scaffoldKey.currentState?.openEndDrawer(),
                       onSignOut: _handleSignOut,
                       onSearch: (q) => setState(() => _searchQuery = q),
                     ),
+                    _buildTabsBar(isDesktop),
                     Expanded(
-                      child: RefreshIndicator(
-                        onRefresh: () =>
-                            _approvalService.loadPendingApprovals(
-                          forceRefresh: true,
-                        ),
-                        child: ValueListenableBuilder<bool>(
-                          valueListenable: _approvalService.isLoadingNotifier,
-                          builder: (context, isLoading, _) {
-                            return ValueListenableBuilder<List<ProjectModel>>(
-                              valueListenable:
-                                  _approvalService.pendingApprovalsNotifier,
-                              builder: (context, pendingProjects, _) {
-                                final filtered = pendingProjects.where((p) {
-                                  if (_searchQuery.trim().isEmpty) return true;
-                                  final q = _searchQuery.toLowerCase();
-                                  return p.title.toLowerCase().contains(q) ||
-                                      p.companyName.toLowerCase().contains(q) ||
-                                      (p.transactionId
-                                              ?.toLowerCase()
-                                              .contains(q) ??
-                                          false);
-                                }).toList();
-
-                                return ListView(
-                                  padding: EdgeInsets.symmetric(
-                                    horizontal: isDesktop ? 24 : 14,
-                                    vertical: isDesktop ? 24 : 16,
-                                  ),
-                                  children: [
-                                    _buildQueueBanner(
-                                      pendingProjects.length,
-                                      isDesktop,
-                                    ),
-                                    const SizedBox(height: 16),
-                                    if (isLoading && pendingProjects.isEmpty)
-                                      const Center(
-                                        child: Padding(
-                                          padding: EdgeInsets.all(40),
-                                          child: CircularProgressIndicator(),
-                                        ),
-                                      )
-                                    else if (filtered.isEmpty)
-                                      _buildEmptyState()
-                                    else
-                                      ...filtered.map((p) =>
-                                          _buildPendingProjectCard(
-                                            p,
-                                            isMobile: !isDesktop,
-                                          )),
-                                  ],
-                                );
-                              },
-                            );
-                          },
-                        ),
+                      child: TabBarView(
+                        controller: _tabController,
+                        children: [
+                          _buildCompanyDepositsTab(isDesktop),
+                          _buildStudentPayoutsTab(isDesktop),
+                        ],
                       ),
                     ),
                   ],
@@ -883,6 +861,965 @@ class _AdminProjectApprovalsScreenState
               ],
             ),
           ],
+        ),
+      ],
+    );
+  }
+
+  Widget _buildTabsBar(bool isDesktop) {
+    return ValueListenableBuilder<List<ProjectModel>>(
+      valueListenable: _approvalService.pendingApprovalsNotifier,
+      builder: (context, pendingCompany, _) {
+        return ValueListenableBuilder<List<ProjectModel>>(
+          valueListenable: _payoutService.payoutReadyProjectsNotifier,
+          builder: (context, pendingPayouts, _) {
+            final companyCount = pendingCompany.length;
+            final payoutCount = pendingPayouts.length;
+
+            return Container(
+              margin: EdgeInsets.symmetric(
+                horizontal: isDesktop ? 24 : 14,
+                vertical: 10,
+              ),
+              padding: const EdgeInsets.all(4),
+              decoration: BoxDecoration(
+                color: const Color(0xFFF1F5F9),
+                borderRadius: BorderRadius.circular(14),
+                border: Border.all(color: const Color(0xFFE2E8F0)),
+              ),
+              child: TabBar(
+                controller: _tabController,
+                indicatorSize: TabBarIndicatorSize.tab,
+                indicator: BoxDecoration(
+                  color: Colors.white,
+                  borderRadius: BorderRadius.circular(10),
+                  boxShadow: [
+                    BoxShadow(
+                      color: Colors.black.withValues(alpha: 0.06),
+                      blurRadius: 4,
+                      offset: const Offset(0, 2),
+                    ),
+                  ],
+                ),
+                labelColor: AppColors.primary,
+                unselectedLabelColor: AppColors.textSecondary,
+                labelStyle: GoogleFonts.inter(
+                  fontWeight: FontWeight.bold,
+                  fontSize: 13,
+                ),
+                unselectedLabelStyle: GoogleFonts.inter(
+                  fontWeight: FontWeight.w600,
+                  fontSize: 13,
+                ),
+                dividerColor: Colors.transparent,
+                tabs: [
+                  Tab(
+                    child: Row(
+                      mainAxisAlignment: MainAxisAlignment.center,
+                      children: [
+                        const Icon(Icons.receipt_long_rounded, size: 16),
+                        const SizedBox(width: 6),
+                        const Text('Company Deposits'),
+                        if (companyCount > 0) ...[
+                          const SizedBox(width: 6),
+                          Container(
+                            padding: const EdgeInsets.symmetric(
+                              horizontal: 6,
+                              vertical: 2,
+                            ),
+                            decoration: BoxDecoration(
+                              color: AppColors.warning,
+                              borderRadius: BorderRadius.circular(10),
+                            ),
+                            child: Text(
+                              '$companyCount',
+                              style: const TextStyle(
+                                color: Colors.white,
+                                fontSize: 11,
+                                fontWeight: FontWeight.bold,
+                              ),
+                            ),
+                          ),
+                        ],
+                      ],
+                    ),
+                  ),
+                  Tab(
+                    child: Row(
+                      mainAxisAlignment: MainAxisAlignment.center,
+                      children: [
+                        const Icon(Icons.payments_rounded, size: 16),
+                        const SizedBox(width: 6),
+                        const Text('Student Payouts'),
+                        if (payoutCount > 0) ...[
+                          const SizedBox(width: 6),
+                          Container(
+                            padding: const EdgeInsets.symmetric(
+                              horizontal: 6,
+                              vertical: 2,
+                            ),
+                            decoration: BoxDecoration(
+                              color: AppColors.success,
+                              borderRadius: BorderRadius.circular(10),
+                            ),
+                            child: Text(
+                              '$payoutCount',
+                              style: const TextStyle(
+                                color: Colors.white,
+                                fontSize: 11,
+                                fontWeight: FontWeight.bold,
+                              ),
+                            ),
+                          ),
+                        ],
+                      ],
+                    ),
+                  ),
+                ],
+              ),
+            );
+          },
+        );
+      },
+    );
+  }
+
+  Widget _buildCompanyDepositsTab(bool isDesktop) {
+    return RefreshIndicator(
+      onRefresh: _refreshAllData,
+      child: ValueListenableBuilder<bool>(
+        valueListenable: _approvalService.isLoadingNotifier,
+        builder: (context, isLoading, _) {
+          return ValueListenableBuilder<List<ProjectModel>>(
+            valueListenable: _approvalService.pendingApprovalsNotifier,
+            builder: (context, pendingProjects, _) {
+              final filtered = pendingProjects.where((p) {
+                if (_searchQuery.trim().isEmpty) return true;
+                final q = _searchQuery.toLowerCase();
+                return p.title.toLowerCase().contains(q) ||
+                    p.companyName.toLowerCase().contains(q) ||
+                    (p.transactionId?.toLowerCase().contains(q) ?? false);
+              }).toList();
+
+              return ListView(
+                padding: EdgeInsets.symmetric(
+                  horizontal: isDesktop ? 24 : 14,
+                  vertical: isDesktop ? 16 : 12,
+                ),
+                children: [
+                  _buildQueueBanner(
+                    pendingProjects.length,
+                    isDesktop,
+                  ),
+                  const SizedBox(height: 16),
+                  if (isLoading && pendingProjects.isEmpty)
+                    const Center(
+                      child: Padding(
+                        padding: EdgeInsets.all(40),
+                        child: CircularProgressIndicator(),
+                      ),
+                    )
+                  else if (filtered.isEmpty)
+                    _buildEmptyState()
+                  else
+                    ...filtered.map(
+                      (p) => _buildPendingProjectCard(
+                        p,
+                        isMobile: !isDesktop,
+                      ),
+                    ),
+                ],
+              );
+            },
+          );
+        },
+      ),
+    );
+  }
+
+  Widget _buildStudentPayoutsTab(bool isDesktop) {
+    return RefreshIndicator(
+      onRefresh: _refreshAllData,
+      child: ValueListenableBuilder<bool>(
+        valueListenable: _payoutService.isLoadingNotifier,
+        builder: (context, isLoading, _) {
+          return ValueListenableBuilder<List<ProjectModel>>(
+            valueListenable: _payoutService.payoutReadyProjectsNotifier,
+            builder: (context, payoutProjects, _) {
+              final filtered = payoutProjects.where((p) {
+                if (_searchQuery.trim().isEmpty) return true;
+                final q = _searchQuery.toLowerCase();
+                return p.title.toLowerCase().contains(q) ||
+                    p.companyName.toLowerCase().contains(q) ||
+                    (p.assignedStudent?.toLowerCase().contains(q) ?? false);
+              }).toList();
+
+              return ListView(
+                padding: EdgeInsets.symmetric(
+                  horizontal: isDesktop ? 24 : 14,
+                  vertical: isDesktop ? 16 : 12,
+                ),
+                children: [
+                  _buildPayoutQueueBanner(
+                    payoutProjects.length,
+                    isDesktop,
+                  ),
+                  const SizedBox(height: 16),
+                  if (isLoading && payoutProjects.isEmpty)
+                    const Center(
+                      child: Padding(
+                        padding: EdgeInsets.all(40),
+                        child: CircularProgressIndicator(),
+                      ),
+                    )
+                  else if (filtered.isEmpty)
+                    _buildStudentPayoutEmptyState()
+                  else
+                    ...filtered.map(
+                      (p) => _buildStudentPayoutCard(
+                        p,
+                        isMobile: !isDesktop,
+                      ),
+                    ),
+                ],
+              );
+            },
+          );
+        },
+      ),
+    );
+  }
+
+  Widget _buildPayoutQueueBanner(int count, bool isDesktop) {
+    return Container(
+      padding: EdgeInsets.all(isDesktop ? 18 : 14),
+      decoration: BoxDecoration(
+        color: const Color(0xFFF0FDF4),
+        borderRadius: BorderRadius.circular(16),
+        border: Border.all(
+          color: const Color(0xFF10B981).withValues(alpha: 0.35),
+        ),
+      ),
+      child: Row(
+        children: [
+          Container(
+            padding: const EdgeInsets.all(10),
+            decoration: BoxDecoration(
+              color: const Color(0xFF10B981).withValues(alpha: 0.15),
+              borderRadius: BorderRadius.circular(12),
+            ),
+            child: const Icon(
+              Icons.payments_rounded,
+              color: Color(0xFF059669),
+              size: 22,
+            ),
+          ),
+          const SizedBox(width: 12),
+          Expanded(
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Text(
+                  'Student Escrow Disbursal Queue',
+                  maxLines: 1,
+                  overflow: TextOverflow.ellipsis,
+                  style: GoogleFonts.poppins(
+                    fontSize: isDesktop ? 16 : 14.5,
+                    fontWeight: FontWeight.bold,
+                    color: const Color(0xFF065F46),
+                  ),
+                ),
+                const SizedBox(height: 2),
+                Text(
+                  'Company approved deliverables. Review student bank details and send payout.',
+                  maxLines: 2,
+                  overflow: TextOverflow.ellipsis,
+                  style: GoogleFonts.inter(
+                    fontSize: 11.5,
+                    color: const Color(0xFF047857),
+                    height: 1.3,
+                  ),
+                ),
+              ],
+            ),
+          ),
+          const SizedBox(width: 10),
+          Container(
+            padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 6),
+            decoration: BoxDecoration(
+              color: count > 0 ? const Color(0xFF059669) : AppColors.surfaceAlt,
+              borderRadius: BorderRadius.circular(18),
+            ),
+            child: Text(
+              '$count Pending',
+              style: GoogleFonts.inter(
+                fontSize: 12,
+                fontWeight: FontWeight.bold,
+                color: count > 0 ? Colors.white : AppColors.textSecondary,
+              ),
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+
+  Widget _buildStudentPayoutCard(ProjectModel project, {required bool isMobile}) {
+    final netStudent = project.studentPayoutAmount ?? (project.escrowAmount * 0.90);
+    final fee = project.platformCommissionAmount ?? (project.escrowAmount * 0.10);
+
+    return Container(
+      margin: const EdgeInsets.only(bottom: 14),
+      decoration: BoxDecoration(
+        color: AppColors.cardSurface,
+        borderRadius: BorderRadius.circular(16),
+        border: Border.all(
+          color: const Color(0xFF10B981).withValues(alpha: 0.4),
+        ),
+        boxShadow: AppColors.softShadow,
+      ),
+      child: Material(
+        color: Colors.transparent,
+        child: InkWell(
+          onTap: () => _openStudentPayoutModal(project),
+          borderRadius: BorderRadius.circular(16),
+          child: Padding(
+            padding: const EdgeInsets.all(18),
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Row(
+                  mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                  children: [
+                    Container(
+                      padding: const EdgeInsets.symmetric(
+                        horizontal: 10,
+                        vertical: 4,
+                      ),
+                      decoration: BoxDecoration(
+                        color: const Color(0xFFECFDF5),
+                        borderRadius: BorderRadius.circular(6),
+                      ),
+                      child: Text(
+                        'COMPANY APPROVED • READY FOR DISBURSAL',
+                        style: GoogleFonts.inter(
+                          fontSize: 11,
+                          fontWeight: FontWeight.bold,
+                          color: const Color(0xFF065F46),
+                        ),
+                      ),
+                    ),
+                    Text(
+                      'PKR ${netStudent.toStringAsFixed(0)}',
+                      style: GoogleFonts.poppins(
+                        fontSize: 16.5,
+                        fontWeight: FontWeight.bold,
+                        color: const Color(0xFF059669),
+                      ),
+                    ),
+                  ],
+                ),
+                const SizedBox(height: 12),
+                Text(
+                  project.title,
+                  style: GoogleFonts.poppins(
+                    fontSize: 16,
+                    fontWeight: FontWeight.bold,
+                    color: AppColors.darkNavy,
+                  ),
+                ),
+                const SizedBox(height: 4),
+                Text(
+                  'Company: ${project.companyName} • Category: ${project.category}',
+                  style: GoogleFonts.inter(
+                    fontSize: 12.5,
+                    color: AppColors.textSecondary,
+                  ),
+                ),
+                const SizedBox(height: 8),
+                Container(
+                  padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 6),
+                  decoration: BoxDecoration(
+                    color: const Color(0xFFF8FAFC),
+                    borderRadius: BorderRadius.circular(8),
+                    border: Border.all(color: const Color(0xFFE2E8F0)),
+                  ),
+                  child: Row(
+                    children: [
+                      const Icon(
+                        Icons.school_rounded,
+                        size: 15,
+                        color: AppColors.primary,
+                      ),
+                      const SizedBox(width: 6),
+                      Expanded(
+                        child: Text(
+                          'Awarded Student: ${project.assignedStudent ?? "Candidate"}',
+                          maxLines: 1,
+                          overflow: TextOverflow.ellipsis,
+                          style: GoogleFonts.inter(
+                            fontSize: 12,
+                            fontWeight: FontWeight.w600,
+                            color: AppColors.darkNavy,
+                          ),
+                        ),
+                      ),
+                      Text(
+                        'Fee: PKR ${fee.toStringAsFixed(0)}',
+                        style: GoogleFonts.inter(
+                          fontSize: 11,
+                          color: AppColors.textSecondary,
+                        ),
+                      ),
+                    ],
+                  ),
+                ),
+                const SizedBox(height: 14),
+                SizedBox(
+                  width: double.infinity,
+                  child: ElevatedButton.icon(
+                    style: ElevatedButton.styleFrom(
+                      backgroundColor: const Color(0xFF059669),
+                      foregroundColor: Colors.white,
+                      padding: const EdgeInsets.symmetric(
+                        horizontal: 16,
+                        vertical: 12,
+                      ),
+                      shape: RoundedRectangleBorder(
+                        borderRadius: BorderRadius.circular(10),
+                      ),
+                      elevation: 0,
+                    ),
+                    icon: const Icon(Icons.account_balance_rounded, size: 16),
+                    label: const Text(
+                      'Review Student Bank Details & Send Payment',
+                      style: TextStyle(fontWeight: FontWeight.bold, fontSize: 13),
+                    ),
+                    onPressed: () => _openStudentPayoutModal(project),
+                  ),
+                ),
+              ],
+            ),
+          ),
+        ),
+      ),
+    );
+  }
+
+  Widget _buildStudentPayoutEmptyState() {
+    return Container(
+      padding: const EdgeInsets.all(40),
+      decoration: BoxDecoration(
+        color: AppColors.cardSurface,
+        borderRadius: BorderRadius.circular(16),
+        border: Border.all(color: AppColors.border),
+      ),
+      child: const AppEmptyState(
+        title: 'No Pending Student Payouts',
+        subtitle:
+            'Projects approved by companies will appear here for you to inspect the awarded student\'s bank details and disburse payout.',
+        icon: Icons.payments_rounded,
+      ),
+    );
+  }
+
+  Future<void> _openStudentPayoutModal(ProjectModel project) async {
+    final escrow = project.escrowAmount > 0 ? project.escrowAmount : 10000.0;
+    final commission10 = project.platformCommissionAmount ??
+        double.parse((escrow * 0.10).toStringAsFixed(2));
+    final netStudent = project.studentPayoutAmount ??
+        double.parse((escrow - commission10).toStringAsFixed(2));
+
+    final tidCtrl = TextEditingController();
+    XFile? receiptFile;
+    Uint8List? receiptBytes;
+    bool isSaving = false;
+    StudentDisbursalDetails? studentDetails;
+    bool isLoadingDetails = true;
+
+    await showModalBottomSheet(
+      context: context,
+      isScrollControlled: true,
+      backgroundColor: Colors.transparent,
+      builder: (ctx) => StatefulBuilder(
+        builder: (context, setModalState) {
+          if (isLoadingDetails) {
+            _payoutService.getStudentDisbursalDetails(project).then((details) {
+              if (ctx.mounted) {
+                setModalState(() {
+                  studentDetails = details;
+                  isLoadingDetails = false;
+                });
+              }
+            });
+          }
+
+          final keyboardInset = MediaQuery.of(context).viewInsets.bottom;
+
+          return Container(
+            constraints: BoxConstraints(
+              maxHeight: MediaQuery.of(context).size.height * 0.90,
+            ),
+            padding: EdgeInsets.fromLTRB(20, 16, 20, 20 + keyboardInset),
+            decoration: const BoxDecoration(
+              color: Colors.white,
+              borderRadius: BorderRadius.vertical(top: Radius.circular(24)),
+            ),
+            child: SingleChildScrollView(
+              child: Column(
+                mainAxisSize: MainAxisSize.min,
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  Center(
+                    child: Container(
+                      width: 40,
+                      height: 4,
+                      margin: const EdgeInsets.only(bottom: 16),
+                      decoration: BoxDecoration(
+                        color: AppColors.border,
+                        borderRadius: BorderRadius.circular(2),
+                      ),
+                    ),
+                  ),
+                  Row(
+                    children: [
+                      Container(
+                        padding: const EdgeInsets.all(8),
+                        decoration: BoxDecoration(
+                          color: const Color(0xFFF0FDF4),
+                          borderRadius: BorderRadius.circular(10),
+                        ),
+                        child: const Icon(
+                          Icons.payments_rounded,
+                          color: Color(0xFF059669),
+                          size: 22,
+                        ),
+                      ),
+                      const SizedBox(width: 12),
+                      Expanded(
+                        child: Column(
+                          crossAxisAlignment: CrossAxisAlignment.start,
+                          children: [
+                            Text(
+                              'Disburse Payout to Student',
+                              style: GoogleFonts.poppins(
+                                fontSize: 16.5,
+                                fontWeight: FontWeight.bold,
+                                color: AppColors.darkNavy,
+                              ),
+                            ),
+                            Text(
+                              'Project: ${project.title} • ${project.companyName}',
+                              maxLines: 1,
+                              overflow: TextOverflow.ellipsis,
+                              style: GoogleFonts.inter(
+                                fontSize: 12,
+                                color: AppColors.textSecondary,
+                              ),
+                            ),
+                          ],
+                        ),
+                      ),
+                    ],
+                  ),
+                  const SizedBox(height: 14),
+                  const Divider(color: AppColors.border),
+                  const SizedBox(height: 12),
+
+                  // 1. AWARDED STUDENT BANK & WALLET DESTINATION CARD
+                  if (isLoadingDetails)
+                    Container(
+                      height: 120,
+                      alignment: Alignment.center,
+                      child: const CircularProgressIndicator(),
+                    )
+                  else
+                    Container(
+                      padding: const EdgeInsets.all(14),
+                      decoration: BoxDecoration(
+                        color: const Color(0xFFF0FDF4),
+                        borderRadius: BorderRadius.circular(12),
+                        border: Border.all(
+                          color: const Color(0xFF10B981).withValues(alpha: 0.35),
+                        ),
+                      ),
+                      child: Column(
+                        crossAxisAlignment: CrossAxisAlignment.start,
+                        children: [
+                          Row(
+                            children: [
+                              Container(
+                                padding: const EdgeInsets.all(6),
+                                decoration: BoxDecoration(
+                                  color: const Color(0xFF10B981).withValues(alpha: 0.15),
+                                  borderRadius: BorderRadius.circular(8),
+                                ),
+                                child: const Icon(
+                                  Icons.account_balance_rounded,
+                                  color: Color(0xFF059669),
+                                  size: 18,
+                                ),
+                              ),
+                              const SizedBox(width: 10),
+                              Expanded(
+                                child: Column(
+                                  crossAxisAlignment: CrossAxisAlignment.start,
+                                  children: [
+                                    Text(
+                                      'Awarded Student Bank Account Details',
+                                      style: GoogleFonts.poppins(
+                                        fontSize: 12.5,
+                                        fontWeight: FontWeight.bold,
+                                        color: const Color(0xFF065F46),
+                                      ),
+                                    ),
+                                    Text(
+                                      '${studentDetails?.studentName ?? project.assignedStudent ?? "Awarded Student"} • ${studentDetails?.studentEmail ?? ""}',
+                                      maxLines: 1,
+                                      overflow: TextOverflow.ellipsis,
+                                      style: GoogleFonts.inter(
+                                        fontSize: 11.5,
+                                        color: const Color(0xFF047857),
+                                      ),
+                                    ),
+                                  ],
+                                ),
+                              ),
+                            ],
+                          ),
+                          const SizedBox(height: 10),
+                          const Divider(color: Color(0xFFD1FAE5), height: 1),
+                          const SizedBox(height: 10),
+                          Row(
+                            children: [
+                              Expanded(
+                                child: Column(
+                                  crossAxisAlignment: CrossAxisAlignment.start,
+                                  children: [
+                                    Text(
+                                      'Payment Method',
+                                      style: GoogleFonts.inter(
+                                        fontSize: 11,
+                                        color: AppColors.textSecondary,
+                                      ),
+                                    ),
+                                    Text(
+                                      studentDetails?.paymentMethod ?? 'Bank Account',
+                                      maxLines: 1,
+                                      overflow: TextOverflow.ellipsis,
+                                      style: GoogleFonts.inter(
+                                        fontSize: 13,
+                                        fontWeight: FontWeight.w600,
+                                        color: AppColors.darkNavy,
+                                      ),
+                                    ),
+                                  ],
+                                ),
+                              ),
+                              const SizedBox(width: 10),
+                              Expanded(
+                                child: Column(
+                                  crossAxisAlignment: CrossAxisAlignment.start,
+                                  children: [
+                                    Text(
+                                      'Account Title',
+                                      style: GoogleFonts.inter(
+                                        fontSize: 11,
+                                        color: AppColors.textSecondary,
+                                      ),
+                                    ),
+                                    Text(
+                                      studentDetails?.accountTitle ?? (studentDetails?.studentName ?? 'Student Account'),
+                                      maxLines: 1,
+                                      overflow: TextOverflow.ellipsis,
+                                      style: GoogleFonts.inter(
+                                        fontSize: 13,
+                                        fontWeight: FontWeight.w600,
+                                        color: AppColors.darkNavy,
+                                      ),
+                                    ),
+                                  ],
+                                ),
+                              ),
+                            ],
+                          ),
+                          const SizedBox(height: 8),
+                          Row(
+                            children: [
+                              Expanded(
+                                child: Column(
+                                  crossAxisAlignment: CrossAxisAlignment.start,
+                                  children: [
+                                    Text(
+                                      'Account Number / IBAN',
+                                      style: GoogleFonts.inter(
+                                        fontSize: 11,
+                                        color: AppColors.textSecondary,
+                                      ),
+                                    ),
+                                    Text(
+                                      studentDetails?.accountNumber ?? '0300-1234567',
+                                      style: GoogleFonts.jetBrainsMono(
+                                        fontSize: 13.5,
+                                        fontWeight: FontWeight.bold,
+                                        color: const Color(0xFF065F46),
+                                      ),
+                                    ),
+                                  ],
+                                ),
+                              ),
+                              IconButton(
+                                tooltip: 'Copy Account Number',
+                                icon: const Icon(Icons.copy_rounded,
+                                    size: 18, color: Color(0xFF059669)),
+                                onPressed: () {
+                                  _copyToClipboard(
+                                    studentDetails?.accountNumber ?? '',
+                                    'Student Account Number',
+                                  );
+                                },
+                              ),
+                            ],
+                          ),
+                        ],
+                      ),
+                    ),
+                  const SizedBox(height: 14),
+
+                  // 2. FINANCIAL BREAKDOWN CARD
+                  Container(
+                    padding: const EdgeInsets.all(14),
+                    decoration: BoxDecoration(
+                      color: AppColors.surfaceAlt,
+                      borderRadius: BorderRadius.circular(12),
+                      border: Border.all(color: AppColors.border),
+                    ),
+                    child: Column(
+                      children: [
+                        _buildBreakdownRow(
+                          'Total Escrow Funded',
+                          'PKR ${escrow.toStringAsFixed(0)}',
+                          isBold: true,
+                        ),
+                        const SizedBox(height: 6),
+                        _buildBreakdownRow(
+                          'Platform Fee (10%)',
+                          '- PKR ${commission10.toStringAsFixed(0)}',
+                          color: AppColors.primary,
+                        ),
+                        const SizedBox(height: 6),
+                        _buildBreakdownRow(
+                          'Net Payable to Student (90%)',
+                          'PKR ${netStudent.toStringAsFixed(0)}',
+                          color: AppColors.success,
+                          isBold: true,
+                        ),
+                      ],
+                    ),
+                  ),
+                  const SizedBox(height: 16),
+
+                  // 3. TID INPUT
+                  Text(
+                    'Bank Transfer TID / Reference Number *',
+                    style: GoogleFonts.inter(
+                      fontSize: 12.5,
+                      fontWeight: FontWeight.bold,
+                      color: AppColors.darkNavy,
+                    ),
+                  ),
+                  const SizedBox(height: 8),
+                  TextField(
+                    controller: tidCtrl,
+                    decoration: const InputDecoration(
+                      hintText: 'e.g. 109822998877 or TRX-0099',
+                      prefixIcon: Icon(Icons.numbers_rounded),
+                      border: OutlineInputBorder(),
+                      isDense: true,
+                    ),
+                  ),
+                  const SizedBox(height: 16),
+
+                  // 4. RECEIPT PROOF
+                  Text(
+                    'Transfer Receipt Screenshot Proof *',
+                    style: GoogleFonts.inter(
+                      fontSize: 12.5,
+                      fontWeight: FontWeight.bold,
+                      color: AppColors.darkNavy,
+                    ),
+                  ),
+                  const SizedBox(height: 8),
+                  if (receiptBytes != null)
+                    Container(
+                      padding: const EdgeInsets.all(8),
+                      decoration: BoxDecoration(
+                        color: AppColors.surfaceAlt,
+                        borderRadius: BorderRadius.circular(10),
+                      ),
+                      child: Row(
+                        children: [
+                          ClipRRect(
+                            borderRadius: BorderRadius.circular(6),
+                            child: Image.memory(
+                              receiptBytes!,
+                              width: 44,
+                              height: 44,
+                              fit: BoxFit.cover,
+                            ),
+                          ),
+                          const SizedBox(width: 10),
+                          Expanded(
+                            child: Text(
+                              receiptFile?.name ?? 'receipt.jpg',
+                              maxLines: 1,
+                              overflow: TextOverflow.ellipsis,
+                              style: const TextStyle(fontSize: 12),
+                            ),
+                          ),
+                          IconButton(
+                            icon: const Icon(Icons.close_rounded),
+                            onPressed: () {
+                              setModalState(() {
+                                receiptFile = null;
+                                receiptBytes = null;
+                              });
+                            },
+                          ),
+                        ],
+                      ),
+                    )
+                  else
+                    OutlinedButton.icon(
+                      onPressed: () async {
+                        final picker = ImagePicker();
+                        final img = await picker.pickImage(
+                          source: ImageSource.gallery,
+                          imageQuality: 80,
+                        );
+                        if (img != null) {
+                          final bytes = await img.readAsBytes();
+                          setModalState(() {
+                            receiptFile = img;
+                            receiptBytes = bytes;
+                          });
+                        }
+                      },
+                      icon: const Icon(Icons.upload_file_rounded),
+                      label: const Text('Attach Transfer Slip / Receipt Screenshot'),
+                    ),
+
+                  const SizedBox(height: 24),
+
+                  // 5. SUBMIT BUTTON
+                  SizedBox(
+                    width: double.infinity,
+                    child: ElevatedButton.icon(
+                      style: ElevatedButton.styleFrom(
+                        backgroundColor: const Color(0xFF059669),
+                        foregroundColor: Colors.white,
+                        padding: const EdgeInsets.symmetric(vertical: 14),
+                        shape: RoundedRectangleBorder(
+                          borderRadius: BorderRadius.circular(12),
+                        ),
+                      ),
+                      icon: isSaving
+                          ? const SizedBox(
+                              width: 18,
+                              height: 18,
+                              child: CircularProgressIndicator(
+                                strokeWidth: 2,
+                                color: Colors.white,
+                              ),
+                            )
+                          : const Icon(Icons.check_circle_rounded, size: 20),
+                      label: Text(
+                        isSaving
+                            ? 'Executing Transfer...'
+                            : 'Send Payment & Mark as Paid (PKR ${netStudent.toStringAsFixed(0)})',
+                        style: const TextStyle(
+                          fontSize: 14,
+                          fontWeight: FontWeight.bold,
+                        ),
+                      ),
+                      onPressed: isSaving
+                          ? null
+                          : () async {
+                              final tid = tidCtrl.text.trim();
+                              if (tid.isEmpty) {
+                                _showFeedback('Please enter Bank Transfer TID', isError: true);
+                                return;
+                              }
+                              if (receiptBytes == null) {
+                                _showFeedback('Please attach transfer receipt screenshot proof', isError: true);
+                                return;
+                              }
+
+                              setModalState(() => isSaving = true);
+
+                              final receiptUrl = await _payoutService.uploadPayoutReceipt(
+                                projectId: project.id,
+                                bytes: receiptBytes!,
+                                fileName: receiptFile?.name ?? 'receipt.jpg',
+                              );
+
+                              final ok = await _payoutService.completePayout(
+                                projectId: project.id,
+                                transactionId: tid,
+                                receiptUrl: receiptUrl,
+                              );
+
+                              if (!ctx.mounted) return;
+                              if (ok) {
+                                Navigator.pop(ctx);
+                                _showFeedback(
+                                  'Payment of PKR ${netStudent.toStringAsFixed(0)} disbursed to ${studentDetails?.studentName ?? "Student"}! Project marked as Paid.',
+                                );
+                                await _refreshAllData();
+                                if (mounted) setState(() {});
+                              } else {
+                                setModalState(() => isSaving = false);
+                                _showFeedback(
+                                  _payoutService.lastError ?? 'Failed to complete payout.',
+                                  isError: true,
+                                );
+                              }
+                            },
+                    ),
+                  ),
+                ],
+              ),
+            ),
+          );
+        },
+      ),
+    );
+  }
+
+  Widget _buildBreakdownRow(
+    String label,
+    String value, {
+    Color? color,
+    bool isBold = false,
+  }) {
+    return Row(
+      mainAxisAlignment: MainAxisAlignment.spaceBetween,
+      children: [
+        Text(
+          label,
+          style: GoogleFonts.inter(
+            fontSize: 12.5,
+            color: color ?? AppColors.textSecondary,
+            fontWeight: isBold ? FontWeight.bold : FontWeight.normal,
+          ),
+        ),
+        Text(
+          value,
+          style: GoogleFonts.inter(
+            fontSize: 13,
+            color: color ?? AppColors.darkNavy,
+            fontWeight: isBold ? FontWeight.bold : FontWeight.w600,
+          ),
         ),
       ],
     );

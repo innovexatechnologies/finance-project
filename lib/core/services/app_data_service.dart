@@ -1356,6 +1356,50 @@ class AppDataService extends ChangeNotifier {
     }
   }
 
+  /// Records Admin payout disbursement to student with TID and receipt proof.
+  /// Sets application and project status to 'completed' / 'Completed'.
+  Future<void> recordDisbursedPayout({
+    required String projectId,
+    required String transactionId,
+    String? receiptUrl,
+  }) async {
+    final nowIso = DateTime.now().toIso8601String();
+
+    final appIndex = _applications.indexWhere(
+      (a) => a['projectId']?.toString() == projectId,
+    );
+    if (appIndex >= 0) {
+      _applications[appIndex]['status'] = 'Completed';
+      _applications[appIndex]['timelineStep'] = 3;
+      _applications[appIndex]['payout_transaction_id'] = transactionId;
+      if (receiptUrl != null && receiptUrl.isNotEmpty) {
+        _applications[appIndex]['payout_receipt_url'] = receiptUrl;
+      }
+      _applications[appIndex]['isPaidByAdmin'] = true;
+      _applications[appIndex]['paymentSent'] = true;
+    }
+
+    final projIndex = _projects.indexWhere(
+      (p) => p['id']?.toString() == projectId,
+    );
+    if (projIndex >= 0) {
+      _projects[projIndex]['status'] = 'completed';
+      _projects[projIndex]['payout_transaction_id'] = transactionId;
+      if (receiptUrl != null && receiptUrl.isNotEmpty) {
+        _projects[projIndex]['payout_receipt_url'] = receiptUrl;
+      }
+      _projects[projIndex]['completed_at'] = nowIso;
+      _projects[projIndex]['paymentSent'] = true;
+    }
+
+    _safeNotifyListeners();
+
+    if (_prefs != null) {
+      await _prefs!.setString(_kApplications, jsonEncode(_applications));
+      await _prefs!.setString(_kCustomProjects, jsonEncode(_projects));
+    }
+  }
+
   // ===========================================================================
   // PROFILE & SKILLS
   // ===========================================================================

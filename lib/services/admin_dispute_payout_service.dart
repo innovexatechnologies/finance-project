@@ -1,5 +1,7 @@
 import 'dart:convert';
 import 'package:flutter/foundation.dart';
+import 'package:shared_preferences/shared_preferences.dart';
+import 'package:link_vibe/core/services/app_data_service.dart';
 import 'package:link_vibe/core/services/supabase_helper.dart';
 import 'package:link_vibe/feature/admin/models/admin_notification_model.dart';
 import 'package:link_vibe/feature/company/models/project_model.dart';
@@ -425,8 +427,8 @@ class AdminDisputePayoutService {
               final pmRows = await supabase
                   .from('student_payment_methods')
                   .select()
-                  .eq('student_id', studentId)
-                  .order('is_default', ascending: false)
+                  .or('user_id.eq.$studentId,student_id.eq.$studentId')
+                  .order('updated_at', ascending: false)
                   .limit(1);
 
               if (pmRows.isNotEmpty) {
@@ -460,6 +462,21 @@ class AdminDisputePayoutService {
         debugPrint('getStudentDisbursalDetails query warning: $e');
       }
     }
+
+    // Local cached student payment method fallback
+    try {
+      final prefs = await SharedPreferences.getInstance();
+      final localProvider = prefs.getString('student_payment_provider');
+      final localAccount = prefs.getString('student_payment_account');
+      if (localAccount != null && localAccount.trim().isNotEmpty) {
+        if (method == 'JazzCash Mobile Account' || method.isEmpty) {
+          method = localProvider ?? method;
+        }
+        if (accountNum == '0300-1234567' || accountNum.isEmpty) {
+          accountNum = localAccount.trim();
+        }
+      }
+    } catch (_) {}
 
     return StudentDisbursalDetails(
       studentName: name,
@@ -573,6 +590,17 @@ class AdminDisputePayoutService {
 
     // Sync into CompanyProjectService
     _syncCompanyService(projectId, 'completed', completedAt: nowIso);
+
+    // Sync into AppDataService for real-time student UI update
+    try {
+      await AppDataService.instance.recordDisbursedPayout(
+        projectId: projectId,
+        transactionId: transactionId.trim(),
+        receiptUrl: receiptUrl,
+      );
+    } catch (e) {
+      debugPrint('Sync AppDataService recordDisbursedPayout warning: $e');
+    }
 
     return true;
   }

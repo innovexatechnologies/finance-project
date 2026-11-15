@@ -1331,7 +1331,11 @@ class _CompanyDashboardScreenState extends State<CompanyDashboardScreen> {
                             ),
                           ),
                           const SizedBox(width: 8),
-                          StatusBadge(label: project.status),
+                          StatusBadge(
+                            label: (project.isReadyForPayout || project.isCompleted)
+                                ? 'Paid'
+                                : project.status,
+                          ),
                         ],
                       ),
                       const SizedBox(height: 10),

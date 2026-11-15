@@ -872,7 +872,11 @@ class _CompanyProjectDetailScreenState
                 ),
               ),
               const SizedBox(width: 8),
-              StatusBadge(label: project.status),
+              StatusBadge(
+                label: (project.isReadyForPayout || project.isCompleted)
+                    ? 'Paid'
+                    : project.status,
+              ),
             ],
           ),
           const SizedBox(height: 12),
@@ -1934,7 +1938,7 @@ class _CompanyProjectDetailScreenState
               crossAxisAlignment: CrossAxisAlignment.start,
               children: [
                 Text(
-                  'Ready for Payout',
+                  'Payment Approved (Paid)',
                   style: GoogleFonts.poppins(
                     fontSize: 15,
                     fontWeight: FontWeight.w700,
@@ -1943,7 +1947,7 @@ class _CompanyProjectDetailScreenState
                 ),
                 const SizedBox(height: 3),
                 Text(
-                  'Payout resolution applied (${project.payoutType ?? "full_student"}). Skill Bridge Admin will execute account transfer.',
+                  'You have approved the deliverables and released payment. SkillBridge Admin is transferring net payout to ${project.assignedStudent ?? "the awarded student"}.',
                   style: GoogleFonts.inter(
                     fontSize: 12.5,
                     color: const Color(0xFF047857),
