@@ -3,7 +3,6 @@ import 'package:flutter/services.dart';
 import 'package:google_fonts/google_fonts.dart';
 import 'package:image_picker/image_picker.dart';
 import 'package:link_vibe/core/constants/app_colors.dart';
-import 'package:link_vibe/core/widgets/app_empty_state.dart';
 import 'package:link_vibe/feature/admin/models/admin_notification_model.dart';
 import 'package:link_vibe/feature/admin/presentation/screens/admin_login_screen.dart';
 import 'package:link_vibe/feature/admin/presentation/widgets/admin_sidebar.dart';
@@ -37,6 +36,13 @@ class _AdminDisputeResolutionScreenState
   void initState() {
     super.initState();
     _tabController = TabController(length: 3, vsync: this);
+    _tabController.addListener(() {
+      if (!mounted) return;
+      if (_tabController.indexIsChanging ||
+          _tabController.animation?.value == _tabController.index) {
+        setState(() {});
+      }
+    });
     WidgetsBinding.instance.addPostFrameCallback((_) {
       if (!mounted) return;
       _refreshAllData();
@@ -714,48 +720,8 @@ class _AdminDisputeResolutionScreenState
                       onSignOut: _handleSignOut,
                       onSearch: (q) => setState(() => _searchQuery = q),
                     ),
-                    Container(
-                      color: Colors.white,
-                      child: TabBar(
-                        controller: _tabController,
-                        labelColor: AppColors.primary,
-                        unselectedLabelColor: AppColors.textSecondary,
-                        indicatorColor: AppColors.primary,
-                        indicatorWeight: 3,
-                        tabs: [
-                          ValueListenableBuilder<List<ProjectModel>>(
-                            valueListenable:
-                                _payoutService.disputedProjectsNotifier,
-                            builder: (context, list, child) => Tab(
-                              icon: const Icon(Icons.gavel_rounded, size: 18),
-                              text: 'Dispute Cases (${list.length})',
-                            ),
-                          ),
-                          ValueListenableBuilder<List<ProjectModel>>(
-                            valueListenable:
-                                _payoutService.payoutReadyProjectsNotifier,
-                            builder: (context, list, child) => Tab(
-                              icon: const Icon(Icons.payment_rounded, size: 18),
-                              text: 'Ready for Payout (${list.length})',
-                            ),
-                          ),
-                          ValueListenableBuilder<List<AdminNotificationModel>>(
-                            valueListenable:
-                                _payoutService.notificationsNotifier,
-                            builder: (context, list, child) {
-                              final unread = list.where((n) => !n.isRead).length;
-                              return Tab(
-                                icon: const Icon(Icons.notifications_active_rounded,
-                                    size: 18),
-                                text: unread > 0
-                                    ? 'Escrow Alerts ($unread New)'
-                                    : 'Escrow Alerts',
-                              );
-                            },
-                          ),
-                        ],
-                      ),
-                    ),
+                    _buildExecutiveBanner(!isDesktop),
+                    _buildUniqueTabBar(!isDesktop),
                     Expanded(
                       child: RefreshIndicator(
                         onRefresh: _refreshAllData,
@@ -794,15 +760,7 @@ class _AdminDisputeResolutionScreenState
               }).toList();
 
         if (filteredList.isEmpty) {
-          return const Padding(
-            padding: EdgeInsets.all(40),
-            child: AppEmptyState(
-              title: 'No Active Disputes',
-              subtitle:
-                  'All project deliverables are progressing peacefully without any active dispute cases.',
-              icon: Icons.verified_rounded,
-            ),
-          );
+          return _buildUniqueDisputesEmptyState();
         }
 
         return ListView.builder(
@@ -891,24 +849,30 @@ class _AdminDisputeResolutionScreenState
                     ),
                   ),
                   const SizedBox(height: 16),
-                  Row(
-                    mainAxisAlignment: MainAxisAlignment.end,
-                    children: [
-                      ElevatedButton.icon(
-                        style: ElevatedButton.styleFrom(
-                          backgroundColor: AppColors.primary,
-                          foregroundColor: Colors.white,
-                          padding: const EdgeInsets.symmetric(
-                              horizontal: 16, vertical: 10),
-                          shape: RoundedRectangleBorder(
-                            borderRadius: BorderRadius.circular(8),
+                  LayoutBuilder(
+                    builder: (context, cardConstraints) {
+                      final isMobileCard = cardConstraints.maxWidth < 460;
+                      return SizedBox(
+                        width: isMobileCard ? double.infinity : null,
+                        child: ElevatedButton.icon(
+                          style: ElevatedButton.styleFrom(
+                            backgroundColor: AppColors.primary,
+                            foregroundColor: Colors.white,
+                            padding: const EdgeInsets.symmetric(
+                                horizontal: 16, vertical: 12),
+                            shape: RoundedRectangleBorder(
+                              borderRadius: BorderRadius.circular(10),
+                            ),
                           ),
+                          icon: const Icon(Icons.gavel_rounded, size: 17),
+                          label: const Text(
+                            'Resolve Dispute (3-Way Decision)',
+                            style: TextStyle(fontWeight: FontWeight.bold),
+                          ),
+                          onPressed: () => _openDisputeDecisionDialog(p),
                         ),
-                        icon: const Icon(Icons.gavel_rounded, size: 17),
-                        label: const Text('Resolve Dispute (3-Way Decision)'),
-                        onPressed: () => _openDisputeDecisionDialog(p),
-                      ),
-                    ],
+                      );
+                    },
                   ),
                 ],
               ),
@@ -925,15 +889,7 @@ class _AdminDisputeResolutionScreenState
       valueListenable: _payoutService.payoutReadyProjectsNotifier,
       builder: (context, projects, _) {
         if (projects.isEmpty) {
-          return const Padding(
-            padding: EdgeInsets.all(40),
-            child: AppEmptyState(
-              title: 'Payout Queue Empty',
-              subtitle:
-                  'There are no approved or dispute-resolved projects awaiting payout transfer.',
-              icon: Icons.done_all_rounded,
-            ),
-          );
+          return _buildUniquePayoutsEmptyState();
         }
 
         return ListView.builder(
@@ -1016,24 +972,30 @@ class _AdminDisputeResolutionScreenState
                     ),
                   ],
                   const SizedBox(height: 16),
-                  Row(
-                    mainAxisAlignment: MainAxisAlignment.end,
-                    children: [
-                      ElevatedButton.icon(
-                        style: ElevatedButton.styleFrom(
-                          backgroundColor: AppColors.success,
-                          foregroundColor: Colors.white,
-                          padding: const EdgeInsets.symmetric(
-                              horizontal: 16, vertical: 10),
-                          shape: RoundedRectangleBorder(
-                            borderRadius: BorderRadius.circular(8),
+                  LayoutBuilder(
+                    builder: (context, cardConstraints) {
+                      final isMobileCard = cardConstraints.maxWidth < 460;
+                      return SizedBox(
+                        width: isMobileCard ? double.infinity : null,
+                        child: ElevatedButton.icon(
+                          style: ElevatedButton.styleFrom(
+                            backgroundColor: AppColors.success,
+                            foregroundColor: Colors.white,
+                            padding: const EdgeInsets.symmetric(
+                                horizontal: 16, vertical: 12),
+                            shape: RoundedRectangleBorder(
+                              borderRadius: BorderRadius.circular(10),
+                            ),
                           ),
+                          icon: const Icon(Icons.send_rounded, size: 16),
+                          label: const Text(
+                            'Execute Transfer & Finalize',
+                            style: TextStyle(fontWeight: FontWeight.bold),
+                          ),
+                          onPressed: () => _openCompletePayoutModal(p),
                         ),
-                        icon: const Icon(Icons.send_rounded, size: 16),
-                        label: const Text('Execute Transfer & Finalize'),
-                        onPressed: () => _openCompletePayoutModal(p),
-                      ),
-                    ],
+                      );
+                    },
                   ),
                 ],
               ),
@@ -1050,14 +1012,7 @@ class _AdminDisputeResolutionScreenState
       valueListenable: _payoutService.notificationsNotifier,
       builder: (context, notifs, _) {
         if (notifs.isEmpty) {
-          return const Padding(
-            padding: EdgeInsets.all(40),
-            child: AppEmptyState(
-              title: 'No Escrow Alerts',
-              subtitle: 'No pending alerts or notifications at this time.',
-              icon: Icons.notifications_none_rounded,
-            ),
-          );
+          return _buildUniqueNotificationsEmptyState();
         }
 
         return ListView.builder(
@@ -1148,6 +1103,695 @@ class _AdminDisputeResolutionScreenState
           },
         );
       },
+    );
+  }
+
+  // ===========================================================================
+  // EXECUTIVE HEADER & SEGMENTED PILL TAB BAR (ZERO TRUNCATION)
+  // ===========================================================================
+  Widget _buildExecutiveBanner(bool isMobile) {
+    return Container(
+      width: double.infinity,
+      margin: EdgeInsets.fromLTRB(
+        isMobile ? 12 : 24,
+        isMobile ? 10 : 16,
+        isMobile ? 12 : 24,
+        0,
+      ),
+      padding: EdgeInsets.all(isMobile ? 14 : 18),
+      decoration: BoxDecoration(
+        gradient: const LinearGradient(
+          colors: [
+            Color(0xFF0F172A), // Slate 900
+            Color(0xFF1E293B), // Slate 800
+          ],
+          begin: Alignment.topLeft,
+          end: Alignment.bottomRight,
+        ),
+        borderRadius: BorderRadius.circular(16),
+        boxShadow: [
+          BoxShadow(
+            color: Colors.black.withValues(alpha: 0.12),
+            blurRadius: 10,
+            offset: const Offset(0, 4),
+          ),
+        ],
+      ),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Row(
+            children: [
+              Container(
+                padding: const EdgeInsets.all(8),
+                decoration: BoxDecoration(
+                  color: AppColors.primary.withValues(alpha: 0.25),
+                  borderRadius: BorderRadius.circular(10),
+                  border: Border.all(color: AppColors.primary.withValues(alpha: 0.4)),
+                ),
+                child: const Icon(
+                  Icons.shield_rounded,
+                  color: Colors.white,
+                  size: 20,
+                ),
+              ),
+              const SizedBox(width: 12),
+              Expanded(
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    Text(
+                      'Custodial Escrow & Resolution Chamber',
+                      style: GoogleFonts.poppins(
+                        fontSize: isMobile ? 14 : 16,
+                        fontWeight: FontWeight.bold,
+                        color: Colors.white,
+                      ),
+                    ),
+                    Text(
+                      'Arbitrated 3-Way Decisions • 5-Day Auto-Release • 10% Platform Fee',
+                      style: GoogleFonts.inter(
+                        fontSize: isMobile ? 11 : 12,
+                        color: const Color(0xFF94A3B8), // Slate 400
+                      ),
+                    ),
+                  ],
+                ),
+              ),
+            ],
+          ),
+          const SizedBox(height: 12),
+          Wrap(
+            spacing: 8,
+            runSpacing: 6,
+            children: [
+              _buildBannerStatPill(
+                icon: Icons.gavel_rounded,
+                label: 'Arbitration Chamber',
+                color: const Color(0xFFEF4444),
+              ),
+              _buildBannerStatPill(
+                icon: Icons.account_balance_wallet_rounded,
+                label: 'Guaranteed Payouts',
+                color: const Color(0xFF10B981),
+              ),
+              _buildBannerStatPill(
+                icon: Icons.timer_rounded,
+                label: '5-Day Release Protocol',
+                color: const Color(0xFFF59E0B),
+              ),
+            ],
+          ),
+        ],
+      ),
+    );
+  }
+
+  Widget _buildBannerStatPill({
+    required IconData icon,
+    required String label,
+    required Color color,
+  }) {
+    return Container(
+      padding: const EdgeInsets.symmetric(horizontal: 9, vertical: 4),
+      decoration: BoxDecoration(
+        color: color.withValues(alpha: 0.14),
+        borderRadius: BorderRadius.circular(20),
+        border: Border.all(color: color.withValues(alpha: 0.35)),
+      ),
+      child: Row(
+        mainAxisSize: MainAxisSize.min,
+        children: [
+          Icon(icon, size: 12, color: color),
+          const SizedBox(width: 5),
+          Text(
+            label,
+            style: GoogleFonts.inter(
+              fontSize: 10.5,
+              fontWeight: FontWeight.w600,
+              color: color,
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+
+  Widget _buildUniqueTabBar(bool isMobile) {
+    return Container(
+      color: Colors.white,
+      padding: EdgeInsets.symmetric(
+        horizontal: isMobile ? 12 : 24,
+        vertical: 10,
+      ),
+      child: Container(
+        padding: const EdgeInsets.all(4),
+        decoration: BoxDecoration(
+          color: const Color(0xFFF1F5F9), // Slate 100
+          borderRadius: BorderRadius.circular(14),
+          border: Border.all(color: const Color(0xFFE2E8F0)),
+        ),
+        child: AnimatedBuilder(
+          animation: _tabController,
+          builder: (context, _) {
+            final activeIndex = _tabController.index;
+            return Row(
+              children: [
+                Expanded(
+                  child: _buildSegmentTab(
+                    index: 0,
+                    isActive: activeIndex == 0,
+                    icon: Icons.gavel_rounded,
+                    title: 'Disputes',
+                    isMobile: isMobile,
+                    countNotifier: _payoutService.disputedProjectsNotifier,
+                    badgeColor: AppColors.error,
+                  ),
+                ),
+                const SizedBox(width: 4),
+                Expanded(
+                  child: _buildSegmentTab(
+                    index: 1,
+                    isActive: activeIndex == 1,
+                    icon: Icons.account_balance_wallet_rounded,
+                    title: 'Payouts',
+                    isMobile: isMobile,
+                    countNotifier: _payoutService.payoutReadyProjectsNotifier,
+                    badgeColor: AppColors.success,
+                  ),
+                ),
+                const SizedBox(width: 4),
+                Expanded(
+                  child: _buildNotificationSegmentTab(
+                    index: 2,
+                    isActive: activeIndex == 2,
+                    icon: Icons.notifications_active_rounded,
+                    title: 'Alerts',
+                    isMobile: isMobile,
+                    badgeColor: AppColors.warning,
+                  ),
+                ),
+              ],
+            );
+          },
+        ),
+      ),
+    );
+  }
+
+  Widget _buildSegmentTab({
+    required int index,
+    required bool isActive,
+    required IconData icon,
+    required String title,
+    required bool isMobile,
+    required ValueNotifier<List<ProjectModel>> countNotifier,
+    required Color badgeColor,
+  }) {
+    return InkWell(
+      onTap: () {
+        _tabController.animateTo(index);
+        setState(() {});
+      },
+      borderRadius: BorderRadius.circular(10),
+      child: AnimatedContainer(
+        duration: const Duration(milliseconds: 200),
+        padding: EdgeInsets.symmetric(
+          vertical: isMobile ? 8 : 10,
+          horizontal: isMobile ? 4 : 12,
+        ),
+        decoration: BoxDecoration(
+          color: isActive ? Colors.white : Colors.transparent,
+          borderRadius: BorderRadius.circular(10),
+          boxShadow: isActive
+              ? [
+                  BoxShadow(
+                    color: Colors.black.withValues(alpha: 0.06),
+                    blurRadius: 4,
+                    offset: const Offset(0, 2),
+                  ),
+                ]
+              : null,
+        ),
+        child: FittedBox(
+          fit: BoxFit.scaleDown,
+          child: Row(
+            mainAxisAlignment: MainAxisAlignment.center,
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              Icon(
+                icon,
+                size: isMobile ? 15 : 18,
+                color: isActive ? AppColors.darkNavy : AppColors.textSecondary,
+              ),
+              const SizedBox(width: 5),
+              Text(
+                title,
+                maxLines: 1,
+                style: GoogleFonts.inter(
+                  fontSize: isMobile ? 12 : 13.5,
+                  fontWeight: isActive ? FontWeight.w700 : FontWeight.w500,
+                  color: isActive ? AppColors.darkNavy : AppColors.textSecondary,
+                ),
+              ),
+              const SizedBox(width: 6),
+              ValueListenableBuilder<List<ProjectModel>>(
+                valueListenable: countNotifier,
+                builder: (context, list, _) {
+                  final count = list.length;
+                  return Container(
+                    padding: const EdgeInsets.symmetric(
+                      horizontal: 6,
+                      vertical: 2,
+                    ),
+                    decoration: BoxDecoration(
+                      color: count > 0
+                          ? badgeColor.withValues(alpha: 0.14)
+                          : (isActive ? Colors.grey.shade200 : Colors.grey.shade300),
+                      borderRadius: BorderRadius.circular(12),
+                    ),
+                    child: Text(
+                      '$count',
+                      style: GoogleFonts.jetBrainsMono(
+                        fontSize: isMobile ? 10 : 11,
+                        fontWeight: FontWeight.bold,
+                        color: count > 0 ? badgeColor : AppColors.textSecondary,
+                      ),
+                    ),
+                  );
+                },
+              ),
+            ],
+          ),
+        ),
+      ),
+    );
+  }
+
+  Widget _buildNotificationSegmentTab({
+    required int index,
+    required bool isActive,
+    required IconData icon,
+    required String title,
+    required bool isMobile,
+    required Color badgeColor,
+  }) {
+    return InkWell(
+      onTap: () {
+        _tabController.animateTo(index);
+        setState(() {});
+      },
+      borderRadius: BorderRadius.circular(10),
+      child: AnimatedContainer(
+        duration: const Duration(milliseconds: 200),
+        padding: EdgeInsets.symmetric(
+          vertical: isMobile ? 8 : 10,
+          horizontal: isMobile ? 4 : 12,
+        ),
+        decoration: BoxDecoration(
+          color: isActive ? Colors.white : Colors.transparent,
+          borderRadius: BorderRadius.circular(10),
+          boxShadow: isActive
+              ? [
+                  BoxShadow(
+                    color: Colors.black.withValues(alpha: 0.06),
+                    blurRadius: 4,
+                    offset: const Offset(0, 2),
+                  ),
+                ]
+              : null,
+        ),
+        child: FittedBox(
+          fit: BoxFit.scaleDown,
+          child: Row(
+            mainAxisAlignment: MainAxisAlignment.center,
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              Icon(
+                icon,
+                size: isMobile ? 15 : 18,
+                color: isActive ? AppColors.darkNavy : AppColors.textSecondary,
+              ),
+              const SizedBox(width: 5),
+              Text(
+                title,
+                maxLines: 1,
+                style: GoogleFonts.inter(
+                  fontSize: isMobile ? 12 : 13.5,
+                  fontWeight: isActive ? FontWeight.w700 : FontWeight.w500,
+                  color: isActive ? AppColors.darkNavy : AppColors.textSecondary,
+                ),
+              ),
+              const SizedBox(width: 6),
+              ValueListenableBuilder<List<AdminNotificationModel>>(
+                valueListenable: _payoutService.notificationsNotifier,
+                builder: (context, notifs, _) {
+                  final unread = notifs.where((n) => !n.isRead).length;
+                  final count = unread > 0 ? unread : notifs.length;
+                  return Container(
+                    padding: const EdgeInsets.symmetric(
+                      horizontal: 6,
+                      vertical: 2,
+                    ),
+                    decoration: BoxDecoration(
+                      color: unread > 0
+                          ? badgeColor.withValues(alpha: 0.16)
+                          : (isActive ? Colors.grey.shade200 : Colors.grey.shade300),
+                      borderRadius: BorderRadius.circular(12),
+                    ),
+                    child: Text(
+                      unread > 0 ? '$unread' : '$count',
+                      style: GoogleFonts.jetBrainsMono(
+                        fontSize: isMobile ? 10 : 11,
+                        fontWeight: FontWeight.bold,
+                        color: unread > 0 ? badgeColor : AppColors.textSecondary,
+                      ),
+                    ),
+                  );
+                },
+              ),
+            ],
+          ),
+        ),
+      ),
+    );
+  }
+
+  // ===========================================================================
+  // UNIQUE ILLUSTRATED EMPTY STATES
+  // ===========================================================================
+  Widget _buildUniqueDisputesEmptyState() {
+    return Center(
+      child: SingleChildScrollView(
+        padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 24),
+        child: Container(
+          constraints: const BoxConstraints(maxWidth: 540),
+          padding: const EdgeInsets.all(28),
+          decoration: BoxDecoration(
+            color: Colors.white,
+            borderRadius: BorderRadius.circular(20),
+            border: Border.all(color: const Color(0xFFE2E8F0)),
+            boxShadow: [
+              BoxShadow(
+                color: Colors.black.withValues(alpha: 0.04),
+                blurRadius: 16,
+                offset: const Offset(0, 4),
+              ),
+            ],
+          ),
+          child: Column(
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              Container(
+                width: 76,
+                height: 76,
+                decoration: BoxDecoration(
+                  color: AppColors.primary.withValues(alpha: 0.08),
+                  shape: BoxShape.circle,
+                  border: Border.all(
+                    color: AppColors.primary.withValues(alpha: 0.2),
+                    width: 2,
+                  ),
+                ),
+                child: const Center(
+                  child: Icon(
+                    Icons.verified_user_rounded,
+                    size: 38,
+                    color: AppColors.primary,
+                  ),
+                ),
+              ),
+              const SizedBox(height: 18),
+              Text(
+                'Arbitration Chamber In Equilibrium',
+                textAlign: TextAlign.center,
+                style: GoogleFonts.poppins(
+                  fontSize: 18,
+                  fontWeight: FontWeight.bold,
+                  color: AppColors.darkNavy,
+                ),
+              ),
+              const SizedBox(height: 8),
+              Text(
+                'Zero unresolved arbitration disputes. All student project deliverables and corporate specifications are progressing peacefully.',
+                textAlign: TextAlign.center,
+                style: GoogleFonts.inter(
+                  fontSize: 13,
+                  color: AppColors.textSecondary,
+                  height: 1.45,
+                ),
+              ),
+              const SizedBox(height: 20),
+              const Divider(color: Color(0xFFF1F5F9)),
+              const SizedBox(height: 14),
+              _buildTrustFeatureRow(
+                Icons.check_circle_rounded,
+                '100% Student Release upon approved deliverables',
+                color: AppColors.success,
+              ),
+              const SizedBox(height: 10),
+              _buildTrustFeatureRow(
+                Icons.check_circle_rounded,
+                '100% Company Refund for unfulfilled milestone contracts',
+                color: AppColors.primary,
+              ),
+              const SizedBox(height: 10),
+              _buildTrustFeatureRow(
+                Icons.check_circle_rounded,
+                '50/50 Fair Split with 10% platform commission retained',
+                color: AppColors.warning,
+              ),
+              const SizedBox(height: 24),
+              OutlinedButton.icon(
+                style: OutlinedButton.styleFrom(
+                  foregroundColor: AppColors.primary,
+                  side: const BorderSide(color: Color(0xFFCBD5E1)),
+                  padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 12),
+                  shape: RoundedRectangleBorder(
+                    borderRadius: BorderRadius.circular(10),
+                  ),
+                ),
+                icon: const Icon(Icons.refresh_rounded, size: 18),
+                label: Text(
+                  'Sync Dispute Ledger',
+                  style: GoogleFonts.inter(fontWeight: FontWeight.w600),
+                ),
+                onPressed: _refreshAllData,
+              ),
+            ],
+          ),
+        ),
+      ),
+    );
+  }
+
+  Widget _buildUniquePayoutsEmptyState() {
+    return Center(
+      child: SingleChildScrollView(
+        padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 24),
+        child: Container(
+          constraints: const BoxConstraints(maxWidth: 540),
+          padding: const EdgeInsets.all(28),
+          decoration: BoxDecoration(
+            color: Colors.white,
+            borderRadius: BorderRadius.circular(20),
+            border: Border.all(color: const Color(0xFFE2E8F0)),
+            boxShadow: [
+              BoxShadow(
+                color: Colors.black.withValues(alpha: 0.04),
+                blurRadius: 16,
+                offset: const Offset(0, 4),
+              ),
+            ],
+          ),
+          child: Column(
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              Container(
+                width: 76,
+                height: 76,
+                decoration: BoxDecoration(
+                  color: AppColors.success.withValues(alpha: 0.08),
+                  shape: BoxShape.circle,
+                  border: Border.all(
+                    color: AppColors.success.withValues(alpha: 0.2),
+                    width: 2,
+                  ),
+                ),
+                child: const Center(
+                  child: Icon(
+                    Icons.account_balance_rounded,
+                    size: 38,
+                    color: AppColors.success,
+                  ),
+                ),
+              ),
+              const SizedBox(height: 18),
+              Text(
+                'Escrow Disbursement Queue Settled',
+                textAlign: TextAlign.center,
+                style: GoogleFonts.poppins(
+                  fontSize: 18,
+                  fontWeight: FontWeight.bold,
+                  color: AppColors.darkNavy,
+                ),
+              ),
+              const SizedBox(height: 8),
+              Text(
+                'All approved milestones and arbitrated funds have been successfully settled and transferred to student talent accounts.',
+                textAlign: TextAlign.center,
+                style: GoogleFonts.inter(
+                  fontSize: 13,
+                  color: AppColors.textSecondary,
+                  height: 1.45,
+                ),
+              ),
+              const SizedBox(height: 20),
+              const Divider(color: Color(0xFFF1F5F9)),
+              const SizedBox(height: 14),
+              _buildTrustFeatureRow(
+                Icons.check_circle_rounded,
+                'Automated 5-Day Auto-Release for uncontested deliveries',
+                color: AppColors.success,
+              ),
+              const SizedBox(height: 10),
+              _buildTrustFeatureRow(
+                Icons.check_circle_rounded,
+                'Direct Bank Transfer & Mobile Wallet (JazzCash / EasyPaisa)',
+                color: AppColors.primary,
+              ),
+              const SizedBox(height: 10),
+              _buildTrustFeatureRow(
+                Icons.check_circle_rounded,
+                'TID recording & verifiable payment receipt screenshot vault',
+                color: AppColors.success,
+              ),
+              const SizedBox(height: 24),
+              OutlinedButton.icon(
+                style: OutlinedButton.styleFrom(
+                  foregroundColor: AppColors.success,
+                  side: const BorderSide(color: Color(0xFFCBD5E1)),
+                  padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 12),
+                  shape: RoundedRectangleBorder(
+                    borderRadius: BorderRadius.circular(10),
+                  ),
+                ),
+                icon: const Icon(Icons.refresh_rounded, size: 18),
+                label: Text(
+                  'Check Payout Queue',
+                  style: GoogleFonts.inter(fontWeight: FontWeight.w600),
+                ),
+                onPressed: _refreshAllData,
+              ),
+            ],
+          ),
+        ),
+      ),
+    );
+  }
+
+  Widget _buildUniqueNotificationsEmptyState() {
+    return Center(
+      child: SingleChildScrollView(
+        padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 24),
+        child: Container(
+          constraints: const BoxConstraints(maxWidth: 540),
+          padding: const EdgeInsets.all(28),
+          decoration: BoxDecoration(
+            color: Colors.white,
+            borderRadius: BorderRadius.circular(20),
+            border: Border.all(color: const Color(0xFFE2E8F0)),
+            boxShadow: [
+              BoxShadow(
+                color: Colors.black.withValues(alpha: 0.04),
+                blurRadius: 16,
+                offset: const Offset(0, 4),
+              ),
+            ],
+          ),
+          child: Column(
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              Container(
+                width: 76,
+                height: 76,
+                decoration: BoxDecoration(
+                  color: const Color(0xFFF59E0B).withValues(alpha: 0.1),
+                  shape: BoxShape.circle,
+                  border: Border.all(
+                    color: const Color(0xFFF59E0B).withValues(alpha: 0.25),
+                    width: 2,
+                  ),
+                ),
+                child: const Center(
+                  child: Icon(
+                    Icons.notifications_active_rounded,
+                    size: 38,
+                    color: Color(0xFFF59E0B),
+                  ),
+                ),
+              ),
+              const SizedBox(height: 18),
+              Text(
+                'All Escrow Feeds Quiet',
+                textAlign: TextAlign.center,
+                style: GoogleFonts.poppins(
+                  fontSize: 18,
+                  fontWeight: FontWeight.bold,
+                  color: AppColors.darkNavy,
+                ),
+              ),
+              const SizedBox(height: 8),
+              Text(
+                'No new dispute filings, auto-release timers running out, or escrow security alerts recorded.',
+                textAlign: TextAlign.center,
+                style: GoogleFonts.inter(
+                  fontSize: 13,
+                  color: AppColors.textSecondary,
+                  height: 1.45,
+                ),
+              ),
+              const SizedBox(height: 24),
+              OutlinedButton.icon(
+                style: OutlinedButton.styleFrom(
+                  foregroundColor: AppColors.primary,
+                  side: const BorderSide(color: Color(0xFFCBD5E1)),
+                  padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 12),
+                  shape: RoundedRectangleBorder(
+                    borderRadius: BorderRadius.circular(10),
+                  ),
+                ),
+                icon: const Icon(Icons.refresh_rounded, size: 18),
+                label: Text(
+                  'Poll Escrow Alerts',
+                  style: GoogleFonts.inter(fontWeight: FontWeight.w600),
+                ),
+                onPressed: _refreshAllData,
+              ),
+            ],
+          ),
+        ),
+      ),
+    );
+  }
+
+  Widget _buildTrustFeatureRow(IconData icon, String text, {Color? color}) {
+    return Row(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        Icon(icon, size: 16, color: color ?? AppColors.primary),
+        const SizedBox(width: 8),
+        Expanded(
+          child: Text(
+            text,
+            style: GoogleFonts.inter(
+              fontSize: 12,
+              color: AppColors.textSecondary,
+              fontWeight: FontWeight.w500,
+            ),
+          ),
+        ),
+      ],
     );
   }
 }

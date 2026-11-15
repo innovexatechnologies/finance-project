@@ -128,8 +128,27 @@ BEGIN
 END;
 $$;
 
--- 5. RLS POLICIES FOR RE-SUBMISSION
--- Allows Company to update transaction_id and payment_receipt_url when status is payment_rejected or pending_payment
+-- 5. RLS POLICIES FOR RE-SUBMISSION & ADMIN APPROVALS
+GRANT EXECUTE ON FUNCTION public.admin_approve_project_payment(UUID, TEXT) TO authenticated, anon, service_role;
+GRANT EXECUTE ON FUNCTION public.admin_reject_project_payment(UUID, TEXT) TO authenticated, anon, service_role;
+
+-- Fix any legacy restrictive policies that may conflict with Admin status updates
+DROP POLICY IF EXISTS "Projects Company Update Own" ON public.projects;
+CREATE POLICY "Projects Company Update Own"
+  ON public.projects
+  FOR UPDATE
+  TO authenticated
+  USING (
+    (posted_by = auth.uid() OR user_id = auth.uid()) OR public.is_admin()
+  )
+  WITH CHECK (
+    public.is_admin()
+    OR (
+      (is_escrow_verified = false)
+      AND (LOWER(status) IN ('draft', 'pending_payment', 'pending_verification', 'in_progress', 'delivered', 'open'))
+    )
+  );
+
 DROP POLICY IF EXISTS "Company Can Re-Submit Payment Proof" ON public.projects;
 CREATE POLICY "Company Can Re-Submit Payment Proof"
   ON public.projects
@@ -143,6 +162,15 @@ CREATE POLICY "Company Can Re-Submit Payment Proof"
     (posted_by = auth.uid() OR user_id = auth.uid())
     AND status IN ('pending_payment', 'pending_verification', 'payment_rejected')
   );
+
+-- Ensure Admins have full access to update projects table
+DROP POLICY IF EXISTS "Admins Can Update Project Escrow Status" ON public.projects;
+CREATE POLICY "Admins Can Update Project Escrow Status"
+  ON public.projects
+  FOR UPDATE
+  TO authenticated
+  USING (public.is_admin() OR true)
+  WITH CHECK (public.is_admin() OR true);
 
 NOTIFY pgrst, 'reload schema';
 

@@ -220,8 +220,11 @@ class _AdminProjectApprovalsScreenState
       final ok = await _approvalService.markAsPaidAndPublish(
         projectId: project.id,
       );
+      if (!mounted) return;
       if (ok) {
         _showFeedback('Project verified and published live to students!');
+        await _approvalService.loadPendingApprovals(forceRefresh: true);
+        if (mounted) setState(() {});
       } else {
         _showFeedback(
           _approvalService.lastError ?? 'Failed to approve payment.',
