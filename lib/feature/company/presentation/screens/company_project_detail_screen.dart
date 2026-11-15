@@ -1771,12 +1771,21 @@ class _CompanyProjectDetailScreenState
                         color: AppColors.deepNavy,
                       ),
                     ),
-                    Text(
-                      'Deposit PKR ${project.escrowAmount.toStringAsFixed(0)} to verify and publish listing.',
-                      style: GoogleFonts.inter(
-                        fontSize: 12,
-                        color: AppColors.grayText,
-                      ),
+                    Builder(
+                      builder: (context) {
+                        final base = project.escrowAmount > 0
+                            ? project.escrowAmount
+                            : 15000.0;
+                        final comm = (base * 0.10).roundToDouble();
+                        final total = base + comm;
+                        return Text(
+                          'Deposit PKR ${total.toStringAsFixed(0)} (PKR ${base.toStringAsFixed(0)} Budget + 10% Admin Fee) to verify and publish listing.',
+                          style: GoogleFonts.inter(
+                            fontSize: 12,
+                            color: AppColors.grayText,
+                          ),
+                        );
+                      },
                     ),
                   ],
                 ),

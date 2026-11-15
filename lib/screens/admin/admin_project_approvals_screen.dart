@@ -218,12 +218,19 @@ class _AdminProjectApprovalsScreenState
             ),
           ],
         ),
-        content: Text(
-          'Confirm receipt of PKR ${project.escrowAmount.toStringAsFixed(0)} (TID: ${project.transactionId ?? 'N/A'})?\n\nOnce approved, this project will automatically go live on the Student Portal with a "Verified & Escrow Funded" badge.',
-          style: GoogleFonts.inter(
-            fontSize: 13,
-            color: AppColors.textSecondary,
-          ),
+        content: Builder(
+          builder: (context) {
+            final base = project.escrowAmount > 0 ? project.escrowAmount : 15000.0;
+            final comm = (base * 0.10).roundToDouble();
+            final total = base + comm;
+            return Text(
+              'Confirm receipt of total PKR ${total.toStringAsFixed(0)} (PKR ${base.toStringAsFixed(0)} Project Budget + PKR ${comm.toStringAsFixed(0)} [10%] Admin Commission) (TID: ${project.transactionId ?? 'N/A'})?\n\nOnce approved, this project will automatically go live on the Student Portal with a "Verified & Escrow Funded" badge.',
+              style: GoogleFonts.inter(
+                fontSize: 13,
+                color: AppColors.textSecondary,
+              ),
+            );
+          },
         ),
         actions: [
           TextButton(
@@ -501,7 +508,10 @@ class _AdminProjectApprovalsScreenState
   }
 
   Widget _buildPendingProjectCard(ProjectModel project, {bool isMobile = false}) {
-    final amountText = 'PKR ${project.escrowAmount.toStringAsFixed(0)}';
+    final baseAmount = project.escrowAmount > 0 ? project.escrowAmount : 15000.0;
+    final commission10 = (baseAmount * 0.10).roundToDouble();
+    final totalDeposit = baseAmount + commission10;
+    final amountText = 'PKR ${totalDeposit.toStringAsFixed(0)}';
 
     return Container(
       margin: const EdgeInsets.only(bottom: 16),
@@ -547,21 +557,35 @@ class _AdminProjectApprovalsScreenState
                 ),
               ),
               const SizedBox(width: 10),
-              Container(
-                padding:
-                    const EdgeInsets.symmetric(horizontal: 10, vertical: 5),
-                decoration: BoxDecoration(
-                  color: AppColors.successBg,
-                  borderRadius: BorderRadius.circular(8),
-                ),
-                child: Text(
-                  amountText,
-                  style: GoogleFonts.poppins(
-                    fontSize: 15,
-                    fontWeight: FontWeight.bold,
-                    color: AppColors.success,
+              Column(
+                crossAxisAlignment: CrossAxisAlignment.end,
+                children: [
+                  Container(
+                    padding:
+                        const EdgeInsets.symmetric(horizontal: 10, vertical: 5),
+                    decoration: BoxDecoration(
+                      color: AppColors.successBg,
+                      borderRadius: BorderRadius.circular(8),
+                    ),
+                    child: Text(
+                      amountText,
+                      style: GoogleFonts.poppins(
+                        fontSize: 15,
+                        fontWeight: FontWeight.bold,
+                        color: AppColors.success,
+                      ),
+                    ),
                   ),
-                ),
+                  const SizedBox(height: 2),
+                  Text(
+                    'incl. 10% fee (PKR ${commission10.toStringAsFixed(0)})',
+                    style: GoogleFonts.inter(
+                      fontSize: 10,
+                      fontWeight: FontWeight.w600,
+                      color: AppColors.textSecondary,
+                    ),
+                  ),
+                ],
               ),
             ],
           ),
@@ -569,11 +593,26 @@ class _AdminProjectApprovalsScreenState
           const Divider(color: AppColors.border, height: 1),
           const SizedBox(height: 12),
 
-          // Escrow Details Row
+          // Escrow Details Row with 10% Platform Fee breakdown
           Wrap(
             spacing: 20,
             runSpacing: 10,
             children: [
+              _buildMetaItem(
+                label: 'Project Budget',
+                value: 'PKR ${baseAmount.toStringAsFixed(0)}',
+                icon: Icons.payments_outlined,
+              ),
+              _buildMetaItem(
+                label: 'Admin Fee (10%)',
+                value: 'PKR ${commission10.toStringAsFixed(0)}',
+                icon: Icons.percent_rounded,
+              ),
+              _buildMetaItem(
+                label: 'Total Deposit',
+                value: 'PKR ${totalDeposit.toStringAsFixed(0)}',
+                icon: Icons.account_balance_wallet_rounded,
+              ),
               _buildMetaItem(
                 label: 'Payment Method',
                 value: project.paymentMethodUsed?.isNotEmpty == true

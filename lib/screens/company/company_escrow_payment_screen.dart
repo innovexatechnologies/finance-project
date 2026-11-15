@@ -158,6 +158,12 @@ class _CompanyEscrowPaymentScreenState
       setState(() => _isSubmitting = false);
 
       // 3. Show Success Dialog
+      final baseAmt = widget.project.escrowAmount > 0
+          ? widget.project.escrowAmount
+          : 15000.0;
+      final comm10 = (baseAmt * 0.10).roundToDouble();
+      final totDep = baseAmt + comm10;
+
       await showDialog(
         context: context,
         barrierDismissible: false,
@@ -193,7 +199,7 @@ class _CompanyEscrowPaymentScreenState
               ),
               const SizedBox(height: 10),
               Text(
-                'Your deposit of PKR ${widget.project.escrowAmount.toStringAsFixed(0)} has been sent for verification with TID ${_tidController.text.trim()}.\n\nYour project will go live on the Student Portal with a "Verified & Escrow Funded" badge once Admin confirms the transfer.',
+                'Your deposit of PKR ${totDep.toStringAsFixed(0)} (PKR ${baseAmt.toStringAsFixed(0)} Project Budget + PKR ${comm10.toStringAsFixed(0)} [10%] Admin Commission) has been sent for verification with TID ${_tidController.text.trim()}.\n\nYour project will go live on the Student Portal with a "Verified & Escrow Funded" badge once Admin confirms the transfer.',
                 style: GoogleFonts.inter(
                   fontSize: 13,
                   color: AppColors.textSecondary,
@@ -238,9 +244,11 @@ class _CompanyEscrowPaymentScreenState
 
   @override
   Widget build(BuildContext context) {
-    final amountText = widget.project.escrowAmount > 0
-        ? 'PKR ${widget.project.escrowAmount.toStringAsFixed(0)}'
-        : 'PKR 10,000';
+    final baseAmount = widget.project.escrowAmount > 0
+        ? widget.project.escrowAmount
+        : 15000.0;
+    final commission10 = (baseAmount * 0.10).roundToDouble();
+    final totalDeposit = baseAmount + commission10;
 
     return Scaffold(
       backgroundColor: AppColors.background,
@@ -269,8 +277,12 @@ class _CompanyEscrowPaymentScreenState
           child: Column(
             crossAxisAlignment: CrossAxisAlignment.start,
             children: [
-              // Escrow Protection Header Banner
-              _buildEscrowBanner(amountText),
+              // Escrow Protection Header Banner with 10% Admin Commission Breakdown
+              _buildEscrowBanner(
+                baseAmount: baseAmount,
+                commission10: commission10,
+                totalDeposit: totalDeposit,
+              ),
               const SizedBox(height: 24),
 
               // Step 1: Select Admin Account
@@ -278,7 +290,7 @@ class _CompanyEscrowPaymentScreenState
                 step: '1',
                 title: 'Transfer Funds to Admin Escrow',
                 subtitle:
-                    'Select an account and transfer the project budget via your banking app.',
+                    'Select an account and transfer PKR ${totalDeposit.toStringAsFixed(0)} (PKR ${baseAmount.toStringAsFixed(0)} Budget + PKR ${commission10.toStringAsFixed(0)} [10%] Admin Commission) via your banking app.',
               ),
               const SizedBox(height: 12),
               if (_isLoadingMethods)
@@ -291,7 +303,14 @@ class _CompanyEscrowPaymentScreenState
               else if (_paymentMethods.isEmpty)
                 _buildNoAccountsAlert()
               else
-                ..._paymentMethods.map((m) => _buildAccountCard(m)),
+                ..._paymentMethods.map(
+                  (m) => _buildAccountCard(
+                    m,
+                    baseAmount: baseAmount,
+                    commission10: commission10,
+                    totalDeposit: totalDeposit,
+                  ),
+                ),
 
               const SizedBox(height: 24),
 
@@ -367,7 +386,7 @@ class _CompanyEscrowPaymentScreenState
                   label: Text(
                     _isSubmitting
                         ? 'Verifying & Submitting...'
-                        : 'Submit Proof & Request Escrow Verification',
+                        : 'Submit Proof (PKR ${totalDeposit.toStringAsFixed(0)}) & Request Escrow Verification',
                     style: GoogleFonts.inter(
                       fontSize: 14.5,
                       fontWeight: FontWeight.bold,
@@ -384,7 +403,11 @@ class _CompanyEscrowPaymentScreenState
     );
   }
 
-  Widget _buildEscrowBanner(String amountText) {
+  Widget _buildEscrowBanner({
+    required double baseAmount,
+    required double commission10,
+    required double totalDeposit,
+  }) {
     return Container(
       width: double.infinity,
       padding: const EdgeInsets.all(20),
@@ -437,7 +460,7 @@ class _CompanyEscrowPaymentScreenState
                   crossAxisAlignment: CrossAxisAlignment.end,
                   children: [
                     Text(
-                      'Escrow Required',
+                      'Total Deposit Required',
                       style: GoogleFonts.inter(
                         fontSize: 10,
                         fontWeight: FontWeight.w600,
@@ -445,7 +468,7 @@ class _CompanyEscrowPaymentScreenState
                       ),
                     ),
                     Text(
-                      amountText,
+                      'PKR ${totalDeposit.toStringAsFixed(0)}',
                       style: GoogleFonts.poppins(
                         fontSize: 18,
                         fontWeight: FontWeight.bold,
@@ -460,16 +483,117 @@ class _CompanyEscrowPaymentScreenState
           const SizedBox(height: 14),
           const Divider(color: Colors.white24, height: 1),
           const SizedBox(height: 12),
+          // Clear 10% Commission Financial Breakdown
+          Container(
+            padding: const EdgeInsets.all(12),
+            decoration: BoxDecoration(
+              color: Colors.black.withValues(alpha: 0.16),
+              borderRadius: BorderRadius.circular(10),
+              border: Border.all(color: Colors.white.withValues(alpha: 0.12)),
+            ),
+            child: Column(
+              children: [
+                Row(
+                  mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                  children: [
+                    Text(
+                      'Project Budget (Student Reward)',
+                      style: GoogleFonts.inter(
+                        fontSize: 12,
+                        color: Colors.white.withValues(alpha: 0.88),
+                      ),
+                    ),
+                    Text(
+                      'PKR ${baseAmount.toStringAsFixed(0)}',
+                      style: GoogleFonts.inter(
+                        fontSize: 12,
+                        fontWeight: FontWeight.w600,
+                        color: Colors.white,
+                      ),
+                    ),
+                  ],
+                ),
+                const SizedBox(height: 6),
+                Row(
+                  mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                  children: [
+                    Row(
+                      children: [
+                        Text(
+                          'Admin Commission (10%)',
+                          style: GoogleFonts.inter(
+                            fontSize: 12,
+                            color: Colors.white.withValues(alpha: 0.88),
+                          ),
+                        ),
+                        const SizedBox(width: 5),
+                        Container(
+                          padding: const EdgeInsets.symmetric(
+                              horizontal: 5, vertical: 1.5),
+                          decoration: BoxDecoration(
+                            color: Colors.white.withValues(alpha: 0.22),
+                            borderRadius: BorderRadius.circular(4),
+                          ),
+                          child: Text(
+                            '+10% Required',
+                            style: GoogleFonts.inter(
+                              fontSize: 9.5,
+                              fontWeight: FontWeight.w700,
+                              color: Colors.white,
+                            ),
+                          ),
+                        ),
+                      ],
+                    ),
+                    Text(
+                      '+ PKR ${commission10.toStringAsFixed(0)}',
+                      style: GoogleFonts.inter(
+                        fontSize: 12,
+                        fontWeight: FontWeight.w700,
+                        color: Colors.white,
+                      ),
+                    ),
+                  ],
+                ),
+                const Padding(
+                  padding: EdgeInsets.symmetric(vertical: 6),
+                  child: Divider(color: Colors.white24, height: 1),
+                ),
+                Row(
+                  mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                  children: [
+                    Text(
+                      'Total Amount to Pay Admin',
+                      style: GoogleFonts.poppins(
+                        fontSize: 12.5,
+                        fontWeight: FontWeight.w700,
+                        color: Colors.white,
+                      ),
+                    ),
+                    Text(
+                      'PKR ${totalDeposit.toStringAsFixed(0)}',
+                      style: GoogleFonts.poppins(
+                        fontSize: 14.5,
+                        fontWeight: FontWeight.w800,
+                        color: Colors.white,
+                      ),
+                    ),
+                  ],
+                ),
+              ],
+            ),
+          ),
+          const SizedBox(height: 12),
           Row(
             children: [
-              const Icon(Icons.lock_clock_rounded,
+              const Icon(Icons.shield_outlined,
                   color: Colors.white70, size: 16),
               const SizedBox(width: 8),
               Expanded(
                 child: Text(
-                  'Your deposit remains 100% locked in SkillBridge custodial escrow until the project is delivered and approved.',
+                  'PKR ${baseAmount.toStringAsFixed(0)} remains 100% locked in custodial escrow for the student. PKR ${commission10.toStringAsFixed(0)} (10%) is platform admin commission.',
                   style: GoogleFonts.inter(
-                    fontSize: 12,
+                    fontSize: 11.5,
                     color: Colors.white.withValues(alpha: 0.9),
                     height: 1.35,
                   ),
@@ -534,7 +658,12 @@ class _CompanyEscrowPaymentScreenState
     );
   }
 
-  Widget _buildAccountCard(PlatformPaymentMethodModel method) {
+  Widget _buildAccountCard(
+    PlatformPaymentMethodModel method, {
+    required double baseAmount,
+    required double commission10,
+    required double totalDeposit,
+  }) {
     final isSelected = _selectedMethod?.id == method.id;
     final brandColor = method.brandColor;
 
@@ -683,6 +812,31 @@ class _CompanyEscrowPaymentScreenState
                   ),
                 ),
               ],
+              Container(
+                margin: const EdgeInsets.only(top: 8),
+                padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 6),
+                decoration: BoxDecoration(
+                  color: AppColors.lightAqua.withValues(alpha: 0.6),
+                  borderRadius: BorderRadius.circular(8),
+                ),
+                child: Row(
+                  children: [
+                    const Icon(Icons.info_outline_rounded,
+                        size: 14, color: AppColors.primaryBlue),
+                    const SizedBox(width: 6),
+                    Expanded(
+                      child: Text(
+                        'Transfer exact total: PKR ${totalDeposit.toStringAsFixed(0)} (PKR ${baseAmount.toStringAsFixed(0)} Budget + PKR ${commission10.toStringAsFixed(0)} [10%] Admin Fee)',
+                        style: GoogleFonts.inter(
+                          fontSize: 11,
+                          fontWeight: FontWeight.w600,
+                          color: AppColors.primaryBlue,
+                        ),
+                      ),
+                    ),
+                  ],
+                ),
+              ),
             ],
           ),
         ),

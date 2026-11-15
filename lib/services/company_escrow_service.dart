@@ -39,12 +39,14 @@ class CompanyEscrowService {
         ? project.companyId
         : profile.id;
 
+    final commission = (escrowAmount * 0.10).roundToDouble();
     final draftProject = project.copyWith(
       id: cleanId,
       companyName: companyName,
       companyId: companyId,
       status: 'pending_payment',
       escrowAmount: escrowAmount,
+      platformCommissionAmount: commission,
       isEscrowVerified: false,
       createdAt: 'Just now',
     );
@@ -74,6 +76,7 @@ class CompanyEscrowService {
           'skills': draftProject.skillsRequired,
           'status': 'pending_payment',
           'escrow_amount': escrowAmount,
+          'platform_commission_amount': commission,
           'is_escrow_verified': false,
           'progress': draftProject.progress,
           'created_at': nowIso,
