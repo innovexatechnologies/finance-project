@@ -612,8 +612,16 @@ class AppDataService extends ChangeNotifier {
                 'isAssignedProject': paymentStatus != null,
                 'paymentStatusAvailable': paymentStatusAvailable,
                 'paymentSent': paymentStatus?['payment_sent'] == true ||
-                    status.toLowerCase() == 'completed' ||
-                    (matchingProject['payout_transaction_id'] != null),
+                    ((matchingProject['payout_transaction_id'] != null &&
+                            matchingProject['payout_transaction_id']
+                                .toString()
+                                .trim()
+                                .isNotEmpty) ||
+                        (row['payout_transaction_id'] != null &&
+                            row['payout_transaction_id']
+                                .toString()
+                                .trim()
+                                .isNotEmpty)),
                 'paymentConfirmationStatus':
                     paymentStatus?['confirmation_status']?.toString(),
                 'escrow_amount': matchingProject['escrow_amount'] ?? 10000,
@@ -1357,6 +1365,47 @@ class AppDataService extends ChangeNotifier {
       } catch (e) {
         debugPrint('Supabase work submission sync failed: $e');
       }
+    }
+  }
+
+  /// Records Company acceptance of deliverables, setting project to 'ready_for_payout'.
+  /// Keeps project in student's Active tab until Admin formally disburses payment with TID.
+  Future<void> recordCompanyApprovedReadyForPayout({
+    required String projectId,
+    String? companyFeedback,
+  }) async {
+    for (int i = 0; i < _applications.length; i++) {
+      final app = _applications[i];
+      final pId = app['projectId']?.toString() ?? app['id']?.toString() ?? '';
+      if (pId == projectId || app['id']?.toString() == projectId) {
+        _applications[i]['status'] = 'ready_for_payout';
+        _applications[i]['timelineStep'] = 2;
+        _applications[i]['isApprovedByCompany'] = true;
+        _applications[i]['isPaidByAdmin'] = false;
+        if (companyFeedback != null && companyFeedback.trim().isNotEmpty) {
+          _applications[i]['companyFeedback'] = companyFeedback.trim();
+        }
+      }
+    }
+
+    for (int i = 0; i < _projects.length; i++) {
+      final proj = _projects[i];
+      final pId = proj['id']?.toString() ?? '';
+      if (pId == projectId) {
+        _projects[i]['status'] = 'ready_for_payout';
+        _projects[i]['isApprovedByCompany'] = true;
+        _projects[i]['payment_status'] = 'escrow_held';
+        if (companyFeedback != null && companyFeedback.trim().isNotEmpty) {
+          _projects[i]['companyFeedback'] = companyFeedback.trim();
+        }
+      }
+    }
+
+    _safeNotifyListeners();
+
+    if (_prefs != null) {
+      await _prefs!.setString(_kApplications, jsonEncode(_applications));
+      await _prefs!.setString(_kCustomProjects, jsonEncode(_projects));
     }
   }
 

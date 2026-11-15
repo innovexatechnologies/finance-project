@@ -229,15 +229,30 @@ class AdminDisputePayoutService {
       final rows = await supabase
           .from('projects')
           .select()
-          .eq('status', 'ready_for_payout')
+          .or('status.eq.ready_for_payout,status.eq.completed')
           .order('updated_at', ascending: false);
 
       final list = (rows as List<dynamic>)
           .map((r) => ProjectModel.fromJson(Map<String, dynamic>.from(r)))
+          .where((p) =>
+              (p.status.toLowerCase() == 'ready_for_payout' ||
+                  p.status.toLowerCase() == 'approved_by_company' ||
+                  (p.status.toLowerCase() == 'completed' &&
+                      (p.payoutTransactionId == null ||
+                          p.payoutTransactionId!.trim().isEmpty))) &&
+              p.status.toLowerCase() != 'cancelled')
           .toList();
 
-      payoutReadyProjectsNotifier.value = list;
-      return list;
+      // Merge any local in-memory projects that are ready for payout
+      final local = CompanyProjectService()
+          .allProjects
+          .where((p) =>
+              p.isReadyForPayout && !list.any((rem) => rem.id == p.id))
+          .toList();
+
+      final combined = [...list, ...local];
+      payoutReadyProjectsNotifier.value = combined;
+      return combined;
     } catch (e) {
       debugPrint('AdminDisputePayoutService loadPayoutReadyProjects error: $e');
       _lastError = SupabaseHelper.friendlyError(e);
@@ -450,8 +465,8 @@ class AdminDisputePayoutService {
 
               if (pmRows.isNotEmpty) {
                 final pm = pmRows.first;
-                method = (pm['provider'] ?? pm['method_type'] ?? method).toString();
-                accountNum = (pm['account_number'] ?? pm['iban'] ?? accountNum).toString();
+                method = (pm['bank_name'] ?? pm['provider'] ?? pm['method_type'] ?? method).toString();
+                accountNum = (pm['account_number_iban'] ?? pm['account_number'] ?? pm['iban'] ?? accountNum).toString();
                 accountTitle = (pm['account_title'] ?? name).toString();
               }
             } catch (_) {}

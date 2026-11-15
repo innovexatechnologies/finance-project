@@ -116,14 +116,26 @@ class ProjectModel {
   bool get isInProgress =>
       status.toLowerCase() == 'in_progress' ||
       status.toLowerCase() == 'in progress';
-  bool get isDelivered => status.toLowerCase() == 'delivered';
+  bool get isDelivered =>
+      status.toLowerCase() == 'delivered' ||
+      status.toLowerCase() == 'submitted';
   bool get isSubmitted =>
-      status.toLowerCase() == 'submitted' || status.toLowerCase() == 'delivered';
+      status.toLowerCase() == 'submitted' ||
+      status.toLowerCase() == 'delivered';
   bool get isRevisionRequested => status.toLowerCase() == 'revision_requested';
   bool get isDisputed =>
       status.toLowerCase() == 'disputed' || status.toLowerCase() == 'rejected';
-  bool get isReadyForPayout => status.toLowerCase() == 'ready_for_payout';
-  bool get isCompleted => status.toLowerCase() == 'completed';
+  bool get isReadyForPayout =>
+      status.toLowerCase() == 'ready_for_payout' ||
+      status.toLowerCase() == 'approved_by_company' ||
+      (status.toLowerCase() == 'completed' &&
+          (payoutTransactionId == null ||
+              payoutTransactionId!.trim().isEmpty));
+  bool get isCompleted =>
+      (status.toLowerCase() == 'completed' ||
+          status.toLowerCase() == 'paid') &&
+      payoutTransactionId != null &&
+      payoutTransactionId!.trim().isNotEmpty;
   bool get isCancelled => status.toLowerCase() == 'cancelled';
 
   DateTime? get submittedAtDateTime => submittedAt != null

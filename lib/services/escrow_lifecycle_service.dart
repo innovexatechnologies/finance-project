@@ -256,6 +256,19 @@ class EscrowLifecycleService {
             })
             .eq('id', projectId);
 
+        // Also update applications table in Supabase
+        try {
+          await supabase
+              .from('applications')
+              .update({
+                'status': 'ready_for_payout',
+                if (companyFeedback != null && companyFeedback.trim().isNotEmpty)
+                  'company_feedback': companyFeedback.trim(),
+                'updated_at': nowIso,
+              })
+              .eq('project_id', projectId);
+        } catch (_) {}
+
         // Alert Admin for payout execution
         await supabase.from('admin_notifications').insert({
           'project_id': projectId,
@@ -283,8 +296,21 @@ class EscrowLifecycleService {
       refund: 0.00,
     );
 
+    // Update AppDataService so student sees deliverables accepted while keeping project in Active tab
+    try {
+      await AppDataService.instance.recordCompanyApprovedReadyForPayout(
+        projectId: projectId,
+        companyFeedback: companyFeedback,
+      );
+    } catch (_) {}
+
     // Resolve any open HelpDesk ticket for this project
     await HelpdeskService.instance.onCompanyApprove(projectId);
+
+    // Refresh Admin Payout queue immediately
+    try {
+      await AdminDisputePayoutService().loadPayoutReadyProjects(forceRefresh: true);
+    } catch (_) {}
 
     return true;
   }

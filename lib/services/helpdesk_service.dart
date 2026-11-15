@@ -645,7 +645,8 @@ class HelpdeskService {
             .from('projects')
             .update({
               'has_help_request': false,
-              'status': 'completed',
+              'status': 'ready_for_payout',
+              'payment_status': 'escrow_held',
               'updated_at': nowIso,
             })
             .eq('id', projectId);
