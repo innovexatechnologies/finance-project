@@ -123,11 +123,9 @@ class _AdminDisputeResolutionScreenState
   // 2-OPTION DISPUTE RESOLUTION MODALS (PAY TO STUDENT & REFUND TO COMPANY)
   // ===========================================================================
   Future<void> _openDisputePayToStudentModal(ProjectModel project) async {
-    final escrow = project.escrowAmount > 0 ? project.escrowAmount : 10000.0;
-    final commission10 = project.platformCommissionAmount ??
-        double.parse((escrow * 0.10).toStringAsFixed(2));
-    final netStudent = project.studentPayoutAmount ??
-        double.parse((escrow - commission10).toStringAsFixed(2));
+    final escrow = project.escrowAmount;
+    final commission10 = double.parse((escrow * 0.10).toStringAsFixed(2));
+    final netStudent = double.parse((escrow * 0.90).toStringAsFixed(2));
 
     final tidCtrl = TextEditingController();
     XFile? receiptFile;
@@ -1219,8 +1217,8 @@ class _AdminDisputeResolutionScreenState
                         ),
                         const SizedBox(height: 6),
                         _buildBreakdownRow(
-                          'Net Student Payout',
-                          'PKR ${(project.studentPayoutAmount ?? (project.escrowAmount * 0.9)).toStringAsFixed(0)}',
+                          'Net Student Payout (90%)',
+                          'PKR ${(project.escrowAmount * 0.90).toStringAsFixed(0)}',
                           color: AppColors.success,
                           isBold: true,
                         ),
@@ -1746,8 +1744,8 @@ class _AdminDisputeResolutionScreenState
           itemCount: projects.length,
           itemBuilder: (context, idx) {
             final p = projects[idx];
-            final netStudent = p.studentPayoutAmount ?? (p.escrowAmount * 0.90);
-            final fee = p.platformCommissionAmount ?? (p.escrowAmount * 0.10);
+            final fee = double.parse((p.escrowAmount * 0.10).toStringAsFixed(2));
+            final netStudent = double.parse((p.escrowAmount * 0.90).toStringAsFixed(2));
 
             return Container(
               margin: const EdgeInsets.only(bottom: 16),

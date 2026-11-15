@@ -228,17 +228,37 @@ class EscrowLifecycleService {
     // Fetch escrow amount for calculation
     double escrow = 0.0;
     String projectTitle = 'Project';
-    final existing = CompanyProjectService().allProjects;
-    try {
-      final p = existing.firstWhere((p) => p.id == projectId);
-      escrow = p.escrowAmount > 0 ? p.escrowAmount : 10000.0;
-      projectTitle = p.title;
-    } catch (_) {
-      escrow = 10000.0;
+
+    if (supabase != null && SupabaseHelper.isUuid(projectId)) {
+      try {
+        final projRow = await supabase
+            .from('projects')
+            .select('title, escrow_amount')
+            .eq('id', projectId)
+            .maybeSingle();
+        if (projRow != null) {
+          final amt = (projRow['escrow_amount'] as num?)?.toDouble();
+          if (amt != null && amt > 0) escrow = amt;
+          if (projRow['title'] != null) {
+            projectTitle = projRow['title'].toString();
+          }
+        }
+      } catch (_) {}
+    }
+
+    if (escrow <= 0) {
+      final existing = CompanyProjectService().allProjects;
+      try {
+        final p = existing.firstWhere((p) => p.id == projectId);
+        escrow = p.escrowAmount > 0 ? p.escrowAmount : 10000.0;
+        projectTitle = p.title;
+      } catch (_) {
+        escrow = 10000.0;
+      }
     }
 
     final commission = double.parse((escrow * 0.10).toStringAsFixed(2));
-    final studentPayout = double.parse((escrow - commission).toStringAsFixed(2));
+    final studentPayout = double.parse((escrow * 0.90).toStringAsFixed(2));
 
     if (supabase != null && SupabaseHelper.isUuid(projectId)) {
       try {

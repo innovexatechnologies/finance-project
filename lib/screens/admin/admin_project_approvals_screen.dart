@@ -1165,8 +1165,9 @@ class _AdminProjectApprovalsScreenState
   }
 
   Widget _buildStudentPayoutCard(ProjectModel project, {required bool isMobile}) {
-    final netStudent = project.studentPayoutAmount ?? (project.escrowAmount * 0.90);
-    final fee = project.platformCommissionAmount ?? (project.escrowAmount * 0.10);
+    final escrow = project.escrowAmount;
+    final fee = double.parse((escrow * 0.10).toStringAsFixed(2));
+    final netStudent = double.parse((escrow * 0.90).toStringAsFixed(2));
 
     return Container(
       margin: const EdgeInsets.only(bottom: 14),
@@ -1324,11 +1325,9 @@ class _AdminProjectApprovalsScreenState
   }
 
   Future<void> _openStudentPayoutModal(ProjectModel project) async {
-    final escrow = project.escrowAmount > 0 ? project.escrowAmount : 10000.0;
-    final commission10 = project.platformCommissionAmount ??
-        double.parse((escrow * 0.10).toStringAsFixed(2));
-    final netStudent = project.studentPayoutAmount ??
-        double.parse((escrow - commission10).toStringAsFixed(2));
+    final escrow = project.escrowAmount;
+    final commission10 = double.parse((escrow * 0.10).toStringAsFixed(2));
+    final netStudent = double.parse((escrow * 0.90).toStringAsFixed(2));
 
     final tidCtrl = TextEditingController();
     XFile? receiptFile;

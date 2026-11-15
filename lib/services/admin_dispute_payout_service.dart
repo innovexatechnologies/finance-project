@@ -307,10 +307,26 @@ class AdminDisputePayoutService {
       }
     }
 
-    final escrow = (existing != null && existing.escrowAmount > 0)
+    double escrow = (existing != null && existing.escrowAmount > 0)
         ? existing.escrowAmount
-        : 10000.0;
-    final projectTitle = existing?.title ?? 'Project';
+        : 0.0;
+    String projectTitle = existing?.title ?? 'Project';
+
+    if (escrow <= 0 && supabase != null && SupabaseHelper.isUuid(projectId)) {
+      try {
+        final r = await supabase
+            .from('projects')
+            .select('title, escrow_amount')
+            .eq('id', projectId)
+            .maybeSingle();
+        if (r != null) {
+          final amt = (r['escrow_amount'] as num?)?.toDouble();
+          if (amt != null && amt > 0) escrow = amt;
+          if (r['title'] != null) projectTitle = r['title'].toString();
+        }
+      } catch (_) {}
+    }
+    if (escrow <= 0) escrow = 10000.0;
 
     double commission = 0.0;
     double studentPayout = 0.0;
