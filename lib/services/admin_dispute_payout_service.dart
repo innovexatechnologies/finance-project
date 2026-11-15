@@ -4,7 +4,9 @@ import 'package:shared_preferences/shared_preferences.dart';
 import 'package:link_vibe/core/services/app_data_service.dart';
 import 'package:link_vibe/core/services/supabase_helper.dart';
 import 'package:link_vibe/feature/admin/models/admin_notification_model.dart';
+import 'package:link_vibe/feature/company/models/assignment_model.dart';
 import 'package:link_vibe/feature/company/models/project_model.dart';
+import 'package:link_vibe/feature/company/services/company_assignment_service.dart';
 import 'package:link_vibe/feature/company/services/company_project_service.dart';
 
 /// Assigned Student Disbursal Information Model
@@ -732,6 +734,24 @@ class AdminDisputePayoutService {
       CompanyProjectService().projectsNotifier.value = compList;
     }
 
+    // Update in-memory CompanyAssignmentService (moves to Approved / Completed on Deliverables)
+    try {
+      final assignList = List<AssignmentModel>.from(CompanyAssignmentService().allAssignments);
+      for (int i = 0; i < assignList.length; i++) {
+        if (assignList[i].projectId == projectId ||
+            (projectTitle.isNotEmpty &&
+                assignList[i].projectTitle.trim().toLowerCase() ==
+                    projectTitle.toLowerCase())) {
+          assignList[i] = assignList[i].copyWith(
+            submissionStatus: 'Approved',
+            projectStatus: 'Completed',
+            progress: 1.0,
+          );
+        }
+      }
+      CompanyAssignmentService().assignmentsNotifier.value = assignList;
+    } catch (_) {}
+
     // Update in-memory disputed list in-place so buttons hide immediately on card
     final dList = List<ProjectModel>.from(disputedProjectsNotifier.value);
     final dIdx = dList.indexWhere((p) => p.id == projectId);
@@ -869,6 +889,23 @@ class AdminDisputePayoutService {
       );
       CompanyProjectService().projectsNotifier.value = compList;
     }
+
+    // Update in-memory CompanyAssignmentService (marks Cancelled/Rejected on Deliverables)
+    try {
+      final assignList = List<AssignmentModel>.from(CompanyAssignmentService().allAssignments);
+      for (int i = 0; i < assignList.length; i++) {
+        if (assignList[i].projectId == projectId ||
+            (projectTitle.isNotEmpty &&
+                assignList[i].projectTitle.trim().toLowerCase() ==
+                    projectTitle.toLowerCase())) {
+          assignList[i] = assignList[i].copyWith(
+            submissionStatus: 'Rejected',
+            projectStatus: 'Cancelled',
+          );
+        }
+      }
+      CompanyAssignmentService().assignmentsNotifier.value = assignList;
+    } catch (_) {}
 
     // Update in-memory disputed list in-place so buttons hide immediately on card
     final dList = List<ProjectModel>.from(disputedProjectsNotifier.value);
@@ -1019,9 +1056,28 @@ class AdminDisputePayoutService {
     if (idx != -1) {
       list[idx] = list[idx].copyWith(
         status: newStatus,
+        paymentStatus: newStatus.toLowerCase() == 'completed' ? 'paid' : list[idx].paymentStatus,
+        paymentSent: true,
         completedAt: completedAt ?? list[idx].completedAt,
       );
       compService.projectsNotifier.value = list;
+    }
+
+    if (newStatus.toLowerCase() == 'completed') {
+      try {
+        final assignService = CompanyAssignmentService();
+        final assignList = List<AssignmentModel>.from(assignService.allAssignments);
+        for (int i = 0; i < assignList.length; i++) {
+          if (assignList[i].projectId == projectId) {
+            assignList[i] = assignList[i].copyWith(
+              submissionStatus: 'Approved',
+              projectStatus: 'Completed',
+              progress: 1.0,
+            );
+          }
+        }
+        assignService.assignmentsNotifier.value = assignList;
+      } catch (_) {}
     }
   }
 }

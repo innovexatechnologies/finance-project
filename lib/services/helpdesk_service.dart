@@ -3,7 +3,9 @@ import 'package:flutter/foundation.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 import 'package:link_vibe/core/services/app_data_service.dart';
 import 'package:link_vibe/core/services/supabase_helper.dart';
+import 'package:link_vibe/feature/company/models/assignment_model.dart';
 import 'package:link_vibe/feature/company/models/project_model.dart';
+import 'package:link_vibe/feature/company/services/company_assignment_service.dart';
 import 'package:link_vibe/feature/company/services/company_project_service.dart';
 
 /// Student bank/wallet details for Admin Escrow payout
@@ -1137,6 +1139,7 @@ class HelpdeskService {
         compList[i] = compList[i].copyWith(
           status: 'completed',
           paymentStatus: 'paid',
+          paymentSent: true,
           payoutTransactionId: tid,
           hasHelpRequest: false,
         );
@@ -1144,7 +1147,26 @@ class HelpdeskService {
     }
     CompanyProjectService().projectsNotifier.value = compList;
 
-    // 7. Update ticketsNotifier (Marks ticket as resolved so it disappears from open queue and hides button)
+    // 7. Update CompanyAssignmentService (moves to Completed / Approved on Company side)
+    try {
+      final assignList =
+          List<AssignmentModel>.from(CompanyAssignmentService().allAssignments);
+      for (int i = 0; i < assignList.length; i++) {
+        if (assignList[i].projectId == projectId ||
+            (effectiveTitle.isNotEmpty &&
+                assignList[i].projectTitle.trim().toLowerCase() ==
+                    effectiveTitle.toLowerCase())) {
+          assignList[i] = assignList[i].copyWith(
+            submissionStatus: 'Approved',
+            projectStatus: 'Completed',
+            progress: 1.0,
+          );
+        }
+      }
+      CompanyAssignmentService().assignmentsNotifier.value = assignList;
+    } catch (_) {}
+
+    // 8. Update ticketsNotifier (Marks ticket as resolved so it disappears from open queue and hides button)
     final updated = ticketsNotifier.value.map((t) {
       final matchesId = t.id == ticketId || t.projectId == projectId;
       final matchesTitle = effectiveTitle.isNotEmpty &&

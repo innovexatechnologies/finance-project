@@ -339,9 +339,14 @@ class _CompanyProjectsListScreenState extends State<CompanyProjectsListScreen> {
             return false;
           }).toList();
 
-          final paymentFiltered = companyProjects
-              .where((project) => project.paymentSent == _showPaidProjects)
-              .toList();
+          final paymentFiltered = companyProjects.where((project) {
+            if (_selectedStatus == 'Completed' &&
+                (project.status.toLowerCase() == 'completed' ||
+                    project.isCompleted)) {
+              return true;
+            }
+            return project.paymentSent == _showPaidProjects;
+          }).toList();
 
           final statusFiltered = _selectedStatus == 'All'
               ? paymentFiltered
@@ -506,13 +511,20 @@ class _CompanyProjectsListScreenState extends State<CompanyProjectsListScreen> {
                                 final isSelected = _selectedStatus == status;
                                 final count = status == 'All'
                                     ? paymentFiltered.length
-                                    : paymentFiltered
-                                          .where(
-                                            (p) =>
+                                    : (status == 'Completed'
+                                        ? companyProjects
+                                            .where((p) =>
                                                 p.status.toLowerCase() ==
-                                                status.toLowerCase(),
-                                          )
-                                          .length;
+                                                    'completed' ||
+                                                p.isCompleted)
+                                            .length
+                                        : paymentFiltered
+                                            .where(
+                                              (p) =>
+                                                  p.status.toLowerCase() ==
+                                                  status.toLowerCase(),
+                                            )
+                                            .length);
 
                                 return _buildFilterPill(
                                   status: status,

@@ -304,13 +304,18 @@ class _AssignedProjectsScreenState extends State<AssignedProjectsScreen> {
           final toReviewCount = projectFiltered
               .where((a) =>
                   a.submissionStatus == 'Pending Review' &&
-                  !a.isRejected)
+                  !a.isRejected &&
+                  a.projectStatus.toLowerCase() != 'completed' &&
+                  a.submissionStatus != 'Approved')
               .length;
           final rejectedCount = projectFiltered
               .where((a) => a.isRejected)
               .length;
           final approvedCount = projectFiltered
-              .where((a) => a.submissionStatus == 'Approved')
+              .where((a) =>
+                  a.submissionStatus == 'Approved' ||
+                  a.submissionStatus.toLowerCase() == 'completed' ||
+                  a.projectStatus.toLowerCase() == 'completed')
               .length;
           final hasActiveFilters =
               _selectedFilter != 'All' ||
@@ -447,19 +452,35 @@ class _AssignedProjectsScreenState extends State<AssignedProjectsScreen> {
   ) {
     switch (filter) {
       case 'In Progress':
-        return items.where((a) => a.projectStatus == 'In Progress').toList();
+        return items
+            .where((a) =>
+                a.projectStatus.toLowerCase() == 'in progress' &&
+                a.submissionStatus != 'Approved' &&
+                a.submissionStatus.toLowerCase() != 'completed' &&
+                a.projectStatus.toLowerCase() != 'completed')
+            .toList();
       case 'Pending Review':
         return items
             .where((a) =>
-                a.submissionStatus == 'Pending Review' && !a.isRejected)
+                a.submissionStatus.toLowerCase() == 'pending review' &&
+                !a.isRejected &&
+                a.projectStatus.toLowerCase() != 'completed' &&
+                a.submissionStatus.toLowerCase() != 'completed' &&
+                a.submissionStatus != 'Approved')
             .toList();
       case 'Rejected':
         return items.where((a) => a.isRejected).toList();
       case 'Approved':
-        return items.where((a) => a.submissionStatus == 'Approved').toList();
+        return items
+            .where((a) =>
+                a.submissionStatus == 'Approved' ||
+                a.submissionStatus.toLowerCase() == 'completed' ||
+                a.projectStatus.toLowerCase() == 'completed')
+            .toList();
       case 'Pending Submission':
         return items
-            .where((a) => a.submissionStatus == 'Pending Submission')
+            .where((a) =>
+                a.submissionStatus.toLowerCase() == 'pending submission')
             .toList();
       default:
         return items;
@@ -1015,11 +1036,17 @@ class _AssignedProjectsScreenState extends State<AssignedProjectsScreen> {
     final canReviewSubmission =
         assignment.hasSubmission && assignment.latestSubmission != null;
     final isRejected = assignment.isRejected;
-    final isApproved = assignment.submissionStatus == 'Approved';
-    final isPendingReview = assignment.submissionStatus == 'Pending Review' && !isRejected;
+    final isApproved = assignment.submissionStatus == 'Approved' ||
+        assignment.submissionStatus.toLowerCase() == 'completed' ||
+        assignment.projectStatus.toLowerCase() == 'completed';
+    final isPendingReview = assignment.submissionStatus == 'Pending Review' &&
+        !isRejected &&
+        !isApproved;
     final statusTone = isRejected
         ? AppColors.statusClosed
-        : StatusBadge.colorForStatus(assignment.submissionStatus);
+        : (isApproved
+            ? AppColors.statusOpen
+            : StatusBadge.colorForStatus(assignment.submissionStatus));
 
     return Container(
       margin: const EdgeInsets.only(bottom: 14),
@@ -1124,7 +1151,9 @@ class _AssignedProjectsScreenState extends State<AssignedProjectsScreen> {
                             StatusBadge(
                               label: isRejected
                                   ? 'Rejected'
-                                  : assignment.submissionStatus,
+                                  : (isApproved
+                                      ? 'Approved'
+                                      : assignment.submissionStatus),
                             ),
                           ],
                         ),
@@ -1404,7 +1433,9 @@ class _AssignedProjectsScreenState extends State<AssignedProjectsScreen> {
                                         Icon(
                                           isRejected
                                               ? Icons.gavel_rounded
-                                              : Icons.rate_review_outlined,
+                                              : (isApproved
+                                                  ? Icons.check_circle_rounded
+                                                  : Icons.rate_review_outlined),
                                           size: 16,
                                           color: Colors.white,
                                         ),
@@ -1413,9 +1444,11 @@ class _AssignedProjectsScreenState extends State<AssignedProjectsScreen> {
                                           child: Text(
                                             isRejected
                                                 ? 'Disputed / Rejected'
-                                                : (isPendingReview
-                                                    ? 'Review Deliverable'
-                                                    : 'View Submission'),
+                                                : (isApproved
+                                                    ? 'Approved / Completed'
+                                                    : (isPendingReview
+                                                        ? 'Review Deliverable'
+                                                        : 'View Submission')),
                                             maxLines: 1,
                                             overflow: TextOverflow.ellipsis,
                                             style: GoogleFonts.poppins(

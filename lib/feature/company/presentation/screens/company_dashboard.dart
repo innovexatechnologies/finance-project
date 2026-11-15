@@ -129,7 +129,7 @@ class _CompanyDashboardScreenState extends State<CompanyDashboardScreen> {
       items.add(
         CompanyActivityItem(
           id: 'proj_${p.id}',
-          title: p.status == 'Completed'
+          title: p.status.toLowerCase() == 'completed'
               ? 'Challenge Completed'
               : p.status == 'Draft'
                   ? 'Project Saved as Draft'
@@ -137,7 +137,7 @@ class _CompanyDashboardScreenState extends State<CompanyDashboardScreen> {
           subtitle:
               '"${p.title}" • ${p.applicantsCount} application(s) • ${p.status}',
           timeAgo: p.createdAt,
-          type: p.status == 'Completed'
+          type: p.status.toLowerCase() == 'completed'
               ? CompanyActivityType.statusUpdate
               : CompanyActivityType.projectActivity,
           projectId: p.id,
@@ -386,12 +386,14 @@ class _CompanyDashboardScreenState extends State<CompanyDashboardScreen> {
                           activeProjects: projects
                               .where(
                                 (p) =>
-                                    p.status == 'Open' ||
-                                    p.status == 'In Progress',
+                                    p.status.toLowerCase() == 'open' ||
+                                    p.status.toLowerCase() == 'in progress',
                               )
                               .length,
                           completedProjects: projects
-                              .where((p) => p.status == 'Completed')
+                              .where((p) =>
+                                  p.status.toLowerCase() == 'completed' ||
+                                  p.isCompleted)
                               .length,
                           pendingApplications: applicants
                               .where(
