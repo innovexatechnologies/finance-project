@@ -46,7 +46,7 @@ class _AssignedProjectsScreenState extends State<AssignedProjectsScreen> {
     'All',
     'In Progress',
     'Pending Review',
-    'Revision Requested',
+    'Rejected',
     'Approved',
     'Pending Submission',
   ];
@@ -302,10 +302,12 @@ class _AssignedProjectsScreenState extends State<AssignedProjectsScreen> {
                 }).toList();
 
           final toReviewCount = projectFiltered
-              .where((a) => a.submissionStatus == 'Pending Review')
+              .where((a) =>
+                  a.submissionStatus == 'Pending Review' &&
+                  !a.isRejected)
               .length;
-          final revisionCount = projectFiltered
-              .where((a) => a.submissionStatus == 'Revision Requested')
+          final rejectedCount = projectFiltered
+              .where((a) => a.isRejected)
               .length;
           final approvedCount = projectFiltered
               .where((a) => a.submissionStatus == 'Approved')
@@ -338,7 +340,7 @@ class _AssignedProjectsScreenState extends State<AssignedProjectsScreen> {
                                 _buildDeliveryBanner(
                                   assignedCount: projectFiltered.length,
                                   toReviewCount: toReviewCount,
-                                  revisionCount: revisionCount,
+                                  rejectedCount: rejectedCount,
                                   approvedCount: approvedCount,
                                 ),
                                 const SizedBox(height: 18),
@@ -373,7 +375,7 @@ class _AssignedProjectsScreenState extends State<AssignedProjectsScreen> {
                                       _buildDeliveryBanner(
                                         assignedCount: projectFiltered.length,
                                         toReviewCount: toReviewCount,
-                                        revisionCount: revisionCount,
+                                        rejectedCount: rejectedCount,
                                         approvedCount: approvedCount,
                                       ),
                                       const SizedBox(height: 16),
@@ -448,12 +450,11 @@ class _AssignedProjectsScreenState extends State<AssignedProjectsScreen> {
         return items.where((a) => a.projectStatus == 'In Progress').toList();
       case 'Pending Review':
         return items
-            .where((a) => a.submissionStatus == 'Pending Review')
+            .where((a) =>
+                a.submissionStatus == 'Pending Review' && !a.isRejected)
             .toList();
-      case 'Revision Requested':
-        return items
-            .where((a) => a.submissionStatus == 'Revision Requested')
-            .toList();
+      case 'Rejected':
+        return items.where((a) => a.isRejected).toList();
       case 'Approved':
         return items.where((a) => a.submissionStatus == 'Approved').toList();
       case 'Pending Submission':
@@ -722,7 +723,7 @@ class _AssignedProjectsScreenState extends State<AssignedProjectsScreen> {
   Widget _buildDeliveryBanner({
     required int assignedCount,
     required int toReviewCount,
-    required int revisionCount,
+    required int rejectedCount,
     required int approvedCount,
   }) {
     return Container(
@@ -780,8 +781,8 @@ class _AssignedProjectsScreenState extends State<AssignedProjectsScreen> {
                   ),
                   _buildBannerDivider(),
                   _buildBannerMetric(
-                    value: '$revisionCount',
-                    label: 'Revisions',
+                    value: '$rejectedCount',
+                    label: 'Rejected',
                   ),
                   _buildBannerDivider(),
                   _buildBannerMetric(
@@ -1013,9 +1014,12 @@ class _AssignedProjectsScreenState extends State<AssignedProjectsScreen> {
     final pct = (assignment.progress * 100).round();
     final canReviewSubmission =
         assignment.hasSubmission && assignment.latestSubmission != null;
-    final statusTone = StatusBadge.colorForStatus(assignment.submissionStatus);
+    final isRejected = assignment.isRejected;
     final isApproved = assignment.submissionStatus == 'Approved';
-    final isPendingReview = assignment.submissionStatus == 'Pending Review';
+    final isPendingReview = assignment.submissionStatus == 'Pending Review' && !isRejected;
+    final statusTone = isRejected
+        ? AppColors.statusClosed
+        : StatusBadge.colorForStatus(assignment.submissionStatus);
 
     return Container(
       margin: const EdgeInsets.only(bottom: 14),
@@ -1117,7 +1121,11 @@ class _AssignedProjectsScreenState extends State<AssignedProjectsScreen> {
                               ),
                             ),
                             const SizedBox(width: 8),
-                            StatusBadge(label: assignment.submissionStatus),
+                            StatusBadge(
+                              label: isRejected
+                                  ? 'Rejected'
+                                  : assignment.submissionStatus,
+                            ),
                           ],
                         ),
                         const SizedBox(height: 9),
@@ -1374,7 +1382,9 @@ class _AssignedProjectsScreenState extends State<AssignedProjectsScreen> {
                                           ? null
                                           : (isApproved
                                                 ? AppColors.statusOpen
-                                                : AppColors.deepNavy),
+                                                : (isRejected
+                                                    ? AppColors.statusClosed
+                                                    : AppColors.deepNavy)),
                                       borderRadius: BorderRadius.circular(12),
                                       boxShadow: isPendingReview
                                           ? [
@@ -1391,17 +1401,21 @@ class _AssignedProjectsScreenState extends State<AssignedProjectsScreen> {
                                       mainAxisAlignment:
                                           MainAxisAlignment.center,
                                       children: [
-                                        const Icon(
-                                          Icons.rate_review_outlined,
+                                        Icon(
+                                          isRejected
+                                              ? Icons.gavel_rounded
+                                              : Icons.rate_review_outlined,
                                           size: 16,
                                           color: Colors.white,
                                         ),
                                         const SizedBox(width: 7),
                                         Flexible(
                                           child: Text(
-                                            isPendingReview
-                                                ? 'Review Deliverable'
-                                                : 'View Submission',
+                                            isRejected
+                                                ? 'Disputed / Rejected'
+                                                : (isPendingReview
+                                                    ? 'Review Deliverable'
+                                                    : 'View Submission'),
                                             maxLines: 1,
                                             overflow: TextOverflow.ellipsis,
                                             style: GoogleFonts.poppins(

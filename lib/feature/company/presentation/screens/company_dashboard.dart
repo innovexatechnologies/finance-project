@@ -1332,9 +1332,15 @@ class _CompanyDashboardScreenState extends State<CompanyDashboardScreen> {
                           ),
                           const SizedBox(width: 8),
                           StatusBadge(
-                            label: (project.isReadyForPayout || project.isCompleted)
-                                ? 'Paid'
-                                : project.status,
+                            label: project.isCancelled
+                                ? 'Cancelled'
+                                : (project.isDisputed ||
+                                        project.status.toLowerCase() == 'rejected' ||
+                                        project.status.toLowerCase() == 'disputed'
+                                    ? 'Rejected'
+                                    : ((project.isReadyForPayout || project.isCompleted)
+                                        ? 'Paid'
+                                        : project.status)),
                           ),
                         ],
                       ),

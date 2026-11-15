@@ -1017,9 +1017,13 @@ class _CompanyProjectDetailScreenState
               StatusBadge(
                 label: project.isCancelled
                     ? 'Cancelled'
-                    : (project.isReadyForPayout || project.isCompleted)
-                    ? 'Paid'
-                    : project.status,
+                    : (project.isDisputed ||
+                            project.status.toLowerCase() == 'rejected' ||
+                            project.status.toLowerCase() == 'disputed'
+                        ? 'Rejected'
+                        : ((project.isReadyForPayout || project.isCompleted)
+                            ? 'Paid'
+                            : project.status)),
               ),
             ],
           ),

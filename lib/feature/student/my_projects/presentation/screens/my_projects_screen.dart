@@ -278,7 +278,9 @@ class _MyProjectsScreenState extends State<MyProjectsScreen>
     final isRevisionRequested = statusLower == 'revision_requested' || statusLower == 'revision requested';
     final isDisputed = statusLower == 'disputed' ||
         statusLower == 'rejected' ||
-        project['isDisputed'] == true;
+        project['isDisputed'] == true ||
+        project['applicationStatus']?.toString().toLowerCase() == 'rejected' ||
+        project['application_status']?.toString().toLowerCase() == 'rejected';
     final isCancelled = statusLower == 'cancelled' || project['isCancelled'] == true;
     final bool isAssigned = project['isAssignedProject'] == true;
     final payoutTid = (project['payout_transaction_id'] ??
@@ -669,7 +671,7 @@ class _MyProjectsScreenState extends State<MyProjectsScreen>
                     ),
                     const SizedBox(height: 6),
                     Text(
-                      'Please share evidence on our official Gmail: ${AppDataService.skillBridgeOfficialGmail}',
+                      'Please share your work evidence on our official Gmail: ${AppDataService.skillBridgeOfficialGmail}',
                       style: GoogleFonts.inter(
                         fontSize: 11.5,
                         fontWeight: FontWeight.w500,

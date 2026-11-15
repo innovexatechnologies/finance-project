@@ -3,6 +3,7 @@ import 'package:flutter/foundation.dart';
 import 'package:link_vibe/core/services/app_data_service.dart';
 import 'package:link_vibe/core/services/supabase_helper.dart';
 import 'package:link_vibe/feature/company/models/project_model.dart';
+import 'package:link_vibe/feature/company/services/company_assignment_service.dart';
 import 'package:link_vibe/feature/company/services/company_project_service.dart';
 import 'package:link_vibe/services/admin_dispute_payout_service.dart';
 import 'package:link_vibe/services/helpdesk_service.dart';
@@ -367,6 +368,18 @@ class EscrowLifecycleService {
             })
             .eq('id', projectId);
 
+        // Also update applications table in Supabase so status reflects Rejected
+        try {
+          await supabase
+              .from('applications')
+              .update({
+                'status': 'Rejected',
+                'company_feedback': reason.trim(),
+                'updated_at': nowIso,
+              })
+              .eq('project_id', projectId);
+        } catch (_) {}
+
         // Insert high-priority dispute alert
         await supabase.from('admin_notifications').insert({
           'project_id': projectId,
@@ -391,6 +404,21 @@ class EscrowLifecycleService {
       disputeCaseId: caseId,
       disputeReason: reason.trim(),
     );
+
+    // Update in-memory company assignments
+    try {
+      final assignService = CompanyAssignmentService();
+      final updatedList = assignService.allAssignments.map((a) {
+        if (a.projectId == projectId) {
+          return a.copyWith(
+            submissionStatus: 'Rejected',
+            projectStatus: 'Rejected',
+          );
+        }
+        return a;
+      }).toList();
+      assignService.assignmentsNotifier.value = updatedList;
+    } catch (_) {}
 
     // Synchronize AppDataService for Student Portal & persistence
     await AppDataService.instance.recordDisputedProject(

@@ -313,7 +313,9 @@ class _StudentProjectDetailsScreenState
     final isDisputed = statusLower == 'disputed' ||
         statusLower == 'rejected' ||
         project['isDisputed'] == true ||
-        currentApplication?['isDisputed'] == true;
+        currentApplication?['isDisputed'] == true ||
+        appStatus == 'rejected' ||
+        appStatus == 'disputed';
     final isCancelled = statusLower == 'cancelled' ||
         project['isCancelled'] == true ||
         currentApplication?['isCancelled'] == true;

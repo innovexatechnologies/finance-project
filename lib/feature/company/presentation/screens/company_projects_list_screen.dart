@@ -971,7 +971,17 @@ class _CompanyProjectsListScreenState extends State<CompanyProjectsListScreen> {
                               ),
                             ),
                           ),
-                          StatusBadge(label: project.status),
+                          StatusBadge(
+                            label: project.isCancelled
+                                ? 'Cancelled'
+                                : (project.isDisputed ||
+                                        project.status.toLowerCase() == 'rejected' ||
+                                        project.status.toLowerCase() == 'disputed'
+                                    ? 'Rejected'
+                                    : ((project.isReadyForPayout || project.isCompleted)
+                                        ? 'Paid'
+                                        : project.status)),
+                          ),
                           if (canCloseOrCancel || isDraft) ...[
                             PopupMenuButton<String>(
                               padding: EdgeInsets.zero,
