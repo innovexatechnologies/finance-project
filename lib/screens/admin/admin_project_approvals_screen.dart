@@ -375,13 +375,16 @@ class _AdminProjectApprovalsScreenState
                                 }).toList();
 
                                 return ListView(
-                                  padding: const EdgeInsets.all(24),
+                                  padding: EdgeInsets.symmetric(
+                                    horizontal: isDesktop ? 24 : 14,
+                                    vertical: isDesktop ? 24 : 16,
+                                  ),
                                   children: [
                                     _buildQueueBanner(
                                       pendingProjects.length,
                                       isDesktop,
                                     ),
-                                    const SizedBox(height: 20),
+                                    const SizedBox(height: 16),
                                     if (isLoading && pendingProjects.isEmpty)
                                       const Center(
                                         child: Padding(
@@ -393,7 +396,10 @@ class _AdminProjectApprovalsScreenState
                                       _buildEmptyState()
                                     else
                                       ...filtered.map((p) =>
-                                          _buildPendingProjectCard(p)),
+                                          _buildPendingProjectCard(
+                                            p,
+                                            isMobile: !isDesktop,
+                                          )),
                                   ],
                                 );
                               },
@@ -412,9 +418,37 @@ class _AdminProjectApprovalsScreenState
     );
   }
 
+  String _formatSubmissionDate(String raw) {
+    if (raw.trim().isEmpty) return 'N/A';
+    final parsed = DateTime.tryParse(raw);
+    if (parsed != null) {
+      final local = parsed.toLocal();
+      const monthNames = [
+        'Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun',
+        'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec'
+      ];
+      final month = monthNames[local.month - 1];
+      final day = local.day;
+      final year = local.year;
+      final hour = local.hour == 0
+          ? 12
+          : (local.hour > 12 ? local.hour - 12 : local.hour);
+      final minute = local.minute.toString().padLeft(2, '0');
+      final period = local.hour >= 12 ? 'PM' : 'AM';
+      return '$month $day, $year • $hour:$minute $period';
+    }
+    if (raw.contains('T')) {
+      final parts = raw.split('T');
+      final date = parts[0];
+      final time = parts[1].split('.')[0];
+      return '$date • $time';
+    }
+    return raw;
+  }
+
   Widget _buildQueueBanner(int count, bool isDesktop) {
     return Container(
-      padding: const EdgeInsets.all(20),
+      padding: EdgeInsets.all(isDesktop ? 20 : 16),
       decoration: BoxDecoration(
         color: AppColors.cardSurface,
         borderRadius: BorderRadius.circular(14),
@@ -422,55 +456,59 @@ class _AdminProjectApprovalsScreenState
         boxShadow: AppColors.softShadow,
       ),
       child: Row(
-        mainAxisAlignment: MainAxisAlignment.spaceBetween,
         children: [
-          Row(
-            children: [
-              Container(
-                padding: const EdgeInsets.all(12),
-                decoration: BoxDecoration(
-                  color: AppColors.warningBg,
-                  borderRadius: BorderRadius.circular(12),
-                ),
-                child: const Icon(
-                  Icons.pending_actions_rounded,
-                  color: AppColors.warning,
-                  size: 24,
-                ),
-              ),
-              const SizedBox(width: 14),
-              Column(
-                crossAxisAlignment: CrossAxisAlignment.start,
-                children: [
-                  Text(
-                    'Pending Escrow Verification Queue',
-                    style: GoogleFonts.poppins(
-                      fontSize: 16,
-                      fontWeight: FontWeight.bold,
-                      color: AppColors.darkNavy,
-                    ),
-                  ),
-                  Text(
-                    'Verify company deposit slips against bank statements before publishing live',
-                    style: GoogleFonts.inter(
-                      fontSize: 12,
-                      color: AppColors.textSecondary,
-                    ),
-                  ),
-                ],
-              ),
-            ],
-          ),
           Container(
-            padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 8),
+            padding: const EdgeInsets.all(10),
+            decoration: BoxDecoration(
+              color: AppColors.warningBg,
+              borderRadius: BorderRadius.circular(12),
+            ),
+            child: const Icon(
+              Icons.pending_actions_rounded,
+              color: AppColors.warning,
+              size: 22,
+            ),
+          ),
+          const SizedBox(width: 12),
+          Expanded(
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Text(
+                  'Pending Escrow Verification Queue',
+                  maxLines: 1,
+                  overflow: TextOverflow.ellipsis,
+                  style: GoogleFonts.poppins(
+                    fontSize: isDesktop ? 16 : 14.5,
+                    fontWeight: FontWeight.bold,
+                    color: AppColors.darkNavy,
+                  ),
+                ),
+                const SizedBox(height: 2),
+                Text(
+                  'Verify company deposit slips against bank statements before publishing live',
+                  maxLines: 2,
+                  overflow: TextOverflow.ellipsis,
+                  style: GoogleFonts.inter(
+                    fontSize: 11.5,
+                    color: AppColors.textSecondary,
+                    height: 1.3,
+                  ),
+                ),
+              ],
+            ),
+          ),
+          const SizedBox(width: 10),
+          Container(
+            padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 6),
             decoration: BoxDecoration(
               color: count > 0 ? AppColors.warning : AppColors.surfaceAlt,
-              borderRadius: BorderRadius.circular(20),
+              borderRadius: BorderRadius.circular(18),
             ),
             child: Text(
               '$count Pending',
               style: GoogleFonts.inter(
-                fontSize: 13,
+                fontSize: 12,
                 fontWeight: FontWeight.bold,
                 color: count > 0 ? Colors.white : AppColors.textSecondary,
               ),
@@ -481,12 +519,12 @@ class _AdminProjectApprovalsScreenState
     );
   }
 
-  Widget _buildPendingProjectCard(ProjectModel project) {
+  Widget _buildPendingProjectCard(ProjectModel project, {bool isMobile = false}) {
     final amountText = 'PKR ${project.escrowAmount.toStringAsFixed(0)}';
 
     return Container(
-      margin: const EdgeInsets.only(bottom: 18),
-      padding: const EdgeInsets.all(20),
+      margin: const EdgeInsets.only(bottom: 16),
+      padding: EdgeInsets.all(isMobile ? 16 : 20),
       decoration: BoxDecoration(
         color: AppColors.cardSurface,
         borderRadius: BorderRadius.circular(16),
@@ -498,7 +536,7 @@ class _AdminProjectApprovalsScreenState
         children: [
           // Header Row
           Row(
-            mainAxisAlignment: MainAxisAlignment.spaceBetween,
+            crossAxisAlignment: CrossAxisAlignment.start,
             children: [
               Expanded(
                 child: Column(
@@ -506,25 +544,31 @@ class _AdminProjectApprovalsScreenState
                   children: [
                     Text(
                       project.title,
+                      maxLines: 2,
+                      overflow: TextOverflow.ellipsis,
                       style: GoogleFonts.poppins(
                         fontSize: 16,
                         fontWeight: FontWeight.bold,
                         color: AppColors.darkNavy,
                       ),
                     ),
+                    const SizedBox(height: 3),
                     Text(
                       'Posted by: ${project.companyName} • ${project.category}',
+                      maxLines: 2,
+                      overflow: TextOverflow.ellipsis,
                       style: GoogleFonts.inter(
-                        fontSize: 12.5,
+                        fontSize: 12,
                         color: AppColors.textSecondary,
                       ),
                     ),
                   ],
                 ),
               ),
+              const SizedBox(width: 10),
               Container(
                 padding:
-                    const EdgeInsets.symmetric(horizontal: 12, vertical: 6),
+                    const EdgeInsets.symmetric(horizontal: 10, vertical: 5),
                 decoration: BoxDecoration(
                   color: AppColors.successBg,
                   borderRadius: BorderRadius.circular(8),
@@ -532,7 +576,7 @@ class _AdminProjectApprovalsScreenState
                 child: Text(
                   amountText,
                   style: GoogleFonts.poppins(
-                    fontSize: 16,
+                    fontSize: 15,
                     fontWeight: FontWeight.bold,
                     color: AppColors.success,
                   ),
@@ -540,37 +584,42 @@ class _AdminProjectApprovalsScreenState
               ),
             ],
           ),
-          const SizedBox(height: 16),
-          const Divider(color: AppColors.border, height: 1),
           const SizedBox(height: 14),
+          const Divider(color: AppColors.border, height: 1),
+          const SizedBox(height: 12),
 
           // Escrow Details Row
           Wrap(
-            spacing: 24,
-            runSpacing: 12,
+            spacing: 20,
+            runSpacing: 10,
             children: [
               _buildMetaItem(
                 label: 'Payment Method',
-                value: project.paymentMethodUsed ?? 'Bank / Wallet',
+                value: project.paymentMethodUsed?.isNotEmpty == true
+                    ? project.paymentMethodUsed!
+                    : 'Bank / Wallet',
                 icon: Icons.account_balance_wallet_outlined,
               ),
               _buildMetaItem(
                 label: 'Transaction ID (TID)',
-                value: project.transactionId ?? 'N/A',
+                value: project.transactionId?.isNotEmpty == true
+                    ? project.transactionId!
+                    : 'N/A',
                 icon: Icons.numbers_rounded,
                 isMonospace: true,
-                onCopy: project.transactionId != null
+                onCopy: project.transactionId != null &&
+                        project.transactionId!.isNotEmpty
                     ? () => _copyToClipboard(project.transactionId!, 'TID')
                     : null,
               ),
               _buildMetaItem(
                 label: 'Submission Date',
-                value: project.createdAt,
+                value: _formatSubmissionDate(project.createdAt),
                 icon: Icons.schedule_rounded,
               ),
             ],
           ),
-          const SizedBox(height: 16),
+          const SizedBox(height: 14),
 
           // Receipt Screenshot Preview
           if (project.paymentReceiptUrl != null &&
@@ -598,93 +647,183 @@ class _AdminProjectApprovalsScreenState
                   border: Border.all(color: AppColors.border),
                 ),
                 child: Row(
-                  mainAxisSize: MainAxisSize.min,
                   children: [
                     ClipRRect(
                       borderRadius: BorderRadius.circular(6),
                       child: Image.network(
                         project.paymentReceiptUrl!,
-                        width: 48,
-                        height: 48,
+                        width: 44,
+                        height: 44,
                         fit: BoxFit.cover,
                         errorBuilder: (context, error, stackTrace) => const Icon(
                           Icons.receipt_long_rounded,
-                          size: 32,
+                          size: 28,
                           color: AppColors.primary,
                         ),
                       ),
                     ),
                     const SizedBox(width: 10),
-                    Column(
-                      crossAxisAlignment: CrossAxisAlignment.start,
-                      children: [
-                        Text(
-                          'Click to Inspect Receipt Screenshot',
-                          style: GoogleFonts.inter(
-                            fontSize: 12,
-                            fontWeight: FontWeight.bold,
-                            color: AppColors.primary,
+                    Expanded(
+                      child: Column(
+                        crossAxisAlignment: CrossAxisAlignment.start,
+                        mainAxisSize: MainAxisSize.min,
+                        children: [
+                          Text(
+                            'Click to Inspect Receipt Screenshot',
+                            maxLines: 1,
+                            overflow: TextOverflow.ellipsis,
+                            style: GoogleFonts.inter(
+                              fontSize: 12,
+                              fontWeight: FontWeight.bold,
+                              color: AppColors.primary,
+                            ),
                           ),
-                        ),
-                        Text(
-                          'Tap for full-size interactive zoom',
-                          style: GoogleFonts.inter(
-                            fontSize: 11,
-                            color: AppColors.textSecondary,
+                          const SizedBox(height: 2),
+                          Text(
+                            'Tap for full-size interactive zoom',
+                            maxLines: 1,
+                            overflow: TextOverflow.ellipsis,
+                            style: GoogleFonts.inter(
+                              fontSize: 11,
+                              color: AppColors.textSecondary,
+                            ),
                           ),
-                        ),
-                      ],
+                        ],
+                      ),
                     ),
-                    const SizedBox(width: 12),
-                    const Icon(Icons.fullscreen_rounded,
-                        size: 20, color: AppColors.primary),
+                    const SizedBox(width: 8),
+                    const Icon(
+                      Icons.fullscreen_rounded,
+                      size: 20,
+                      color: AppColors.primary,
+                    ),
                   ],
                 ),
               ),
             ),
-            const SizedBox(height: 16),
+            const SizedBox(height: 14),
           ],
 
           const Divider(color: AppColors.border, height: 1),
-          const SizedBox(height: 14),
+          const SizedBox(height: 12),
 
-          // Action Buttons
-          Row(
-            mainAxisAlignment: MainAxisAlignment.end,
-            children: [
-              OutlinedButton.icon(
-                style: OutlinedButton.styleFrom(
-                  foregroundColor: AppColors.error,
-                  side: const BorderSide(color: AppColors.error),
-                  padding:
-                      const EdgeInsets.symmetric(horizontal: 16, vertical: 10),
-                  shape: RoundedRectangleBorder(
-                    borderRadius: BorderRadius.circular(8),
+          // Action Buttons: 100% Overflow Proof with Responsive LayoutBuilder
+          LayoutBuilder(
+            builder: (context, constraints) {
+              final isWide = constraints.maxWidth >= 480;
+              if (isWide) {
+                return Row(
+                  mainAxisAlignment: MainAxisAlignment.end,
+                  children: [
+                    OutlinedButton.icon(
+                      style: OutlinedButton.styleFrom(
+                        foregroundColor: AppColors.error,
+                        side: const BorderSide(color: AppColors.error),
+                        padding: const EdgeInsets.symmetric(
+                          horizontal: 16,
+                          vertical: 10,
+                        ),
+                        shape: RoundedRectangleBorder(
+                          borderRadius: BorderRadius.circular(8),
+                        ),
+                      ),
+                      icon: const Icon(Icons.close_rounded, size: 16),
+                      label: const Text('Reject Payment'),
+                      onPressed: () => _confirmReject(project),
+                    ),
+                    const SizedBox(width: 12),
+                    ElevatedButton.icon(
+                      style: ElevatedButton.styleFrom(
+                        backgroundColor: AppColors.success,
+                        foregroundColor: Colors.white,
+                        padding: const EdgeInsets.symmetric(
+                          horizontal: 18,
+                          vertical: 10,
+                        ),
+                        shape: RoundedRectangleBorder(
+                          borderRadius: BorderRadius.circular(8),
+                        ),
+                        elevation: 0,
+                      ),
+                      icon: const Icon(
+                        Icons.check_circle_outline_rounded,
+                        size: 18,
+                      ),
+                      label: Text(
+                        'Mark as Paid & Publish',
+                        style: GoogleFonts.inter(fontWeight: FontWeight.bold),
+                      ),
+                      onPressed: () => _confirmApprove(project),
+                    ),
+                  ],
+                );
+              }
+
+              // Mobile Layout: Two Expanded buttons perfectly proportioned to never overflow
+              return Row(
+                children: [
+                  Expanded(
+                    flex: 5,
+                    child: OutlinedButton.icon(
+                      style: OutlinedButton.styleFrom(
+                        foregroundColor: AppColors.error,
+                        side: const BorderSide(color: AppColors.error),
+                        padding: const EdgeInsets.symmetric(
+                          horizontal: 8,
+                          vertical: 10,
+                        ),
+                        shape: RoundedRectangleBorder(
+                          borderRadius: BorderRadius.circular(8),
+                        ),
+                      ),
+                      icon: const Icon(Icons.close_rounded, size: 15),
+                      label: Text(
+                        'Reject Payment',
+                        maxLines: 1,
+                        overflow: TextOverflow.ellipsis,
+                        style: GoogleFonts.inter(
+                          fontSize: 12,
+                          fontWeight: FontWeight.w600,
+                        ),
+                      ),
+                      onPressed: () => _confirmReject(project),
+                    ),
                   ),
-                ),
-                icon: const Icon(Icons.close_rounded, size: 16),
-                label: const Text('Reject Payment'),
-                onPressed: () => _confirmReject(project),
-              ),
-              const SizedBox(width: 12),
-              ElevatedButton.icon(
-                style: ElevatedButton.styleFrom(
-                  backgroundColor: AppColors.success,
-                  foregroundColor: Colors.white,
-                  padding:
-                      const EdgeInsets.symmetric(horizontal: 18, vertical: 10),
-                  shape: RoundedRectangleBorder(
-                    borderRadius: BorderRadius.circular(8),
+                  const SizedBox(width: 8),
+                  Expanded(
+                    flex: 6,
+                    child: ElevatedButton.icon(
+                      style: ElevatedButton.styleFrom(
+                        backgroundColor: AppColors.success,
+                        foregroundColor: Colors.white,
+                        padding: const EdgeInsets.symmetric(
+                          horizontal: 8,
+                          vertical: 10,
+                        ),
+                        shape: RoundedRectangleBorder(
+                          borderRadius: BorderRadius.circular(8),
+                        ),
+                        elevation: 0,
+                      ),
+                      icon: const Icon(
+                        Icons.check_circle_outline_rounded,
+                        size: 16,
+                      ),
+                      label: Text(
+                        'Mark as Paid',
+                        maxLines: 1,
+                        overflow: TextOverflow.ellipsis,
+                        style: GoogleFonts.inter(
+                          fontSize: 12,
+                          fontWeight: FontWeight.bold,
+                        ),
+                      ),
+                      onPressed: () => _confirmApprove(project),
+                    ),
                   ),
-                ),
-                icon: const Icon(Icons.check_circle_outline_rounded, size: 18),
-                label: Text(
-                  'Mark as Paid & Publish',
-                  style: GoogleFonts.inter(fontWeight: FontWeight.bold),
-                ),
-                onPressed: () => _confirmApprove(project),
-              ),
-            ],
+                ],
+              );
+            },
           ),
         ],
       ),
