@@ -94,6 +94,8 @@ class CompanyAssignmentService {
             status == 'In Progress' ||
             status == 'Revision Requested' ||
             status == 'Completed' ||
+            status == 'Rejected' ||
+            status == 'disputed' ||
             (status == 'Under Review' && hasWorkSubmitted);
 
         if (!isAssignment) continue;
@@ -107,8 +109,15 @@ class CompanyAssignmentService {
           }
         }
 
+        final isRejectedOrDisputed = status == 'Rejected' ||
+            status == 'disputed' ||
+            project?.status.toLowerCase() == 'disputed' ||
+            project?.status.toLowerCase() == 'rejected';
+
         final String uiSubmissionStatus;
-        if (status == 'Completed') {
+        if (isRejectedOrDisputed) {
+          uiSubmissionStatus = 'Rejected';
+        } else if (status == 'Completed') {
           uiSubmissionStatus = 'Approved';
         } else if (status == 'Revision Requested') {
           uiSubmissionStatus = 'Revision Requested';
@@ -118,9 +127,11 @@ class CompanyAssignmentService {
           uiSubmissionStatus = 'Pending Submission';
         }
 
-        final String projStatus = status == 'Completed'
-            ? 'Completed'
-            : (project?.status ?? 'In Progress');
+        final String projStatus = isRejectedOrDisputed
+            ? 'Rejected'
+            : (status == 'Completed'
+                ? 'Completed'
+                : (project?.status ?? 'In Progress'));
 
         final rawHistory = r['review_history'];
         final List<SubmissionReviewRecord> history = [];
@@ -277,6 +288,13 @@ class CompanyAssignmentService {
         assignment.projectId,
         'Completed',
         progress: 1.0,
+      );
+    } else if (newStatus == 'Rejected') {
+      newProjStatus = 'Rejected';
+      dbAppStatus = 'Rejected';
+      await CompanyProjectService().updateProjectStatus(
+        assignment.projectId,
+        'Rejected',
       );
     } else if (newStatus == 'Revision Requested') {
       newProgress = (assignment.progress > 0.25)

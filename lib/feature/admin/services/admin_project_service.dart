@@ -136,6 +136,13 @@ class AdminProjectService {
                 companyNamesByUserId[rawPostedBy] ??
                 (dbCompName.isNotEmpty ? dbCompName : 'Corporate Partner');
 
+        final escrowAmount = (row['escrow_amount'] as num?)?.toDouble() ?? 0.0;
+        final isEscrowVerified = row['is_escrow_verified'] == true;
+        final paymentSent = row['payment_sent'] == true || isEscrowVerified;
+        final transactionId = row['transaction_id']?.toString();
+        final paymentReceiptUrl = row['payment_receipt_url']?.toString();
+        final paymentMethodUsed = row['payment_method_used']?.toString();
+
         loaded.add(
           AdminProjectModel(
             id: id,
@@ -164,6 +171,13 @@ class AdminProjectService {
             moderationReason: row['moderation_reason']?.toString(),
             moderationHistory: matchingLogs,
             isArchived: parsed.$1 == AdminProjectStatus.removed,
+            escrowAmount: escrowAmount,
+            isEscrowVerified: isEscrowVerified,
+            paymentSent: paymentSent,
+            transactionId: transactionId,
+            paymentReceiptUrl: paymentReceiptUrl,
+            paymentMethodUsed: paymentMethodUsed,
+            rawDbStatus: dbStatus,
           ),
         );
       }
@@ -177,9 +191,13 @@ class AdminProjectService {
   (AdminProjectStatus, AdminPublicationStatus) _parseDbStatus(String dbStatus) {
     switch (dbStatus.trim().toLowerCase()) {
       case 'draft':
+      case 'pending_payment':
+      case 'pending payment':
         return (AdminProjectStatus.draft, AdminPublicationStatus.unpublished);
       case 'pending review':
       case 'pending':
+      case 'pending_verification':
+      case 'pending verification':
         return (
           AdminProjectStatus.pendingReview,
           AdminPublicationStatus.pendingModeration,
@@ -194,6 +212,8 @@ class AdminProjectService {
       case 'closed':
         return (AdminProjectStatus.closed, AdminPublicationStatus.unpublished);
       case 'rejected':
+      case 'payment_rejected':
+      case 'payment rejected':
         return (AdminProjectStatus.rejected, AdminPublicationStatus.rejected);
       case 'removed':
       case 'cancelled':

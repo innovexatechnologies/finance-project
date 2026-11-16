@@ -22,6 +22,7 @@ class StatusBadge extends StatelessWidget {
         s.contains('active') ||
         s.contains('approved') ||
         s.contains('completed') ||
+        s.contains('paid') ||
         s.contains('verified') ||
         s.contains('accepted') ||
         s.contains('valid') ||
@@ -45,6 +46,8 @@ class StatusBadge extends StatelessWidget {
       return AppColors.statusPending;
     }
     if (s.contains('reject') ||
+        s.contains('dispute') ||
+        s.contains('cancel') ||
         s.contains('suspend') ||
         s.contains('revoked') ||
         s.contains('flagged') ||

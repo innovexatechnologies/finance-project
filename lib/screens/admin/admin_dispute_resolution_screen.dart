@@ -1,16 +1,16 @@
-import 'dart:typed_data';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:google_fonts/google_fonts.dart';
 import 'package:image_picker/image_picker.dart';
 import 'package:link_vibe/core/constants/app_colors.dart';
-import 'package:link_vibe/core/widgets/app_empty_state.dart';
+import 'package:link_vibe/core/services/app_data_service.dart';
 import 'package:link_vibe/feature/admin/models/admin_notification_model.dart';
 import 'package:link_vibe/feature/admin/presentation/screens/admin_login_screen.dart';
 import 'package:link_vibe/feature/admin/presentation/widgets/admin_sidebar.dart';
 import 'package:link_vibe/feature/admin/presentation/widgets/admin_top_navbar.dart';
 import 'package:link_vibe/feature/admin/services/admin_auth_service.dart';
 import 'package:link_vibe/feature/company/models/project_model.dart';
+import 'package:link_vibe/feature/company/services/company_project_service.dart';
 import 'package:link_vibe/services/admin_dispute_payout_service.dart';
 
 /// Enterprise Admin Console for Dispute Resolution, Payout Execution, and Escrow Alerts.
@@ -34,10 +34,61 @@ class _AdminDisputeResolutionScreenState
   String _searchQuery = '';
   bool _isSidebarCollapsed = false;
 
+  final Set<String> _resolvedProjectIds = {};
+  final Map<String, String> _resolvedActionLabels = {};
+  final Map<String, String> _resolvedTids = {};
+
+  bool _isProjectDisputeResolved(ProjectModel p) {
+    if (_resolvedProjectIds.contains(p.id)) return true;
+    final res = p.disputeResolution?.toLowerCase() ?? '';
+    if (res == 'paid_to_student' || res == 'refunded_to_company') return true;
+    final st = p.status.toLowerCase();
+    if (st == 'completed' || st == 'cancelled' || st == 'paid') return true;
+    final paySt = p.paymentStatus.toLowerCase();
+    if (paySt == 'paid' || paySt == 'refunded') return true;
+    if (p.payoutType == 'dispute_student_awarded' ||
+        p.payoutType == 'dispute_company_refunded' ||
+        p.payoutType == 'full_company_refund') {
+      return true;
+    }
+    if (p.payoutTransactionId != null &&
+        p.payoutTransactionId!.trim().isNotEmpty) {
+      return true;
+    }
+    if (p.refundTransactionId != null &&
+        p.refundTransactionId!.trim().isNotEmpty) {
+      return true;
+    }
+    return false;
+  }
+
+  bool _isDisputePaidToStudent(ProjectModel p) {
+    if (_resolvedActionLabels[p.id] == 'paid_to_student') return true;
+    if (_resolvedActionLabels[p.id] == 'refunded_to_company') return false;
+    final res = p.disputeResolution?.toLowerCase() ?? '';
+    if (res == 'paid_to_student') return true;
+    if (res == 'refunded_to_company') return false;
+    if (p.payoutType == 'dispute_company_refunded' ||
+        p.payoutType == 'full_company_refund' ||
+        p.status.toLowerCase() == 'cancelled' ||
+        (p.refundTransactionId != null &&
+            p.refundTransactionId!.trim().isNotEmpty)) {
+      return false;
+    }
+    return true;
+  }
+
   @override
   void initState() {
     super.initState();
     _tabController = TabController(length: 3, vsync: this);
+    _tabController.addListener(() {
+      if (!mounted) return;
+      if (_tabController.indexIsChanging ||
+          _tabController.animation?.value == _tabController.index) {
+        setState(() {});
+      }
+    });
     WidgetsBinding.instance.addPostFrameCallback((_) {
       if (!mounted) return;
       _refreshAllData();
@@ -115,263 +166,877 @@ class _AdminDisputeResolutionScreenState
   }
 
   // ===========================================================================
-  // 3-WAY DISPUTE DECISION MODAL
+  // 2-OPTION DISPUTE RESOLUTION MODALS (PAY TO STUDENT & REFUND TO COMPANY)
   // ===========================================================================
-  Future<void> _openDisputeDecisionDialog(ProjectModel project) async {
-    final escrow = project.escrowAmount > 0 ? project.escrowAmount : 10000.0;
-    final commission10 = double.parse((escrow * 0.10).toStringAsFixed(2));
-    final studentFull = double.parse((escrow - commission10).toStringAsFixed(2));
-    final splitNet = double.parse(((escrow - commission10) / 2).toStringAsFixed(2));
+  double _resolveProjectEscrow(ProjectModel project) {
+    if (project.escrowAmount > 0) return project.escrowAmount;
 
-    final notesCtrl = TextEditingController();
+    try {
+      final p = CompanyProjectService().allProjects.firstWhere(
+        (e) =>
+            e.id == project.id ||
+            e.title.trim().toLowerCase() == project.title.trim().toLowerCase(),
+      );
+      if (p.escrowAmount > 0) return p.escrowAmount;
+    } catch (_) {}
 
-    await showDialog(
-      context: context,
-      builder: (ctx) => StatefulBuilder(
-        builder: (context, setModalState) => AlertDialog(
-          shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(20)),
-          title: Row(
-            children: [
-              Container(
-                padding: const EdgeInsets.all(8),
-                decoration: BoxDecoration(
-                  color: AppColors.errorBg,
-                  borderRadius: BorderRadius.circular(10),
-                ),
-                child: const Icon(Icons.gavel_rounded,
-                    color: AppColors.error, size: 22),
-              ),
-              const SizedBox(width: 12),
-              Expanded(
-                child: Column(
-                  crossAxisAlignment: CrossAxisAlignment.start,
-                  children: [
-                    Text(
-                      'Admin 3-Way Dispute Decision',
-                      style: GoogleFonts.poppins(
-                        fontSize: 16,
-                        fontWeight: FontWeight.bold,
-                        color: AppColors.darkNavy,
-                      ),
-                    ),
-                    Text(
-                      'Case ID: ${project.disputeCaseId ?? "#SB-CASE"}',
-                      style: GoogleFonts.inter(
-                        fontSize: 12,
-                        fontWeight: FontWeight.bold,
-                        color: AppColors.primary,
-                      ),
-                    ),
-                  ],
-                ),
-              ),
-            ],
-          ),
-          content: SingleChildScrollView(
-            child: Column(
-              mainAxisSize: MainAxisSize.min,
-              crossAxisAlignment: CrossAxisAlignment.start,
-              children: [
-                Text(
-                  'Project: ${project.title}',
-                  style: GoogleFonts.inter(
-                    fontWeight: FontWeight.bold,
-                    fontSize: 13.5,
-                  ),
-                ),
-                Text(
-                  'Total Escrow Locked: PKR ${escrow.toStringAsFixed(0)}',
-                  style: GoogleFonts.inter(
-                    fontSize: 12.5,
-                    color: AppColors.textSecondary,
-                  ),
-                ),
-                if (project.disputeReason != null) ...[
-                  const SizedBox(height: 8),
-                  Container(
-                    width: double.infinity,
-                    padding: const EdgeInsets.all(10),
-                    decoration: BoxDecoration(
-                      color: AppColors.surfaceAlt,
-                      borderRadius: BorderRadius.circular(8),
-                    ),
-                    child: Text(
-                      'Dispute Reason: "${project.disputeReason}"',
-                      style: GoogleFonts.inter(
-                        fontSize: 12,
-                        color: AppColors.textPrimary,
-                        fontStyle: FontStyle.italic,
-                      ),
-                    ),
-                  ),
-                ],
-                const SizedBox(height: 16),
-                Text(
-                  'Select Binding Resolution Decision:',
-                  style: GoogleFonts.inter(
-                    fontSize: 12.5,
-                    fontWeight: FontWeight.bold,
-                    color: AppColors.darkNavy,
-                  ),
-                ),
-                const SizedBox(height: 10),
+    try {
+      final p = AppDataService.instance.getAllProjects().firstWhere(
+        (e) =>
+            (e['id'] ?? e['projectId'])?.toString() == project.id ||
+            e['title']?.toString().trim().toLowerCase() ==
+                project.title.trim().toLowerCase(),
+      );
+      final raw = p['escrow_amount'] ??
+          p['escrowAmount'] ??
+          p['budgetAmount'] ??
+          p['budget'] ??
+          p['stipend'];
+      if (raw is num && raw > 0) return raw.toDouble();
+      if (raw != null) {
+        final cl = raw.toString().replaceAll(RegExp(r'[^0-9.]'), '');
+        final d = double.tryParse(cl);
+        if (d != null && d > 0) return d;
+      }
+    } catch (_) {}
 
-                // Option 1: 100% Student
-                _buildDecisionOptionCard(
-                  title: '1. 100% Release to Student',
-                  subtitle:
-                      'Student: PKR $studentFull (10% platform fee: PKR $commission10). Company: PKR 0',
-                  color: AppColors.success,
-                  onTap: () async {
-                    Navigator.pop(ctx);
-                    await _executeDisputeDecision(
-                      project.id,
-                      'full_student',
-                      notesCtrl.text,
-                    );
-                  },
-                ),
-                const SizedBox(height: 10),
+    final fromInst =
+        ProjectModel.extractEscrowAmount(project.additionalInstructions);
+    if (fromInst != null && fromInst > 0) return fromInst;
 
-                // Option 2: 100% Refund to Company
-                _buildDecisionOptionCard(
-                  title: '2. 100% Refund to Company',
-                  subtitle:
-                      'Company refund: PKR ${escrow.toStringAsFixed(0)}. Student payout: PKR 0',
-                  color: AppColors.error,
-                  onTap: () async {
-                    Navigator.pop(ctx);
-                    await _executeDisputeDecision(
-                      project.id,
-                      'full_company_refund',
-                      notesCtrl.text,
-                    );
-                  },
-                ),
-                const SizedBox(height: 10),
-
-                // Option 3: 50% Student / 50% Company Split
-                _buildDecisionOptionCard(
-                  title: '3. 50-50 Split (Student & Company)',
-                  subtitle:
-                      'Student: PKR $splitNet, Company Refund: PKR $splitNet (10% fee: PKR $commission10)',
-                  color: AppColors.warning,
-                  onTap: () async {
-                    Navigator.pop(ctx);
-                    await _executeDisputeDecision(
-                      project.id,
-                      'split_50_50',
-                      notesCtrl.text,
-                    );
-                  },
-                ),
-                const SizedBox(height: 14),
-
-                TextField(
-                  controller: notesCtrl,
-                  decoration: const InputDecoration(
-                    labelText: 'Optional Admin Notes / Decision Rationale',
-                    border: OutlineInputBorder(),
-                    isDense: true,
-                  ),
-                ),
-              ],
-            ),
-          ),
-          actions: [
-            TextButton(
-              onPressed: () => Navigator.pop(ctx),
-              child: const Text('Cancel'),
-            ),
-          ],
-        ),
-      ),
-    );
+    return 25000.0;
   }
 
-  Widget _buildDecisionOptionCard({
-    required String title,
-    required String subtitle,
-    required Color color,
-    required VoidCallback onTap,
-  }) {
-    return InkWell(
-      onTap: onTap,
-      borderRadius: BorderRadius.circular(10),
-      child: Container(
-        padding: const EdgeInsets.all(12),
-        decoration: BoxDecoration(
-          color: color.withValues(alpha: 0.08),
-          borderRadius: BorderRadius.circular(10),
-          border: Border.all(color: color.withValues(alpha: 0.3)),
-        ),
-        child: Row(
-          children: [
-            Icon(Icons.radio_button_checked_rounded, color: color, size: 18),
-            const SizedBox(width: 10),
-            Expanded(
+  Future<void> _openDisputePayToStudentModal(ProjectModel project) async {
+    final escrow = _resolveProjectEscrow(project);
+    final commission10 = double.parse((escrow * 0.10).toStringAsFixed(2));
+    final netStudent = double.parse((escrow * 0.90).toStringAsFixed(2));
+
+    final tidCtrl = TextEditingController();
+    XFile? receiptFile;
+    Uint8List? receiptBytes;
+    bool isSaving = false;
+    StudentDisbursalDetails? studentDetails;
+    bool isLoadingDetails = true;
+
+    await showModalBottomSheet(
+      context: context,
+      isScrollControlled: true,
+      backgroundColor: Colors.transparent,
+      builder: (ctx) => StatefulBuilder(
+        builder: (context, setModalState) {
+          if (isLoadingDetails) {
+            _payoutService.getStudentDisbursalDetails(project).then((details) {
+              if (ctx.mounted) {
+                setModalState(() {
+                  studentDetails = details;
+                  isLoadingDetails = false;
+                });
+              }
+            });
+          }
+
+          final keyboardInset = MediaQuery.of(context).viewInsets.bottom;
+
+          return Container(
+            constraints: BoxConstraints(
+              maxHeight: MediaQuery.of(context).size.height * 0.90,
+            ),
+            padding: EdgeInsets.fromLTRB(20, 16, 20, 20 + keyboardInset),
+            decoration: const BoxDecoration(
+              color: Colors.white,
+              borderRadius: BorderRadius.vertical(top: Radius.circular(24)),
+            ),
+            child: SingleChildScrollView(
               child: Column(
+                mainAxisSize: MainAxisSize.min,
                 crossAxisAlignment: CrossAxisAlignment.start,
                 children: [
-                  Text(
-                    title,
-                    style: GoogleFonts.inter(
-                      fontSize: 13,
-                      fontWeight: FontWeight.bold,
-                      color: AppColors.darkNavy,
+                  Center(
+                    child: Container(
+                      width: 40,
+                      height: 4,
+                      margin: const EdgeInsets.only(bottom: 16),
+                      decoration: BoxDecoration(
+                        color: AppColors.border,
+                        borderRadius: BorderRadius.circular(2),
+                      ),
                     ),
                   ),
-                  const SizedBox(height: 2),
-                  Text(
-                    subtitle,
-                    style: GoogleFonts.inter(
-                      fontSize: 11.5,
-                      color: AppColors.textSecondary,
+                  Row(
+                    children: [
+                      Container(
+                        padding: const EdgeInsets.all(8),
+                        decoration: BoxDecoration(
+                          color: const Color(0xFFF0FDF4),
+                          borderRadius: BorderRadius.circular(10),
+                        ),
+                        child: const Icon(
+                          Icons.payments_rounded,
+                          color: Color(0xFF059669),
+                          size: 22,
+                        ),
+                      ),
+                      const SizedBox(width: 12),
+                      Expanded(
+                        child: Column(
+                          crossAxisAlignment: CrossAxisAlignment.start,
+                          children: [
+                            Text(
+                              'Dispute Award: Pay to Student',
+                              style: GoogleFonts.poppins(
+                                fontSize: 16.5,
+                                fontWeight: FontWeight.bold,
+                                color: AppColors.darkNavy,
+                              ),
+                            ),
+                            Text(
+                              'Project: ${project.title} • ${project.companyName}',
+                              maxLines: 1,
+                              overflow: TextOverflow.ellipsis,
+                              style: GoogleFonts.inter(
+                                fontSize: 12,
+                                color: AppColors.textSecondary,
+                              ),
+                            ),
+                          ],
+                        ),
+                      ),
+                    ],
+                  ),
+                  const SizedBox(height: 16),
+
+                  // Student Details Card
+                  Container(
+                    width: double.infinity,
+                    padding: const EdgeInsets.all(14),
+                    decoration: BoxDecoration(
+                      color: const Color(0xFFF8FAFC),
+                      borderRadius: BorderRadius.circular(14),
+                      border: Border.all(color: AppColors.border),
+                    ),
+                    child: isLoadingDetails
+                        ? const Center(
+                            child: Padding(
+                              padding: EdgeInsets.all(16),
+                              child: CircularProgressIndicator(strokeWidth: 2),
+                            ),
+                          )
+                        : Column(
+                            crossAxisAlignment: CrossAxisAlignment.start,
+                            children: [
+                              Row(
+                                mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                                children: [
+                                  Row(
+                                    children: [
+                                      const Icon(
+                                        Icons.account_balance_wallet_rounded,
+                                        size: 16,
+                                        color: AppColors.primary,
+                                      ),
+                                      const SizedBox(width: 6),
+                                      Text(
+                                        'Awarded Student Bank Account',
+                                        style: GoogleFonts.inter(
+                                          fontWeight: FontWeight.bold,
+                                          fontSize: 12.5,
+                                          color: AppColors.darkNavy,
+                                        ),
+                                      ),
+                                    ],
+                                  ),
+                                  Container(
+                                    padding: const EdgeInsets.symmetric(
+                                        horizontal: 8, vertical: 2),
+                                    decoration: BoxDecoration(
+                                      color: const Color(0xFFEFF6FF),
+                                      borderRadius: BorderRadius.circular(6),
+                                    ),
+                                    child: Text(
+                                      studentDetails?.paymentMethod ?? 'JazzCash',
+                                      style: GoogleFonts.inter(
+                                        fontSize: 11,
+                                        fontWeight: FontWeight.bold,
+                                        color: const Color(0xFF2563EB),
+                                      ),
+                                    ),
+                                  ),
+                                ],
+                              ),
+                              const SizedBox(height: 10),
+                              Text(
+                                'Account Title: ${studentDetails?.accountTitle ?? studentDetails?.studentName ?? "Student Member"}',
+                                style: GoogleFonts.inter(
+                                  fontSize: 13,
+                                  fontWeight: FontWeight.w600,
+                                  color: AppColors.darkNavy,
+                                ),
+                              ),
+                              const SizedBox(height: 4),
+                              Row(
+                                children: [
+                                  Expanded(
+                                    child: Text(
+                                      'A/C or IBAN: ${studentDetails?.accountNumber ?? "0300-1234567"}',
+                                      style: GoogleFonts.jetBrainsMono(
+                                        fontSize: 12.5,
+                                        fontWeight: FontWeight.bold,
+                                        color: AppColors.textSecondary,
+                                      ),
+                                    ),
+                                  ),
+                                  InkWell(
+                                    onTap: () {
+                                      final num = studentDetails?.accountNumber ?? '';
+                                      if (num.isNotEmpty) {
+                                        _copyToClipboard(num, 'Student Account Number');
+                                      }
+                                    },
+                                    child: Container(
+                                      padding: const EdgeInsets.symmetric(
+                                          horizontal: 8, vertical: 3),
+                                      decoration: BoxDecoration(
+                                        color: Colors.white,
+                                        borderRadius: BorderRadius.circular(6),
+                                        border: Border.all(color: AppColors.border),
+                                      ),
+                                      child: const Row(
+                                        children: [
+                                          Icon(Icons.copy_rounded,
+                                              size: 13, color: AppColors.primary),
+                                          SizedBox(width: 4),
+                                          Text(
+                                            'Copy',
+                                            style: TextStyle(
+                                              fontSize: 11,
+                                              fontWeight: FontWeight.bold,
+                                              color: AppColors.primary,
+                                            ),
+                                          ),
+                                        ],
+                                      ),
+                                    ),
+                                  ),
+                                ],
+                              ),
+                            ],
+                          ),
+                  ),
+                  const SizedBox(height: 14),
+
+                  // 10% Platform Commission & 90% Net Student Award Calculation Breakdown
+                  Container(
+                    width: double.infinity,
+                    padding: const EdgeInsets.all(14),
+                    decoration: BoxDecoration(
+                      color: const Color(0xFFF0FDF4),
+                      borderRadius: BorderRadius.circular(14),
+                      border: Border.all(
+                        color: const Color(0xFF10B981).withValues(alpha: 0.35),
+                      ),
+                    ),
+                    child: Column(
+                      children: [
+                        _buildBreakdownRow(
+                          'Total Escrow Funded (Project Price)',
+                          'PKR ${escrow.toStringAsFixed(0)}',
+                          isBold: true,
+                        ),
+                        const SizedBox(height: 7),
+                        _buildBreakdownRow(
+                          'Platform Fee / Commission (10%)',
+                          '- PKR ${commission10.toStringAsFixed(0)}',
+                          color: AppColors.primary,
+                        ),
+                        const SizedBox(height: 7),
+                        const Divider(color: Color(0xFFA7F3D0)),
+                        const SizedBox(height: 7),
+                        _buildBreakdownRow(
+                          'Net Payable to Student (90%)',
+                          'PKR ${netStudent.toStringAsFixed(0)}',
+                          color: const Color(0xFF047857),
+                          isBold: true,
+                        ),
+                      ],
+                    ),
+                  ),
+                  const SizedBox(height: 14),
+
+                  // TID Input
+                  TextField(
+                    controller: tidCtrl,
+                    decoration: InputDecoration(
+                      labelText: 'Bank Transfer Transaction ID (TID) *',
+                      hintText: 'Enter reference TID from your banking slip...',
+                      prefixIcon: const Icon(Icons.numbers_rounded, size: 18),
+                      border: OutlineInputBorder(borderRadius: BorderRadius.circular(10)),
+                      isDense: true,
+                    ),
+                  ),
+                  const SizedBox(height: 12),
+
+                  // Screenshot upload
+                  Row(
+                    children: [
+                      ElevatedButton.icon(
+                        style: ElevatedButton.styleFrom(
+                          backgroundColor: const Color(0xFF059669),
+                          foregroundColor: Colors.white,
+                          shape: RoundedRectangleBorder(
+                            borderRadius: BorderRadius.circular(8),
+                          ),
+                          padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 10),
+                        ),
+                        onPressed: () async {
+                          final picker = ImagePicker();
+                          final picked = await picker.pickImage(
+                            source: ImageSource.gallery,
+                            imageQuality: 85,
+                          );
+                          if (picked != null) {
+                            final bytes = await picked.readAsBytes();
+                            setModalState(() {
+                              receiptFile = picked;
+                              receiptBytes = bytes;
+                            });
+                          }
+                        },
+                        icon: const Icon(Icons.upload_file_rounded, size: 16),
+                        label: Text(
+                          receiptBytes != null ? 'Slip Selected ✓' : 'Attach Transfer Slip',
+                          style: const TextStyle(fontSize: 12, fontWeight: FontWeight.bold),
+                        ),
+                      ),
+                      if (receiptBytes != null) ...[
+                        const SizedBox(width: 10),
+                        const Expanded(
+                          child: Text(
+                            'Receipt slip attached and ready for student inspection.',
+                            style: TextStyle(fontSize: 11, color: Color(0xFF047857)),
+                          ),
+                        ),
+                      ],
+                    ],
+                  ),
+                  const SizedBox(height: 18),
+
+                  // Action Button
+                  SizedBox(
+                    width: double.infinity,
+                    child: ElevatedButton.icon(
+                      style: ElevatedButton.styleFrom(
+                        backgroundColor: const Color(0xFF059669),
+                        foregroundColor: Colors.white,
+                        padding: const EdgeInsets.symmetric(vertical: 14),
+                        shape: RoundedRectangleBorder(
+                          borderRadius: BorderRadius.circular(12),
+                        ),
+                      ),
+                      onPressed: isSaving
+                          ? null
+                          : () async {
+                              final tid = tidCtrl.text.trim();
+                              if (tid.isEmpty) {
+                                ScaffoldMessenger.of(context).showSnackBar(
+                                  const SnackBar(
+                                    content: Text('Please enter the bank transfer Transaction ID (TID)'),
+                                    backgroundColor: AppColors.error,
+                                  ),
+                                );
+                                return;
+                              }
+
+                              setModalState(() => isSaving = true);
+                              String? uploadedReceiptUrl;
+                              if (receiptBytes != null) {
+                                uploadedReceiptUrl = await _payoutService.uploadPayoutReceipt(
+                                  projectId: project.id,
+                                  bytes: receiptBytes!,
+                                  fileName: receiptFile?.name ?? 'dispute_payout_slip.jpg',
+                                );
+                              }
+
+                              final ok = await _payoutService.executeDisputePayToStudent(
+                                projectId: project.id,
+                                transactionId: tid,
+                                receiptUrl: uploadedReceiptUrl,
+                              );
+
+                              if (!ctx.mounted) return;
+                              Navigator.pop(ctx);
+
+                              if (ok) {
+                                setState(() {
+                                  _resolvedProjectIds.add(project.id);
+                                  _resolvedActionLabels[project.id] =
+                                      'paid_to_student';
+                                  _resolvedTids[project.id] = tid;
+                                });
+                                _showFeedback(
+                                  'Dispute Resolved: Payment sent to student. Status converted to Paid.',
+                                );
+                                _refreshAllData();
+                              } else {
+                                _showFeedback(
+                                  _payoutService.lastError ?? 'Failed to execute student payout.',
+                                  isError: true,
+                                );
+                              }
+                            },
+                      icon: isSaving
+                          ? const SizedBox(
+                              width: 18,
+                              height: 18,
+                              child: CircularProgressIndicator(
+                                strokeWidth: 2,
+                                color: Colors.white,
+                              ),
+                            )
+                          : const Icon(Icons.check_circle_rounded, size: 18),
+                      label: Text(
+                        isSaving
+                            ? 'Processing Transfer...'
+                            : 'Confirm Payout to Student (PKR ${netStudent.toStringAsFixed(0)})',
+                        style: GoogleFonts.poppins(
+                          fontWeight: FontWeight.bold,
+                          fontSize: 14,
+                        ),
+                      ),
                     ),
                   ),
                 ],
               ),
             ),
-            const Icon(Icons.arrow_forward_ios_rounded,
-                size: 14, color: AppColors.textMuted),
-          ],
-        ),
+          );
+        },
       ),
     );
   }
 
-  Future<void> _executeDisputeDecision(
-    String projectId,
-    String decisionType,
-    String notes,
-  ) async {
-    final ok = await _payoutService.resolveDisputeDecision(
-      projectId: projectId,
-      decisionType: decisionType,
-      adminNotes: notes,
-    );
+  Future<void> _openDisputeRefundToCompanyModal(ProjectModel project) async {
+    final escrow = _resolveProjectEscrow(project);
+    final tidCtrl = TextEditingController();
+    XFile? receiptFile;
+    Uint8List? receiptBytes;
+    bool isSaving = false;
+    CompanyRefundDetails? companyDetails;
+    bool isLoadingDetails = true;
 
-    if (ok) {
-      _showFeedback(
-        'Dispute decision applied successfully. Project moved to Payout Ready Queue.',
-      );
-      _tabController.animateTo(1); // Switch to Payout queue
-    } else {
-      _showFeedback(
-        _payoutService.lastError ?? 'Failed to apply dispute decision.',
-        isError: true,
-      );
-    }
+    await showModalBottomSheet(
+      context: context,
+      isScrollControlled: true,
+      backgroundColor: Colors.transparent,
+      builder: (ctx) => StatefulBuilder(
+        builder: (context, setModalState) {
+          if (isLoadingDetails) {
+            _payoutService.getCompanyRefundDetails(project).then((details) {
+              if (ctx.mounted) {
+                setModalState(() {
+                  companyDetails = details;
+                  isLoadingDetails = false;
+                });
+              }
+            });
+          }
+
+          final keyboardInset = MediaQuery.of(context).viewInsets.bottom;
+
+          return Container(
+            constraints: BoxConstraints(
+              maxHeight: MediaQuery.of(context).size.height * 0.90,
+            ),
+            padding: EdgeInsets.fromLTRB(20, 16, 20, 20 + keyboardInset),
+            decoration: const BoxDecoration(
+              color: Colors.white,
+              borderRadius: BorderRadius.vertical(top: Radius.circular(24)),
+            ),
+            child: SingleChildScrollView(
+              child: Column(
+                mainAxisSize: MainAxisSize.min,
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  Center(
+                    child: Container(
+                      width: 40,
+                      height: 4,
+                      margin: const EdgeInsets.only(bottom: 16),
+                      decoration: BoxDecoration(
+                        color: AppColors.border,
+                        borderRadius: BorderRadius.circular(2),
+                      ),
+                    ),
+                  ),
+                  Row(
+                    children: [
+                      Container(
+                        padding: const EdgeInsets.all(8),
+                        decoration: BoxDecoration(
+                          color: const Color(0xFFFEF2F2),
+                          borderRadius: BorderRadius.circular(10),
+                        ),
+                        child: const Icon(
+                          Icons.replay_rounded,
+                          color: Color(0xFFDC2626),
+                          size: 22,
+                        ),
+                      ),
+                      const SizedBox(width: 12),
+                      Expanded(
+                        child: Column(
+                          crossAxisAlignment: CrossAxisAlignment.start,
+                          children: [
+                            Text(
+                              'Dispute Award: Refund to Company',
+                              style: GoogleFonts.poppins(
+                                fontSize: 16.5,
+                                fontWeight: FontWeight.bold,
+                                color: AppColors.darkNavy,
+                              ),
+                            ),
+                            Text(
+                              'Project: ${project.title} • ${project.companyName}',
+                              maxLines: 1,
+                              overflow: TextOverflow.ellipsis,
+                              style: GoogleFonts.inter(
+                                fontSize: 12,
+                                color: AppColors.textSecondary,
+                              ),
+                            ),
+                          ],
+                        ),
+                      ),
+                    ],
+                  ),
+                  const SizedBox(height: 16),
+
+                  // Company Refund Bank Details Card
+                  Container(
+                    width: double.infinity,
+                    padding: const EdgeInsets.all(14),
+                    decoration: BoxDecoration(
+                      color: const Color(0xFFF8FAFC),
+                      borderRadius: BorderRadius.circular(14),
+                      border: Border.all(color: AppColors.border),
+                    ),
+                    child: isLoadingDetails
+                        ? const Center(
+                            child: Padding(
+                              padding: EdgeInsets.all(16),
+                              child: CircularProgressIndicator(strokeWidth: 2),
+                            ),
+                          )
+                        : Column(
+                            crossAxisAlignment: CrossAxisAlignment.start,
+                            children: [
+                              Row(
+                                mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                                children: [
+                                  Row(
+                                    children: [
+                                      const Icon(
+                                        Icons.business_rounded,
+                                        size: 16,
+                                        color: AppColors.primary,
+                                      ),
+                                      const SizedBox(width: 6),
+                                      Text(
+                                        'Corporate Refund Account',
+                                        style: GoogleFonts.inter(
+                                          fontWeight: FontWeight.bold,
+                                          fontSize: 12.5,
+                                          color: AppColors.darkNavy,
+                                        ),
+                                      ),
+                                    ],
+                                  ),
+                                  Container(
+                                    padding: const EdgeInsets.symmetric(
+                                        horizontal: 8, vertical: 2),
+                                    decoration: BoxDecoration(
+                                      color: const Color(0xFFEFF6FF),
+                                      borderRadius: BorderRadius.circular(6),
+                                    ),
+                                    child: Text(
+                                      companyDetails?.paymentMethod ?? 'Bank Account',
+                                      style: GoogleFonts.inter(
+                                        fontSize: 11,
+                                        fontWeight: FontWeight.bold,
+                                        color: const Color(0xFF2563EB),
+                                      ),
+                                    ),
+                                  ),
+                                ],
+                              ),
+                              const SizedBox(height: 10),
+                              Text(
+                                'Account Title: ${companyDetails?.accountTitle ?? companyDetails?.companyName ?? "Corporate Partner"}',
+                                style: GoogleFonts.inter(
+                                  fontSize: 13,
+                                  fontWeight: FontWeight.w600,
+                                  color: AppColors.darkNavy,
+                                ),
+                              ),
+                              const SizedBox(height: 4),
+                              Row(
+                                children: [
+                                  Expanded(
+                                    child: Text(
+                                      'A/C or IBAN: ${companyDetails?.accountNumber ?? "PK36MEZN0001234567890123"}',
+                                      style: GoogleFonts.jetBrainsMono(
+                                        fontSize: 12.5,
+                                        fontWeight: FontWeight.bold,
+                                        color: AppColors.textSecondary,
+                                      ),
+                                    ),
+                                  ),
+                                  InkWell(
+                                    onTap: () {
+                                      final num = companyDetails?.accountNumber ?? '';
+                                      if (num.isNotEmpty) {
+                                        _copyToClipboard(num, 'Company Account Number');
+                                      }
+                                    },
+                                    child: Container(
+                                      padding: const EdgeInsets.symmetric(
+                                          horizontal: 8, vertical: 3),
+                                      decoration: BoxDecoration(
+                                        color: Colors.white,
+                                        borderRadius: BorderRadius.circular(6),
+                                        border: Border.all(color: AppColors.border),
+                                      ),
+                                      child: const Row(
+                                        children: [
+                                          Icon(Icons.copy_rounded,
+                                              size: 13, color: AppColors.primary),
+                                          SizedBox(width: 4),
+                                          Text(
+                                            'Copy',
+                                            style: TextStyle(
+                                              fontSize: 11,
+                                              fontWeight: FontWeight.bold,
+                                              color: AppColors.primary,
+                                            ),
+                                          ),
+                                        ],
+                                      ),
+                                    ),
+                                  ),
+                                ],
+                              ),
+                            ],
+                          ),
+                  ),
+                  const SizedBox(height: 14),
+
+                  // Total Escrow & Refund Breakdown Box (0% Platform Fee, 100% Return)
+                  Container(
+                    width: double.infinity,
+                    padding: const EdgeInsets.all(14),
+                    decoration: BoxDecoration(
+                      color: const Color(0xFFFEF2F2),
+                      borderRadius: BorderRadius.circular(14),
+                      border: Border.all(
+                        color: const Color(0xFFEF4444).withValues(alpha: 0.35),
+                      ),
+                    ),
+                    child: Column(
+                      children: [
+                        _buildBreakdownRow(
+                          'Total Escrow Funded (Project Price)',
+                          'PKR ${escrow.toStringAsFixed(0)}',
+                          isBold: true,
+                        ),
+                        const SizedBox(height: 7),
+                        _buildBreakdownRow(
+                          'Platform Fee / Commission (0%)',
+                          'PKR 0 (0% Commission)',
+                          color: const Color(0xFF16A34A),
+                          isBold: false,
+                        ),
+                        const SizedBox(height: 7),
+                        const Divider(color: Color(0xFFFECACA)),
+                        const SizedBox(height: 7),
+                        _buildBreakdownRow(
+                          'Refund Payable to Company (100% Full Escrow)',
+                          'PKR ${escrow.toStringAsFixed(0)}',
+                          color: const Color(0xFFDC2626),
+                          isBold: true,
+                        ),
+                      ],
+                    ),
+                  ),
+                  const SizedBox(height: 14),
+
+                  // Refund TID Input
+                  TextField(
+                    controller: tidCtrl,
+                    decoration: InputDecoration(
+                      labelText: 'Refund Transaction ID (TID) *',
+                      hintText: 'Enter bank refund reference TID...',
+                      prefixIcon: const Icon(Icons.numbers_rounded, size: 18),
+                      border: OutlineInputBorder(borderRadius: BorderRadius.circular(10)),
+                      isDense: true,
+                    ),
+                  ),
+                  const SizedBox(height: 12),
+
+                  // Screenshot upload
+                  Row(
+                    children: [
+                      ElevatedButton.icon(
+                        style: ElevatedButton.styleFrom(
+                          backgroundColor: const Color(0xFFDC2626),
+                          foregroundColor: Colors.white,
+                          shape: RoundedRectangleBorder(
+                            borderRadius: BorderRadius.circular(8),
+                          ),
+                          padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 10),
+                        ),
+                        onPressed: () async {
+                          final picker = ImagePicker();
+                          final picked = await picker.pickImage(
+                            source: ImageSource.gallery,
+                            imageQuality: 85,
+                          );
+                          if (picked != null) {
+                            final bytes = await picked.readAsBytes();
+                            setModalState(() {
+                              receiptFile = picked;
+                              receiptBytes = bytes;
+                            });
+                          }
+                        },
+                        icon: const Icon(Icons.upload_file_rounded, size: 16),
+                        label: Text(
+                          receiptBytes != null ? 'Slip Selected ✓' : 'Attach Refund Slip',
+                          style: const TextStyle(fontSize: 12, fontWeight: FontWeight.bold),
+                        ),
+                      ),
+                      if (receiptBytes != null) ...[
+                        const SizedBox(width: 10),
+                        const Expanded(
+                          child: Text(
+                            'Refund proof slip attached.',
+                            style: TextStyle(fontSize: 11, color: Color(0xFF991B1B)),
+                          ),
+                        ),
+                      ],
+                    ],
+                  ),
+                  const SizedBox(height: 18),
+
+                  // Action Button
+                  SizedBox(
+                    width: double.infinity,
+                    child: ElevatedButton.icon(
+                      style: ElevatedButton.styleFrom(
+                        backgroundColor: const Color(0xFFDC2626),
+                        foregroundColor: Colors.white,
+                        padding: const EdgeInsets.symmetric(vertical: 14),
+                        shape: RoundedRectangleBorder(
+                          borderRadius: BorderRadius.circular(12),
+                        ),
+                      ),
+                      onPressed: isSaving
+                          ? null
+                          : () async {
+                              final tid = tidCtrl.text.trim();
+                              if (tid.isEmpty) {
+                                ScaffoldMessenger.of(context).showSnackBar(
+                                  const SnackBar(
+                                    content: Text('Please enter the refund Transaction ID (TID)'),
+                                    backgroundColor: AppColors.error,
+                                  ),
+                                );
+                                return;
+                              }
+
+                              setModalState(() => isSaving = true);
+                              String? uploadedReceiptUrl;
+                              if (receiptBytes != null) {
+                                uploadedReceiptUrl = await _payoutService.uploadPayoutReceipt(
+                                  projectId: project.id,
+                                  bytes: receiptBytes!,
+                                  fileName: receiptFile?.name ?? 'company_refund_slip.jpg',
+                                );
+                              }
+
+                              final ok = await _payoutService.executeDisputeRefundToCompany(
+                                projectId: project.id,
+                                transactionId: tid,
+                                receiptUrl: uploadedReceiptUrl,
+                              );
+
+                              if (!ctx.mounted) return;
+                              Navigator.pop(ctx);
+
+                              if (ok) {
+                                setState(() {
+                                  _resolvedProjectIds.add(project.id);
+                                  _resolvedActionLabels[project.id] =
+                                      'refunded_to_company';
+                                  _resolvedTids[project.id] = tid;
+                                });
+                                _showFeedback(
+                                  'Dispute Resolved: SkillBridge administration refunded payment to company. Project Cancelled.',
+                                );
+                                _refreshAllData();
+                              } else {
+                                _showFeedback(
+                                  _payoutService.lastError ?? 'Failed to execute company refund.',
+                                  isError: true,
+                                );
+                              }
+                            },
+                      icon: isSaving
+                          ? const SizedBox(
+                              width: 18,
+                              height: 18,
+                              child: CircularProgressIndicator(
+                                strokeWidth: 2,
+                                color: Colors.white,
+                              ),
+                            )
+                          : const Icon(Icons.check_circle_rounded, size: 18),
+                      label: Text(
+                        isSaving
+                            ? 'Processing Refund...'
+                            : 'Confirm Refund to Company (PKR ${escrow.toStringAsFixed(0)})',
+                        style: GoogleFonts.poppins(
+                          fontWeight: FontWeight.bold,
+                          fontSize: 14,
+                        ),
+                      ),
+                    ),
+                  ),
+                ],
+              ),
+            ),
+          );
+        },
+      ),
+    );
   }
 
   // ===========================================================================
   // EXECUTE PAYOUT TRANSFER MODAL
   // ===========================================================================
   Future<void> _openCompletePayoutModal(ProjectModel project) async {
+    final escrow = _resolveProjectEscrow(project);
+    final fee = double.parse((escrow * 0.10).toStringAsFixed(2));
+    final netStudent = double.parse((escrow * 0.90).toStringAsFixed(2));
+
     final tidCtrl = TextEditingController();
     XFile? receiptFile;
     Uint8List? receiptBytes;
     bool isSaving = false;
+
+    // Load student banking / wallet credentials asynchronously
+    final studentDetails =
+        await _payoutService.getStudentDisbursalDetails(project);
+
+    if (!mounted) return;
 
     await showModalBottomSheet(
       context: context,
@@ -382,8 +1047,8 @@ class _AdminDisputeResolutionScreenState
           final viewInsets = MediaQuery.of(context).viewInsets;
 
           return Container(
-            margin: EdgeInsets.only(top: 60, bottom: viewInsets.bottom),
-            padding: const EdgeInsets.all(24),
+            margin: EdgeInsets.only(top: 40, bottom: viewInsets.bottom),
+            padding: const EdgeInsets.all(22),
             decoration: const BoxDecoration(
               color: Colors.white,
               borderRadius: BorderRadius.vertical(top: Radius.circular(24)),
@@ -432,6 +1097,8 @@ class _AdminDisputeResolutionScreenState
                             ),
                             Text(
                               'Project: ${project.title}',
+                              maxLines: 1,
+                              overflow: TextOverflow.ellipsis,
                               style: GoogleFonts.inter(
                                 fontSize: 12,
                                 color: AppColors.textSecondary,
@@ -442,8 +1109,161 @@ class _AdminDisputeResolutionScreenState
                       ),
                     ],
                   ),
-                  const SizedBox(height: 20),
+                  const SizedBox(height: 16),
                   const Divider(color: AppColors.border),
+                  const SizedBox(height: 12),
+
+                  // ASSIGNED STUDENT DISBURSAL DESTINATION CARD
+                  Container(
+                    padding: const EdgeInsets.all(14),
+                    decoration: BoxDecoration(
+                      color: const Color(0xFFF0FDF4),
+                      borderRadius: BorderRadius.circular(12),
+                      border: Border.all(
+                        color: const Color(0xFF10B981).withValues(alpha: 0.35),
+                      ),
+                    ),
+                    child: Column(
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      children: [
+                        Row(
+                          children: [
+                            Container(
+                              padding: const EdgeInsets.all(6),
+                              decoration: BoxDecoration(
+                                color: const Color(0xFF10B981).withValues(alpha: 0.15),
+                                borderRadius: BorderRadius.circular(8),
+                              ),
+                              child: const Icon(
+                                Icons.account_balance_wallet_rounded,
+                                color: Color(0xFF059669),
+                                size: 18,
+                              ),
+                            ),
+                            const SizedBox(width: 10),
+                            Expanded(
+                              child: Column(
+                                crossAxisAlignment: CrossAxisAlignment.start,
+                                children: [
+                                  Text(
+                                    'Disbursal Destination (Assigned Student)',
+                                    style: GoogleFonts.poppins(
+                                      fontSize: 12.5,
+                                      fontWeight: FontWeight.bold,
+                                      color: const Color(0xFF065F46),
+                                    ),
+                                  ),
+                                  Text(
+                                    '${studentDetails.studentName} • ${studentDetails.studentEmail}',
+                                    maxLines: 1,
+                                    overflow: TextOverflow.ellipsis,
+                                    style: GoogleFonts.inter(
+                                      fontSize: 11.5,
+                                      color: const Color(0xFF047857),
+                                    ),
+                                  ),
+                                ],
+                              ),
+                            ),
+                          ],
+                        ),
+                        const SizedBox(height: 10),
+                        const Divider(color: Color(0xFFD1FAE5), height: 1),
+                        const SizedBox(height: 10),
+                        Row(
+                          children: [
+                            Expanded(
+                              child: Column(
+                                crossAxisAlignment: CrossAxisAlignment.start,
+                                children: [
+                                  Text(
+                                    'Payment Method',
+                                    style: GoogleFonts.inter(
+                                      fontSize: 11,
+                                      color: AppColors.textSecondary,
+                                    ),
+                                  ),
+                                  Text(
+                                    studentDetails.paymentMethod,
+                                    maxLines: 1,
+                                    overflow: TextOverflow.ellipsis,
+                                    style: GoogleFonts.inter(
+                                      fontSize: 13,
+                                      fontWeight: FontWeight.w600,
+                                      color: AppColors.darkNavy,
+                                    ),
+                                  ),
+                                ],
+                              ),
+                            ),
+                            const SizedBox(width: 10),
+                            Expanded(
+                              child: Column(
+                                crossAxisAlignment: CrossAxisAlignment.start,
+                                children: [
+                                  Text(
+                                    'Account Title',
+                                    style: GoogleFonts.inter(
+                                      fontSize: 11,
+                                      color: AppColors.textSecondary,
+                                    ),
+                                  ),
+                                  Text(
+                                    studentDetails.accountTitle,
+                                    maxLines: 1,
+                                    overflow: TextOverflow.ellipsis,
+                                    style: GoogleFonts.inter(
+                                      fontSize: 13,
+                                      fontWeight: FontWeight.w600,
+                                      color: AppColors.darkNavy,
+                                    ),
+                                  ),
+                                ],
+                              ),
+                            ),
+                          ],
+                        ),
+                        const SizedBox(height: 8),
+                        Row(
+                          children: [
+                            Expanded(
+                              child: Column(
+                                crossAxisAlignment: CrossAxisAlignment.start,
+                                children: [
+                                  Text(
+                                    'Account Number / IBAN',
+                                    style: GoogleFonts.inter(
+                                      fontSize: 11,
+                                      color: AppColors.textSecondary,
+                                    ),
+                                  ),
+                                  Text(
+                                    studentDetails.accountNumber,
+                                    style: GoogleFonts.jetBrainsMono(
+                                      fontSize: 13.5,
+                                      fontWeight: FontWeight.bold,
+                                      color: const Color(0xFF065F46),
+                                    ),
+                                  ),
+                                ],
+                              ),
+                            ),
+                            IconButton(
+                              tooltip: 'Copy Account Number',
+                              icon: const Icon(Icons.copy_rounded,
+                                  size: 18, color: Color(0xFF059669)),
+                              onPressed: () {
+                                _copyToClipboard(
+                                  studentDetails.accountNumber,
+                                  'Student Account Number',
+                                );
+                              },
+                            ),
+                          ],
+                        ),
+                      ],
+                    ),
+                  ),
                   const SizedBox(height: 14),
 
                   // Financial Breakdown Card
@@ -457,20 +1277,20 @@ class _AdminDisputeResolutionScreenState
                     child: Column(
                       children: [
                         _buildBreakdownRow(
-                          'Total Escrow Deposit',
-                          'PKR ${project.escrowAmount.toStringAsFixed(0)}',
+                          'Total Escrow Funded (Project Price)',
+                          'PKR ${escrow.toStringAsFixed(0)}',
                           isBold: true,
                         ),
                         const SizedBox(height: 6),
                         _buildBreakdownRow(
                           'Platform Commission (10%)',
-                          'PKR ${(project.platformCommissionAmount ?? 0).toStringAsFixed(0)}',
+                          '- PKR ${fee.toStringAsFixed(0)}',
                           color: AppColors.primary,
                         ),
                         const SizedBox(height: 6),
                         _buildBreakdownRow(
-                          'Net Student Payout',
-                          'PKR ${(project.studentPayoutAmount ?? 0).toStringAsFixed(0)}',
+                          'Net Student Payout (90%)',
+                          'PKR ${netStudent.toStringAsFixed(0)}',
                           color: AppColors.success,
                           isBold: true,
                         ),
@@ -485,7 +1305,7 @@ class _AdminDisputeResolutionScreenState
                       ],
                     ),
                   ),
-                  const SizedBox(height: 18),
+                  const SizedBox(height: 16),
 
                   Text(
                     'Bank Transfer TID / Reference Number *',
@@ -509,7 +1329,7 @@ class _AdminDisputeResolutionScreenState
 
                   // Receipt Upload
                   Text(
-                    'Transfer Receipt Screenshot (Optional)',
+                    'Transfer Receipt Screenshot Proof *',
                     style: GoogleFonts.inter(
                       fontSize: 12.5,
                       fontWeight: FontWeight.bold,
@@ -535,6 +1355,8 @@ class _AdminDisputeResolutionScreenState
                           Expanded(
                             child: Text(
                               receiptFile?.name ?? 'receipt.jpg',
+                              maxLines: 1,
+                              overflow: TextOverflow.ellipsis,
                               style: const TextStyle(fontSize: 12),
                             ),
                           ),
@@ -567,7 +1389,7 @@ class _AdminDisputeResolutionScreenState
                         }
                       },
                       icon: const Icon(Icons.upload_file_rounded),
-                      label: const Text('Attach Transfer Slip / Receipt'),
+                      label: const Text('Attach Transfer Slip / Receipt Screenshot'),
                     ),
 
                   const SizedBox(height: 24),
@@ -595,8 +1417,8 @@ class _AdminDisputeResolutionScreenState
                           : const Icon(Icons.check_circle_outline_rounded),
                       label: Text(
                         isSaving
-                            ? 'Processing Payout...'
-                            : 'Mark Payout Completed & Finalize Project',
+                            ? 'Processing Transfer...'
+                            : 'Mark as Paid & Share Receipt with Student',
                         style: GoogleFonts.inter(fontWeight: FontWeight.bold),
                       ),
                       onPressed: isSaving
@@ -609,17 +1431,27 @@ class _AdminDisputeResolutionScreenState
                                 return;
                               }
                               setSheetState(() => isSaving = true);
+
+                              String? uploadedUrl;
+                              if (receiptBytes != null) {
+                                uploadedUrl =
+                                    await _payoutService.uploadPayoutReceipt(
+                                  projectId: project.id,
+                                  bytes: receiptBytes!,
+                                  fileName: receiptFile?.name ?? 'receipt.jpg',
+                                );
+                              }
+
                               final ok = await _payoutService.completePayout(
                                 projectId: project.id,
                                 transactionId: tid,
-                                receiptUrl: receiptFile != null
-                                    ? 'https://mock.storage/payouts/${project.id}/${receiptFile!.name}'
-                                    : null,
+                                receiptUrl: uploadedUrl,
                               );
-                              if (ok && mounted) {
+                              if (ok && ctx.mounted) {
                                 Navigator.pop(ctx);
                                 _showFeedback(
-                                    'Payout finalized! Project marked completed.');
+                                    'Payout completed! Transfer receipt sent to student.');
+                                await _refreshAllData();
                               } else {
                                 setSheetState(() => isSaving = false);
                                 _showFeedback(
@@ -715,48 +1547,8 @@ class _AdminDisputeResolutionScreenState
                       onSignOut: _handleSignOut,
                       onSearch: (q) => setState(() => _searchQuery = q),
                     ),
-                    Container(
-                      color: Colors.white,
-                      child: TabBar(
-                        controller: _tabController,
-                        labelColor: AppColors.primary,
-                        unselectedLabelColor: AppColors.textSecondary,
-                        indicatorColor: AppColors.primary,
-                        indicatorWeight: 3,
-                        tabs: [
-                          ValueListenableBuilder<List<ProjectModel>>(
-                            valueListenable:
-                                _payoutService.disputedProjectsNotifier,
-                            builder: (_, list, __) => Tab(
-                              icon: const Icon(Icons.gavel_rounded, size: 18),
-                              text: 'Dispute Cases (${list.length})',
-                            ),
-                          ),
-                          ValueListenableBuilder<List<ProjectModel>>(
-                            valueListenable:
-                                _payoutService.payoutReadyProjectsNotifier,
-                            builder: (_, list, __) => Tab(
-                              icon: const Icon(Icons.payment_rounded, size: 18),
-                              text: 'Ready for Payout (${list.length})',
-                            ),
-                          ),
-                          ValueListenableBuilder<List<AdminNotificationModel>>(
-                            valueListenable:
-                                _payoutService.notificationsNotifier,
-                            builder: (_, list, __) {
-                              final unread = list.where((n) => !n.isRead).length;
-                              return Tab(
-                                icon: const Icon(Icons.notifications_active_rounded,
-                                    size: 18),
-                                text: unread > 0
-                                    ? 'Escrow Alerts ($unread New)'
-                                    : 'Escrow Alerts',
-                              );
-                            },
-                          ),
-                        ],
-                      ),
-                    ),
+                    _buildExecutiveBanner(!isDesktop),
+                    _buildUniqueTabBar(!isDesktop),
                     Expanded(
                       child: RefreshIndicator(
                         onRefresh: _refreshAllData,
@@ -785,23 +1577,24 @@ class _AdminDisputeResolutionScreenState
     return ValueListenableBuilder<List<ProjectModel>>(
       valueListenable: _payoutService.disputedProjectsNotifier,
       builder: (context, projects, _) {
-        if (projects.isEmpty) {
-          return const Padding(
-            padding: EdgeInsets.all(40),
-            child: AppEmptyState(
-              title: 'No Active Disputes',
-              subtitle:
-                  'All project deliverables are progressing peacefully without any active dispute cases.',
-              icon: Icons.verified_rounded,
-            ),
-          );
+        final filteredList = _searchQuery.trim().isEmpty
+            ? projects
+            : projects.where((p) {
+                final q = _searchQuery.toLowerCase();
+                return p.title.toLowerCase().contains(q) ||
+                    (p.disputeCaseId ?? '').toLowerCase().contains(q) ||
+                    p.companyName.toLowerCase().contains(q);
+              }).toList();
+
+        if (filteredList.isEmpty) {
+          return _buildUniqueDisputesEmptyState();
         }
 
         return ListView.builder(
           padding: const EdgeInsets.all(24),
-          itemCount: projects.length,
+          itemCount: filteredList.length,
           itemBuilder: (context, idx) {
-            final p = projects[idx];
+            final p = filteredList[idx];
             return Container(
               margin: const EdgeInsets.only(bottom: 16),
               padding: const EdgeInsets.all(20),
@@ -817,28 +1610,53 @@ class _AdminDisputeResolutionScreenState
                   Row(
                     mainAxisAlignment: MainAxisAlignment.spaceBetween,
                     children: [
-                      Container(
-                        padding: const EdgeInsets.symmetric(
-                            horizontal: 10, vertical: 4),
-                        decoration: BoxDecoration(
-                          color: AppColors.errorBg,
-                          borderRadius: BorderRadius.circular(6),
-                        ),
-                        child: Text(
-                          p.disputeCaseId ?? '#SB-DISPUTE',
-                          style: GoogleFonts.jetBrainsMono(
-                            fontSize: 12,
-                            fontWeight: FontWeight.bold,
-                            color: AppColors.error,
+                      InkWell(
+                        onTap: () => _copyToClipboard(
+                            p.disputeCaseId ?? '#SB-DISPUTE', 'Dispute Case ID'),
+                        borderRadius: BorderRadius.circular(6),
+                        child: Container(
+                          padding: const EdgeInsets.symmetric(
+                              horizontal: 10, vertical: 4),
+                          decoration: BoxDecoration(
+                            color: _isProjectDisputeResolved(p)
+                                ? (_isDisputePaidToStudent(p)
+                                    ? const Color(0xFFDCFCE7)
+                                    : const Color(0xFFFEE2E2))
+                                : AppColors.errorBg,
+                            borderRadius: BorderRadius.circular(6),
+                          ),
+                          child: Text(
+                            _isProjectDisputeResolved(p)
+                                ? (_isDisputePaidToStudent(p)
+                                    ? 'RESOLVED • PAID'
+                                    : 'RESOLVED • REFUNDED')
+                                : (p.disputeCaseId ?? '#SB-DISPUTE'),
+                            style: GoogleFonts.jetBrainsMono(
+                              fontSize: 12,
+                              fontWeight: FontWeight.bold,
+                              color: _isProjectDisputeResolved(p)
+                                  ? (_isDisputePaidToStudent(p)
+                                      ? const Color(0xFF15803D)
+                                      : const Color(0xFFB91C1C))
+                                  : AppColors.error,
+                            ),
                           ),
                         ),
                       ),
                       Text(
-                        'PKR ${p.escrowAmount.toStringAsFixed(0)} Locked',
+                        _isProjectDisputeResolved(p)
+                            ? (_isDisputePaidToStudent(p)
+                                ? 'PKR ${_resolveProjectEscrow(p).toStringAsFixed(0)} Paid (90%)'
+                                : 'PKR ${_resolveProjectEscrow(p).toStringAsFixed(0)} Refunded (100%)')
+                            : 'PKR ${_resolveProjectEscrow(p).toStringAsFixed(0)} Locked',
                         style: GoogleFonts.poppins(
                           fontSize: 15,
                           fontWeight: FontWeight.bold,
-                          color: AppColors.darkNavy,
+                          color: _isProjectDisputeResolved(p)
+                              ? (_isDisputePaidToStudent(p)
+                                  ? const Color(0xFF047857)
+                                  : const Color(0xFFB91C1C))
+                              : AppColors.darkNavy,
                         ),
                       ),
                     ],
@@ -877,25 +1695,213 @@ class _AdminDisputeResolutionScreenState
                       ),
                     ),
                   ),
-                  const SizedBox(height: 16),
-                  Row(
-                    mainAxisAlignment: MainAxisAlignment.end,
-                    children: [
-                      ElevatedButton.icon(
-                        style: ElevatedButton.styleFrom(
-                          backgroundColor: AppColors.primary,
-                          foregroundColor: Colors.white,
-                          padding: const EdgeInsets.symmetric(
-                              horizontal: 16, vertical: 10),
-                          shape: RoundedRectangleBorder(
-                            borderRadius: BorderRadius.circular(8),
+                  const SizedBox(height: 8),
+                  Container(
+                    width: double.infinity,
+                    padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 7),
+                    decoration: BoxDecoration(
+                      color: const Color(0xFFEFF6FF),
+                      borderRadius: BorderRadius.circular(8),
+                      border: Border.all(color: const Color(0xFF93C5FD)),
+                    ),
+                    child: Row(
+                      children: [
+                        const Icon(Icons.mark_email_read_rounded,
+                            size: 15, color: Color(0xFF1D4ED8)),
+                        const SizedBox(width: 6),
+                        Expanded(
+                          child: Text(
+                            'Evidence Channel: Parties instructed to submit proof to skillbridge.official@gmail.com',
+                            style: GoogleFonts.inter(
+                              fontSize: 11.5,
+                              color: const Color(0xFF1E40AF),
+                              fontWeight: FontWeight.w500,
+                            ),
                           ),
                         ),
-                        icon: const Icon(Icons.gavel_rounded, size: 17),
-                        label: const Text('Resolve Dispute (3-Way Decision)'),
-                        onPressed: () => _openDisputeDecisionDialog(p),
-                      ),
-                    ],
+                      ],
+                    ),
+                  ),
+                  const SizedBox(height: 16),
+                  Builder(
+                    builder: (context) {
+                      if (_isProjectDisputeResolved(p)) {
+                        final isStudentAwarded = _isDisputePaidToStudent(p);
+                        final tid = (p.payoutTransactionId != null &&
+                                p.payoutTransactionId!.isNotEmpty)
+                            ? p.payoutTransactionId!
+                            : ((p.refundTransactionId != null &&
+                                    p.refundTransactionId!.isNotEmpty)
+                                ? p.refundTransactionId!
+                                : (_resolvedTids[p.id] ?? 'Confirmed'));
+                        final escrow = _resolveProjectEscrow(p);
+                        final commission10 = (escrow * 0.10).toStringAsFixed(0);
+                        final netStudent = (escrow * 0.90).toStringAsFixed(0);
+
+                        return Container(
+                          width: double.infinity,
+                          padding: const EdgeInsets.symmetric(
+                              horizontal: 14, vertical: 12),
+                          decoration: BoxDecoration(
+                            color: isStudentAwarded
+                                ? const Color(0xFFF0FDF4)
+                                : const Color(0xFFFEF2F2),
+                            borderRadius: BorderRadius.circular(12),
+                            border: Border.all(
+                              color: isStudentAwarded
+                                  ? const Color(0xFF86EFAC)
+                                  : const Color(0xFFFECACA),
+                            ),
+                          ),
+                          child: Row(
+                            crossAxisAlignment: CrossAxisAlignment.start,
+                            children: [
+                              Container(
+                                padding: const EdgeInsets.all(6),
+                                decoration: BoxDecoration(
+                                  color: isStudentAwarded
+                                      ? const Color(0xFFDCFCE7)
+                                      : const Color(0xFFFEE2E2),
+                                  shape: BoxShape.circle,
+                                ),
+                                child: Icon(
+                                  isStudentAwarded
+                                      ? Icons.check_circle_rounded
+                                      : Icons.replay_circle_filled_rounded,
+                                  size: 18,
+                                  color: isStudentAwarded
+                                      ? const Color(0xFF059669)
+                                      : const Color(0xFFDC2626),
+                                ),
+                              ),
+                              const SizedBox(width: 10),
+                              Expanded(
+                                child: Column(
+                                  crossAxisAlignment: CrossAxisAlignment.start,
+                                  children: [
+                                    Text(
+                                      isStudentAwarded
+                                          ? 'Dispute Resolved: Payment Sent to Student (PAID)'
+                                          : 'Dispute Resolved: 100% Refunded to Company (CANCELLED)',
+                                      style: GoogleFonts.inter(
+                                        fontSize: 13,
+                                        fontWeight: FontWeight.bold,
+                                        color: isStudentAwarded
+                                            ? const Color(0xFF065F46)
+                                            : const Color(0xFF991B1B),
+                                      ),
+                                    ),
+                                    const SizedBox(height: 3),
+                                    Text(
+                                      isStudentAwarded
+                                          ? '90% Net Payout (PKR $netStudent) sent to student • 10% Platform Fee (PKR $commission10) • TID: $tid'
+                                          : '100% Full Escrow (PKR ${escrow.toStringAsFixed(0)}) refunded to company • 0% Platform Fee (PKR 0) • Refund TID: $tid',
+                                      style: GoogleFonts.inter(
+                                        fontSize: 11.5,
+                                        color: isStudentAwarded
+                                            ? const Color(0xFF047857)
+                                            : const Color(0xFFB91C1C),
+                                      ),
+                                    ),
+                                  ],
+                                ),
+                              ),
+                            ],
+                          ),
+                        );
+                      }
+
+                      return LayoutBuilder(
+                        builder: (context, cardConstraints) {
+                          final isMobileCard = cardConstraints.maxWidth < 500;
+                          if (isMobileCard) {
+                            return Column(
+                              crossAxisAlignment: CrossAxisAlignment.stretch,
+                              children: [
+                                ElevatedButton.icon(
+                                  style: ElevatedButton.styleFrom(
+                                    backgroundColor: const Color(0xFF059669),
+                                    foregroundColor: Colors.white,
+                                    padding: const EdgeInsets.symmetric(
+                                        horizontal: 16, vertical: 12),
+                                    shape: RoundedRectangleBorder(
+                                      borderRadius: BorderRadius.circular(10),
+                                    ),
+                                  ),
+                                  icon: const Icon(Icons.payments_rounded, size: 17),
+                                  label: const Text(
+                                    'Pay to Student',
+                                    style: TextStyle(fontWeight: FontWeight.bold),
+                                  ),
+                                  onPressed: () => _openDisputePayToStudentModal(p),
+                                ),
+                                const SizedBox(height: 8),
+                                ElevatedButton.icon(
+                                  style: ElevatedButton.styleFrom(
+                                    backgroundColor: const Color(0xFFDC2626),
+                                    foregroundColor: Colors.white,
+                                    padding: const EdgeInsets.symmetric(
+                                        horizontal: 16, vertical: 12),
+                                    shape: RoundedRectangleBorder(
+                                      borderRadius: BorderRadius.circular(10),
+                                    ),
+                                  ),
+                                  icon: const Icon(Icons.replay_rounded, size: 17),
+                                  label: const Text(
+                                    'Refund to Company',
+                                    style: TextStyle(fontWeight: FontWeight.bold),
+                                  ),
+                                  onPressed: () => _openDisputeRefundToCompanyModal(p),
+                                ),
+                              ],
+                            );
+                          }
+                          return Row(
+                            children: [
+                              Expanded(
+                                child: ElevatedButton.icon(
+                                  style: ElevatedButton.styleFrom(
+                                    backgroundColor: const Color(0xFF059669),
+                                    foregroundColor: Colors.white,
+                                    padding: const EdgeInsets.symmetric(
+                                        horizontal: 16, vertical: 12),
+                                    shape: RoundedRectangleBorder(
+                                      borderRadius: BorderRadius.circular(10),
+                                    ),
+                                  ),
+                                  icon: const Icon(Icons.payments_rounded, size: 17),
+                                  label: const Text(
+                                    'Pay to Student',
+                                    style: TextStyle(fontWeight: FontWeight.bold),
+                                  ),
+                                  onPressed: () => _openDisputePayToStudentModal(p),
+                                ),
+                              ),
+                              const SizedBox(width: 12),
+                              Expanded(
+                                child: ElevatedButton.icon(
+                                  style: ElevatedButton.styleFrom(
+                                    backgroundColor: const Color(0xFFDC2626),
+                                    foregroundColor: Colors.white,
+                                    padding: const EdgeInsets.symmetric(
+                                        horizontal: 16, vertical: 12),
+                                    shape: RoundedRectangleBorder(
+                                      borderRadius: BorderRadius.circular(10),
+                                    ),
+                                  ),
+                                  icon: const Icon(Icons.replay_rounded, size: 17),
+                                  label: const Text(
+                                    'Refund to Company',
+                                    style: TextStyle(fontWeight: FontWeight.bold),
+                                  ),
+                                  onPressed: () => _openDisputeRefundToCompanyModal(p),
+                                ),
+                              ),
+                            ],
+                          );
+                        },
+                      );
+                    },
                   ),
                 ],
               ),
@@ -912,15 +1918,7 @@ class _AdminDisputeResolutionScreenState
       valueListenable: _payoutService.payoutReadyProjectsNotifier,
       builder: (context, projects, _) {
         if (projects.isEmpty) {
-          return const Padding(
-            padding: EdgeInsets.all(40),
-            child: AppEmptyState(
-              title: 'Payout Queue Empty',
-              subtitle:
-                  'There are no approved or dispute-resolved projects awaiting payout transfer.',
-              icon: Icons.done_all_rounded,
-            ),
-          );
+          return _buildUniquePayoutsEmptyState();
         }
 
         return ListView.builder(
@@ -928,8 +1926,9 @@ class _AdminDisputeResolutionScreenState
           itemCount: projects.length,
           itemBuilder: (context, idx) {
             final p = projects[idx];
-            final netStudent = p.studentPayoutAmount ?? (p.escrowAmount * 0.90);
-            final fee = p.platformCommissionAmount ?? (p.escrowAmount * 0.10);
+            final escrow = _resolveProjectEscrow(p);
+            final fee = double.parse((escrow * 0.10).toStringAsFixed(2));
+            final netStudent = double.parse((escrow * 0.90).toStringAsFixed(2));
 
             return Container(
               margin: const EdgeInsets.only(bottom: 16),
@@ -1003,24 +2002,30 @@ class _AdminDisputeResolutionScreenState
                     ),
                   ],
                   const SizedBox(height: 16),
-                  Row(
-                    mainAxisAlignment: MainAxisAlignment.end,
-                    children: [
-                      ElevatedButton.icon(
-                        style: ElevatedButton.styleFrom(
-                          backgroundColor: AppColors.success,
-                          foregroundColor: Colors.white,
-                          padding: const EdgeInsets.symmetric(
-                              horizontal: 16, vertical: 10),
-                          shape: RoundedRectangleBorder(
-                            borderRadius: BorderRadius.circular(8),
+                  LayoutBuilder(
+                    builder: (context, cardConstraints) {
+                      final isMobileCard = cardConstraints.maxWidth < 460;
+                      return SizedBox(
+                        width: isMobileCard ? double.infinity : null,
+                        child: ElevatedButton.icon(
+                          style: ElevatedButton.styleFrom(
+                            backgroundColor: AppColors.success,
+                            foregroundColor: Colors.white,
+                            padding: const EdgeInsets.symmetric(
+                                horizontal: 16, vertical: 12),
+                            shape: RoundedRectangleBorder(
+                              borderRadius: BorderRadius.circular(10),
+                            ),
                           ),
+                          icon: const Icon(Icons.send_rounded, size: 16),
+                          label: const Text(
+                            'Execute Transfer & Finalize',
+                            style: TextStyle(fontWeight: FontWeight.bold),
+                          ),
+                          onPressed: () => _openCompletePayoutModal(p),
                         ),
-                        icon: const Icon(Icons.send_rounded, size: 16),
-                        label: const Text('Execute Transfer & Finalize'),
-                        onPressed: () => _openCompletePayoutModal(p),
-                      ),
-                    ],
+                      );
+                    },
                   ),
                 ],
               ),
@@ -1037,14 +2042,7 @@ class _AdminDisputeResolutionScreenState
       valueListenable: _payoutService.notificationsNotifier,
       builder: (context, notifs, _) {
         if (notifs.isEmpty) {
-          return const Padding(
-            padding: EdgeInsets.all(40),
-            child: AppEmptyState(
-              title: 'No Escrow Alerts',
-              subtitle: 'No pending alerts or notifications at this time.',
-              icon: Icons.notifications_none_rounded,
-            ),
-          );
+          return _buildUniqueNotificationsEmptyState();
         }
 
         return ListView.builder(
@@ -1135,6 +2133,695 @@ class _AdminDisputeResolutionScreenState
           },
         );
       },
+    );
+  }
+
+  // ===========================================================================
+  // EXECUTIVE HEADER & SEGMENTED PILL TAB BAR (ZERO TRUNCATION)
+  // ===========================================================================
+  Widget _buildExecutiveBanner(bool isMobile) {
+    return Container(
+      width: double.infinity,
+      margin: EdgeInsets.fromLTRB(
+        isMobile ? 12 : 24,
+        isMobile ? 10 : 16,
+        isMobile ? 12 : 24,
+        0,
+      ),
+      padding: EdgeInsets.all(isMobile ? 14 : 18),
+      decoration: BoxDecoration(
+        gradient: const LinearGradient(
+          colors: [
+            Color(0xFF0F172A), // Slate 900
+            Color(0xFF1E293B), // Slate 800
+          ],
+          begin: Alignment.topLeft,
+          end: Alignment.bottomRight,
+        ),
+        borderRadius: BorderRadius.circular(16),
+        boxShadow: [
+          BoxShadow(
+            color: Colors.black.withValues(alpha: 0.12),
+            blurRadius: 10,
+            offset: const Offset(0, 4),
+          ),
+        ],
+      ),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Row(
+            children: [
+              Container(
+                padding: const EdgeInsets.all(8),
+                decoration: BoxDecoration(
+                  color: AppColors.primary.withValues(alpha: 0.25),
+                  borderRadius: BorderRadius.circular(10),
+                  border: Border.all(color: AppColors.primary.withValues(alpha: 0.4)),
+                ),
+                child: const Icon(
+                  Icons.shield_rounded,
+                  color: Colors.white,
+                  size: 20,
+                ),
+              ),
+              const SizedBox(width: 12),
+              Expanded(
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    Text(
+                      'Custodial Escrow & Resolution Chamber',
+                      style: GoogleFonts.poppins(
+                        fontSize: isMobile ? 14 : 16,
+                        fontWeight: FontWeight.bold,
+                        color: Colors.white,
+                      ),
+                    ),
+                    Text(
+                      'Arbitrated Decisions (Pay Student / Refund Company) • 5-Day Auto-Release • 10% Platform Fee',
+                      style: GoogleFonts.inter(
+                        fontSize: isMobile ? 11 : 12,
+                        color: const Color(0xFF94A3B8), // Slate 400
+                      ),
+                    ),
+                  ],
+                ),
+              ),
+            ],
+          ),
+          const SizedBox(height: 12),
+          Wrap(
+            spacing: 8,
+            runSpacing: 6,
+            children: [
+              _buildBannerStatPill(
+                icon: Icons.gavel_rounded,
+                label: 'Arbitration Chamber',
+                color: const Color(0xFFEF4444),
+              ),
+              _buildBannerStatPill(
+                icon: Icons.account_balance_wallet_rounded,
+                label: 'Guaranteed Payouts',
+                color: const Color(0xFF10B981),
+              ),
+              _buildBannerStatPill(
+                icon: Icons.timer_rounded,
+                label: '5-Day Release Protocol',
+                color: const Color(0xFFF59E0B),
+              ),
+            ],
+          ),
+        ],
+      ),
+    );
+  }
+
+  Widget _buildBannerStatPill({
+    required IconData icon,
+    required String label,
+    required Color color,
+  }) {
+    return Container(
+      padding: const EdgeInsets.symmetric(horizontal: 9, vertical: 4),
+      decoration: BoxDecoration(
+        color: color.withValues(alpha: 0.14),
+        borderRadius: BorderRadius.circular(20),
+        border: Border.all(color: color.withValues(alpha: 0.35)),
+      ),
+      child: Row(
+        mainAxisSize: MainAxisSize.min,
+        children: [
+          Icon(icon, size: 12, color: color),
+          const SizedBox(width: 5),
+          Text(
+            label,
+            style: GoogleFonts.inter(
+              fontSize: 10.5,
+              fontWeight: FontWeight.w600,
+              color: color,
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+
+  Widget _buildUniqueTabBar(bool isMobile) {
+    return Container(
+      color: Colors.white,
+      padding: EdgeInsets.symmetric(
+        horizontal: isMobile ? 12 : 24,
+        vertical: 10,
+      ),
+      child: Container(
+        padding: const EdgeInsets.all(4),
+        decoration: BoxDecoration(
+          color: const Color(0xFFF1F5F9), // Slate 100
+          borderRadius: BorderRadius.circular(14),
+          border: Border.all(color: const Color(0xFFE2E8F0)),
+        ),
+        child: AnimatedBuilder(
+          animation: _tabController,
+          builder: (context, _) {
+            final activeIndex = _tabController.index;
+            return Row(
+              children: [
+                Expanded(
+                  child: _buildSegmentTab(
+                    index: 0,
+                    isActive: activeIndex == 0,
+                    icon: Icons.gavel_rounded,
+                    title: 'Disputes',
+                    isMobile: isMobile,
+                    countNotifier: _payoutService.disputedProjectsNotifier,
+                    badgeColor: AppColors.error,
+                  ),
+                ),
+                const SizedBox(width: 4),
+                Expanded(
+                  child: _buildSegmentTab(
+                    index: 1,
+                    isActive: activeIndex == 1,
+                    icon: Icons.account_balance_wallet_rounded,
+                    title: 'Payouts',
+                    isMobile: isMobile,
+                    countNotifier: _payoutService.payoutReadyProjectsNotifier,
+                    badgeColor: AppColors.success,
+                  ),
+                ),
+                const SizedBox(width: 4),
+                Expanded(
+                  child: _buildNotificationSegmentTab(
+                    index: 2,
+                    isActive: activeIndex == 2,
+                    icon: Icons.notifications_active_rounded,
+                    title: 'Alerts',
+                    isMobile: isMobile,
+                    badgeColor: AppColors.warning,
+                  ),
+                ),
+              ],
+            );
+          },
+        ),
+      ),
+    );
+  }
+
+  Widget _buildSegmentTab({
+    required int index,
+    required bool isActive,
+    required IconData icon,
+    required String title,
+    required bool isMobile,
+    required ValueNotifier<List<ProjectModel>> countNotifier,
+    required Color badgeColor,
+  }) {
+    return InkWell(
+      onTap: () {
+        _tabController.animateTo(index);
+        setState(() {});
+      },
+      borderRadius: BorderRadius.circular(10),
+      child: AnimatedContainer(
+        duration: const Duration(milliseconds: 200),
+        padding: EdgeInsets.symmetric(
+          vertical: isMobile ? 8 : 10,
+          horizontal: isMobile ? 4 : 12,
+        ),
+        decoration: BoxDecoration(
+          color: isActive ? Colors.white : Colors.transparent,
+          borderRadius: BorderRadius.circular(10),
+          boxShadow: isActive
+              ? [
+                  BoxShadow(
+                    color: Colors.black.withValues(alpha: 0.06),
+                    blurRadius: 4,
+                    offset: const Offset(0, 2),
+                  ),
+                ]
+              : null,
+        ),
+        child: FittedBox(
+          fit: BoxFit.scaleDown,
+          child: Row(
+            mainAxisAlignment: MainAxisAlignment.center,
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              Icon(
+                icon,
+                size: isMobile ? 15 : 18,
+                color: isActive ? AppColors.darkNavy : AppColors.textSecondary,
+              ),
+              const SizedBox(width: 5),
+              Text(
+                title,
+                maxLines: 1,
+                style: GoogleFonts.inter(
+                  fontSize: isMobile ? 12 : 13.5,
+                  fontWeight: isActive ? FontWeight.w700 : FontWeight.w500,
+                  color: isActive ? AppColors.darkNavy : AppColors.textSecondary,
+                ),
+              ),
+              const SizedBox(width: 6),
+              ValueListenableBuilder<List<ProjectModel>>(
+                valueListenable: countNotifier,
+                builder: (context, list, _) {
+                  final count = list.length;
+                  return Container(
+                    padding: const EdgeInsets.symmetric(
+                      horizontal: 6,
+                      vertical: 2,
+                    ),
+                    decoration: BoxDecoration(
+                      color: count > 0
+                          ? badgeColor.withValues(alpha: 0.14)
+                          : (isActive ? Colors.grey.shade200 : Colors.grey.shade300),
+                      borderRadius: BorderRadius.circular(12),
+                    ),
+                    child: Text(
+                      '$count',
+                      style: GoogleFonts.jetBrainsMono(
+                        fontSize: isMobile ? 10 : 11,
+                        fontWeight: FontWeight.bold,
+                        color: count > 0 ? badgeColor : AppColors.textSecondary,
+                      ),
+                    ),
+                  );
+                },
+              ),
+            ],
+          ),
+        ),
+      ),
+    );
+  }
+
+  Widget _buildNotificationSegmentTab({
+    required int index,
+    required bool isActive,
+    required IconData icon,
+    required String title,
+    required bool isMobile,
+    required Color badgeColor,
+  }) {
+    return InkWell(
+      onTap: () {
+        _tabController.animateTo(index);
+        setState(() {});
+      },
+      borderRadius: BorderRadius.circular(10),
+      child: AnimatedContainer(
+        duration: const Duration(milliseconds: 200),
+        padding: EdgeInsets.symmetric(
+          vertical: isMobile ? 8 : 10,
+          horizontal: isMobile ? 4 : 12,
+        ),
+        decoration: BoxDecoration(
+          color: isActive ? Colors.white : Colors.transparent,
+          borderRadius: BorderRadius.circular(10),
+          boxShadow: isActive
+              ? [
+                  BoxShadow(
+                    color: Colors.black.withValues(alpha: 0.06),
+                    blurRadius: 4,
+                    offset: const Offset(0, 2),
+                  ),
+                ]
+              : null,
+        ),
+        child: FittedBox(
+          fit: BoxFit.scaleDown,
+          child: Row(
+            mainAxisAlignment: MainAxisAlignment.center,
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              Icon(
+                icon,
+                size: isMobile ? 15 : 18,
+                color: isActive ? AppColors.darkNavy : AppColors.textSecondary,
+              ),
+              const SizedBox(width: 5),
+              Text(
+                title,
+                maxLines: 1,
+                style: GoogleFonts.inter(
+                  fontSize: isMobile ? 12 : 13.5,
+                  fontWeight: isActive ? FontWeight.w700 : FontWeight.w500,
+                  color: isActive ? AppColors.darkNavy : AppColors.textSecondary,
+                ),
+              ),
+              const SizedBox(width: 6),
+              ValueListenableBuilder<List<AdminNotificationModel>>(
+                valueListenable: _payoutService.notificationsNotifier,
+                builder: (context, notifs, _) {
+                  final unread = notifs.where((n) => !n.isRead).length;
+                  final count = unread > 0 ? unread : notifs.length;
+                  return Container(
+                    padding: const EdgeInsets.symmetric(
+                      horizontal: 6,
+                      vertical: 2,
+                    ),
+                    decoration: BoxDecoration(
+                      color: unread > 0
+                          ? badgeColor.withValues(alpha: 0.16)
+                          : (isActive ? Colors.grey.shade200 : Colors.grey.shade300),
+                      borderRadius: BorderRadius.circular(12),
+                    ),
+                    child: Text(
+                      unread > 0 ? '$unread' : '$count',
+                      style: GoogleFonts.jetBrainsMono(
+                        fontSize: isMobile ? 10 : 11,
+                        fontWeight: FontWeight.bold,
+                        color: unread > 0 ? badgeColor : AppColors.textSecondary,
+                      ),
+                    ),
+                  );
+                },
+              ),
+            ],
+          ),
+        ),
+      ),
+    );
+  }
+
+  // ===========================================================================
+  // UNIQUE ILLUSTRATED EMPTY STATES
+  // ===========================================================================
+  Widget _buildUniqueDisputesEmptyState() {
+    return Center(
+      child: SingleChildScrollView(
+        padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 24),
+        child: Container(
+          constraints: const BoxConstraints(maxWidth: 540),
+          padding: const EdgeInsets.all(28),
+          decoration: BoxDecoration(
+            color: Colors.white,
+            borderRadius: BorderRadius.circular(20),
+            border: Border.all(color: const Color(0xFFE2E8F0)),
+            boxShadow: [
+              BoxShadow(
+                color: Colors.black.withValues(alpha: 0.04),
+                blurRadius: 16,
+                offset: const Offset(0, 4),
+              ),
+            ],
+          ),
+          child: Column(
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              Container(
+                width: 76,
+                height: 76,
+                decoration: BoxDecoration(
+                  color: AppColors.primary.withValues(alpha: 0.08),
+                  shape: BoxShape.circle,
+                  border: Border.all(
+                    color: AppColors.primary.withValues(alpha: 0.2),
+                    width: 2,
+                  ),
+                ),
+                child: const Center(
+                  child: Icon(
+                    Icons.verified_user_rounded,
+                    size: 38,
+                    color: AppColors.primary,
+                  ),
+                ),
+              ),
+              const SizedBox(height: 18),
+              Text(
+                'Arbitration Chamber In Equilibrium',
+                textAlign: TextAlign.center,
+                style: GoogleFonts.poppins(
+                  fontSize: 18,
+                  fontWeight: FontWeight.bold,
+                  color: AppColors.darkNavy,
+                ),
+              ),
+              const SizedBox(height: 8),
+              Text(
+                'Zero unresolved arbitration disputes. All student project deliverables and corporate specifications are progressing peacefully.',
+                textAlign: TextAlign.center,
+                style: GoogleFonts.inter(
+                  fontSize: 13,
+                  color: AppColors.textSecondary,
+                  height: 1.45,
+                ),
+              ),
+              const SizedBox(height: 20),
+              const Divider(color: Color(0xFFF1F5F9)),
+              const SizedBox(height: 14),
+              _buildTrustFeatureRow(
+                Icons.check_circle_rounded,
+                '100% Student Release upon approved deliverables',
+                color: AppColors.success,
+              ),
+              const SizedBox(height: 10),
+              _buildTrustFeatureRow(
+                Icons.check_circle_rounded,
+                '100% Company Refund for unfulfilled milestone contracts',
+                color: AppColors.primary,
+              ),
+              const SizedBox(height: 10),
+              _buildTrustFeatureRow(
+                Icons.check_circle_rounded,
+                '50/50 Fair Split with 10% platform commission retained',
+                color: AppColors.warning,
+              ),
+              const SizedBox(height: 24),
+              OutlinedButton.icon(
+                style: OutlinedButton.styleFrom(
+                  foregroundColor: AppColors.primary,
+                  side: const BorderSide(color: Color(0xFFCBD5E1)),
+                  padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 12),
+                  shape: RoundedRectangleBorder(
+                    borderRadius: BorderRadius.circular(10),
+                  ),
+                ),
+                icon: const Icon(Icons.refresh_rounded, size: 18),
+                label: Text(
+                  'Sync Dispute Ledger',
+                  style: GoogleFonts.inter(fontWeight: FontWeight.w600),
+                ),
+                onPressed: _refreshAllData,
+              ),
+            ],
+          ),
+        ),
+      ),
+    );
+  }
+
+  Widget _buildUniquePayoutsEmptyState() {
+    return Center(
+      child: SingleChildScrollView(
+        padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 24),
+        child: Container(
+          constraints: const BoxConstraints(maxWidth: 540),
+          padding: const EdgeInsets.all(28),
+          decoration: BoxDecoration(
+            color: Colors.white,
+            borderRadius: BorderRadius.circular(20),
+            border: Border.all(color: const Color(0xFFE2E8F0)),
+            boxShadow: [
+              BoxShadow(
+                color: Colors.black.withValues(alpha: 0.04),
+                blurRadius: 16,
+                offset: const Offset(0, 4),
+              ),
+            ],
+          ),
+          child: Column(
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              Container(
+                width: 76,
+                height: 76,
+                decoration: BoxDecoration(
+                  color: AppColors.success.withValues(alpha: 0.08),
+                  shape: BoxShape.circle,
+                  border: Border.all(
+                    color: AppColors.success.withValues(alpha: 0.2),
+                    width: 2,
+                  ),
+                ),
+                child: const Center(
+                  child: Icon(
+                    Icons.account_balance_rounded,
+                    size: 38,
+                    color: AppColors.success,
+                  ),
+                ),
+              ),
+              const SizedBox(height: 18),
+              Text(
+                'Escrow Disbursement Queue Settled',
+                textAlign: TextAlign.center,
+                style: GoogleFonts.poppins(
+                  fontSize: 18,
+                  fontWeight: FontWeight.bold,
+                  color: AppColors.darkNavy,
+                ),
+              ),
+              const SizedBox(height: 8),
+              Text(
+                'All approved milestones and arbitrated funds have been successfully settled and transferred to student talent accounts.',
+                textAlign: TextAlign.center,
+                style: GoogleFonts.inter(
+                  fontSize: 13,
+                  color: AppColors.textSecondary,
+                  height: 1.45,
+                ),
+              ),
+              const SizedBox(height: 20),
+              const Divider(color: Color(0xFFF1F5F9)),
+              const SizedBox(height: 14),
+              _buildTrustFeatureRow(
+                Icons.check_circle_rounded,
+                'Automated 5-Day Auto-Release for uncontested deliveries',
+                color: AppColors.success,
+              ),
+              const SizedBox(height: 10),
+              _buildTrustFeatureRow(
+                Icons.check_circle_rounded,
+                'Direct Bank Transfer & Mobile Wallet (JazzCash / EasyPaisa)',
+                color: AppColors.primary,
+              ),
+              const SizedBox(height: 10),
+              _buildTrustFeatureRow(
+                Icons.check_circle_rounded,
+                'TID recording & verifiable payment receipt screenshot vault',
+                color: AppColors.success,
+              ),
+              const SizedBox(height: 24),
+              OutlinedButton.icon(
+                style: OutlinedButton.styleFrom(
+                  foregroundColor: AppColors.success,
+                  side: const BorderSide(color: Color(0xFFCBD5E1)),
+                  padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 12),
+                  shape: RoundedRectangleBorder(
+                    borderRadius: BorderRadius.circular(10),
+                  ),
+                ),
+                icon: const Icon(Icons.refresh_rounded, size: 18),
+                label: Text(
+                  'Check Payout Queue',
+                  style: GoogleFonts.inter(fontWeight: FontWeight.w600),
+                ),
+                onPressed: _refreshAllData,
+              ),
+            ],
+          ),
+        ),
+      ),
+    );
+  }
+
+  Widget _buildUniqueNotificationsEmptyState() {
+    return Center(
+      child: SingleChildScrollView(
+        padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 24),
+        child: Container(
+          constraints: const BoxConstraints(maxWidth: 540),
+          padding: const EdgeInsets.all(28),
+          decoration: BoxDecoration(
+            color: Colors.white,
+            borderRadius: BorderRadius.circular(20),
+            border: Border.all(color: const Color(0xFFE2E8F0)),
+            boxShadow: [
+              BoxShadow(
+                color: Colors.black.withValues(alpha: 0.04),
+                blurRadius: 16,
+                offset: const Offset(0, 4),
+              ),
+            ],
+          ),
+          child: Column(
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              Container(
+                width: 76,
+                height: 76,
+                decoration: BoxDecoration(
+                  color: const Color(0xFFF59E0B).withValues(alpha: 0.1),
+                  shape: BoxShape.circle,
+                  border: Border.all(
+                    color: const Color(0xFFF59E0B).withValues(alpha: 0.25),
+                    width: 2,
+                  ),
+                ),
+                child: const Center(
+                  child: Icon(
+                    Icons.notifications_active_rounded,
+                    size: 38,
+                    color: Color(0xFFF59E0B),
+                  ),
+                ),
+              ),
+              const SizedBox(height: 18),
+              Text(
+                'All Escrow Feeds Quiet',
+                textAlign: TextAlign.center,
+                style: GoogleFonts.poppins(
+                  fontSize: 18,
+                  fontWeight: FontWeight.bold,
+                  color: AppColors.darkNavy,
+                ),
+              ),
+              const SizedBox(height: 8),
+              Text(
+                'No new dispute filings, auto-release timers running out, or escrow security alerts recorded.',
+                textAlign: TextAlign.center,
+                style: GoogleFonts.inter(
+                  fontSize: 13,
+                  color: AppColors.textSecondary,
+                  height: 1.45,
+                ),
+              ),
+              const SizedBox(height: 24),
+              OutlinedButton.icon(
+                style: OutlinedButton.styleFrom(
+                  foregroundColor: AppColors.primary,
+                  side: const BorderSide(color: Color(0xFFCBD5E1)),
+                  padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 12),
+                  shape: RoundedRectangleBorder(
+                    borderRadius: BorderRadius.circular(10),
+                  ),
+                ),
+                icon: const Icon(Icons.refresh_rounded, size: 18),
+                label: Text(
+                  'Poll Escrow Alerts',
+                  style: GoogleFonts.inter(fontWeight: FontWeight.w600),
+                ),
+                onPressed: _refreshAllData,
+              ),
+            ],
+          ),
+        ),
+      ),
+    );
+  }
+
+  Widget _buildTrustFeatureRow(IconData icon, String text, {Color? color}) {
+    return Row(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        Icon(icon, size: 16, color: color ?? AppColors.primary),
+        const SizedBox(width: 8),
+        Expanded(
+          child: Text(
+            text,
+            style: GoogleFonts.inter(
+              fontSize: 12,
+              color: AppColors.textSecondary,
+              fontWeight: FontWeight.w500,
+            ),
+          ),
+        ),
+      ],
     );
   }
 }

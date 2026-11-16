@@ -282,7 +282,8 @@ class _PostProjectScreenState extends State<PostProjectScreen> {
       _descriptionController.text = existing.description;
       _requirementsController.text = existing.requirements;
       _deliverablesController.text = existing.deliverables;
-      _openingsController.text = '1';
+      _openingsController.text =
+          existing.openings > 0 ? existing.openings.toString() : '1';
       if (existing.escrowAmount > 0) {
         _escrowAmountController.text = existing.escrowAmount.toStringAsFixed(0);
       }
@@ -427,10 +428,9 @@ class _PostProjectScreenState extends State<PostProjectScreen> {
       progress: existing?.progress ?? 0.0,
       createdAt: existing?.createdAt ?? 'Just now',
       paymentSent: existing?.paymentSent ?? false,
-      escrowAmount:
-          double.tryParse(
-            _escrowAmountController.text.trim().replaceAll(',', ''),
-          ) ??
+      escrowAmount: double.tryParse(
+              _escrowAmountController.text.trim().replaceAll(',', '')) ??
+          15000.0,
           15000.0,
     );
   }
@@ -553,15 +553,22 @@ class _PostProjectScreenState extends State<PostProjectScreen> {
               ),
             ],
           ),
-          content: Text(
-            _isEditMode
-                ? 'Save updates to "${_titleController.text.trim()}" and keep it open for university candidates?'
-                : 'Project "${_titleController.text.trim()}" will be saved and you will proceed to the Escrow Deposit screen to transfer funds (PKR ${_escrowAmountController.text.trim()}) to Admin escrow.',
-            style: GoogleFonts.inter(
-              fontSize: 13.5,
-              color: AppColors.grayText,
-              height: 1.5,
-            ),
+          content: Builder(
+            builder: (context) {
+              final baseAmt = double.tryParse(_escrowAmountController.text.trim().replaceAll(',', '')) ?? 15000.0;
+              final comm10 = (baseAmt * 0.10).roundToDouble();
+              final totDep = baseAmt + comm10;
+              return Text(
+                _isEditMode
+                    ? 'Save updates to "${_titleController.text.trim()}" and keep it open for university candidates?'
+                    : 'Project "${_titleController.text.trim()}" will be saved. You will proceed to the Escrow Deposit screen to transfer total PKR ${totDep.toStringAsFixed(0)} (PKR ${baseAmt.toStringAsFixed(0)} Project Budget + PKR ${comm10.toStringAsFixed(0)} [10%] Admin Commission) to Admin escrow.',
+                style: GoogleFonts.inter(
+                  fontSize: 13.5,
+                  color: AppColors.grayText,
+                  height: 1.5,
+                ),
+              );
+            },
           ),
           actions: [
             TextButton(
@@ -1346,29 +1353,145 @@ class _PostProjectScreenState extends State<PostProjectScreen> {
   }
 
   Widget _buildEscrowAmountField() {
-    return TextFormField(
-      controller: _escrowAmountController,
-      keyboardType: const TextInputType.numberWithOptions(decimal: true),
-      style: GoogleFonts.inter(
-        fontSize: 14,
-        fontWeight: FontWeight.w600,
-        color: AppColors.deepNavy,
-      ),
-      validator: (val) {
-        if (val == null || val.trim().isEmpty) {
-          return 'Project Escrow budget amount is required';
-        }
-        final parsed = double.tryParse(val.trim().replaceAll(',', ''));
-        if (parsed == null || parsed <= 0) {
-          return 'Enter a valid project budget (minimum PKR 1,000)';
-        }
-        return null;
-      },
-      decoration: _fieldDecoration(
-        labelText: 'Project Budget / Escrow Deposit (PKR) *',
-        hintText: 'e.g. 25000',
-        prefixIcon: Icons.account_balance_wallet_outlined,
-      ),
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        TextFormField(
+          controller: _escrowAmountController,
+          keyboardType: const TextInputType.numberWithOptions(decimal: true),
+          style: GoogleFonts.inter(
+            fontSize: 14,
+            fontWeight: FontWeight.w600,
+            color: AppColors.deepNavy,
+          ),
+          validator: (val) {
+            if (val == null || val.trim().isEmpty) {
+              return 'Project Escrow budget amount is required';
+            }
+            final parsed = double.tryParse(val.trim().replaceAll(',', ''));
+            if (parsed == null || parsed <= 0) {
+              return 'Enter a valid project budget (minimum PKR 1,000)';
+            }
+            return null;
+          },
+          decoration: _fieldDecoration(
+            labelText: 'Project Budget (Student Reward) (PKR) *',
+            hintText: 'e.g. 15000',
+            prefixIcon: Icons.account_balance_wallet_outlined,
+          ),
+        ),
+        ValueListenableBuilder<TextEditingValue>(
+          valueListenable: _escrowAmountController,
+          builder: (context, val, _) {
+            final parsed =
+                double.tryParse(val.text.trim().replaceAll(',', '')) ?? 0.0;
+            if (parsed <= 0) return const SizedBox.shrink();
+            final commission = (parsed * 0.10).roundToDouble();
+            final total = parsed + commission;
+            return Container(
+              margin: const EdgeInsets.only(top: 8),
+              padding: const EdgeInsets.all(12),
+              decoration: BoxDecoration(
+                color: AppColors.lightAqua.withValues(alpha: 0.5),
+                borderRadius: BorderRadius.circular(10),
+                border: Border.all(
+                  color: AppColors.primaryBlue.withValues(alpha: 0.2),
+                ),
+              ),
+              child: Column(
+                children: [
+                  Row(
+                    mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                    children: [
+                      Text(
+                        'Student Project Reward:',
+                        style: GoogleFonts.inter(
+                          fontSize: 12,
+                          color: AppColors.deepNavy,
+                        ),
+                      ),
+                      Text(
+                        'PKR ${parsed.toStringAsFixed(0)}',
+                        style: GoogleFonts.inter(
+                          fontSize: 12,
+                          fontWeight: FontWeight.w600,
+                          color: AppColors.deepNavy,
+                        ),
+                      ),
+                    ],
+                  ),
+                  const SizedBox(height: 4),
+                  Row(
+                    mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                    children: [
+                      Row(
+                        children: [
+                          Text(
+                            'Admin Commission (+10%):',
+                            style: GoogleFonts.inter(
+                              fontSize: 12,
+                              color: AppColors.primaryBlue,
+                              fontWeight: FontWeight.w600,
+                            ),
+                          ),
+                          const SizedBox(width: 4),
+                          Container(
+                            padding: const EdgeInsets.symmetric(
+                                horizontal: 4, vertical: 1),
+                            decoration: BoxDecoration(
+                              color:
+                                  AppColors.primaryBlue.withValues(alpha: 0.1),
+                              borderRadius: BorderRadius.circular(4),
+                            ),
+                            child: Text(
+                              'Required',
+                              style: GoogleFonts.inter(
+                                fontSize: 9.5,
+                                fontWeight: FontWeight.bold,
+                                color: AppColors.primaryBlue,
+                              ),
+                            ),
+                          ),
+                        ],
+                      ),
+                      Text(
+                        '+ PKR ${commission.toStringAsFixed(0)}',
+                        style: GoogleFonts.inter(
+                          fontSize: 12,
+                          fontWeight: FontWeight.w700,
+                          color: AppColors.primaryBlue,
+                        ),
+                      ),
+                    ],
+                  ),
+                  const Divider(height: 12),
+                  Row(
+                    mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                    children: [
+                      Text(
+                        'Total Deposit to Admin:',
+                        style: GoogleFonts.poppins(
+                          fontSize: 12.5,
+                          fontWeight: FontWeight.bold,
+                          color: AppColors.deepNavy,
+                        ),
+                      ),
+                      Text(
+                        'PKR ${total.toStringAsFixed(0)}',
+                        style: GoogleFonts.poppins(
+                          fontSize: 13.5,
+                          fontWeight: FontWeight.bold,
+                          color: AppColors.primaryBlue,
+                        ),
+                      ),
+                    ],
+                  ),
+                ],
+              ),
+            );
+          },
+        ),
+      ],
     );
   }
 

@@ -39,6 +39,23 @@ CREATE TRIGGER trg_platform_payment_methods_updated_at
   FOR EACH ROW
   EXECUTE FUNCTION public.handle_platform_payment_methods_updated_at();
 
+-- 3.5. ADMIN HELPER FUNCTION (Ensures standalone execution in Supabase SQL editor never throws missing function error)
+CREATE OR REPLACE FUNCTION public.is_admin()
+RETURNS BOOLEAN
+LANGUAGE sql
+STABLE
+SECURITY DEFINER
+SET search_path = public
+AS $$
+  SELECT EXISTS (
+    SELECT 1 FROM public.profiles
+    WHERE id = auth.uid()
+      AND lower(COALESCE(user_type, '')) = 'admin'
+  ) OR (
+    auth.jwt() ->> 'email' IN ('admin@skillbridge.edu.pk', 'admin@skillbridge.com')
+  );
+$$;
+
 -- 4. ROW LEVEL SECURITY (RLS)
 ALTER TABLE public.platform_payment_methods ENABLE ROW LEVEL SECURITY;
 
@@ -54,12 +71,12 @@ CREATE POLICY "Platform Payment Methods Admin Manage"
   USING (public.is_admin())
   WITH CHECK (public.is_admin());
 
--- Policy 2: Authenticated Users (Company / Students) can ONLY read active payment methods
--- Administrators can read all records (active and inactive)
+-- Policy 2: Public read for active payment methods (Companies during project publish & checkout)
+-- Administrators can read all records (both active and inactive)
 CREATE POLICY "Platform Payment Methods Read Active"
   ON public.platform_payment_methods
   FOR SELECT
-  TO authenticated
+  TO public
   USING (is_active = true OR public.is_admin());
 
 -- 5. INITIAL SEED DATA (Default Escrow Payment Accounts)

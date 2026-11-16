@@ -339,9 +339,14 @@ class _CompanyProjectsListScreenState extends State<CompanyProjectsListScreen> {
             return false;
           }).toList();
 
-          final paymentFiltered = companyProjects
-              .where((project) => project.paymentSent == _showPaidProjects)
-              .toList();
+          final paymentFiltered = companyProjects.where((project) {
+            if (_selectedStatus == 'Completed' &&
+                (project.status.toLowerCase() == 'completed' ||
+                    project.isCompleted)) {
+              return true;
+            }
+            return project.paymentSent == _showPaidProjects;
+          }).toList();
 
           final statusFiltered = _selectedStatus == 'All'
               ? paymentFiltered
@@ -506,13 +511,20 @@ class _CompanyProjectsListScreenState extends State<CompanyProjectsListScreen> {
                                 final isSelected = _selectedStatus == status;
                                 final count = status == 'All'
                                     ? paymentFiltered.length
-                                    : paymentFiltered
-                                          .where(
-                                            (p) =>
+                                    : (status == 'Completed'
+                                        ? companyProjects
+                                            .where((p) =>
                                                 p.status.toLowerCase() ==
-                                                status.toLowerCase(),
-                                          )
-                                          .length;
+                                                    'completed' ||
+                                                p.isCompleted)
+                                            .length
+                                        : paymentFiltered
+                                            .where(
+                                              (p) =>
+                                                  p.status.toLowerCase() ==
+                                                  status.toLowerCase(),
+                                            )
+                                            .length);
 
                                 return _buildFilterPill(
                                   status: status,
@@ -971,7 +983,17 @@ class _CompanyProjectsListScreenState extends State<CompanyProjectsListScreen> {
                               ),
                             ),
                           ),
-                          StatusBadge(label: project.status),
+                          StatusBadge(
+                            label: project.isCancelled
+                                ? 'Cancelled'
+                                : (project.isDisputed ||
+                                        project.status.toLowerCase() == 'rejected' ||
+                                        project.status.toLowerCase() == 'disputed'
+                                    ? 'Rejected'
+                                    : ((project.isReadyForPayout || project.isCompleted)
+                                        ? 'Paid'
+                                        : project.status)),
+                          ),
                           if (canCloseOrCancel || isDraft) ...[
                             PopupMenuButton<String>(
                               padding: EdgeInsets.zero,
@@ -1106,6 +1128,92 @@ class _CompanyProjectsListScreenState extends State<CompanyProjectsListScreen> {
                           ],
                         ],
                       ),
+                      if (project.isPaymentRejected) ...[
+                        const SizedBox(height: 12),
+                        Container(
+                          width: double.infinity,
+                          padding: const EdgeInsets.all(12),
+                          decoration: BoxDecoration(
+                            color: const Color(0xFFFEF2F2),
+                            borderRadius: BorderRadius.circular(10),
+                            border: Border.all(
+                              color: AppColors.error.withValues(alpha: 0.4),
+                              width: 1.2,
+                            ),
+                          ),
+                          child: Column(
+                            crossAxisAlignment: CrossAxisAlignment.start,
+                            children: [
+                              Row(
+                                children: [
+                                  const Icon(
+                                    Icons.error_outline_rounded,
+                                    color: AppColors.error,
+                                    size: 18,
+                                  ),
+                                  const SizedBox(width: 8),
+                                  Expanded(
+                                    child: Text(
+                                      'Payment Not Received: Last Chance to Re-submit',
+                                      style: GoogleFonts.inter(
+                                        color: AppColors.error,
+                                        fontWeight: FontWeight.w700,
+                                        fontSize: 12.5,
+                                      ),
+                                    ),
+                                  ),
+                                ],
+                              ),
+                              if (project.rejectionReason != null &&
+                                  project.rejectionReason!.trim().isNotEmpty) ...[
+                                const SizedBox(height: 6),
+                                Text(
+                                  'Admin Note: "${project.rejectionReason}"',
+                                  style: GoogleFonts.inter(
+                                    color: const Color(0xFF991B1B),
+                                    fontSize: 12,
+                                    fontStyle: FontStyle.italic,
+                                  ),
+                                ),
+                              ],
+                              const SizedBox(height: 10),
+                              SizedBox(
+                                width: double.infinity,
+                                child: ElevatedButton.icon(
+                                  style: ElevatedButton.styleFrom(
+                                    backgroundColor: AppColors.error,
+                                    foregroundColor: Colors.white,
+                                    padding: const EdgeInsets.symmetric(vertical: 9),
+                                    shape: RoundedRectangleBorder(
+                                      borderRadius: BorderRadius.circular(8),
+                                    ),
+                                    elevation: 0,
+                                  ),
+                                  icon: const Icon(Icons.upload_file_rounded, size: 15),
+                                  label: Text(
+                                    'Re-Submit Payment Proof',
+                                    style: GoogleFonts.inter(
+                                      fontSize: 12,
+                                      fontWeight: FontWeight.bold,
+                                    ),
+                                  ),
+                                  onPressed: () async {
+                                    await Navigator.push(
+                                      context,
+                                      MaterialPageRoute(
+                                        builder: (_) => CompanyEscrowPaymentScreen(
+                                          project: project,
+                                        ),
+                                      ),
+                                    );
+                                    _refreshProjects();
+                                  },
+                                ),
+                              ),
+                            ],
+                          ),
+                        ),
+                      ],
                       const SizedBox(height: 12),
                       Text(
                         project.title,
@@ -1271,7 +1379,41 @@ class _CompanyProjectsListScreenState extends State<CompanyProjectsListScreen> {
                             ),
                           ),
                           const SizedBox(width: 10),
-                          if (project.isPendingPayment)
+                          if (project.isPaymentRejected)
+                            ElevatedButton.icon(
+                              style: ElevatedButton.styleFrom(
+                                backgroundColor: AppColors.error,
+                                foregroundColor: Colors.white,
+                                padding: const EdgeInsets.symmetric(
+                                  horizontal: 12,
+                                  vertical: 7,
+                                ),
+                                shape: RoundedRectangleBorder(
+                                  borderRadius: BorderRadius.circular(10),
+                                ),
+                                elevation: 0,
+                              ),
+                              icon: const Icon(Icons.refresh_rounded, size: 14),
+                              label: Text(
+                                'Re-Submit Proof',
+                                style: GoogleFonts.inter(
+                                  fontSize: 12,
+                                  fontWeight: FontWeight.bold,
+                                ),
+                              ),
+                              onPressed: () async {
+                                await Navigator.push(
+                                  context,
+                                  MaterialPageRoute(
+                                    builder: (_) => CompanyEscrowPaymentScreen(
+                                      project: project,
+                                    ),
+                                  ),
+                                );
+                                _refreshProjects();
+                              },
+                            )
+                          else if (project.isPendingPayment)
                             ElevatedButton.icon(
                               style: ElevatedButton.styleFrom(
                                 backgroundColor: AppColors.statusPending,
@@ -1382,6 +1524,66 @@ class _CompanyProjectsListScreenState extends State<CompanyProjectsListScreen> {
   }
 
   Widget _buildPaymentStatusChip(ProjectModel project) {
+    if (project.isPaymentRejected) {
+      return Container(
+        padding: const EdgeInsets.symmetric(horizontal: 9, vertical: 5),
+        decoration: BoxDecoration(
+          color: AppColors.errorBg,
+          borderRadius: BorderRadius.circular(9),
+          border: Border.all(color: AppColors.error.withValues(alpha: 0.3)),
+        ),
+        child: Row(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            const Icon(
+              Icons.error_outline_rounded,
+              size: 13.5,
+              color: AppColors.error,
+            ),
+            const SizedBox(width: 5),
+            Text(
+              'Payment Rejected',
+              style: GoogleFonts.inter(
+                fontSize: 11.5,
+                fontWeight: FontWeight.w700,
+                color: AppColors.error,
+              ),
+            ),
+          ],
+        ),
+      );
+    }
+
+    if (project.isPendingVerification) {
+      return Container(
+        padding: const EdgeInsets.symmetric(horizontal: 9, vertical: 5),
+        decoration: BoxDecoration(
+          color: AppColors.warningBg,
+          borderRadius: BorderRadius.circular(9),
+          border: Border.all(color: AppColors.warning.withValues(alpha: 0.3)),
+        ),
+        child: Row(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            const Icon(
+              Icons.hourglass_top_rounded,
+              size: 13.5,
+              color: AppColors.warning,
+            ),
+            const SizedBox(width: 5),
+            Text(
+              'Pending Verification',
+              style: GoogleFonts.inter(
+                fontSize: 11.5,
+                fontWeight: FontWeight.w700,
+                color: const Color(0xFF92400E),
+              ),
+            ),
+          ],
+        ),
+      );
+    }
+
     final isAssigned = project.assignedStudent?.trim().isNotEmpty == true;
     final label = !isAssigned
         ? 'Unassigned'

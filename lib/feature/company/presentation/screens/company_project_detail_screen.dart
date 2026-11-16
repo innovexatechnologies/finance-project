@@ -1,11 +1,15 @@
 import 'package:flutter/material.dart';
+import 'package:flutter/services.dart';
 import 'package:google_fonts/google_fonts.dart';
 import 'package:link_vibe/core/constants/app_colors.dart';
+import 'package:link_vibe/core/services/app_data_service.dart';
 import 'package:link_vibe/core/widgets/app_empty_state.dart';
 import 'package:link_vibe/core/widgets/status_badge.dart';
 import 'package:link_vibe/feature/company/models/project_model.dart';
 import 'package:link_vibe/feature/company/services/company_profile_service.dart';
 import 'package:link_vibe/feature/company/services/company_project_service.dart';
+import 'package:link_vibe/screens/company/company_escrow_payment_screen.dart';
+import 'package:link_vibe/feature/company/presentation/widgets/company_project_alert_banner.dart';
 import 'package:link_vibe/services/escrow_lifecycle_service.dart';
 import 'applicants_screen.dart';
 import 'assigned_projects_screen.dart';
@@ -392,134 +396,6 @@ class _CompanyProjectDetailScreenState
     }
   }
 
-  Future<void> _handleRequestRevision(ProjectModel project) async {
-    if (!project.canRequestRevision) {
-      ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(
-          content: Text('Maximum 2 revisions limit reached for this project.'),
-          backgroundColor: AppColors.error,
-          behavior: SnackBarBehavior.floating,
-        ),
-      );
-      return;
-    }
-
-    final notesController = TextEditingController();
-    final remaining = project.remainingRevisions;
-    final revisionNumber = project.revisionCount + 1;
-
-    final confirmed = await showDialog<bool>(
-      context: context,
-      builder: (ctx) => AlertDialog(
-        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
-        title: Row(
-          children: [
-            Container(
-              padding: const EdgeInsets.all(8),
-              decoration: BoxDecoration(
-                color: const Color(0xFFDBEAFE),
-                borderRadius: BorderRadius.circular(10),
-              ),
-              child: const Icon(Icons.rate_review_rounded, color: Color(0xFF2563EB)),
-            ),
-            const SizedBox(width: 10),
-            Expanded(
-              child: Text(
-                'Request Revision ($revisionNumber of 2)',
-                style: const TextStyle(fontSize: 17, fontWeight: FontWeight.bold),
-              ),
-            ),
-          ],
-        ),
-        content: SingleChildScrollView(
-          child: Column(
-            mainAxisSize: MainAxisSize.min,
-            crossAxisAlignment: CrossAxisAlignment.start,
-            children: [
-              Text(
-                'Specify the changes or improvements required from the student. The 5-day auto-release countdown will pause until the student re-delivers.',
-                style: GoogleFonts.inter(fontSize: 13, height: 1.4),
-              ),
-              const SizedBox(height: 10),
-              Container(
-                padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 6),
-                decoration: BoxDecoration(
-                  color: const Color(0xFFEFF6FF),
-                  borderRadius: BorderRadius.circular(8),
-                  border: Border.all(color: const Color(0xFF3B82F6).withValues(alpha: 0.3)),
-                ),
-                child: Text(
-                  'Remaining revisions after this request: ${remaining - 1} of 2',
-                  style: const TextStyle(
-                      fontSize: 11.5, fontWeight: FontWeight.w600, color: Color(0xFF1D4ED8)),
-                ),
-              ),
-              const SizedBox(height: 14),
-              TextField(
-                controller: notesController,
-                maxLines: 3,
-                decoration: InputDecoration(
-                  labelText: 'Required Improvements / Feedback *',
-                  hintText: 'Describe missing criteria, bug fixes, or deliverables needed...',
-                  border: OutlineInputBorder(borderRadius: BorderRadius.circular(10)),
-                ),
-              ),
-            ],
-          ),
-        ),
-        actions: [
-          TextButton(
-            onPressed: () => Navigator.pop(ctx, false),
-            child: const Text('Cancel'),
-          ),
-          ElevatedButton(
-            style: ElevatedButton.styleFrom(
-              backgroundColor: const Color(0xFF2563EB),
-              foregroundColor: Colors.white,
-              shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(10)),
-            ),
-            onPressed: () {
-              if (notesController.text.trim().isEmpty) {
-                ScaffoldMessenger.of(ctx).showSnackBar(
-                  const SnackBar(content: Text('Please describe the required improvements.')),
-                );
-                return;
-              }
-              Navigator.pop(ctx, true);
-            },
-            child: const Text('Submit Revision Request'),
-          ),
-        ],
-      ),
-    );
-
-    if (confirmed == true && mounted) {
-      final success = await EscrowLifecycleService().requestProjectRevision(
-        projectId: project.id,
-        revisionNotes: notesController.text.trim(),
-      );
-
-      if (!mounted) return;
-      if (success) {
-        ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(
-            content: Text('Revision $revisionNumber requested! 5-day timer paused.'),
-            backgroundColor: const Color(0xFF2563EB),
-            behavior: SnackBarBehavior.floating,
-          ),
-        );
-      } else {
-        ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(
-            content: Text(EscrowLifecycleService().lastError ?? 'Failed to request revision.'),
-            backgroundColor: AppColors.error,
-            behavior: SnackBarBehavior.floating,
-          ),
-        );
-      }
-    }
-  }
-
   Future<void> _handleRaiseDispute(ProjectModel project) async {
     final reasonController = TextEditingController();
 
@@ -527,14 +403,18 @@ class _CompanyProjectDetailScreenState
       context: context,
       builder: (ctx) => AlertDialog(
         shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
-        title: const Row(
+        title: Row(
           children: [
-            Icon(Icons.gavel_rounded, color: AppColors.error),
-            SizedBox(width: 10),
+            const Icon(Icons.cancel_rounded, color: AppColors.error),
+            const SizedBox(width: 10),
             Expanded(
               child: Text(
-                'Raise Escrow Dispute',
-                style: TextStyle(fontSize: 17, fontWeight: FontWeight.bold),
+                'Reject Project Deliverables',
+                style: GoogleFonts.poppins(
+                  fontSize: 16.5,
+                  fontWeight: FontWeight.bold,
+                  color: AppColors.darkNavy,
+                ),
               ),
             ),
           ],
@@ -545,16 +425,112 @@ class _CompanyProjectDetailScreenState
             crossAxisAlignment: CrossAxisAlignment.start,
             children: [
               Text(
-                'Are deliverables for "${project.title}" incomplete or unsatisfactory? Raising a dispute halts auto-release and transfers the case to Skill Bridge Admin for mediation.',
+                'Are deliverables for "${project.title}" unsatisfactory? Deliverables will be marked as rejected and transferred to SkillBridge Admin Dispute Mediation.',
                 style: const TextStyle(fontSize: 13, height: 1.4),
+              ),
+              const SizedBox(height: 12),
+              Container(
+                padding: const EdgeInsets.all(12),
+                decoration: BoxDecoration(
+                  color: const Color(0xFFFEF2F2),
+                  borderRadius: BorderRadius.circular(10),
+                  border: Border.all(
+                    color: const Color(0xFFEF4444).withValues(alpha: 0.35),
+                  ),
+                ),
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    Row(
+                      children: [
+                        const Icon(Icons.mark_email_read_rounded,
+                            size: 18, color: Color(0xFFDC2626)),
+                        const SizedBox(width: 8),
+                        Expanded(
+                          child: Text(
+                            'Dispute Evidence Submission',
+                            style: GoogleFonts.poppins(
+                              fontSize: 12.5,
+                              fontWeight: FontWeight.w700,
+                              color: const Color(0xFF991B1B),
+                            ),
+                          ),
+                        ),
+                      ],
+                    ),
+                    const SizedBox(height: 6),
+                    const Text(
+                      'Please share evidence on our official Gmail:',
+                      style: TextStyle(
+                        fontSize: 11.5,
+                        fontWeight: FontWeight.w500,
+                        color: Color(0xFF7F1D1D),
+                      ),
+                    ),
+                    const SizedBox(height: 5),
+                    Row(
+                      children: [
+                        Expanded(
+                          child: SelectableText(
+                            AppDataService.skillBridgeOfficialGmail,
+                            style: GoogleFonts.jetBrainsMono(
+                              fontSize: 12,
+                              fontWeight: FontWeight.bold,
+                              color: const Color(0xFFDC2626),
+                            ),
+                          ),
+                        ),
+                        InkWell(
+                          onTap: () {
+                            Clipboard.setData(const ClipboardData(
+                              text: AppDataService.skillBridgeOfficialGmail,
+                            ));
+                            ScaffoldMessenger.of(context).showSnackBar(
+                              const SnackBar(
+                                content: Text('SkillBridge official Gmail copied to clipboard!'),
+                                duration: Duration(seconds: 2),
+                                backgroundColor: Color(0xFFDC2626),
+                              ),
+                            );
+                          },
+                          child: Container(
+                            padding: const EdgeInsets.symmetric(
+                                horizontal: 8, vertical: 4),
+                            decoration: BoxDecoration(
+                              color: Colors.white,
+                              borderRadius: BorderRadius.circular(6),
+                              border: Border.all(color: const Color(0xFFFCA5A5)),
+                            ),
+                            child: const Row(
+                              mainAxisSize: MainAxisSize.min,
+                              children: [
+                                Icon(Icons.copy_rounded,
+                                    size: 12, color: Color(0xFFDC2626)),
+                                SizedBox(width: 4),
+                                Text(
+                                  'Copy',
+                                  style: TextStyle(
+                                    fontSize: 11,
+                                    fontWeight: FontWeight.bold,
+                                    color: Color(0xFFDC2626),
+                                  ),
+                                ),
+                              ],
+                            ),
+                          ),
+                        ),
+                      ],
+                    ),
+                  ],
+                ),
               ),
               const SizedBox(height: 14),
               TextField(
                 controller: reasonController,
                 maxLines: 3,
                 decoration: InputDecoration(
-                  labelText: 'Dispute Reason / Details *',
-                  hintText: 'Explain the issue with deliverables in detail...',
+                  labelText: 'Rejection Reason / Issues *',
+                  hintText: 'Explain why the work is being rejected...',
                   border: OutlineInputBorder(borderRadius: BorderRadius.circular(10)),
                 ),
               ),
@@ -575,13 +551,13 @@ class _CompanyProjectDetailScreenState
             onPressed: () {
               if (reasonController.text.trim().isEmpty) {
                 ScaffoldMessenger.of(ctx).showSnackBar(
-                  const SnackBar(content: Text('Please describe the reason for dispute.')),
+                  const SnackBar(content: Text('Please describe the reason for rejection.')),
                 );
                 return;
               }
               Navigator.pop(ctx, true);
             },
-            child: const Text('Raise Dispute'),
+            child: const Text('Reject & Open Dispute'),
           ),
         ],
       ),
@@ -600,16 +576,51 @@ class _CompanyProjectDetailScreenState
           context: context,
           builder: (c) => AlertDialog(
             shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
-            title: const Row(
+            title: Row(
               children: [
-                Icon(Icons.info_outline_rounded, color: AppColors.primaryBlue),
-                SizedBox(width: 8),
-                Text('Dispute Registered'),
+                const Icon(Icons.cancel_rounded, color: AppColors.error),
+                const SizedBox(width: 8),
+                Text(
+                  'Deliverables Rejected',
+                  style: GoogleFonts.poppins(
+                    fontSize: 16,
+                    fontWeight: FontWeight.bold,
+                    color: AppColors.darkNavy,
+                  ),
+                ),
               ],
             ),
-            content: Text(
-              'Dispute has been logged under Case $caseId.\n\nSkill Bridge Administrator has been alerted and will review project submissions, communication logs, and issue a binding resolution (100% Student, 100% Refund, or 50-50 Split).',
-              style: const TextStyle(fontSize: 13.5, height: 1.45),
+            content: SingleChildScrollView(
+              child: Column(
+                mainAxisSize: MainAxisSize.min,
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  Text(
+                    'Dispute has been logged under Case $caseId.\n\nSkillBridge Administrator is meditating.',
+                    style: const TextStyle(fontSize: 13.5, height: 1.45),
+                  ),
+                  const SizedBox(height: 10),
+                  Container(
+                    width: double.infinity,
+                    padding: const EdgeInsets.all(10),
+                    decoration: BoxDecoration(
+                      color: const Color(0xFFFEF2F2),
+                      borderRadius: BorderRadius.circular(8),
+                      border: Border.all(
+                        color: const Color(0xFFEF4444).withValues(alpha: 0.3),
+                      ),
+                    ),
+                    child: Text(
+                      'Please share evidence on our official Gmail: ${AppDataService.skillBridgeOfficialGmail}',
+                      style: GoogleFonts.inter(
+                        fontSize: 12,
+                        fontWeight: FontWeight.bold,
+                        color: const Color(0xFFDC2626),
+                      ),
+                    ),
+                  ),
+                ],
+              ),
             ),
             actions: [
               TextButton(
@@ -812,7 +823,20 @@ class _CompanyProjectDetailScreenState
           body: ListView(
             padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 20),
             children: [
-              if (project.isDelivered) ...[
+              CompanyProjectAlertBanner(project: project),
+              if (project.isCancelled) ...[
+                _buildCancelledStatusBanner(project),
+                const SizedBox(height: 16),
+              ] else if (project.isPaymentRejected) ...[
+                _buildPaymentRejectedBanner(project),
+                const SizedBox(height: 16),
+              ] else if (project.isPendingVerification) ...[
+                _buildPendingVerificationBanner(project),
+                const SizedBox(height: 16),
+              ] else if (project.isPendingPayment) ...[
+                _buildPendingPaymentBanner(project),
+                const SizedBox(height: 16),
+              ] else if (project.isDelivered) ...[
                 _buildDeliveryReviewCard(project),
                 const SizedBox(height: 16),
               ] else if (project.isRevisionRequested) ...[
@@ -821,7 +845,7 @@ class _CompanyProjectDetailScreenState
               ] else if (project.isDisputed) ...[
                 _buildDisputeStatusBanner(project),
                 const SizedBox(height: 16),
-              ] else if (project.isReadyForPayout) ...[
+              ] else if (project.isReadyForPayout || project.isCompleted || project.status.toLowerCase() == 'paid') ...[
                 _buildPayoutStatusBanner(project),
                 const SizedBox(height: 16),
               ],
@@ -990,7 +1014,17 @@ class _CompanyProjectDetailScreenState
                 ),
               ),
               const SizedBox(width: 8),
-              StatusBadge(label: project.status),
+              StatusBadge(
+                label: project.isCancelled
+                    ? 'Cancelled'
+                    : (project.isDisputed ||
+                            project.status.toLowerCase() == 'rejected' ||
+                            project.status.toLowerCase() == 'disputed'
+                        ? 'Rejected'
+                        : ((project.isReadyForPayout || project.isCompleted)
+                            ? 'Paid'
+                            : project.status)),
+              ),
             ],
           ),
           const SizedBox(height: 12),
@@ -1387,40 +1421,9 @@ class _CompanyProjectDetailScreenState
               ),
               onPressed: () => _handleApproveAndRelease(project),
               icon: const Icon(Icons.check_circle_outline_rounded, size: 18),
-              label: const Text('Approve & Release Payment to Student'),
+              label: const Text('Approve & Release Payment'),
             ),
           ),
-          if (project.canRequestRevision) ...[
-            const SizedBox(height: 8),
-            SizedBox(
-              width: double.infinity,
-              child: OutlinedButton.icon(
-                style: OutlinedButton.styleFrom(
-                  foregroundColor: const Color(0xFF2563EB),
-                  side: const BorderSide(color: Color(0xFF2563EB)),
-                  padding: const EdgeInsets.symmetric(vertical: 12),
-                ),
-                onPressed: () => _handleRequestRevision(project),
-                icon: const Icon(Icons.rate_review_rounded, size: 18),
-                label: Text('Request Revision (${project.remainingRevisions}/2 Remaining)'),
-              ),
-            ),
-          ] else ...[
-            const SizedBox(height: 8),
-            SizedBox(
-              width: double.infinity,
-              child: OutlinedButton.icon(
-                style: OutlinedButton.styleFrom(
-                  foregroundColor: AppColors.grayText,
-                  side: const BorderSide(color: AppColors.lightGray),
-                  padding: const EdgeInsets.symmetric(vertical: 12),
-                ),
-                onPressed: null,
-                icon: const Icon(Icons.lock_clock_rounded, size: 18),
-                label: const Text('2/2 Revisions Used (Max Limit Reached)'),
-              ),
-            ),
-          ],
           const SizedBox(height: 8),
           SizedBox(
             width: double.infinity,
@@ -1432,7 +1435,7 @@ class _CompanyProjectDetailScreenState
               ),
               onPressed: () => _handleRaiseDispute(project),
               icon: const Icon(Icons.gavel_rounded, size: 18),
-              label: const Text('Raise Dispute / Contest Deliverables'),
+              label: const Text('Reject Work & Open Dispute'),
             ),
           ),
         ],
@@ -1555,6 +1558,270 @@ class _CompanyProjectDetailScreenState
     );
   }
 
+  Widget _buildPaymentRejectedBanner(ProjectModel project) {
+    return Container(
+      padding: const EdgeInsets.all(16),
+      decoration: BoxDecoration(
+        color: const Color(0xFFFEF2F2),
+        borderRadius: BorderRadius.circular(14),
+        border: Border.all(
+          color: AppColors.error.withValues(alpha: 0.5),
+          width: 1.3,
+        ),
+      ),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Row(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              Container(
+                padding: const EdgeInsets.all(8),
+                decoration: BoxDecoration(
+                  color: AppColors.error.withValues(alpha: 0.12),
+                  borderRadius: BorderRadius.circular(10),
+                ),
+                child: const Icon(
+                  Icons.error_outline_rounded,
+                  color: AppColors.error,
+                  size: 22,
+                ),
+              ),
+              const SizedBox(width: 12),
+              Expanded(
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    Text(
+                      'Payment Proof Not Received (Last Chance)',
+                      style: GoogleFonts.poppins(
+                        fontSize: 14.5,
+                        fontWeight: FontWeight.bold,
+                        color: AppColors.error,
+                      ),
+                    ),
+                    const SizedBox(height: 3),
+                    Text(
+                      'Skill Bridge Admin could not verify your payment proof. Please re-submit your valid Transaction ID and transfer receipt screenshot.',
+                      style: GoogleFonts.inter(
+                        fontSize: 12,
+                        color: const Color(0xFF7F1D1D),
+                        height: 1.35,
+                      ),
+                    ),
+                  ],
+                ),
+              ),
+            ],
+          ),
+          if (project.rejectionReason != null &&
+              project.rejectionReason!.trim().isNotEmpty) ...[
+            const SizedBox(height: 12),
+            Container(
+              width: double.infinity,
+              padding: const EdgeInsets.all(10),
+              decoration: BoxDecoration(
+                color: Colors.white,
+                borderRadius: BorderRadius.circular(8),
+                border: Border.all(
+                  color: AppColors.error.withValues(alpha: 0.25),
+                ),
+              ),
+              child: Text(
+                'Admin Reason: "${project.rejectionReason}"',
+                style: GoogleFonts.inter(
+                  fontSize: 12,
+                  fontStyle: FontStyle.italic,
+                  color: const Color(0xFF991B1B),
+                  fontWeight: FontWeight.w600,
+                ),
+              ),
+            ),
+          ],
+          const SizedBox(height: 14),
+          SizedBox(
+            width: double.infinity,
+            child: ElevatedButton.icon(
+              style: ElevatedButton.styleFrom(
+                backgroundColor: AppColors.error,
+                foregroundColor: Colors.white,
+                padding: const EdgeInsets.symmetric(vertical: 12),
+                shape: RoundedRectangleBorder(
+                  borderRadius: BorderRadius.circular(10),
+                ),
+                elevation: 0,
+              ),
+              icon: const Icon(Icons.upload_file_rounded, size: 16),
+              label: Text(
+                'Re-Submit Payment Proof Now',
+                style: GoogleFonts.inter(
+                  fontSize: 13,
+                  fontWeight: FontWeight.bold,
+                ),
+              ),
+              onPressed: () {
+                Navigator.push(
+                  context,
+                  MaterialPageRoute(
+                    builder: (_) => CompanyEscrowPaymentScreen(project: project),
+                  ),
+                );
+              },
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+
+  Widget _buildPendingVerificationBanner(ProjectModel project) {
+    return Container(
+      padding: const EdgeInsets.all(14),
+      decoration: BoxDecoration(
+        color: const Color(0xFFFFFBEB),
+        borderRadius: BorderRadius.circular(14),
+        border: Border.all(
+          color: AppColors.warning.withValues(alpha: 0.5),
+          width: 1.2,
+        ),
+      ),
+      child: Row(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Container(
+            padding: const EdgeInsets.all(8),
+            decoration: BoxDecoration(
+              color: AppColors.warning.withValues(alpha: 0.15),
+              borderRadius: BorderRadius.circular(10),
+            ),
+            child: const Icon(
+              Icons.hourglass_top_rounded,
+              color: AppColors.warning,
+              size: 20,
+            ),
+          ),
+          const SizedBox(width: 12),
+          Expanded(
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Text(
+                  'Payment Under Admin Verification',
+                  style: GoogleFonts.poppins(
+                    fontSize: 13.5,
+                    fontWeight: FontWeight.bold,
+                    color: const Color(0xFF92400E),
+                  ),
+                ),
+                const SizedBox(height: 3),
+                Text(
+                  'Your payment receipt & TID are currently awaiting admin approval. Once verified, this project will automatically be published to students.',
+                  style: GoogleFonts.inter(
+                    fontSize: 12,
+                    color: const Color(0xFF78350F),
+                    height: 1.35,
+                  ),
+                ),
+              ],
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+
+  Widget _buildPendingPaymentBanner(ProjectModel project) {
+    return Container(
+      padding: const EdgeInsets.all(14),
+      decoration: BoxDecoration(
+        color: const Color(0xFFEFF6FF),
+        borderRadius: BorderRadius.circular(14),
+        border: Border.all(
+          color: AppColors.primaryBlue.withValues(alpha: 0.35),
+          width: 1.2,
+        ),
+      ),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Row(
+            children: [
+              Container(
+                padding: const EdgeInsets.all(8),
+                decoration: BoxDecoration(
+                  color: AppColors.primaryBlue.withValues(alpha: 0.12),
+                  borderRadius: BorderRadius.circular(10),
+                ),
+                child: const Icon(
+                  Icons.payment_rounded,
+                  color: AppColors.primaryBlue,
+                  size: 20,
+                ),
+              ),
+              const SizedBox(width: 12),
+              Expanded(
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    Text(
+                      'Escrow Deposit Required',
+                      style: GoogleFonts.poppins(
+                        fontSize: 13.5,
+                        fontWeight: FontWeight.bold,
+                        color: AppColors.deepNavy,
+                      ),
+                    ),
+                    Builder(
+                      builder: (context) {
+                        final base = project.escrowAmount > 0
+                            ? project.escrowAmount
+                            : 15000.0;
+                        final comm = (base * 0.10).roundToDouble();
+                        final total = base + comm;
+                        return Text(
+                          'Deposit PKR ${total.toStringAsFixed(0)} (PKR ${base.toStringAsFixed(0)} Budget + 10% Admin Fee) to verify and publish listing.',
+                          style: GoogleFonts.inter(
+                            fontSize: 12,
+                            color: AppColors.grayText,
+                          ),
+                        );
+                      },
+                    ),
+                  ],
+                ),
+              ),
+            ],
+          ),
+          const SizedBox(height: 12),
+          SizedBox(
+            width: double.infinity,
+            child: ElevatedButton.icon(
+              style: ElevatedButton.styleFrom(
+                backgroundColor: AppColors.primaryBlue,
+                foregroundColor: Colors.white,
+                padding: const EdgeInsets.symmetric(vertical: 10),
+                shape: RoundedRectangleBorder(
+                  borderRadius: BorderRadius.circular(8),
+                ),
+                elevation: 0,
+              ),
+              icon: const Icon(Icons.arrow_forward_rounded, size: 15),
+              label: const Text('Proceed to Escrow Deposit'),
+              onPressed: () {
+                Navigator.push(
+                  context,
+                  MaterialPageRoute(
+                    builder: (_) => CompanyEscrowPaymentScreen(project: project),
+                  ),
+                );
+              },
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+
   Widget _buildDeliveryReviewCard(ProjectModel project) {
     final remaining = project.autoReleaseRemaining;
     return Container(
@@ -1624,6 +1891,7 @@ class _CompanyProjectDetailScreenState
             ),
           ),
           const SizedBox(height: 16),
+          // Strictly 2 Options: Accept & Release OR Reject & Dispute (No Improvement option)
           Row(
             children: [
               Expanded(
@@ -1631,66 +1899,45 @@ class _CompanyProjectDetailScreenState
                   style: ElevatedButton.styleFrom(
                     backgroundColor: const Color(0xFF059669),
                     foregroundColor: Colors.white,
-                    padding: const EdgeInsets.symmetric(vertical: 12),
+                    padding: const EdgeInsets.symmetric(vertical: 13),
                     shape: RoundedRectangleBorder(
                       borderRadius: BorderRadius.circular(10),
                     ),
                   ),
                   icon: const Icon(Icons.check_circle_outline_rounded, size: 18),
-                  label: const Text('Approve & Release Payment'),
+                  label: Text(
+                    'Approve & Release Payment',
+                    maxLines: 1,
+                    overflow: TextOverflow.ellipsis,
+                    style: GoogleFonts.poppins(
+                      fontWeight: FontWeight.bold,
+                      fontSize: 13,
+                    ),
+                  ),
                   onPressed: () => _handleApproveAndRelease(project),
                 ),
-              ),
-            ],
-          ),
-          const SizedBox(height: 10),
-          Row(
-            children: [
-              Expanded(
-                child: project.canRequestRevision
-                    ? OutlinedButton.icon(
-                        style: OutlinedButton.styleFrom(
-                          foregroundColor: const Color(0xFF2563EB),
-                          side: const BorderSide(color: Color(0xFF2563EB)),
-                          padding: const EdgeInsets.symmetric(vertical: 12),
-                          shape: RoundedRectangleBorder(
-                            borderRadius: BorderRadius.circular(10),
-                          ),
-                        ),
-                        icon: const Icon(Icons.rate_review_rounded, size: 18),
-                        label: Text(
-                          'Request Revision (${project.remainingRevisions}/2)',
-                          style: const TextStyle(fontWeight: FontWeight.w600),
-                        ),
-                        onPressed: () => _handleRequestRevision(project),
-                      )
-                    : OutlinedButton.icon(
-                        style: OutlinedButton.styleFrom(
-                          foregroundColor: AppColors.grayText,
-                          side: const BorderSide(color: AppColors.lightGray),
-                          padding: const EdgeInsets.symmetric(vertical: 12),
-                          shape: RoundedRectangleBorder(
-                            borderRadius: BorderRadius.circular(10),
-                          ),
-                        ),
-                        icon: const Icon(Icons.lock_clock_rounded, size: 18),
-                        label: const Text('2/2 Revisions Used'),
-                        onPressed: null,
-                      ),
               ),
               const SizedBox(width: 10),
               Expanded(
                 child: OutlinedButton.icon(
                   style: OutlinedButton.styleFrom(
                     foregroundColor: AppColors.error,
-                    side: const BorderSide(color: AppColors.error),
-                    padding: const EdgeInsets.symmetric(vertical: 12),
+                    side: const BorderSide(color: AppColors.error, width: 1.2),
+                    padding: const EdgeInsets.symmetric(vertical: 13),
                     shape: RoundedRectangleBorder(
                       borderRadius: BorderRadius.circular(10),
                     ),
                   ),
                   icon: const Icon(Icons.gavel_rounded, size: 18),
-                  label: const Text('Raise Dispute'),
+                  label: Text(
+                    'Reject & Dispute',
+                    maxLines: 1,
+                    overflow: TextOverflow.ellipsis,
+                    style: GoogleFonts.poppins(
+                      fontWeight: FontWeight.w600,
+                      fontSize: 13,
+                    ),
+                  ),
                   onPressed: () => _handleRaiseDispute(project),
                 ),
               ),
@@ -1732,15 +1979,15 @@ class _CompanyProjectDetailScreenState
                   crossAxisAlignment: CrossAxisAlignment.start,
                   children: [
                     Text(
-                      'Revision ${project.revisionCount} of 2 in Progress',
+                      'Improvement in Progress (Final Review Allowed)',
                       style: GoogleFonts.poppins(
-                        fontSize: 15,
+                        fontSize: 14.5,
                         fontWeight: FontWeight.w700,
                         color: const Color(0xFF1E40AF),
                       ),
                     ),
                     const Text(
-                      '5-Day Auto-Release Timer Paused',
+                      'Student has strictly 2 Days (48 Hours) to re-deliver',
                       style: TextStyle(
                         fontSize: 12,
                         fontWeight: FontWeight.w600,
@@ -1754,7 +2001,7 @@ class _CompanyProjectDetailScreenState
           ),
           const SizedBox(height: 12),
           Text(
-            'Requested Improvements: "${project.revisionNotes ?? "Deliverables need improvement"}". Waiting for student to submit revised work.',
+            'Requested Improvements: "${project.revisionNotes ?? "Deliverables need improvement"}". Student is preparing revised work under 48-hour deadline.',
             style: GoogleFonts.inter(
               fontSize: 12.5,
               color: const Color(0xFF1E3A8A),
@@ -1811,6 +2058,102 @@ class _CompanyProjectDetailScreenState
                     height: 1.4,
                   ),
                 ),
+                const SizedBox(height: 10),
+                Container(
+                  padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 7),
+                  decoration: BoxDecoration(
+                    color: Colors.white,
+                    borderRadius: BorderRadius.circular(8),
+                    border: Border.all(color: const Color(0xFFFCA5A5)),
+                  ),
+                  child: Row(
+                    children: [
+                      const Icon(Icons.email_outlined,
+                          size: 15, color: Color(0xFFDC2626)),
+                      const SizedBox(width: 6),
+                      Expanded(
+                        child: Text(
+                          'Share evidence: ${AppDataService.skillBridgeOfficialGmail}',
+                          style: GoogleFonts.inter(
+                            fontSize: 11.5,
+                            fontWeight: FontWeight.bold,
+                            color: const Color(0xFFDC2626),
+                          ),
+                        ),
+                      ),
+                      InkWell(
+                        onTap: () {
+                          Clipboard.setData(const ClipboardData(
+                            text: AppDataService.skillBridgeOfficialGmail,
+                          ));
+                          ScaffoldMessenger.of(context).showSnackBar(
+                            const SnackBar(
+                              content: Text('SkillBridge official Gmail copied!'),
+                              duration: Duration(seconds: 1),
+                              backgroundColor: Color(0xFFDC2626),
+                            ),
+                          );
+                        },
+                        child: const Icon(Icons.copy_rounded,
+                            size: 14, color: Color(0xFFDC2626)),
+                      ),
+                    ],
+                  ),
+                ),
+              ],
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+
+  Widget _buildCancelledStatusBanner(ProjectModel project) {
+    final tid = project.refundTransactionId ?? 'N/A';
+    return Container(
+      padding: const EdgeInsets.all(16),
+      decoration: BoxDecoration(
+        color: const Color(0xFFFEF2F2),
+        borderRadius: BorderRadius.circular(16),
+        border: Border.all(color: const Color(0xFFEF4444)),
+      ),
+      child: Row(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Container(
+            padding: const EdgeInsets.all(8),
+            decoration: BoxDecoration(
+              color: const Color(0xFFFEE2E2),
+              borderRadius: BorderRadius.circular(10),
+            ),
+            child: const Icon(
+              Icons.cancel_rounded,
+              color: Color(0xFFDC2626),
+              size: 22,
+            ),
+          ),
+          const SizedBox(width: 12),
+          Expanded(
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Text(
+                  'Project Cancelled (Refunded)',
+                  style: GoogleFonts.poppins(
+                    fontSize: 15,
+                    fontWeight: FontWeight.w700,
+                    color: const Color(0xFF991B1B),
+                  ),
+                ),
+                const SizedBox(height: 3),
+                Text(
+                  'SkillBridge administration payment refund to company (TID: $tid). Project Cancelled.',
+                  style: GoogleFonts.inter(
+                    fontSize: 12.5,
+                    color: const Color(0xFFB91C1C),
+                    height: 1.4,
+                  ),
+                ),
               ],
             ),
           ),
@@ -1848,7 +2191,7 @@ class _CompanyProjectDetailScreenState
               crossAxisAlignment: CrossAxisAlignment.start,
               children: [
                 Text(
-                  'Ready for Payout',
+                  'Payment Approved (Paid)',
                   style: GoogleFonts.poppins(
                     fontSize: 15,
                     fontWeight: FontWeight.w700,
@@ -1857,7 +2200,9 @@ class _CompanyProjectDetailScreenState
                 ),
                 const SizedBox(height: 3),
                 Text(
-                  'Payout resolution applied (${project.payoutType ?? "full_student"}). Skill Bridge Admin will execute account transfer.',
+                  (project.payoutTransactionId != null && project.payoutTransactionId!.isNotEmpty)
+                      ? 'SkillBridge administration sent payment to student (TID: ${project.payoutTransactionId}). Deliverables Paid.'
+                      : 'You have approved the deliverables and released payment. SkillBridge Admin is transferring net payout to ${project.assignedStudent ?? "the awarded student"}.',
                   style: GoogleFonts.inter(
                     fontSize: 12.5,
                     color: const Color(0xFF047857),

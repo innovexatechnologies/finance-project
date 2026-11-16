@@ -214,6 +214,11 @@ class AssignmentModel {
     this.latestSubmission,
   });
 
+  bool get isRejected =>
+      submissionStatus.toLowerCase() == 'rejected' ||
+      projectStatus.toLowerCase() == 'rejected' ||
+      projectStatus.toLowerCase() == 'disputed';
+
   AssignmentModel copyWith({
     String? id,
     String? companyId,

@@ -1135,6 +1135,8 @@ class _AdminSettingsScreenState extends State<AdminSettingsScreen>
                           : t.id;
 
                       return DataRow(
+                        onSelectChanged: (_) =>
+                            _showHelpRequestDetailModal(t, currentAdmin),
                         cells: [
                           DataCell(
                             Text(
@@ -1145,6 +1147,8 @@ class _AdminSettingsScreenState extends State<AdminSettingsScreen>
                                 fontSize: 12,
                               ),
                             ),
+                            onTap: () =>
+                                _showHelpRequestDetailModal(t, currentAdmin),
                           ),
                           DataCell(
                             Column(
@@ -1167,6 +1171,8 @@ class _AdminSettingsScreenState extends State<AdminSettingsScreen>
                                 ),
                               ],
                             ),
+                            onTap: () =>
+                                _showHelpRequestDetailModal(t, currentAdmin),
                           ),
                           DataCell(
                             Container(
@@ -1192,6 +1198,8 @@ class _AdminSettingsScreenState extends State<AdminSettingsScreen>
                                 ),
                               ),
                             ),
+                            onTap: () =>
+                                _showHelpRequestDetailModal(t, currentAdmin),
                           ),
                           DataCell(
                             SizedBox(
@@ -1203,6 +1211,8 @@ class _AdminSettingsScreenState extends State<AdminSettingsScreen>
                                 style: const TextStyle(fontSize: 12),
                               ),
                             ),
+                            onTap: () =>
+                                _showHelpRequestDetailModal(t, currentAdmin),
                           ),
                           DataCell(
                             Row(
@@ -1227,6 +1237,8 @@ class _AdminSettingsScreenState extends State<AdminSettingsScreen>
                                 ),
                               ],
                             ),
+                            onTap: () =>
+                                _showHelpRequestDetailModal(t, currentAdmin),
                           ),
                           DataCell(
                             Container(
@@ -1247,6 +1259,8 @@ class _AdminSettingsScreenState extends State<AdminSettingsScreen>
                                 ),
                               ),
                             ),
+                            onTap: () =>
+                                _showHelpRequestDetailModal(t, currentAdmin),
                           ),
                           DataCell(
                             ElevatedButton(

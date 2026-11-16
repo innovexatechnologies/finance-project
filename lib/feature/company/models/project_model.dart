@@ -28,24 +28,34 @@ class ProjectModel {
   final String? paymentReceiptUrl;
   final bool isEscrowVerified;
   final String? verifiedAt;
+  final String? rejectionReason;
 
   // Delivery, Auto-Release & Dispute Fields
   final String? deliveredAt;
   final String? disputeCaseId;
   final String? disputeReason;
+  final String? disputeResolution;
   final String? payoutType; // 'full_student', 'auto_released_student', 'full_company_refund', 'split_50_50'
   final double? studentPayoutAmount;
   final double? companyRefundAmount;
   final double? platformCommissionAmount;
   final String? payoutTransactionId;
   final String? payoutReceiptUrl;
+  final String? refundTransactionId;
+  final String? refundReceiptUrl;
   final String? completedAt;
 
-  // Revision Tracking Fields (Max 2 Revisions)
+  // Revision Tracking Fields (Max 1 Revision with 2-day deadline)
   final int revisionCount;
   final int maxRevisions;
   final String? revisionNotes;
   final String? lastRevisionRequestedAt;
+  final String? revisionDeadline;
+
+  // HelpDesk & Escrow Escalation Fields
+  final String? submittedAt;
+  final bool hasHelpRequest;
+  final String paymentStatus;
 
   ProjectModel({
     required this.id,
@@ -75,35 +85,92 @@ class ProjectModel {
     this.paymentReceiptUrl,
     this.isEscrowVerified = false,
     this.verifiedAt,
+    this.rejectionReason,
     this.deliveredAt,
     this.disputeCaseId,
     this.disputeReason,
+    this.disputeResolution,
     this.payoutType,
     this.studentPayoutAmount,
     this.companyRefundAmount,
     this.platformCommissionAmount,
     this.payoutTransactionId,
     this.payoutReceiptUrl,
+    this.refundTransactionId,
+    this.refundReceiptUrl,
     this.completedAt,
     this.revisionCount = 0,
-    this.maxRevisions = 2,
+    this.maxRevisions = 1,
     this.revisionNotes,
     this.lastRevisionRequestedAt,
+    this.revisionDeadline,
+    this.submittedAt,
+    this.hasHelpRequest = false,
+    this.paymentStatus = 'escrow_held',
   });
 
   bool get isPendingPayment => status.toLowerCase() == 'pending_payment';
   bool get isPendingVerification =>
       status.toLowerCase() == 'pending_verification';
+  bool get isPaymentRejected =>
+      status.toLowerCase() == 'payment_rejected' ||
+      status.toLowerCase() == 'rejected';
   bool get isLiveVerified =>
       (status.toLowerCase() == 'open') && isEscrowVerified;
   bool get isInProgress =>
       status.toLowerCase() == 'in_progress' ||
       status.toLowerCase() == 'in progress';
-  bool get isDelivered => status.toLowerCase() == 'delivered';
+  bool get isDelivered =>
+      status.toLowerCase() == 'delivered' ||
+      status.toLowerCase() == 'submitted';
+  bool get isSubmitted =>
+      status.toLowerCase() == 'submitted' ||
+      status.toLowerCase() == 'delivered';
   bool get isRevisionRequested => status.toLowerCase() == 'revision_requested';
-  bool get isDisputed => status.toLowerCase() == 'disputed';
-  bool get isReadyForPayout => status.toLowerCase() == 'ready_for_payout';
-  bool get isCompleted => status.toLowerCase() == 'completed';
+  bool get isDisputed =>
+      status.toLowerCase() == 'disputed' || status.toLowerCase() == 'rejected';
+  bool get isDisputeResolved =>
+      (disputeResolution != null && disputeResolution!.trim().isNotEmpty) ||
+      (status.toLowerCase() == 'completed' &&
+          payoutTransactionId != null &&
+          payoutTransactionId!.trim().isNotEmpty) ||
+      (status.toLowerCase() == 'cancelled' &&
+          ((refundTransactionId != null &&
+                  refundTransactionId!.trim().isNotEmpty) ||
+              payoutType == 'dispute_company_refunded'));
+  bool get isReadyForPayout =>
+      status.toLowerCase() == 'ready_for_payout' ||
+      status.toLowerCase() == 'approved_by_company' ||
+      (status.toLowerCase() == 'completed' &&
+          (payoutTransactionId == null ||
+              payoutTransactionId!.trim().isEmpty));
+  bool get isCompleted =>
+      (status.toLowerCase() == 'completed' ||
+          status.toLowerCase() == 'paid') &&
+      payoutTransactionId != null &&
+      payoutTransactionId!.trim().isNotEmpty;
+  bool get isCancelled => status.toLowerCase() == 'cancelled';
+
+  DateTime? get submittedAtDateTime => submittedAt != null
+      ? DateTime.tryParse(submittedAt!)
+      : deliveredAtDateTime;
+
+  bool get isHelpEligible {
+    if (!isSubmitted || submittedAtDateTime == null || hasHelpRequest) return false;
+    return DateTime.now().difference(submittedAtDateTime!).inHours >= 48;
+  }
+
+  Duration get helpEligibleRemaining {
+    if (submittedAtDateTime == null) return Duration.zero;
+    final diff = DateTime.now().difference(submittedAtDateTime!);
+    const twoDays = Duration(hours: 48);
+    if (diff >= twoDays) return Duration.zero;
+    return twoDays - diff;
+  }
+
+  String get budget => escrowAmount > 0
+      ? 'PKR ${escrowAmount.toStringAsFixed(0)}'
+      : 'Academic Credit / Verified Certificate';
 
   int get remainingRevisions =>
       (maxRevisions - revisionCount).clamp(0, maxRevisions);
@@ -154,20 +221,28 @@ class ProjectModel {
     String? paymentReceiptUrl,
     bool? isEscrowVerified,
     String? verifiedAt,
+    String? rejectionReason,
     String? deliveredAt,
     String? disputeCaseId,
     String? disputeReason,
+    String? disputeResolution,
     String? payoutType,
     double? studentPayoutAmount,
     double? companyRefundAmount,
     double? platformCommissionAmount,
     String? payoutTransactionId,
     String? payoutReceiptUrl,
+    String? refundTransactionId,
+    String? refundReceiptUrl,
     String? completedAt,
     int? revisionCount,
     int? maxRevisions,
     String? revisionNotes,
     String? lastRevisionRequestedAt,
+    String? revisionDeadline,
+    String? submittedAt,
+    bool? hasHelpRequest,
+    String? paymentStatus,
   }) {
     return ProjectModel(
       id: id ?? this.id,
@@ -198,9 +273,11 @@ class ProjectModel {
       paymentReceiptUrl: paymentReceiptUrl ?? this.paymentReceiptUrl,
       isEscrowVerified: isEscrowVerified ?? this.isEscrowVerified,
       verifiedAt: verifiedAt ?? this.verifiedAt,
+      rejectionReason: rejectionReason ?? this.rejectionReason,
       deliveredAt: deliveredAt ?? this.deliveredAt,
       disputeCaseId: disputeCaseId ?? this.disputeCaseId,
       disputeReason: disputeReason ?? this.disputeReason,
+      disputeResolution: disputeResolution ?? this.disputeResolution,
       payoutType: payoutType ?? this.payoutType,
       studentPayoutAmount: studentPayoutAmount ?? this.studentPayoutAmount,
       companyRefundAmount: companyRefundAmount ?? this.companyRefundAmount,
@@ -208,12 +285,18 @@ class ProjectModel {
           platformCommissionAmount ?? this.platformCommissionAmount,
       payoutTransactionId: payoutTransactionId ?? this.payoutTransactionId,
       payoutReceiptUrl: payoutReceiptUrl ?? this.payoutReceiptUrl,
+      refundTransactionId: refundTransactionId ?? this.refundTransactionId,
+      refundReceiptUrl: refundReceiptUrl ?? this.refundReceiptUrl,
       completedAt: completedAt ?? this.completedAt,
       revisionCount: revisionCount ?? this.revisionCount,
       maxRevisions: maxRevisions ?? this.maxRevisions,
       revisionNotes: revisionNotes ?? this.revisionNotes,
       lastRevisionRequestedAt:
           lastRevisionRequestedAt ?? this.lastRevisionRequestedAt,
+      revisionDeadline: revisionDeadline ?? this.revisionDeadline,
+      submittedAt: submittedAt ?? this.submittedAt,
+      hasHelpRequest: hasHelpRequest ?? this.hasHelpRequest,
+      paymentStatus: paymentStatus ?? this.paymentStatus,
     );
   }
 
@@ -245,15 +328,21 @@ class ProjectModel {
       progress: (json['progress'] as num?)?.toDouble() ?? 0.0,
       createdAt: (json['created_at'] ?? 'Recently').toString(),
       paymentSent: json['payment_sent'] == true,
-      escrowAmount: (json['escrow_amount'] as num?)?.toDouble() ?? 0.0,
-      paymentMethodUsed: json['payment_method_used']?.toString(),
-      transactionId: json['transaction_id']?.toString(),
-      paymentReceiptUrl: json['payment_receipt_url']?.toString(),
+      escrowAmount: _parseEscrowAmount(json),
+      paymentMethodUsed: json['payment_method_used']?.toString() ??
+          _extractPaymentMethod(json['additional_instructions']?.toString()),
+      transactionId: json['transaction_id']?.toString() ??
+          _extractTransactionId(json['additional_instructions']?.toString()),
+      paymentReceiptUrl: json['payment_receipt_url']?.toString() ??
+          json['attachment_url']?.toString(),
       isEscrowVerified: json['is_escrow_verified'] == true,
       verifiedAt: json['verified_at']?.toString(),
+      rejectionReason: json['rejection_reason']?.toString(),
       deliveredAt: json['delivered_at']?.toString(),
       disputeCaseId: json['dispute_case_id']?.toString(),
       disputeReason: json['dispute_reason']?.toString(),
+      disputeResolution: json['dispute_resolution']?.toString() ??
+          json['disputeResolution']?.toString(),
       payoutType: json['payout_type']?.toString(),
       studentPayoutAmount: (json['student_payout_amount'] as num?)?.toDouble(),
       companyRefundAmount: (json['company_refund_amount'] as num?)?.toDouble(),
@@ -261,11 +350,24 @@ class ProjectModel {
           ?.toDouble(),
       payoutTransactionId: json['payout_transaction_id']?.toString(),
       payoutReceiptUrl: json['payout_receipt_url']?.toString(),
+      refundTransactionId: json['refund_transaction_id']?.toString(),
+      refundReceiptUrl: json['refund_receipt_url']?.toString(),
       completedAt: json['completed_at']?.toString(),
       revisionCount: (json['revision_count'] as num?)?.toInt() ?? 0,
-      maxRevisions: (json['max_revisions'] as num?)?.toInt() ?? 2,
+      maxRevisions: (json['max_revisions'] as num?)?.toInt() ?? 1,
       revisionNotes: json['revision_notes']?.toString(),
       lastRevisionRequestedAt: json['last_revision_requested_at']?.toString(),
+      revisionDeadline: json['revision_deadline']?.toString() ??
+          json['revisionDeadline']?.toString(),
+      submittedAt: json['submitted_at']?.toString() ??
+          json['submittedAt']?.toString() ??
+          json['delivered_at']?.toString(),
+      hasHelpRequest: json['has_help_request'] == true ||
+          json['hasHelpRequest'] == true,
+      paymentStatus: (json['payment_status'] ??
+              json['paymentStatus'] ??
+              'escrow_held')
+          .toString(),
     );
   }
 
@@ -301,6 +403,7 @@ class ProjectModel {
       if (deliveredAt != null) 'delivered_at': deliveredAt,
       if (disputeCaseId != null) 'dispute_case_id': disputeCaseId,
       if (disputeReason != null) 'dispute_reason': disputeReason,
+      if (disputeResolution != null) 'dispute_resolution': disputeResolution,
       if (payoutType != null) 'payout_type': payoutType,
       if (studentPayoutAmount != null)
         'student_payout_amount': studentPayoutAmount,
@@ -311,12 +414,67 @@ class ProjectModel {
       if (payoutTransactionId != null)
         'payout_transaction_id': payoutTransactionId,
       if (payoutReceiptUrl != null) 'payout_receipt_url': payoutReceiptUrl,
+      if (refundTransactionId != null)
+        'refund_transaction_id': refundTransactionId,
+      if (refundReceiptUrl != null) 'refund_receipt_url': refundReceiptUrl,
       if (completedAt != null) 'completed_at': completedAt,
       'revision_count': revisionCount,
       'max_revisions': maxRevisions,
       if (revisionNotes != null) 'revision_notes': revisionNotes,
       if (lastRevisionRequestedAt != null)
         'last_revision_requested_at': lastRevisionRequestedAt,
+      if (revisionDeadline != null) 'revision_deadline': revisionDeadline,
+      if (submittedAt != null) 'submitted_at': submittedAt,
+      'has_help_request': hasHelpRequest,
+      'payment_status': paymentStatus,
     };
+  }
+
+  static String? _extractTransactionId(String? instructions) {
+    if (instructions == null || !instructions.contains('TID:')) return null;
+    final match = RegExp(r'TID:\s*([^\s|]+)').firstMatch(instructions);
+    return match?.group(1);
+  }
+
+  static String? _extractPaymentMethod(String? instructions) {
+    if (instructions == null || !instructions.contains('Payment')) return null;
+    final match =
+        RegExp(r'Payment(?:\s*Method)?:\s*([^|]+)').firstMatch(instructions);
+    return match?.group(1)?.trim();
+  }
+
+  static double _parseEscrowAmount(Map<String, dynamic> json) {
+    final raw = json['escrow_amount'] ??
+        json['escrowAmount'] ??
+        json['budget_amount'] ??
+        json['budgetAmount'] ??
+        json['budget'] ??
+        json['stipend'] ??
+        json['amount'];
+    if (raw is num && raw > 0) return raw.toDouble();
+    if (raw != null) {
+      final clean = raw.toString().replaceAll(RegExp(r'[^0-9.]'), '');
+      final val = double.tryParse(clean);
+      if (val != null && val > 0) return val;
+    }
+    final fromInstructions =
+        extractEscrowAmount(json['additional_instructions']?.toString());
+    if (fromInstructions != null && fromInstructions > 0) {
+      return fromInstructions;
+    }
+    return 0.0;
+  }
+
+  static double? extractEscrowAmount(String? instructions) {
+    if (instructions == null || instructions.trim().isEmpty) return null;
+    final match = RegExp(
+      r'(?:escrow|amount|budget|deposit|price|fee|pkr)\s*[:=]?\s*(?:pkr)?\s*([0-9,]+(?:\.[0-9]+)?)',
+      caseSensitive: false,
+    ).firstMatch(instructions);
+    if (match != null) {
+      final clean = match.group(1)?.replaceAll(',', '');
+      return double.tryParse(clean ?? '');
+    }
+    return null;
   }
 }

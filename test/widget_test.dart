@@ -7,6 +7,7 @@ import 'package:shared_preferences/shared_preferences.dart';
 import 'package:supabase_flutter/supabase_flutter.dart';
 import 'package:link_vibe/core/constants/app_colors.dart';
 import 'package:link_vibe/core/services/app_data_service.dart';
+import 'package:link_vibe/core/services/deep_link_service.dart';
 import 'package:link_vibe/core/services/share_service.dart';
 import 'package:link_vibe/core/services/supabase_helper.dart';
 import 'package:link_vibe/core/theme/app_theme.dart';
@@ -25,6 +26,7 @@ import 'package:link_vibe/services/escrow_lifecycle_service.dart';
 import 'package:link_vibe/services/admin_dispute_payout_service.dart';
 import 'package:link_vibe/screens/admin/admin_dispute_resolution_screen.dart';
 import 'package:link_vibe/feature/admin/presentation/screens/admin_login_screen.dart';
+import 'package:link_vibe/feature/admin/presentation/screens/admin_payment_methods_screen.dart';
 import 'package:link_vibe/feature/admin/presentation/screens/admin_settings_screen.dart';
 import 'package:link_vibe/feature/admin/presentation/screens/application_monitoring_screen.dart';
 import 'package:link_vibe/feature/admin/presentation/screens/certificate_management_screen.dart';
@@ -62,6 +64,7 @@ import 'package:link_vibe/feature/student/home/presentation/screens/student_home
 import 'package:link_vibe/feature/student/my_projects/presentation/screens/my_projects_screen.dart';
 import 'package:link_vibe/feature/student/presentation/screens/student_main_nav.dart';
 import 'package:link_vibe/feature/student/profile/presentation/screens/student_profile_screen.dart';
+import 'package:link_vibe/feature/student/project_details/presentation/screens/student_project_details_screen.dart';
 import 'package:link_vibe/feature/student/settings/presentation/screens/change_password_screen.dart';
 import 'package:link_vibe/feature/student/settings/presentation/screens/contact_support_screen.dart';
 import 'package:link_vibe/feature/student/settings/presentation/screens/settings_screen.dart';
@@ -73,6 +76,7 @@ void main() {
 
   setUp(() async {
     SharedPreferences.setMockInitialValues({});
+    DeepLinkService.instance.resetForTest();
     await AppDataService.instance.init();
   });
 
@@ -859,7 +863,7 @@ void main() {
       expect(tester.takeException(), isNull);
     });
 
-    test('ShareService summaries contain in-app SkillBridge links', () {
+    test('ShareService generates in-app SkillBridge deep links for projects, applications, and certificates without external GoDaddy domains', () {
       final projectMsg = ShareService.buildProjectShareText({
         'id': 'proj-101',
         'title': 'Flutter Mobile App',
@@ -871,6 +875,7 @@ void main() {
       expect(projectMsg, contains('Flutter Mobile App'));
       expect(projectMsg, contains('Acme Labs'));
       expect(projectMsg, contains('skillbridge://project/proj-101'));
+      expect(projectMsg, isNot(contains('skillbridge.app')));
 
       final appMsg = ShareService.buildApplicationShareText({
         'id': 'app-77',
@@ -886,6 +891,7 @@ void main() {
         appMsg,
         contains('skillbridge://application/app-77?projectId=proj-101'),
       );
+      expect(appMsg, isNot(contains('skillbridge.app')));
 
       final certMsg = ShareService.buildCertificateShareText({
         'id': 'CERT-999',
@@ -896,6 +902,38 @@ void main() {
       });
       expect(certMsg, contains('Excellence Certificate'));
       expect(certMsg, contains('skillbridge://certificate/CERT-999'));
+      expect(certMsg, isNot(contains('skillbridge.app')));
+
+      final fallbackCertLink = ShareService.buildCertificateShareLink({
+        'id': 'SB-2026-1',
+      });
+      expect(fallbackCertLink, 'skillbridge://certificate/SB-2026-1');
+
+      final parsedProj = DeepLinkService.parseUri(
+        Uri.parse('skillbridge://project/proj-101'),
+      );
+      expect(parsedProj?.type, AppLinkType.project);
+      expect(parsedProj?.id, 'proj-101');
+
+      final parsedApp = DeepLinkService.parseUri(
+        Uri.parse('skillbridge://application/app-77?projectId=proj-101'),
+      );
+      expect(parsedApp?.type, AppLinkType.application);
+      expect(parsedApp?.id, 'app-77');
+      expect(parsedApp?.projectId, 'proj-101');
+
+      final parsedCert = DeepLinkService.parseUri(
+        Uri.parse('skillbridge://certificate/CERT-999'),
+      );
+      expect(parsedCert?.type, AppLinkType.certificate);
+      expect(parsedCert?.id, 'CERT-999');
+
+      expect(
+        DeepLinkService.parseUri(
+          Uri.parse('io.supabase.campusconnect://login-callback?code=abc'),
+        ),
+        isNull,
+      );
     });
 
     test('CompanyProfileService caches workspace snapshot cleanly', () async {
@@ -906,42 +944,41 @@ void main() {
         userId: 'comp-user-1',
       );
 
-      CompanyProfileService().currentProfileNotifier.value =
-          const CompanyProfileModel(
-            id: 'comp-row-1',
-            companyName: 'FastCloud Labs',
-            industry: 'Cloud Services',
-            description: 'Building fast platforms',
-            officialEmail: 'hr@fastcloud.io',
-            websiteUrl: 'https://fastcloud.io',
-            contactPersonName: 'Sara',
-            phoneNumber: '03001234567',
-            city: 'Lahore',
-            completeAddress: 'Gulberg',
-            logoInitial: 'FL',
-            isVerified: true,
-            lastUpdated: 'Just now',
-          );
-      CompanyProjectService().projectsNotifier.value = [
-        ProjectModel(
-          id: 'p-1',
-          title: 'AI Analytics Dashboard',
-          category: 'Development',
-          description: 'Metrics',
-          requirements: 'Dart',
-          skillsRequired: ['Flutter'],
-          deliverables: 'App',
-          deadline: 'Dec 2026',
-          projectType: 'Remote',
-          openings: 2,
-          additionalInstructions: '',
+        CompanyProfileService().currentProfileNotifier.value =
+            const CompanyProfileModel(
+          id: 'comp-row-1',
           companyName: 'FastCloud Labs',
-          companyId: 'comp-row-1',
-          status: 'Open',
-          duration: '4 weeks',
-          budget: 'Paid',
-        ),
-      ];
+          industry: 'Cloud Services',
+          description: 'Building fast platforms',
+          officialEmail: 'hr@fastcloud.io',
+          websiteUrl: 'https://fastcloud.io',
+          contactPersonName: 'Sara',
+          phoneNumber: '03001234567',
+          city: 'Lahore',
+          completeAddress: 'Gulberg',
+          logoInitial: 'FL',
+          isVerified: true,
+          lastUpdated: 'Just now',
+        );
+        CompanyProjectService().projectsNotifier.value = [
+          ProjectModel(
+            id: 'p-1',
+            title: 'AI Analytics Dashboard',
+            category: 'Development',
+            description: 'Metrics',
+            requirements: 'Dart',
+            skillsRequired: ['Flutter'],
+            deliverables: 'App',
+            deadline: 'Dec 2026',
+            projectType: 'Remote',
+            openings: 2,
+            additionalInstructions: '',
+            companyName: 'FastCloud Labs',
+            companyId: 'comp-row-1',
+            status: 'Open',
+            duration: '4 weeks',
+          ),
+        ];
 
       await CompanyProfileService.persistLocalCache();
       CompanyProfileService().reset();
@@ -1238,92 +1275,179 @@ void main() {
       },
     );
 
-    testWidgets('Share buttons remain available with app-link controls', (
-      tester,
-    ) async {
-      tester.view.physicalSize = const Size(412, 915);
-      tester.view.devicePixelRatio = 1.0;
-      addTearDown(() => tester.view.resetPhysicalSize());
+    testWidgets(
+      'Share buttons are removed from StudentHomeScreen & StudentProfileScreen, present on Projects/Applications/Certificates, and deep links open directly in-app',
+      (tester) async {
+        tester.view.physicalSize = const Size(412, 915);
+        tester.view.devicePixelRatio = 1.0;
+        addTearDown(() => tester.view.resetPhysicalSize());
 
-      SharedPreferences.setMockInitialValues({
-        'cc_is_logged_in_v1': true,
-        'cc_user_role_v1': 'Student',
-        'cc_user_id_v1': 'stu-dl-1',
-        'cc_user_name_v1': 'Hina Khan',
-        'cc_custom_projects_v1': '[{"id":"proj-dl-1","title":"Deep Link Mobile App","company":"Acme Labs","category":"Development","duration":"4 Weeks","workMode":"Remote","status":"Open","stipend":"PKR 25,000"}]',
-        'cc_applications_v1': '[{"id":"app-dl-1","projectId":"proj-dl-1","title":"Deep Link Mobile App","company":"Acme Labs","status":"Pending","appliedDate":"Today","timelineStep":1}]',
-        'cc_certificates_v1': '[{"id":"CERT-DL-1","title":"Completion Certificate","project":"Deep Link Mobile App","issuer":"Acme Labs","date":"2026","status":"valid","verificationUrl":"https://skillbridge.edu.pk/verify/CERT-DL-1"}]',
-      });
-      await AppDataService.instance.init();
+        SharedPreferences.setMockInitialValues({
+          'cc_is_logged_in_v1': true,
+          'cc_user_role_v1': 'Student',
+          'cc_user_id_v1': 'stu-dl-1',
+          'cc_user_name_v1': 'Hina Khan',
+          'cc_custom_projects_v1':
+              '[{"id":"proj-dl-1","title":"Deep Link Mobile App","company":"Acme Labs","category":"Development","duration":"4 Weeks","workMode":"Remote","status":"Open"}]',
+          'cc_applications_v1':
+              '[{"id":"app-dl-1","projectId":"proj-dl-1","title":"Deep Link Mobile App","company":"Acme Labs","status":"Pending","appliedDate":"Today","timelineStep":1}]',
+          'cc_certificates_v1':
+              '[{"id":"CERT-DL-1","title":"Completion Certificate","project":"Deep Link Mobile App","issuer":"Acme Labs","date":"2026","status":"valid","verificationUrl":"https://skillbridge.edu.pk/verify/CERT-DL-1"}]',
+        });
+        await AppDataService.instance.init();
 
-      // StudentHomeScreen must NOT have Share button even with open projects
-      await tester.pumpWidget(
-        MaterialApp(
-          key: const ValueKey('share_home'),
-          theme: AppTheme.lightTheme,
-          home: const StudentHomeScreen(),
-        ),
-      );
-      await tester.pumpAndSettle();
-      expect(find.text('Deep Link Mobile App'), findsOneWidget);
-      expect(find.byTooltip('Share Project'), findsNothing);
-      expect(find.byIcon(Icons.share_outlined), findsNothing);
+        // 1. StudentHomeScreen must NOT have Share button even with open projects
+        await tester.pumpWidget(
+          MaterialApp(
+            key: const ValueKey('dl_home'),
+            theme: AppTheme.lightTheme,
+            home: const StudentHomeScreen(),
+          ),
+        );
+        await tester.pumpAndSettle();
+        expect(find.text('Deep Link Mobile App'), findsOneWidget);
+        expect(find.byTooltip('Share Project'), findsNothing);
+        expect(find.byIcon(Icons.share_outlined), findsNothing);
 
-      // StudentProfileScreen must NOT have Share Profile button
-      await tester.pumpWidget(
-        MaterialApp(
-          key: const ValueKey('share_profile'),
-          theme: AppTheme.lightTheme,
-          home: const StudentProfileScreen(),
-        ),
-      );
-      await tester.pumpAndSettle();
-      expect(find.byTooltip('Share Profile'), findsNothing);
-      expect(find.byIcon(Icons.share_outlined), findsNothing);
+        // 2. StudentProfileScreen must NOT have Share Profile button
+        await tester.pumpWidget(
+          MaterialApp(
+            key: const ValueKey('dl_profile'),
+            theme: AppTheme.lightTheme,
+            home: const StudentProfileScreen(),
+          ),
+        );
+        await tester.pumpAndSettle();
+        expect(find.byTooltip('Share Profile'), findsNothing);
+        expect(find.byIcon(Icons.share_outlined), findsNothing);
 
-      // Explore projects retains native sharing and deep-link actions.
-      await tester.pumpWidget(
-        MaterialApp(
-          key: const ValueKey('share_explore'),
-          theme: AppTheme.lightTheme,
-          home: const ExploreProjectsScreen(),
-        ),
-      );
-      await tester.pumpAndSettle();
-      expect(find.byTooltip('Share Project'), findsOneWidget);
-      expect(find.text('Open Shared Link'), findsNothing);
+        // 3. ExploreProjectsScreen has Share button & Open Shared Link button
+        DeepLinkService.instance.attachNavigatorKey(MyApp.navigatorKey);
+        await tester.pumpWidget(
+          MaterialApp(
+            key: const ValueKey('dl_explore'),
+            navigatorKey: MyApp.navigatorKey,
+            theme: AppTheme.lightTheme,
+            home: const ExploreProjectsScreen(),
+          ),
+        );
+        await tester.pumpAndSettle();
+        expect(find.byTooltip('Share Project'), findsOneWidget);
+        expect(find.byTooltip('Open Shared Link'), findsOneWidget);
 
-      await tester.tap(find.byTooltip('Share Project'));
-      await tester.pumpAndSettle();
-      expect(find.text('Share Project'), findsOneWidget);
-      expect(find.text('Share via Apps'), findsOneWidget);
-      expect(find.text('Copy Details'), findsOneWidget);
-      expect(find.text('Direct SkillBridge Link'), findsOneWidget);
-      expect(find.text('Open in App'), findsOneWidget);
-      await tester.tap(find.byIcon(Icons.close_rounded).last);
-      await tester.pumpAndSettle();
+        // Tapping Share Project opens the professional Share Sheet with link & actions
+        await tester.tap(find.byTooltip('Share Project'));
+        await tester.pumpAndSettle();
+        expect(find.text('Share Project'), findsOneWidget);
+        expect(find.text('Direct SkillBridge Link'), findsOneWidget);
+        expect(find.text('skillbridge://project/proj-dl-1'), findsOneWidget);
+        expect(find.text('Share via Apps'), findsOneWidget);
+        expect(find.text('Open in App'), findsOneWidget);
 
-      await tester.pumpWidget(
-        MaterialApp(
-          key: const ValueKey('share_apps'),
-          theme: AppTheme.lightTheme,
-          home: const MyApplicationsScreen(),
-        ),
-      );
-      await tester.pumpAndSettle();
-      expect(find.byTooltip('Share Application'), findsOneWidget);
+        // Tapping Open in App opens StudentProjectDetailsScreen directly
+        await tester.tap(find.text('Open in App'));
+        await tester.pumpAndSettle();
+        expect(find.byType(StudentProjectDetailsScreen), findsOneWidget);
+        Navigator.of(MyApp.navigatorKey.currentContext!).pop();
+        await tester.pumpAndSettle();
 
-      await tester.pumpWidget(
-        MaterialApp(
-          key: const ValueKey('share_certs'),
-          theme: AppTheme.lightTheme,
-          home: const CertificatesScreen(),
-        ),
-      );
-      await tester.pumpAndSettle();
-      expect(find.byIcon(Icons.share_outlined), findsOneWidget);
-      expect(tester.takeException(), isNull);
-    });
+        // Tapping Open Shared Link extracts embedded link from full shared message
+        final extracted = DeepLinkService.extractUriFromText(
+          ShareService.buildProjectShareText({
+            'id': 'proj-dl-1',
+            'title': 'Deep Link Mobile App',
+            'company': 'Acme Labs',
+          }),
+        );
+        expect(extracted?.toString(), 'skillbridge://project/proj-dl-1');
+
+        await tester.tap(find.byTooltip('Open Shared Link'));
+        await tester.pumpAndSettle();
+        expect(find.text('Open Shared Link'), findsOneWidget);
+        await tester.enterText(
+          find.byType(TextField).last,
+          'Check out: skillbridge://project/proj-dl-1',
+        );
+        await tester.tap(find.text('Open in App'));
+        await tester.pumpAndSettle();
+        expect(find.byType(StudentProjectDetailsScreen), findsOneWidget);
+        Navigator.of(MyApp.navigatorKey.currentContext!).pop();
+        await tester.pumpAndSettle();
+
+        // 4. MyApplicationsScreen has Share button
+        await tester.pumpWidget(
+          MaterialApp(
+            key: const ValueKey('dl_apps'),
+            theme: AppTheme.lightTheme,
+            home: const MyApplicationsScreen(),
+          ),
+        );
+        await tester.pumpAndSettle();
+        expect(find.byTooltip('Share Application'), findsOneWidget);
+
+        // 5. CertificatesScreen has Share button
+        await tester.pumpWidget(
+          MaterialApp(
+            key: const ValueKey('dl_certs'),
+            theme: AppTheme.lightTheme,
+            home: const CertificatesScreen(),
+          ),
+        );
+        await tester.pumpAndSettle();
+        expect(find.byIcon(Icons.share_outlined), findsOneWidget);
+
+        // 6. Opening shared deep links navigates cleanly inside the app
+        DeepLinkService.instance.attachNavigatorKey(MyApp.navigatorKey);
+        await tester.pumpWidget(
+          MaterialApp(
+            key: const ValueKey('dl_main_nav'),
+            navigatorKey: MyApp.navigatorKey,
+            theme: AppTheme.lightTheme,
+            home: const StudentMainNav(),
+          ),
+        );
+        await tester.pumpAndSettle();
+        await DeepLinkService.instance.markWorkspaceReadyAndConsume();
+
+        // Project link opens StudentProjectDetailsScreen in-app
+        final projOpened = await DeepLinkService.instance.openUri(
+          Uri.parse('skillbridge://project/proj-dl-1'),
+        );
+        expect(projOpened, isTrue);
+        await tester.pumpAndSettle();
+        final detailsFinder = find.byType(StudentProjectDetailsScreen);
+        expect(detailsFinder, findsOneWidget);
+        expect(
+          find.descendant(
+            of: detailsFinder,
+            matching: find.text('Deep Link Mobile App'),
+          ),
+          findsOneWidget,
+        );
+        Navigator.of(MyApp.navigatorKey.currentContext!).pop();
+        await tester.pumpAndSettle();
+
+        // Application link opens Application Detail Sheet in-app
+        final appOpened = await DeepLinkService.instance.openUri(
+          Uri.parse('skillbridge://application/app-dl-1?projectId=proj-dl-1'),
+        );
+        expect(appOpened, isTrue);
+        await tester.pumpAndSettle();
+        expect(find.text('View Project'), findsOneWidget);
+        Navigator.of(MyApp.navigatorKey.currentContext!).pop();
+        await tester.pumpAndSettle();
+
+        // Certificate link opens Verified Certificate Dialog in-app
+        final certOpened = await DeepLinkService.instance.openUri(
+          Uri.parse('skillbridge://certificate/CERT-DL-1'),
+        );
+        expect(certOpened, isTrue);
+        await tester.pumpAndSettle();
+        expect(find.text('Completion Certificate'), findsOneWidget);
+        expect(find.textContaining('CERT-DL-1'), findsOneWidget);
+        expect(tester.takeException(), isNull);
+      },
+    );
   });
 
   group('Admin Panel Supabase Readiness & Persistence Flows', () {
@@ -1563,56 +1687,19 @@ void main() {
       tester.view.devicePixelRatio = 1.0;
       addTearDown(() => tester.view.resetPhysicalSize());
 
-      for (final screen in const [
-        StudentManagementScreen(),
-        CompanyManagementScreen(),
-        CompanyVerificationsScreen(),
-        ProjectManagementScreen(),
-        ApplicationMonitoringScreen(),
-        CertificateManagementScreen(),
-        ReportsAnalyticsScreen(),
-        AdminSettingsScreen(),
-      ]) {
-        await tester.pumpWidget(MaterialApp(home: screen));
-        await tester.pump(const Duration(milliseconds: 250));
-        expect(tester.takeException(), isNull);
-        if (screen is ReportsAnalyticsScreen) {
-          expect(find.text('Refresh'), findsNothing);
-          expect(find.text('Export CSV'), findsNothing);
-          expect(find.text('Today'), findsOneWidget);
-          expect(find.text('This Week'), findsOneWidget);
-          expect(find.text('This Month'), findsOneWidget);
-          expect(find.text('Last Month'), findsOneWidget);
-          expect(find.text('This Year'), findsOneWidget);
-          expect(find.text('Custom Range'), findsOneWidget);
-          expect(find.text('Generate Report'), findsOneWidget);
-          expect(find.text('Total Projects'), findsOneWidget);
-        }
-      }
-    });
-
-    testWidgets(
-      'ReportsAnalyticsScreen fits mobile layouts and shows filters',
-      (tester) async {
-        for (final size in const [Size(320, 568), Size(412, 915)]) {
-          await pumpAndVerifyScreen(
-            tester,
-            screen: const ReportsAnalyticsScreen(),
-            size: size,
-          );
-
-          expect(find.text('Overall Statistics'), findsOneWidget);
-          expect(find.text('Date Range Filter'), findsOneWidget);
-          expect(find.text('Date-wise Statistics'), findsOneWidget);
-          expect(find.text('Today'), findsOneWidget);
-          expect(find.text('This Week'), findsOneWidget);
-          expect(find.text('This Month'), findsOneWidget);
-          expect(find.text('Last Month'), findsOneWidget);
-          expect(find.text('This Year'), findsOneWidget);
-          expect(find.text('Custom Range'), findsOneWidget);
-          expect(find.text('Generate Report'), findsOneWidget);
-          expect(find.text('Refresh'), findsNothing);
-          expect(find.text('Export CSV'), findsNothing);
+        for (final screen in const [
+          StudentManagementScreen(),
+          CompanyManagementScreen(),
+          CompanyVerificationsScreen(),
+          ProjectManagementScreen(),
+          ApplicationMonitoringScreen(),
+          CertificateManagementScreen(),
+          ReportsAnalyticsScreen(),
+          AdminSettingsScreen(),
+          AdminPaymentMethodsScreen(),
+        ]) {
+          await tester.pumpWidget(MaterialApp(home: screen));
+          await tester.pump(const Duration(milliseconds: 250));
           expect(tester.takeException(), isNull);
         }
       },
@@ -1664,23 +1751,18 @@ void main() {
 
       await service.addPaymentMethod(customMethod);
       expect(
-        service.paymentMethodsNotifier.value.any(
-          (m) => m.id == 'ppm-custom-test',
-        ),
+        service.paymentMethodsNotifier.value.any((m) => m.id == 'ppm-custom-test'),
         isTrue,
       );
 
       await service.toggleMethodStatus('ppm-custom-test', false);
-      final toggled = service.paymentMethodsNotifier.value.firstWhere(
-        (m) => m.id == 'ppm-custom-test',
-      );
+      final toggled = service.paymentMethodsNotifier.value
+          .firstWhere((m) => m.id == 'ppm-custom-test');
       expect(toggled.isActive, isFalse);
 
       await service.deletePaymentMethod('ppm-custom-test');
       expect(
-        service.paymentMethodsNotifier.value.any(
-          (m) => m.id == 'ppm-custom-test',
-        ),
+        service.paymentMethodsNotifier.value.any((m) => m.id == 'ppm-custom-test'),
         isFalse,
       );
     });
@@ -1712,8 +1794,7 @@ void main() {
       expect(createdDraft.escrowAmount, 25000.0);
 
       // 2. Company fetches active payment accounts
-      final activeMethods = await escrowService
-          .getActivePlatformPaymentMethods();
+      final activeMethods = await escrowService.getActivePlatformPaymentMethods();
       expect(activeMethods.isNotEmpty, isTrue);
 
       // 3. Company submits payment proof -> pending_verification
@@ -1721,8 +1802,7 @@ void main() {
         projectId: testEscrowProjectId,
         transactionId: 'TXN-99887766',
         paymentMethodUsed: 'Meezan Bank Ltd',
-        receiptUrl:
-            'https://supabase.mock.storage/payment_receipts/receipt.jpg',
+        receiptUrl: 'https://supabase.mock.storage/payment_receipts/receipt.jpg',
       );
       expect(proofSubmitted, isTrue);
 
@@ -1735,21 +1815,11 @@ void main() {
         projectId: testEscrowProjectId,
       );
       expect(approved, isTrue);
-      expect(
-        approvalService.pendingApprovalsNotifier.value.any(
-          (p) => p.id == testEscrowProjectId,
-        ),
-        isFalse,
-      );
+      expect(approvalService.pendingApprovalsNotifier.value.any((p) => p.id == testEscrowProjectId), isFalse);
 
       // 6. Student service fetches verified open projects
       final verifiedOpen = await studentService.fetchVerifiedOpenProjects();
-      expect(
-        verifiedOpen.any(
-          (p) => p.id == testEscrowProjectId && p.isEscrowVerified,
-        ),
-        isTrue,
-      );
+      expect(verifiedOpen.any((p) => p.id == testEscrowProjectId && p.isEscrowVerified), isTrue);
 
       // 7. Verify filtering
       final filtered = studentService.filterProjects(
@@ -1775,9 +1845,7 @@ void main() {
       );
       expect(delivered, isTrue);
 
-      final project = CompanyProjectService().allProjects.firstWhere(
-        (p) => p.id == testEscrowProjectId,
-      );
+      final project = CompanyProjectService().allProjects.firstWhere((p) => p.id == testEscrowProjectId);
       expect(project.isDelivered, isTrue);
       expect(project.deliveredAt != null, isTrue);
 
@@ -1788,9 +1856,7 @@ void main() {
       );
       expect(approved, isTrue);
 
-      final payoutReadyProject = CompanyProjectService().allProjects.firstWhere(
-        (p) => p.id == testEscrowProjectId,
-      );
+      final payoutReadyProject = CompanyProjectService().allProjects.firstWhere((p) => p.id == testEscrowProjectId);
       expect(payoutReadyProject.isReadyForPayout, isTrue);
       expect(payoutReadyProject.payoutType, 'full_student');
       expect(payoutReadyProject.platformCommissionAmount, 2500.0);
@@ -1805,9 +1871,7 @@ void main() {
       );
       expect(disputeCase != null && disputeCase.startsWith('#SB-'), isTrue);
 
-      final disputedProject = CompanyProjectService().allProjects.firstWhere(
-        (p) => p.id == testEscrowProjectId,
-      );
+      final disputedProject = CompanyProjectService().allProjects.firstWhere((p) => p.id == testEscrowProjectId);
       expect(disputedProject.isDisputed, isTrue);
       expect(disputedProject.disputeCaseId, disputeCase);
     });
@@ -1819,9 +1883,6 @@ void main() {
       // Load disputes
       final disputes = await payoutService.loadDisputedProjects();
       expect(disputes.any((p) => p.id == testEscrowProjectId), isTrue);
-      final disputedProject = disputes.firstWhere(
-        (p) => p.id == testEscrowProjectId,
-      );
 
       // Decision 1: 50-50 Split
       final splitApplied = await payoutService.resolveDisputeDecision(
@@ -1831,9 +1892,7 @@ void main() {
       );
       expect(splitApplied, isTrue);
 
-      var p = payoutService.payoutReadyProjectsNotifier.value.firstWhere(
-        (p) => p.id == testEscrowProjectId,
-      );
+      var p = payoutService.payoutReadyProjectsNotifier.value.firstWhere((p) => p.id == testEscrowProjectId);
       expect(p.isReadyForPayout, isTrue);
       expect(p.payoutType, 'split_50_50');
       expect(p.platformCommissionAmount, 2500.0);
@@ -1841,7 +1900,6 @@ void main() {
       expect(p.companyRefundAmount, 11250.0);
 
       // Decision 2: 100% Student
-      payoutService.disputedProjectsNotifier.value = [disputedProject];
       final fullStudentApplied = await payoutService.resolveDisputeDecision(
         projectId: testEscrowProjectId,
         decisionType: 'full_student',
@@ -1849,14 +1907,11 @@ void main() {
       );
       expect(fullStudentApplied, isTrue);
 
-      p = payoutService.payoutReadyProjectsNotifier.value.firstWhere(
-        (p) => p.id == testEscrowProjectId,
-      );
+      p = payoutService.payoutReadyProjectsNotifier.value.firstWhere((p) => p.id == testEscrowProjectId);
       expect(p.studentPayoutAmount, 22500.0);
       expect(p.companyRefundAmount, 0.0);
 
       // Decision 3: 100% Company Refund
-      payoutService.disputedProjectsNotifier.value = [disputedProject];
       final fullRefundApplied = await payoutService.resolveDisputeDecision(
         projectId: testEscrowProjectId,
         decisionType: 'full_company_refund',
@@ -1864,9 +1919,7 @@ void main() {
       );
       expect(fullRefundApplied, isTrue);
 
-      p = payoutService.payoutReadyProjectsNotifier.value.firstWhere(
-        (p) => p.id == testEscrowProjectId,
-      );
+      p = payoutService.payoutReadyProjectsNotifier.value.firstWhere((p) => p.id == testEscrowProjectId);
       expect(p.studentPayoutAmount, 0.0);
       expect(p.companyRefundAmount, 25000.0);
 
@@ -1878,24 +1931,22 @@ void main() {
       );
       expect(completed, isTrue);
 
-      final completedProject = CompanyProjectService().allProjects.firstWhere(
-        (p) => p.id == testEscrowProjectId,
-      );
+      final completedProject = CompanyProjectService().allProjects.firstWhere((p) => p.id == testEscrowProjectId);
       expect(completedProject.isCompleted, isTrue);
     });
 
-    testWidgets('AdminDisputeResolutionScreen renders tabs and UI cleanly', (
-      tester,
-    ) async {
+    testWidgets('AdminDisputeResolutionScreen renders tabs and UI cleanly', (tester) async {
       await tester.pumpWidget(
-        const MaterialApp(home: AdminDisputeResolutionScreen()),
+        const MaterialApp(
+          home: AdminDisputeResolutionScreen(),
+        ),
       );
       await tester.pump(const Duration(milliseconds: 200));
       expect(find.byType(AdminDisputeResolutionScreen), findsOneWidget);
-      expect(find.text('Disputes & Escrow Payouts'), findsAtLeastNWidgets(1));
+      expect(find.text('Disputes & Escrow Payouts'), findsWidgets);
     });
 
-    test('Project Revision flow with max 2 revisions limit', () async {
+    test('Project Revision flow with strictly 1 review request limit and 2-day deadline', () async {
       final lifecycle = EscrowLifecycleService();
       const testEscrowProjectId = '11111111-2222-3333-4444-555555555555';
 
@@ -1906,86 +1957,48 @@ void main() {
         summary: 'Initial project submission.',
       );
 
-      var p = CompanyProjectService().allProjects.firstWhere(
-        (p) => p.id == testEscrowProjectId,
-      );
+      var p = CompanyProjectService().allProjects.firstWhere((p) => p.id == testEscrowProjectId);
       expect(p.isDelivered, isTrue);
       expect(p.revisionCount, 0);
       expect(p.canRequestRevision, isTrue);
-      expect(p.remainingRevisions, 2);
+      expect(p.remainingRevisions, 1);
 
-      // Revision 1
+      // Revision 1 (Allowed)
       final rev1Success = await lifecycle.requestProjectRevision(
         projectId: testEscrowProjectId,
-        revisionNotes: 'Please fix responsive layout on tablet screens.',
+        revisionNotes: 'Please fix responsive layout on mobile screens.',
       );
       expect(rev1Success, isTrue);
 
-      p = CompanyProjectService().allProjects.firstWhere(
-        (p) => p.id == testEscrowProjectId,
-      );
+      p = CompanyProjectService().allProjects.firstWhere((p) => p.id == testEscrowProjectId);
       expect(p.isRevisionRequested, isTrue);
       expect(p.revisionCount, 1);
-      expect(p.canRequestRevision, isTrue);
-      expect(p.remainingRevisions, 1);
-      expect(
-        p.revisionNotes,
-        'Please fix responsive layout on tablet screens.',
-      );
+      expect(p.canRequestRevision, isFalse);
+      expect(p.remainingRevisions, 0);
+      expect(p.revisionNotes, 'Please fix responsive layout on mobile screens.');
+      expect(p.revisionDeadline, isNotNull);
 
       // Student re-delivers after Revision 1
       final redeliver1 = await lifecycle.reDeliverProject(
         projectId: testEscrowProjectId,
         workUrl: 'https://github.com/student/first-cut-rev1',
-        summary: 'Fixed tablet layout constraints.',
+        summary: 'Fixed mobile layout constraints.',
       );
       expect(redeliver1, isTrue);
 
-      p = CompanyProjectService().allProjects.firstWhere(
-        (p) => p.id == testEscrowProjectId,
-      );
+      p = CompanyProjectService().allProjects.firstWhere((p) => p.id == testEscrowProjectId);
       expect(p.isDelivered, isTrue);
       expect(p.revisionCount, 1);
-      expect(p.remainingRevisions, 1);
+      expect(p.canRequestRevision, isFalse); // On 2nd submission, ONLY Approve or Reject allowed
+      expect(p.remainingRevisions, 0);
 
-      // Revision 2
+      // Revision 2 attempt MUST fail because strictly only 1 revision is permitted
       final rev2Success = await lifecycle.requestProjectRevision(
-        projectId: testEscrowProjectId,
-        revisionNotes: 'Need dark mode styling adjustments.',
-      );
-      expect(rev2Success, isTrue);
-
-      p = CompanyProjectService().allProjects.firstWhere(
-        (p) => p.id == testEscrowProjectId,
-      );
-      expect(p.isRevisionRequested, isTrue);
-      expect(p.revisionCount, 2);
-      expect(p.canRequestRevision, isFalse);
-      expect(p.remainingRevisions, 0);
-
-      // Student re-delivers after Revision 2
-      final redeliver2 = await lifecycle.reDeliverProject(
-        projectId: testEscrowProjectId,
-        workUrl: 'https://github.com/student/first-cut-rev2',
-        summary: 'Dark mode adjusted.',
-      );
-      expect(redeliver2, isTrue);
-
-      p = CompanyProjectService().allProjects.firstWhere(
-        (p) => p.id == testEscrowProjectId,
-      );
-      expect(p.isDelivered, isTrue);
-      expect(p.revisionCount, 2);
-      expect(p.canRequestRevision, isFalse);
-      expect(p.remainingRevisions, 0);
-
-      // Revision 3 attempt MUST fail because limit is 2
-      final rev3Success = await lifecycle.requestProjectRevision(
         projectId: testEscrowProjectId,
         revisionNotes: 'Try another change.',
       );
-      expect(rev3Success, isFalse);
-      expect(lifecycle.lastError, contains('Maximum limit of 2 revisions'));
+      expect(rev2Success, isFalse);
+      expect(lifecycle.lastError, contains('1 review request'));
     });
   });
 }

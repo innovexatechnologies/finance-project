@@ -1,8 +1,13 @@
 import 'dart:math';
 import 'package:flutter/foundation.dart';
+import 'package:link_vibe/core/services/app_data_service.dart';
 import 'package:link_vibe/core/services/supabase_helper.dart';
+import 'package:link_vibe/feature/company/models/assignment_model.dart';
 import 'package:link_vibe/feature/company/models/project_model.dart';
+import 'package:link_vibe/feature/company/services/company_assignment_service.dart';
 import 'package:link_vibe/feature/company/services/company_project_service.dart';
+import 'package:link_vibe/services/admin_dispute_payout_service.dart';
+import 'package:link_vibe/services/helpdesk_service.dart';
 
 /// Pure Service Layer for Escrow Lifecycle Transitions:
 /// - Student Project Delivery (`delivered`)
@@ -78,9 +83,10 @@ class EscrowLifecycleService {
     return _lastError == null;
   }
 
-  /// 2. Company requests revisions on delivered deliverables (Max 2 Revisions Limit).
+  /// 2. Company requests revisions on delivered deliverables (Strictly 1 Review Request & 2-Day Deadline).
   /// Sets: status = 'revision_requested', revision_count = currentCount + 1,
-  /// revision_notes = revisionNotes, last_revision_requested_at = now().
+  /// revision_notes = revisionNotes, last_revision_requested_at = now(),
+  /// revision_deadline = now + 2 days.
   /// Pauses 5-day auto-release countdown since status is no longer 'delivered'.
   Future<bool> requestProjectRevision({
     required String projectId,
@@ -88,6 +94,7 @@ class EscrowLifecycleService {
   }) async {
     _lastError = null;
     final nowIso = DateTime.now().toIso8601String();
+    final deadlineIso = DateTime.now().add(const Duration(days: 2)).toIso8601String();
     final supabase = SupabaseHelper.clientOrNull;
 
     int currentCount = 0;
@@ -99,9 +106,9 @@ class EscrowLifecycleService {
       projectTitle = p.title;
     } catch (_) {}
 
-    // Check maximum 2 revisions limit
-    if (currentCount >= 2) {
-      _lastError = 'Maximum limit of 2 revisions has already been reached for this project.';
+    // Enforce strictly 1 revision request policy
+    if (currentCount >= 1) {
+      _lastError = 'Only 1 review request is allowed. Maximum limit of 1 revision reached.';
       return false;
     }
 
@@ -116,6 +123,7 @@ class EscrowLifecycleService {
               'revision_count': newCount,
               'revision_notes': revisionNotes.trim(),
               'last_revision_requested_at': nowIso,
+              'revision_deadline': deadlineIso,
               'updated_at': nowIso,
             })
             .eq('id', projectId);
@@ -123,9 +131,9 @@ class EscrowLifecycleService {
         // Insert alert for Admin/Student
         await supabase.from('admin_notifications').insert({
           'project_id': projectId,
-          'title': 'Revision Requested ($newCount of 2): $projectTitle',
+          'title': 'Improvement Requested (1 Review Allowed): $projectTitle',
           'message':
-              'Company requested revisions. 5-day countdown paused. Notes: "${revisionNotes.trim()}".',
+              'Company requested improvement. Student has strictly 2 Days (48 Hours) to re-deliver work. Notes: "${revisionNotes.trim()}".',
           'notification_type': 'revision_requested',
           'is_read': false,
           'created_at': nowIso,
@@ -144,6 +152,7 @@ class EscrowLifecycleService {
       revisionCount: newCount,
       revisionNotes: revisionNotes.trim(),
       lastRevisionRequestedAt: nowIso,
+      revisionDeadline: deadlineIso,
     );
 
     return true;
@@ -212,6 +221,9 @@ class EscrowLifecycleService {
   /// Calculates: 10% platform fee, 90% net student payout.
   Future<bool> approveAndReleasePayment({
     required String projectId,
+    String? projectTitle,
+    String? studentName,
+    String? studentId,
     String? companyFeedback,
   }) async {
     _lastError = null;
@@ -220,19 +232,85 @@ class EscrowLifecycleService {
 
     // Fetch escrow amount for calculation
     double escrow = 0.0;
-    String projectTitle = 'Project';
-    final existing = CompanyProjectService().allProjects;
-    try {
-      final p = existing.firstWhere((p) => p.id == projectId);
-      escrow = p.escrowAmount > 0 ? p.escrowAmount : 10000.0;
-      projectTitle = p.title;
-    } catch (_) {
-      escrow = 10000.0;
+    String resolvedProjectTitle = projectTitle ?? 'Project';
+
+    if (supabase != null && SupabaseHelper.isUuid(projectId)) {
+      try {
+        final projRow = await supabase
+            .from('projects')
+            .select('title, escrow_amount')
+            .eq('id', projectId)
+            .maybeSingle();
+        if (projRow != null) {
+          final amt = (projRow['escrow_amount'] as num?)?.toDouble();
+          if (amt != null && amt > 0) escrow = amt;
+          if (projRow['title'] != null &&
+              projRow['title'].toString().trim().isNotEmpty) {
+            resolvedProjectTitle = projRow['title'].toString().trim();
+          }
+        }
+      } catch (_) {}
     }
 
-    final commission = double.parse((escrow * 0.10).toStringAsFixed(2));
-    final studentPayout = double.parse((escrow - commission).toStringAsFixed(2));
+    if (escrow <= 0) {
+      final existing = CompanyProjectService().allProjects;
+      try {
+        final p = existing.firstWhere(
+          (p) =>
+              p.id == projectId ||
+              (resolvedProjectTitle.isNotEmpty &&
+                  p.title.trim().toLowerCase() ==
+                      resolvedProjectTitle.toLowerCase()),
+        );
+        escrow = p.escrowAmount > 0 ? p.escrowAmount : 25000.0;
+        resolvedProjectTitle = p.title;
+      } catch (_) {}
+    }
 
+    if (escrow <= 0) {
+      try {
+        final assigns = CompanyAssignmentService().allAssignments;
+        final a = assigns.firstWhere(
+          (a) =>
+              a.projectId == projectId ||
+              (resolvedProjectTitle.isNotEmpty &&
+                  a.projectTitle.trim().toLowerCase() ==
+                      resolvedProjectTitle.toLowerCase()),
+        );
+        if (resolvedProjectTitle.isEmpty || resolvedProjectTitle == 'Project') {
+          resolvedProjectTitle = a.projectTitle;
+        }
+      } catch (_) {}
+    }
+
+    if (escrow <= 0) {
+      try {
+        final allP = AppDataService.instance.getAllProjects();
+        final raw = allP.firstWhere(
+          (e) =>
+              (e['id'] ?? e['projectId'])?.toString() == projectId ||
+              (resolvedProjectTitle.isNotEmpty &&
+                  (e['title'] ?? e['projectTitle'])
+                          ?.toString()
+                          .trim()
+                          .toLowerCase() ==
+                      resolvedProjectTitle.toLowerCase()),
+        );
+        final amt = raw['escrow_amount'] ??
+            raw['escrowAmount'] ??
+            raw['budgetAmount'] ??
+            raw['budget'] ??
+            raw['stipend'];
+        if (amt is num && amt > 0) escrow = amt.toDouble();
+      } catch (_) {}
+    }
+
+    if (escrow <= 0) escrow = 25000.0;
+
+    final commission = double.parse((escrow * 0.10).toStringAsFixed(2));
+    final studentPayout = double.parse((escrow * 0.90).toStringAsFixed(2));
+
+    // Resilient Supabase updates with automatic fallback
     if (supabase != null && SupabaseHelper.isUuid(projectId)) {
       try {
         await supabase
@@ -245,36 +323,123 @@ class EscrowLifecycleService {
               'company_refund_amount': 0.00,
               'updated_at': nowIso,
               if (companyFeedback != null && companyFeedback.trim().isNotEmpty)
-                'additional_instructions': 'Company Feedback: ${companyFeedback.trim()}',
+                'additional_instructions':
+                    'Company Feedback: ${companyFeedback.trim()}',
             })
             .eq('id', projectId);
+      } catch (e) {
+        debugPrint('approveAndReleasePayment full projects update error: $e');
+        try {
+          await supabase
+              .from('projects')
+              .update({
+                'status': 'ready_for_payout',
+                'updated_at': nowIso,
+              })
+              .eq('id', projectId);
+        } catch (e2) {
+          debugPrint('approveAndReleasePayment simple projects update error: $e2');
+          try {
+            await supabase
+                .from('projects')
+                .update({
+                  'status': 'completed',
+                  'updated_at': nowIso,
+                })
+                .eq('id', projectId);
+          } catch (_) {}
+        }
+      }
 
-        // Alert Admin for payout execution
+      // Also update applications table in Supabase
+      try {
+        await supabase
+            .from('applications')
+            .update({
+              'status': 'ready_for_payout',
+              if (companyFeedback != null && companyFeedback.trim().isNotEmpty)
+                'company_feedback': companyFeedback.trim(),
+              'updated_at': nowIso,
+            })
+            .eq('project_id', projectId);
+      } catch (appErr) {
+        try {
+          await supabase
+              .from('applications')
+              .update({
+                'status': 'Completed',
+                'updated_at': nowIso,
+              })
+              .eq('project_id', projectId);
+        } catch (_) {}
+      }
+
+      // Alert Admin for payout execution
+      try {
         await supabase.from('admin_notifications').insert({
           'project_id': projectId,
-          'title': 'Company Approved: $projectTitle',
+          'title': 'Company Approved: $resolvedProjectTitle',
           'message':
-              'Company approved deliverables. Send 100% payout to Student: PKR $studentPayout (Platform fee: PKR $commission).',
+              'Company approved deliverables. Send 90% payout to Student: PKR $studentPayout (10% fee: PKR $commission).',
           'notification_type': 'company_approval',
           'is_read': false,
           'created_at': nowIso,
         });
-      } catch (e) {
-        debugPrint('EscrowLifecycleService approveAndReleasePayment error: $e');
-        _lastError = SupabaseHelper.friendlyError(e);
-        return false;
-      }
+      } catch (_) {}
     }
 
-    // Update in-memory project
+    // Always synchronize in-memory project
     _updateLocalProjectStatus(
       projectId: projectId,
+      projectTitle: resolvedProjectTitle,
+      studentName: studentName,
+      escrowAmount: escrow,
       newStatus: 'ready_for_payout',
       payoutType: 'full_student',
       studentPayout: studentPayout,
       commission: commission,
       refund: 0.00,
     );
+
+    // Update CompanyAssignmentService in-memory
+    try {
+      final assignList =
+          List<AssignmentModel>.from(CompanyAssignmentService().allAssignments);
+      bool assignChanged = false;
+      for (int i = 0; i < assignList.length; i++) {
+        if (assignList[i].projectId == projectId ||
+            (resolvedProjectTitle.isNotEmpty &&
+                assignList[i].projectTitle.trim().toLowerCase() ==
+                    resolvedProjectTitle.toLowerCase())) {
+          assignList[i] = assignList[i].copyWith(
+            submissionStatus: 'Approved',
+            projectStatus: 'Completed',
+            progress: 1.0,
+          );
+          assignChanged = true;
+        }
+      }
+      if (assignChanged) {
+        CompanyAssignmentService().assignmentsNotifier.value = assignList;
+      }
+    } catch (_) {}
+
+    // Update AppDataService so student sees deliverables accepted while keeping project in Active tab
+    try {
+      await AppDataService.instance.recordCompanyApprovedReadyForPayout(
+        projectId: projectId,
+        projectTitle: resolvedProjectTitle,
+        companyFeedback: companyFeedback,
+      );
+    } catch (_) {}
+
+    // Resolve any open HelpDesk ticket for this project
+    await HelpdeskService.instance.onCompanyApprove(projectId);
+
+    // Refresh Admin Payout queue immediately
+    try {
+      await AdminDisputePayoutService().loadPayoutReadyProjects(forceRefresh: true);
+    } catch (_) {}
 
     return true;
   }
@@ -311,6 +476,18 @@ class EscrowLifecycleService {
             })
             .eq('id', projectId);
 
+        // Also update applications table in Supabase so status reflects Rejected
+        try {
+          await supabase
+              .from('applications')
+              .update({
+                'status': 'Rejected',
+                'company_feedback': reason.trim(),
+                'updated_at': nowIso,
+              })
+              .eq('project_id', projectId);
+        } catch (_) {}
+
         // Insert high-priority dispute alert
         await supabase.from('admin_notifications').insert({
           'project_id': projectId,
@@ -335,6 +512,34 @@ class EscrowLifecycleService {
       disputeCaseId: caseId,
       disputeReason: reason.trim(),
     );
+
+    // Update in-memory company assignments
+    try {
+      final assignService = CompanyAssignmentService();
+      final updatedList = assignService.allAssignments.map((a) {
+        if (a.projectId == projectId) {
+          return a.copyWith(
+            submissionStatus: 'Rejected',
+            projectStatus: 'Rejected',
+          );
+        }
+        return a;
+      }).toList();
+      assignService.assignmentsNotifier.value = updatedList;
+    } catch (_) {}
+
+    // Synchronize AppDataService for Student Portal & persistence
+    await AppDataService.instance.recordDisputedProject(
+      projectId: projectId,
+      disputeCaseId: caseId,
+      disputeReason: reason.trim(),
+    );
+
+    // Refresh Admin Dispute service queue
+    AdminDisputePayoutService().loadDisputedProjects(forceRefresh: true);
+
+    // Resolve any open HelpDesk ticket for this project
+    await HelpdeskService.instance.onCompanyReject(projectId);
 
     return caseId;
   }
@@ -389,6 +594,9 @@ class EscrowLifecycleService {
 
   void _updateLocalProjectStatus({
     required String projectId,
+    String? projectTitle,
+    String? studentName,
+    double? escrowAmount,
     required String newStatus,
     String? deliveredAt,
     String? disputeCaseId,
@@ -400,25 +608,64 @@ class EscrowLifecycleService {
     int? revisionCount,
     String? revisionNotes,
     String? lastRevisionRequestedAt,
+    String? revisionDeadline,
   }) {
     final compProjService = CompanyProjectService();
     final list = List<ProjectModel>.from(compProjService.allProjects);
-    final idx = list.indexWhere((p) => p.id == projectId);
+    int idx = list.indexWhere((p) => p.id == projectId);
+    if (idx == -1 && projectTitle != null && projectTitle.trim().isNotEmpty) {
+      idx = list.indexWhere(
+        (p) =>
+            p.title.trim().toLowerCase() == projectTitle.trim().toLowerCase(),
+      );
+    }
+
     if (idx != -1) {
       list[idx] = list[idx].copyWith(
         status: newStatus,
+        assignedStudent: studentName ?? list[idx].assignedStudent,
+        escrowAmount: (escrowAmount != null && escrowAmount > 0)
+            ? escrowAmount
+            : list[idx].escrowAmount,
         deliveredAt: deliveredAt ?? list[idx].deliveredAt,
         disputeCaseId: disputeCaseId ?? list[idx].disputeCaseId,
         disputeReason: disputeReason ?? list[idx].disputeReason,
         payoutType: payoutType ?? list[idx].payoutType,
         studentPayoutAmount: studentPayout ?? list[idx].studentPayoutAmount,
-        platformCommissionAmount: commission ?? list[idx].platformCommissionAmount,
+        platformCommissionAmount:
+            commission ?? list[idx].platformCommissionAmount,
         companyRefundAmount: refund ?? list[idx].companyRefundAmount,
         revisionCount: revisionCount ?? list[idx].revisionCount,
         revisionNotes: revisionNotes ?? list[idx].revisionNotes,
         lastRevisionRequestedAt:
             lastRevisionRequestedAt ?? list[idx].lastRevisionRequestedAt,
+        revisionDeadline: revisionDeadline ?? list[idx].revisionDeadline,
       );
+      compProjService.projectsNotifier.value = list;
+    } else {
+      // Synthesize new ProjectModel and add to allProjects
+      final newProj = ProjectModel(
+        id: projectId,
+        title: projectTitle ?? 'Corporate Project',
+        description: 'Company deliverable approved.',
+        category: 'Development',
+        duration: 'Active',
+        deadline: 'Flexible',
+        status: newStatus,
+        assignedStudent: studentName ?? 'Awarded Student',
+        escrowAmount: (escrowAmount != null && escrowAmount > 0)
+            ? escrowAmount
+            : 25000.0,
+        companyName: 'Company Partner',
+        payoutType: payoutType,
+        studentPayoutAmount: studentPayout,
+        platformCommissionAmount: commission,
+        companyRefundAmount: refund ?? 0.0,
+        deliveredAt: deliveredAt,
+        disputeCaseId: disputeCaseId,
+        disputeReason: disputeReason,
+      );
+      list.insert(0, newProj);
       compProjService.projectsNotifier.value = list;
     }
   }

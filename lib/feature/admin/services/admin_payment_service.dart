@@ -140,7 +140,10 @@ class AdminPaymentService {
     final cleanId = SupabaseHelper.isUuid(method.id)
         ? method.id
         : supabase == null
-        ? method.id
+            ? (method.id.trim().isNotEmpty
+                ? method.id.trim()
+                : SupabaseHelper.generateUuid())
+            : SupabaseHelper.generateUuid();
         : SupabaseHelper.generateUuid();
 
     final nowIso = DateTime.now().toIso8601String();

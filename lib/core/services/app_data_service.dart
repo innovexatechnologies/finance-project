@@ -8,6 +8,7 @@ import 'package:supabase_flutter/supabase_flutter.dart'
     show FileOptions, PostgrestException;
 import 'package:link_vibe/core/services/supabase_helper.dart';
 import 'package:link_vibe/feature/admin/services/admin_hash_util.dart';
+import 'package:link_vibe/services/escrow_lifecycle_service.dart';
 
 /// Central Persistent & Supabase-Synchronized Data Service for SkillBridge.
 class AppDataService extends ChangeNotifier {
@@ -46,6 +47,7 @@ class AppDataService extends ChangeNotifier {
 
   // Entity caches (empty until fetched from Supabase or created by user)
   static const int maxApplicationsPerProject = 10;
+  static const String skillBridgeOfficialGmail = 'skillbridge.official@gmail.com';
   List<Map<String, dynamic>> _savedProjects = [];
   List<Map<String, dynamic>> _applications = [];
   List<Map<String, dynamic>> _projects = [];
@@ -292,11 +294,20 @@ class AppDataService extends ChangeNotifier {
       }
 
       // 2. Fetch live projects catalog (exclude Removed/Flagged from Explore)
+      final Map<String, Map<String, dynamic>> allProjectsById = {};
       try {
         final projectRows = await supabase
             .from('projects')
             .select()
             .order('created_at', ascending: false);
+
+        for (final raw in projectRows) {
+          final p = Map<String, dynamic>.from(raw);
+          final pid = p['id']?.toString() ?? '';
+          if (pid.isNotEmpty) {
+            allProjectsById[pid] = p;
+          }
+        }
 
         final List<Map<String, dynamic>> mappedProjects = [];
         for (final raw in projectRows) {
@@ -534,12 +545,58 @@ class AppDataService extends ChangeNotifier {
             for (final raw in appRows) {
               final row = Map<String, dynamic>.from(raw);
               final projectId = row['project_id']?.toString() ?? '';
-              final matchingProject = _projects.firstWhere(
-                (p) => p['id']?.toString() == projectId,
+              final matchingProject = allProjectsById[projectId] ??
+                  _projects.firstWhere(
+                    (p) => p['id']?.toString() == projectId,
+                    orElse: () => {},
+                  );
+
+              final rawProjStatus =
+                  (matchingProject['status']?.toString() ?? '').trim();
+              final rawAssignedStudent = (matchingProject['assigned_student'] ??
+                      matchingProject['assignedStudent'] ??
+                      '')
+                  .toString()
+                  .trim()
+                  .toLowerCase();
+              final curUserNameLower = _userName.trim().toLowerCase();
+              final curUserIdLower = user.id.trim().toLowerCase();
+              final isAssignedToThisUser = rawAssignedStudent.isNotEmpty &&
+                  (rawAssignedStudent == curUserIdLower ||
+                      (curUserNameLower.isNotEmpty &&
+                          (rawAssignedStudent == curUserNameLower ||
+                              rawAssignedStudent.contains(curUserNameLower))));
+
+              // Check if locally this application was already accepted or in progress
+              final existingLocal = _applications.firstWhere(
+                (a) =>
+                    (a['id'] != null && a['id'].toString() == row['id']?.toString()) ||
+                    (a['applicationId'] != null &&
+                        a['applicationId'].toString() == row['id']?.toString()) ||
+                    (a['projectId'] != null &&
+                        a['projectId'].toString() == projectId),
                 orElse: () => {},
               );
+              final existingLocalStatus =
+                  (existingLocal['status'] ?? '').toString();
+              final wasLocallyAccepted = existingLocalStatus == 'Accepted' ||
+                  existingLocalStatus == 'In Progress' ||
+                  existingLocal['isAssignedProject'] == true;
 
-              final status = row['status']?.toString() ?? 'Pending';
+              String status;
+              if (rawProjStatus.isNotEmpty &&
+                  rawProjStatus.toLowerCase() != 'open') {
+                status = rawProjStatus;
+              } else if (isAssignedToThisUser) {
+                status = 'In Progress';
+              } else if (wasLocallyAccepted) {
+                status = existingLocalStatus.isNotEmpty
+                    ? existingLocalStatus
+                    : 'Accepted';
+              } else {
+                status = row['status']?.toString() ?? 'Pending';
+              }
+
               final feedback = row['company_feedback']?.toString() ?? '';
               final workUrl = row['submitted_work_url']?.toString() ?? '';
               final fileName = row['file_name']?.toString() ?? '';
@@ -551,10 +608,16 @@ class AppDataService extends ChangeNotifier {
               if (status == 'In Progress' ||
                   status == 'Accepted' ||
                   status == 'Under Review' ||
-                  status == 'Revision Requested') {
+                  status == 'Revision Requested' ||
+                  status == 'delivered' ||
+                  status == 'ready_for_payout' ||
+                  isAssignedToThisUser ||
+                  wasLocallyAccepted) {
                 timelineStep = 2;
               }
-              if (status == 'Completed') timelineStep = 3;
+              if (status == 'Completed' || status == 'completed') {
+                timelineStep = 3;
+              }
 
               final title =
                   row['project_title']?.toString() ??
@@ -563,8 +626,14 @@ class AppDataService extends ChangeNotifier {
               final company =
                   row['company_name']?.toString() ??
                   matchingProject['company']?.toString() ??
+                  matchingProject['company_name']?.toString() ??
                   'Company Partner';
               final paymentStatus = paymentStatuses[projectId];
+              final isAssignedFlag = isAssignedToThisUser ||
+                  wasLocallyAccepted ||
+                  paymentStatus != null ||
+                  status.toLowerCase() == 'accepted' ||
+                  status.toLowerCase() == 'in progress';
 
               mappedApps.add({
                 'id': row['id']?.toString() ?? '',
@@ -573,7 +642,9 @@ class AppDataService extends ChangeNotifier {
                 'title': title,
                 'company': company,
                 'companyUserId':
-                    matchingProject['companyUserId']?.toString() ?? '',
+                    matchingProject['companyUserId']?.toString() ??
+                    matchingProject['posted_by']?.toString() ??
+                    '',
                 'status': status,
                 'appliedDate': _formatDbDate(row['submitted_at']),
                 'timelineStep': timelineStep,
@@ -586,11 +657,42 @@ class AppDataService extends ChangeNotifier {
                 'progress': (row['progress'] as num?)?.toDouble() ?? 0.0,
                 'deadline':
                     matchingProject['deadline']?.toString() ?? 'Flexible',
-                'isAssignedProject': paymentStatus != null,
+                'isAssignedProject': isAssignedFlag,
                 'paymentStatusAvailable': paymentStatusAvailable,
-                'paymentSent': paymentStatus?['payment_sent'] == true,
+                'paymentSent': paymentStatus?['payment_sent'] == true ||
+                    ((matchingProject['payout_transaction_id'] != null &&
+                            matchingProject['payout_transaction_id']
+                                .toString()
+                                .trim()
+                                .isNotEmpty) ||
+                        (row['payout_transaction_id'] != null &&
+                            row['payout_transaction_id']
+                                .toString()
+                                .trim()
+                                .isNotEmpty)),
                 'paymentConfirmationStatus':
                     paymentStatus?['confirmation_status']?.toString(),
+                'escrow_amount': matchingProject['escrow_amount'] ?? 10000,
+                'budgetAmount': matchingProject['escrow_amount'] ?? 10000,
+                'payout_transaction_id': (row['payout_transaction_id'] ??
+                        matchingProject['payout_transaction_id'] ??
+                        '')
+                    .toString(),
+                'payout_receipt_url': (row['payout_receipt_url'] ??
+                        matchingProject['payout_receipt_url'] ??
+                        '')
+                    .toString(),
+                'revision_count': matchingProject['revision_count'] ?? 0,
+                'revision_notes':
+                    (matchingProject['revision_notes'] ?? feedback).toString(),
+                'revision_deadline':
+                    matchingProject['revision_deadline']?.toString(),
+                'dispute_case_id': matchingProject['dispute_case_id']?.toString(),
+                'dispute_reason': matchingProject['dispute_reason']?.toString(),
+                'description': matchingProject['description'] ?? '',
+                'requirements': matchingProject['requirements'] ?? '',
+                'deliverables': matchingProject['deliverables'] ?? '',
+                'attachmentUrl': matchingProject['attachment_url'],
               });
 
               if (workUrl.isNotEmpty ||
@@ -618,6 +720,57 @@ class AppDataService extends ChangeNotifier {
                             : 'Under Review'),
                   'feedback': feedback,
                 };
+              }
+            }
+
+            // Also include projects where this student is assigned directly
+            for (final p in allProjectsById.values) {
+              final pid = p['id']?.toString() ?? '';
+              final assigned =
+                  (p['assigned_student']?.toString() ?? '').trim().toLowerCase();
+              final matchesUser = assigned.isNotEmpty &&
+                  (assigned == user.id.toLowerCase() ||
+                      (_userName.trim().isNotEmpty &&
+                          (assigned == _userName.trim().toLowerCase() ||
+                              assigned.contains(_userName.trim().toLowerCase()))) ||
+                      (_userEmail.trim().isNotEmpty &&
+                          assigned == _userEmail.trim().toLowerCase()));
+              final alreadyIn = mappedApps.any((a) => a['projectId'] == pid);
+              if (matchesUser && !alreadyIn) {
+                final pStatus = p['status']?.toString() ?? 'In Progress';
+                final isDone = pStatus.toLowerCase() == 'completed' ||
+                    pStatus.toLowerCase() == 'paid';
+                mappedApps.add({
+                  'id': 'assigned-$pid',
+                  'applicationId': 'assigned-$pid',
+                  'projectId': pid,
+                  'title': p['title']?.toString() ?? 'Project',
+                  'company': p['company_name']?.toString() ?? 'Partner Company',
+                  'companyUserId': p['posted_by']?.toString() ??
+                      p['user_id']?.toString() ??
+                      '',
+                  'status': pStatus,
+                  'appliedDate': _formatDbDate(p['created_at']),
+                  'timelineStep': isDone ? 3 : 2,
+                  'isAssignedProject': true,
+                  'paymentStatusAvailable': true,
+                  'paymentSent': isDone || p['payout_transaction_id'] != null,
+                  'escrow_amount': p['escrow_amount'] ?? 10000,
+                  'budgetAmount': p['escrow_amount'] ?? 10000,
+                  'payout_transaction_id':
+                      p['payout_transaction_id']?.toString() ?? '',
+                  'payout_receipt_url':
+                      p['payout_receipt_url']?.toString() ?? '',
+                  'revision_count': p['revision_count'] ?? 0,
+                  'revision_notes': p['revision_notes']?.toString() ?? '',
+                  'revision_deadline': p['revision_deadline']?.toString(),
+                  'dispute_case_id': p['dispute_case_id']?.toString(),
+                  'dispute_reason': p['dispute_reason']?.toString(),
+                  'description': p['description'] ?? '',
+                  'requirements': p['requirements'] ?? '',
+                  'deliverables': p['deliverables'] ?? '',
+                  'attachmentUrl': p['attachment_url'],
+                });
               }
             }
 
@@ -829,6 +982,91 @@ class AppDataService extends ChangeNotifier {
 
   List<Map<String, dynamic>> getApplications() =>
       List.unmodifiable(_applications);
+
+  /// Synchronizes applicant acceptance across all session scopes and persistent prefs.
+  Future<void> recordApplicantAccepted({
+    required String applicationId,
+    required String projectId,
+    required String studentId,
+    required String studentName,
+    String? studentUniversity,
+    String? projectTitle,
+  }) async {
+    final assignedLabel =
+        (studentUniversity != null && studentUniversity.trim().isNotEmpty)
+            ? '$studentName ($studentUniversity)'
+            : studentName;
+
+    // 1. Update applications list
+    bool appFound = false;
+    _applications = _applications.map((app) {
+      final aId = (app['id'] ?? app['applicationId'] ?? '').toString();
+      final pId = (app['projectId'] ?? app['project_id'] ?? '').toString();
+      final sId = (app['student_id'] ?? app['user_id'] ?? '').toString();
+
+      if (aId == applicationId ||
+          (pId == projectId && (sId == studentId || sId.isEmpty))) {
+        appFound = true;
+        return {
+          ...app,
+          'status': 'Accepted',
+          'progress': 0.15,
+          'timelineStep': 2,
+          'isAssignedProject': true,
+          'assigned_student': assignedLabel,
+          'assignedStudent': assignedLabel,
+          if (projectTitle != null && projectTitle.isNotEmpty)
+            'title': projectTitle,
+        };
+      }
+      return app;
+    }).toList();
+
+    if (!appFound) {
+      _applications.insert(0, {
+        'id': applicationId,
+        'applicationId': applicationId,
+        'projectId': projectId,
+        'student_id': studentId,
+        'user_id': studentId,
+        'title': projectTitle ?? 'Assigned Project',
+        'company': 'Partner Company',
+        'status': 'Accepted',
+        'progress': 0.15,
+        'timelineStep': 2,
+        'isAssignedProject': true,
+        'appliedDate': _formattedDate(DateTime.now()),
+        'assigned_student': assignedLabel,
+        'assignedStudent': assignedLabel,
+      });
+    }
+
+    // 2. Update projects list
+    _projects = _projects.map((proj) {
+      final pId = (proj['id'] ?? proj['projectId'] ?? '').toString();
+      if (pId == projectId) {
+        return {
+          ...proj,
+          'status': 'In Progress',
+          'assignedStudent': assignedLabel,
+          'assigned_student': assignedLabel,
+          'progress': 0.15,
+        };
+      }
+      return proj;
+    }).toList();
+
+    _safeNotifyListeners();
+
+    if (_prefs != null) {
+      try {
+        await _prefs!.setString(_kApplications, jsonEncode(_applications));
+        await _prefs!.setString(_kCustomProjects, jsonEncode(_projects));
+      } catch (e) {
+        debugPrint('AppDataService recordApplicantAccepted cache warning: $e');
+      }
+    }
+  }
 
   Future<String> confirmProjectPayment({
     required String projectId,
@@ -1217,6 +1455,21 @@ class AppDataService extends ChangeNotifier {
     if (appIndex >= 0) {
       _applications[appIndex]['status'] = 'Under Review';
       _applications[appIndex]['progress'] = 0.85;
+      _applications[appIndex]['isDelivered'] = true;
+      _applications[appIndex]['submitted_at'] = DateTime.now().toIso8601String();
+      _applications[appIndex]['submittedAt'] = DateTime.now().toIso8601String();
+    }
+
+    final projIndex = _projects.indexWhere(
+      (p) => p['id']?.toString() == projectId,
+    );
+    if (projIndex >= 0) {
+      _projects[projIndex]['status'] = 'submitted';
+      _projects[projIndex]['submitted_at'] = DateTime.now().toIso8601String();
+      _projects[projIndex]['delivered_at'] = DateTime.now().toIso8601String();
+      if (workLink.isNotEmpty) {
+        _projects[projIndex]['attachmentUrl'] = workLink;
+      }
     }
 
     _safeNotifyListeners();
@@ -1224,6 +1477,18 @@ class AppDataService extends ChangeNotifier {
     if (_prefs != null) {
       await _prefs!.setString(_kSubmissions, jsonEncode(_workSubmissions));
       await _prefs!.setString(_kApplications, jsonEncode(_applications));
+      await _prefs!.setString(_kCustomProjects, jsonEncode(_projects));
+    }
+
+    // Synchronize to Supabase projects and notify company
+    try {
+      await EscrowLifecycleService().deliverProject(
+        projectId: projectId,
+        workUrl: workLink,
+        summary: summary,
+      );
+    } catch (e) {
+      debugPrint('EscrowLifecycleService delivery sync error: $e');
     }
 
     final supabase = SupabaseHelper.clientOrNull;
@@ -1247,6 +1512,308 @@ class AppDataService extends ChangeNotifier {
       } catch (e) {
         debugPrint('Supabase work submission sync failed: $e');
       }
+    }
+  }
+
+  /// Records Company acceptance of deliverables, setting project to 'ready_for_payout'.
+  /// Keeps project in student's Active tab until Admin formally disburses payment with TID.
+  Future<void> recordCompanyApprovedReadyForPayout({
+    required String projectId,
+    String? projectTitle,
+    String? companyFeedback,
+  }) async {
+    final titleLower = projectTitle?.trim().toLowerCase();
+
+    for (int i = 0; i < _applications.length; i++) {
+      final app = _applications[i];
+      final pId = app['projectId']?.toString() ?? app['id']?.toString() ?? '';
+      final appTitle = (app['title'] ?? app['projectTitle'] ?? '')
+          .toString()
+          .trim()
+          .toLowerCase();
+      if (pId == projectId ||
+          app['id']?.toString() == projectId ||
+          (titleLower != null &&
+              titleLower.isNotEmpty &&
+              appTitle == titleLower)) {
+        _applications[i]['status'] = 'ready_for_payout';
+        _applications[i]['timelineStep'] = 2;
+        _applications[i]['isApprovedByCompany'] = true;
+        _applications[i]['isPaidByAdmin'] = false;
+        if (companyFeedback != null && companyFeedback.trim().isNotEmpty) {
+          _applications[i]['companyFeedback'] = companyFeedback.trim();
+        }
+      }
+    }
+
+    for (int i = 0; i < _projects.length; i++) {
+      final proj = _projects[i];
+      final pId = proj['id']?.toString() ?? '';
+      final projTitle = (proj['title'] ?? '').toString().trim().toLowerCase();
+      if (pId == projectId ||
+          (titleLower != null &&
+              titleLower.isNotEmpty &&
+              projTitle == titleLower)) {
+        _projects[i]['status'] = 'ready_for_payout';
+        _projects[i]['isApprovedByCompany'] = true;
+        _projects[i]['payment_status'] = 'escrow_held';
+        if (companyFeedback != null && companyFeedback.trim().isNotEmpty) {
+          _projects[i]['companyFeedback'] = companyFeedback.trim();
+        }
+      }
+    }
+
+    _safeNotifyListeners();
+
+    if (_prefs != null) {
+      await _prefs!.setString(_kApplications, jsonEncode(_applications));
+      await _prefs!.setString(_kCustomProjects, jsonEncode(_projects));
+    }
+  }
+
+  /// Records Admin payout disbursement to student with TID and receipt proof.
+  /// Sets application and project status to 'completed' / 'Completed'.
+  Future<void> recordDisbursedPayout({
+    required String projectId,
+    required String transactionId,
+    String? receiptUrl,
+    String? projectTitle,
+  }) async {
+    final nowIso = DateTime.now().toIso8601String();
+    final titleLower = projectTitle?.trim().toLowerCase();
+
+    for (int i = 0; i < _applications.length; i++) {
+      final app = _applications[i];
+      final pId = app['projectId']?.toString() ?? app['id']?.toString() ?? '';
+      final appTitle = (app['title'] ?? app['projectTitle'] ?? '')
+          .toString()
+          .trim()
+          .toLowerCase();
+      if (pId == projectId ||
+          app['id']?.toString() == projectId ||
+          (titleLower != null &&
+              titleLower.isNotEmpty &&
+              appTitle == titleLower)) {
+        _applications[i]['status'] = 'Completed';
+        _applications[i]['paymentStatus'] = 'paid';
+        _applications[i]['payment_status'] = 'paid';
+        _applications[i]['isPaid'] = true;
+        _applications[i]['is_paid'] = true;
+        _applications[i]['isPaidByAdmin'] = true;
+        _applications[i]['paymentSent'] = true;
+        _applications[i]['timelineStep'] = 3;
+        _applications[i]['payout_transaction_id'] = transactionId;
+        if (receiptUrl != null && receiptUrl.isNotEmpty) {
+          _applications[i]['payout_receipt_url'] = receiptUrl;
+        }
+      }
+    }
+
+    for (int i = 0; i < _projects.length; i++) {
+      final proj = _projects[i];
+      final pId = proj['id']?.toString() ?? '';
+      final projTitle = (proj['title'] ?? '').toString().trim().toLowerCase();
+      if (pId == projectId ||
+          (titleLower != null &&
+              titleLower.isNotEmpty &&
+              projTitle == titleLower)) {
+        _projects[i]['status'] = 'completed';
+        _projects[i]['paymentStatus'] = 'paid';
+        _projects[i]['payment_status'] = 'paid';
+        _projects[i]['isPaid'] = true;
+        _projects[i]['is_paid'] = true;
+        _projects[i]['isPaidByAdmin'] = true;
+        _projects[i]['paymentSent'] = true;
+        _projects[i]['payout_transaction_id'] = transactionId;
+        if (receiptUrl != null && receiptUrl.isNotEmpty) {
+          _projects[i]['payout_receipt_url'] = receiptUrl;
+        }
+        _projects[i]['completed_at'] = nowIso;
+      }
+    }
+
+    _safeNotifyListeners();
+
+    if (_prefs != null) {
+      await _prefs!.setString(_kApplications, jsonEncode(_applications));
+      await _prefs!.setString(_kCustomProjects, jsonEncode(_projects));
+    }
+  }
+
+  /// Records Company rejection & escrow dispute on deliverables.
+  /// Sets application and project status to 'Rejected' / 'disputed', and persists dispute metadata.
+  Future<void> recordDisputedProject({
+    required String projectId,
+    required String disputeCaseId,
+    required String disputeReason,
+  }) async {
+    final nowIso = DateTime.now().toIso8601String();
+
+    for (int i = 0; i < _applications.length; i++) {
+      final app = _applications[i];
+      final pId = app['projectId']?.toString() ?? app['id']?.toString() ?? '';
+      if (pId == projectId || app['id']?.toString() == projectId) {
+        _applications[i]['status'] = 'Rejected';
+        _applications[i]['dispute_case_id'] = disputeCaseId;
+        _applications[i]['dispute_reason'] = disputeReason;
+        _applications[i]['isDisputed'] = true;
+      }
+    }
+
+    final projIndex = _projects.indexWhere(
+      (p) => p['id']?.toString() == projectId,
+    );
+    if (projIndex >= 0) {
+      _projects[projIndex]['status'] = 'disputed';
+      _projects[projIndex]['dispute_case_id'] = disputeCaseId;
+      _projects[projIndex]['dispute_reason'] = disputeReason;
+      _projects[projIndex]['updated_at'] = nowIso;
+    }
+
+    _safeNotifyListeners();
+
+    if (_prefs != null) {
+      await _prefs!.setString(_kApplications, jsonEncode(_applications));
+      await _prefs!.setString(_kCustomProjects, jsonEncode(_projects));
+    }
+  }
+
+  /// Records Admin refund to company and cancellation of disputed project.
+  Future<void> recordCancelledRefund({
+    required String projectId,
+    required String refundTransactionId,
+    String? refundReceiptUrl,
+  }) async {
+    final nowIso = DateTime.now().toIso8601String();
+
+    for (int i = 0; i < _applications.length; i++) {
+      final app = _applications[i];
+      final pId = app['projectId']?.toString() ?? app['id']?.toString() ?? '';
+      if (pId == projectId || app['id']?.toString() == projectId) {
+        _applications[i]['status'] = 'Cancelled';
+        _applications[i]['refund_transaction_id'] = refundTransactionId;
+        if (refundReceiptUrl != null && refundReceiptUrl.isNotEmpty) {
+          _applications[i]['refund_receipt_url'] = refundReceiptUrl;
+        }
+        _applications[i]['isCancelled'] = true;
+      }
+    }
+
+    final projIndex = _projects.indexWhere(
+      (p) => p['id']?.toString() == projectId,
+    );
+    if (projIndex >= 0) {
+      _projects[projIndex]['status'] = 'cancelled';
+      _projects[projIndex]['refund_transaction_id'] = refundTransactionId;
+      if (refundReceiptUrl != null && refundReceiptUrl.isNotEmpty) {
+        _projects[projIndex]['refund_receipt_url'] = refundReceiptUrl;
+      }
+      _projects[projIndex]['updated_at'] = nowIso;
+    }
+
+    _safeNotifyListeners();
+
+    if (_prefs != null) {
+      await _prefs!.setString(_kApplications, jsonEncode(_applications));
+      await _prefs!.setString(_kCustomProjects, jsonEncode(_projects));
+    }
+  }
+
+  /// Records student HelpDesk escalation ticket submission after 48h
+  Future<void> recordHelpRequestSubmitted({
+    required String projectId,
+    required String reason,
+  }) async {
+    final nowIso = DateTime.now().toIso8601String();
+
+    for (int i = 0; i < _applications.length; i++) {
+      final app = _applications[i];
+      final pId = app['projectId']?.toString() ?? app['id']?.toString() ?? '';
+      if (pId == projectId || app['id']?.toString() == projectId) {
+        _applications[i]['has_help_request'] = true;
+        _applications[i]['hasHelpRequest'] = true;
+        _applications[i]['help_request_reason'] = reason;
+        _applications[i]['help_request_at'] = nowIso;
+      }
+    }
+
+    final projIndex = _projects.indexWhere(
+      (p) => p['id']?.toString() == projectId,
+    );
+    if (projIndex >= 0) {
+      _projects[projIndex]['has_help_request'] = true;
+      _projects[projIndex]['hasHelpRequest'] = true;
+      _projects[projIndex]['help_request_reason'] = reason;
+      _projects[projIndex]['help_request_at'] = nowIso;
+      _projects[projIndex]['updated_at'] = nowIso;
+    }
+
+    _safeNotifyListeners();
+
+    if (_prefs != null) {
+      await _prefs!.setString(_kApplications, jsonEncode(_applications));
+      await _prefs!.setString(_kCustomProjects, jsonEncode(_projects));
+    }
+  }
+
+  /// Records Admin direct HelpDesk payout to student, moving project to Completed/Paid
+  Future<void> recordHelpdeskPayoutCompleted({
+    required String projectId,
+    required String transactionId,
+    String? projectTitle,
+  }) async {
+    final nowIso = DateTime.now().toIso8601String();
+    final cleanTitle = projectTitle?.trim().toLowerCase();
+
+    for (int i = 0; i < _applications.length; i++) {
+      final app = _applications[i];
+      final pId = app['projectId']?.toString() ?? app['id']?.toString() ?? '';
+      final appTitle = (app['projectTitle'] ?? app['title'])?.toString().trim().toLowerCase();
+      final matchesTitle = cleanTitle != null && cleanTitle.isNotEmpty && appTitle == cleanTitle;
+
+      if (pId == projectId || app['id']?.toString() == projectId || matchesTitle) {
+        _applications[i]['status'] = 'Completed';
+        _applications[i]['payment_status'] = 'paid';
+        _applications[i]['paymentStatus'] = 'paid';
+        _applications[i]['isPaid'] = true;
+        _applications[i]['is_paid'] = true;
+        _applications[i]['isPaidByAdmin'] = true;
+        _applications[i]['progress'] = 1.0;
+        _applications[i]['payout_transaction_id'] = transactionId;
+        _applications[i]['payoutTransactionId'] = transactionId;
+        _applications[i]['has_help_request'] = false;
+        _applications[i]['hasHelpRequest'] = false;
+        _applications[i]['updated_at'] = nowIso;
+      }
+    }
+
+    for (int i = 0; i < _projects.length; i++) {
+      final p = _projects[i];
+      final pId = (p['id'] ?? p['projectId'])?.toString() ?? '';
+      final pTitle = p['title']?.toString().trim().toLowerCase();
+      final matchesTitle = cleanTitle != null && cleanTitle.isNotEmpty && pTitle == cleanTitle;
+
+      if (pId == projectId || matchesTitle) {
+        _projects[i]['status'] = 'completed';
+        _projects[i]['payment_status'] = 'paid';
+        _projects[i]['paymentStatus'] = 'paid';
+        _projects[i]['isPaid'] = true;
+        _projects[i]['is_paid'] = true;
+        _projects[i]['isPaidByAdmin'] = true;
+        _projects[i]['payout_transaction_id'] = transactionId;
+        _projects[i]['payoutTransactionId'] = transactionId;
+        _projects[i]['has_help_request'] = false;
+        _projects[i]['hasHelpRequest'] = false;
+        _projects[i]['completed_at'] = nowIso;
+        _projects[i]['updated_at'] = nowIso;
+      }
+    }
+
+    _safeNotifyListeners();
+
+    if (_prefs != null) {
+      await _prefs!.setString(_kApplications, jsonEncode(_applications));
+      await _prefs!.setString(_kCustomProjects, jsonEncode(_projects));
     }
   }
 

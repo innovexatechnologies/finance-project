@@ -10,6 +10,7 @@ import 'package:link_vibe/feature/admin/presentation/widgets/admin_top_navbar.da
 import 'package:link_vibe/feature/admin/services/admin_auth_service.dart';
 import 'package:link_vibe/feature/admin/services/admin_project_service.dart';
 import 'package:link_vibe/feature/admin/services/admin_settings_service.dart';
+import 'package:link_vibe/services/admin_project_approval_service.dart';
 
 /// Enterprise Project Management & Moderation Screen for SkillBridge Admin Panel (Screen 37)
 /// Features project listing grid, multi-parameter filtering, full project inspection drawer,
@@ -71,12 +72,14 @@ class _ProjectManagementScreenState extends State<ProjectManagementScreen> {
 
   final List<String> _projectStatusFilters = [
     'All Statuses',
-    'Draft',
+    'Pending Verification',
     'Pending Review',
+    'Draft',
     'Published',
     'Active',
     'Completed',
     'Closed',
+    'Payment Rejected',
     'Rejected',
     'Removed',
   ];
@@ -311,8 +314,16 @@ class _ProjectManagementScreenState extends State<ProjectManagementScreen> {
                 children: [
                   _buildStatusPill(
                     label: project.statusDisplay,
-                    color: _getStatusColor(project.status),
-                    bgColor: _getStatusBgColor(project.status),
+                    color: project.isPendingVerification
+                        ? AppColors.warning
+                        : project.isPaymentRejected
+                            ? AppColors.error
+                            : _getStatusColor(project.status),
+                    bgColor: project.isPendingVerification
+                        ? AppColors.warningBg
+                        : project.isPaymentRejected
+                            ? AppColors.errorBg
+                            : _getStatusBgColor(project.status),
                   ),
                   _buildStatusPill(
                     label: 'Pub: ${project.publicationStatusDisplay}',
@@ -335,6 +346,10 @@ class _ProjectManagementScreenState extends State<ProjectManagementScreen> {
                   ),
                 ],
               ),
+              const SizedBox(height: 20),
+
+              // Dedicated Escrow Payment & Verification Card
+              _buildEscrowVerificationCard(project, ctx),
               const SizedBox(height: 20),
 
               // 1. Narrative Description
@@ -558,7 +573,45 @@ class _ProjectManagementScreenState extends State<ProjectManagementScreen> {
                 spacing: 8,
                 runSpacing: 8,
                 children: [
-                  if (project.status == AdminProjectStatus.pendingReview) ...[
+                  if (project.isPendingVerification) ...[
+                    ElevatedButton.icon(
+                      style: ElevatedButton.styleFrom(
+                        backgroundColor: AppColors.success,
+                        foregroundColor: Colors.white,
+                        padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
+                      ),
+                      icon: const Icon(Icons.check_circle_rounded, size: 16),
+                      label: const Text('Payment Received (Approve & Publish)'),
+                      onPressed: () async {
+                        Navigator.pop(ctx);
+                        await _handleApprovePayment(project);
+                      },
+                    ),
+                    OutlinedButton.icon(
+                      style: OutlinedButton.styleFrom(
+                        foregroundColor: AppColors.error,
+                        side: const BorderSide(color: AppColors.error),
+                        padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 12),
+                      ),
+                      icon: const Icon(Icons.cancel_outlined, size: 16),
+                      label: const Text('Payment Not Received (Reject Proof)'),
+                      onPressed: () {
+                        Navigator.pop(ctx);
+                        _promptRejectPaymentProof(project);
+                      },
+                    ),
+                  ] else if (project.isPaymentRejected) ...[
+                    OutlinedButton.icon(
+                      style: OutlinedButton.styleFrom(
+                        foregroundColor: AppColors.error,
+                        side: const BorderSide(color: AppColors.error),
+                        padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 12),
+                      ),
+                      icon: const Icon(Icons.info_outline_rounded, size: 16),
+                      label: const Text('Payment Proof Rejected (Awaiting Company)'),
+                      onPressed: null,
+                    ),
+                  ] else if (project.status == AdminProjectStatus.pendingReview) ...[
                     OutlinedButton.icon(
                       style: OutlinedButton.styleFrom(
                         foregroundColor: AppColors.error,
@@ -668,7 +721,566 @@ class _ProjectManagementScreenState extends State<ProjectManagementScreen> {
     );
   }
 
-  // 5. Rejection Reason Prompt
+  Widget _buildEscrowVerificationCard(
+    AdminProjectModel project,
+    BuildContext sheetCtx,
+  ) {
+    final hasReceipt = project.paymentReceiptUrl != null &&
+        project.paymentReceiptUrl!.trim().isNotEmpty;
+    final hasTid = project.transactionId != null &&
+        project.transactionId!.trim().isNotEmpty;
+    final isPendingVer = project.isPendingVerification;
+    final isRejected = project.isPaymentRejected;
+    final isVerified = project.isEscrowVerified;
+
+    Color cardBorder;
+    Color cardBg;
+    IconData headerIcon;
+    Color iconColor;
+    String statusTitle;
+    String statusSubtitle;
+
+    if (isPendingVer) {
+      cardBorder = AppColors.warning;
+      cardBg = const Color(0xFFFFFBEB);
+      headerIcon = Icons.hourglass_top_rounded;
+      iconColor = AppColors.warning;
+      statusTitle = 'Escrow Payment Verification Awaiting Admin Review';
+      statusSubtitle =
+          'The company has submitted payment proof. Verify the transaction credentials and screenshot before approving publication.';
+    } else if (isRejected) {
+      cardBorder = AppColors.error;
+      cardBg = const Color(0xFFFEF2F2);
+      headerIcon = Icons.cancel_outlined;
+      iconColor = AppColors.error;
+      statusTitle = 'Payment Proof Rejected';
+      statusSubtitle =
+          'Admin marked payment as not received. Company has been given a chance to re-submit proof.';
+    } else if (isVerified) {
+      cardBorder = AppColors.success;
+      cardBg = const Color(0xFFF0FDF4);
+      headerIcon = Icons.verified_user_rounded;
+      iconColor = AppColors.success;
+      statusTitle = 'Escrow Verified & Published';
+      statusSubtitle =
+          'Payment is securely held in escrow. Project is live on Student Explorer with trust badge.';
+    } else {
+      cardBorder = AppColors.border;
+      cardBg = AppColors.background;
+      headerIcon = Icons.account_balance_wallet_outlined;
+      iconColor = AppColors.primary;
+      statusTitle = 'Escrow Payment Terms';
+      statusSubtitle = 'Upfront escrow deposit terms for this challenge.';
+    }
+
+    return Container(
+      padding: const EdgeInsets.all(16),
+      decoration: BoxDecoration(
+        color: cardBg,
+        borderRadius: BorderRadius.circular(14),
+        border: Border.all(color: cardBorder, width: 1.2),
+      ),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Row(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              Container(
+                padding: const EdgeInsets.all(8),
+                decoration: BoxDecoration(
+                  color: iconColor.withValues(alpha: 0.15),
+                  borderRadius: BorderRadius.circular(10),
+                ),
+                child: Icon(headerIcon, color: iconColor, size: 22),
+              ),
+              const SizedBox(width: 12),
+              Expanded(
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    Text(
+                      statusTitle,
+                      style: GoogleFonts.poppins(
+                        fontSize: 14,
+                        fontWeight: FontWeight.bold,
+                        color: AppColors.darkNavy,
+                      ),
+                    ),
+                    const SizedBox(height: 3),
+                    Text(
+                      statusSubtitle,
+                      style: GoogleFonts.inter(
+                        fontSize: 12,
+                        color: AppColors.textSecondary,
+                        height: 1.35,
+                      ),
+                    ),
+                  ],
+                ),
+              ),
+            ],
+          ),
+          const SizedBox(height: 14),
+          const Divider(height: 1),
+          const SizedBox(height: 12),
+
+          // Payment Details Grid
+          Container(
+            padding: const EdgeInsets.all(12),
+            decoration: BoxDecoration(
+              color: Colors.white,
+              borderRadius: BorderRadius.circular(10),
+              border: Border.all(color: AppColors.border),
+            ),
+            child: Column(
+              children: [
+                _buildEscrowDetailRow(
+                  'Escrow Deposit Amount',
+                  'PKR ${project.escrowAmount.toStringAsFixed(0)}',
+                  valueColor: AppColors.darkNavy,
+                  isBold: true,
+                ),
+                const Divider(height: 16),
+                _buildEscrowDetailRow(
+                  'Payment Account / Method',
+                  project.paymentMethodUsed?.isNotEmpty == true
+                      ? project.paymentMethodUsed!
+                      : 'Direct Transfer',
+                ),
+                const Divider(height: 16),
+                Row(
+                  mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                  children: [
+                    Text(
+                      'Transaction ID (TID)',
+                      style: GoogleFonts.inter(
+                        fontSize: 12,
+                        color: AppColors.textSecondary,
+                      ),
+                    ),
+                    Row(
+                      mainAxisSize: MainAxisSize.min,
+                      children: [
+                        SelectableText(
+                          hasTid ? project.transactionId! : 'Not Provided',
+                          style: GoogleFonts.inter(
+                            fontSize: 12.5,
+                            fontWeight: FontWeight.w700,
+                            color: hasTid ? AppColors.darkNavy : AppColors.textMuted,
+                          ),
+                        ),
+                        if (hasTid) ...[
+                          const SizedBox(width: 4),
+                          InkWell(
+                            onTap: () {
+                              Clipboard.setData(ClipboardData(text: project.transactionId!));
+                              ScaffoldMessenger.of(context).showSnackBar(
+                                const SnackBar(
+                                  content: Text('TID copied to clipboard!'),
+                                  duration: Duration(seconds: 1),
+                                  behavior: SnackBarBehavior.floating,
+                                ),
+                              );
+                            },
+                            child: const Padding(
+                              padding: EdgeInsets.all(4),
+                              child: Icon(Icons.copy_rounded, size: 14, color: AppColors.primary),
+                            ),
+                          ),
+                        ],
+                      ],
+                    ),
+                  ],
+                ),
+              ],
+            ),
+          ),
+          const SizedBox(height: 14),
+
+          // Receipt Screenshot Preview
+          Text(
+            'Payment Receipt Screenshot:',
+            style: GoogleFonts.inter(
+              fontSize: 12.5,
+              fontWeight: FontWeight.w600,
+              color: AppColors.darkNavy,
+            ),
+          ),
+          const SizedBox(height: 8),
+          if (hasReceipt) ...[
+            InkWell(
+              onTap: () => _viewReceiptImage(project.paymentReceiptUrl!),
+              borderRadius: BorderRadius.circular(10),
+              child: Container(
+                width: double.infinity,
+                height: 160,
+                decoration: BoxDecoration(
+                  borderRadius: BorderRadius.circular(10),
+                  border: Border.all(color: AppColors.border),
+                  color: Colors.black12,
+                ),
+                child: ClipRRect(
+                  borderRadius: BorderRadius.circular(10),
+                  child: Stack(
+                    fit: StackFit.expand,
+                    children: [
+                      Image.network(
+                        project.paymentReceiptUrl!,
+                        fit: BoxFit.cover,
+                        loadingBuilder: (_, child, progress) {
+                          if (progress == null) return child;
+                          return const Center(child: CircularProgressIndicator(strokeWidth: 2));
+                        },
+                        errorBuilder: (context, error, stackTrace) => Center(
+                          child: Column(
+                            mainAxisAlignment: MainAxisAlignment.center,
+                            children: [
+                              const Icon(Icons.broken_image_outlined, color: AppColors.textMuted, size: 36),
+                              const SizedBox(height: 6),
+                              Text(
+                                'Receipt preview unavailable',
+                                style: GoogleFonts.inter(fontSize: 12, color: AppColors.textMuted),
+                              ),
+                            ],
+                          ),
+                        ),
+                      ),
+                      Positioned(
+                        bottom: 8,
+                        right: 8,
+                        child: Container(
+                          padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 5),
+                          decoration: BoxDecoration(
+                            color: Colors.black87,
+                            borderRadius: BorderRadius.circular(6),
+                          ),
+                          child: const Row(
+                            mainAxisSize: MainAxisSize.min,
+                            children: [
+                              Icon(Icons.zoom_in_rounded, color: Colors.white, size: 14),
+                              SizedBox(width: 4),
+                              Text(
+                                'Tap to Zoom Full Screenshot',
+                                style: TextStyle(
+                                  color: Colors.white,
+                                  fontSize: 11,
+                                  fontWeight: FontWeight.w600,
+                                ),
+                              ),
+                            ],
+                          ),
+                        ),
+                      ),
+                    ],
+                  ),
+                ),
+              ),
+            ),
+          ] else ...[
+            Container(
+              width: double.infinity,
+              padding: const EdgeInsets.symmetric(vertical: 20),
+              decoration: BoxDecoration(
+                color: Colors.white,
+                borderRadius: BorderRadius.circular(10),
+                border: Border.all(color: AppColors.border),
+              ),
+              child: Center(
+                child: Text(
+                  'No receipt screenshot uploaded by company.',
+                  style: GoogleFonts.inter(
+                    fontSize: 12,
+                    color: AppColors.textMuted,
+                    fontStyle: FontStyle.italic,
+                  ),
+                ),
+              ),
+            ),
+          ],
+
+          // Quick Action Buttons if pending verification
+          if (isPendingVer) ...[
+            const SizedBox(height: 16),
+            Row(
+              children: [
+                Expanded(
+                  child: OutlinedButton.icon(
+                    style: OutlinedButton.styleFrom(
+                      foregroundColor: AppColors.error,
+                      side: const BorderSide(color: AppColors.error),
+                      padding: const EdgeInsets.symmetric(vertical: 12),
+                      shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(8)),
+                    ),
+                    icon: const Icon(Icons.cancel_outlined, size: 16),
+                    label: const Text(
+                      'Not Received',
+                      style: TextStyle(fontWeight: FontWeight.bold, fontSize: 12.5),
+                    ),
+                    onPressed: () {
+                      Navigator.pop(sheetCtx);
+                      _promptRejectPaymentProof(project);
+                    },
+                  ),
+                ),
+                const SizedBox(width: 10),
+                Expanded(
+                  child: ElevatedButton.icon(
+                    style: ElevatedButton.styleFrom(
+                      backgroundColor: AppColors.success,
+                      foregroundColor: Colors.white,
+                      padding: const EdgeInsets.symmetric(vertical: 12),
+                      shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(8)),
+                      elevation: 0,
+                    ),
+                    icon: const Icon(Icons.check_circle_rounded, size: 16),
+                    label: const Text(
+                      'Payment Received',
+                      style: TextStyle(fontWeight: FontWeight.bold, fontSize: 12.5),
+                    ),
+                    onPressed: () async {
+                      Navigator.pop(sheetCtx);
+                      await _handleApprovePayment(project);
+                    },
+                  ),
+                ),
+              ],
+            ),
+          ],
+        ],
+      ),
+    );
+  }
+
+  Widget _buildEscrowDetailRow(
+    String label,
+    String value, {
+    Color? valueColor,
+    bool isBold = false,
+  }) {
+    return Row(
+      mainAxisAlignment: MainAxisAlignment.spaceBetween,
+      children: [
+        Text(
+          label,
+          style: GoogleFonts.inter(
+            fontSize: 12,
+            color: AppColors.textSecondary,
+          ),
+        ),
+        Text(
+          value,
+          style: GoogleFonts.inter(
+            fontSize: 12.5,
+            fontWeight: isBold ? FontWeight.bold : FontWeight.w600,
+            color: valueColor ?? AppColors.darkNavy,
+          ),
+        ),
+      ],
+    );
+  }
+
+  void _viewReceiptImage(String url) {
+    showDialog(
+      context: context,
+      builder: (ctx) => Dialog(
+        backgroundColor: Colors.transparent,
+        insetPadding: const EdgeInsets.all(12),
+        child: Stack(
+          alignment: Alignment.center,
+          children: [
+            Container(
+              decoration: BoxDecoration(
+                color: Colors.black,
+                borderRadius: BorderRadius.circular(16),
+              ),
+              clipBehavior: Clip.antiAlias,
+              child: Column(
+                mainAxisSize: MainAxisSize.min,
+                children: [
+                  Container(
+                    padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
+                    color: Colors.black87,
+                    child: Row(
+                      mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                      children: [
+                        Text(
+                          'Payment Proof Receipt',
+                          style: GoogleFonts.poppins(
+                            color: Colors.white,
+                            fontSize: 14,
+                            fontWeight: FontWeight.w600,
+                          ),
+                        ),
+                        IconButton(
+                          icon: const Icon(Icons.close_rounded, color: Colors.white),
+                          onPressed: () => Navigator.pop(ctx),
+                        ),
+                      ],
+                    ),
+                  ),
+                  Flexible(
+                    child: InteractiveViewer(
+                      panEnabled: true,
+                      minScale: 0.5,
+                      maxScale: 4.0,
+                      child: Image.network(
+                        url,
+                        loadingBuilder: (_, child, p) => p == null
+                            ? child
+                            : const Padding(
+                                padding: EdgeInsets.all(40),
+                                child: CircularProgressIndicator(color: Colors.white),
+                              ),
+                        errorBuilder: (context, error, stackTrace) => const Padding(
+                          padding: EdgeInsets.all(40),
+                          child: Text(
+                            'Failed to load image',
+                            style: TextStyle(color: Colors.white),
+                          ),
+                        ),
+                      ),
+                    ),
+                  ),
+                ],
+              ),
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+
+  Future<void> _handleApprovePayment(AdminProjectModel project) async {
+    final confirmed = await showDialog<bool>(
+      context: context,
+      builder: (ctx) => AlertDialog(
+        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
+        title: const Row(
+          children: [
+            Icon(Icons.check_circle_rounded, color: AppColors.success),
+            SizedBox(width: 10),
+            Expanded(
+              child: Text(
+                'Verify & Publish Project?',
+                style: TextStyle(fontSize: 16, fontWeight: FontWeight.bold),
+              ),
+            ),
+          ],
+        ),
+        content: Text(
+          'Mark "${project.title}" as Paid & Verified? This confirms receipt of PKR ${project.escrowAmount.toStringAsFixed(0)} in the platform escrow account and publishes the project to the Student Explore feed.',
+          style: GoogleFonts.inter(fontSize: 13, height: 1.4),
+        ),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.pop(ctx, false),
+            child: const Text('Cancel'),
+          ),
+          ElevatedButton(
+            style: ElevatedButton.styleFrom(
+              backgroundColor: AppColors.success,
+              foregroundColor: Colors.white,
+            ),
+            onPressed: () => Navigator.pop(ctx, true),
+            child: const Text('Confirm & Publish'),
+          ),
+        ],
+      ),
+    );
+
+    if (confirmed == true && mounted) {
+      final ok = await AdminProjectApprovalService().markAsPaidAndPublish(
+        projectId: project.id,
+      );
+      if (!mounted) return;
+      _showActionResult(
+        ok,
+        'Payment verified! "${project.title}" is now published and live on the student portal.',
+        successColor: AppColors.success,
+      );
+      _projectService.loadFromSupabase();
+    }
+  }
+
+  void _promptRejectPaymentProof(AdminProjectModel project) {
+    final reasonController = TextEditingController();
+
+    showDialog(
+      context: context,
+      builder: (ctx) => AlertDialog(
+        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
+        title: const Row(
+          children: [
+            Icon(Icons.cancel_outlined, color: AppColors.error),
+            SizedBox(width: 10),
+            Expanded(
+              child: Text(
+                'Payment Not Received',
+                style: TextStyle(fontSize: 16, fontWeight: FontWeight.bold),
+              ),
+            ),
+          ],
+        ),
+        content: SingleChildScrollView(
+          child: Column(
+            mainAxisSize: MainAxisSize.min,
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              Text(
+                'Company will be given a last chance to re-submit payment proof. Explain why payment was not received (e.g. TID invalid, bank statement mismatch):',
+                style: GoogleFonts.inter(fontSize: 13, height: 1.4),
+              ),
+              const SizedBox(height: 12),
+              TextField(
+                controller: reasonController,
+                maxLines: 3,
+                decoration: InputDecoration(
+                  labelText: 'Rejection Reason *',
+                  hintText: 'e.g. TID not found on bank statement...',
+                  border: OutlineInputBorder(borderRadius: BorderRadius.circular(10)),
+                ),
+              ),
+            ],
+          ),
+        ),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.pop(ctx),
+            child: const Text('Cancel'),
+          ),
+          ElevatedButton(
+            style: ElevatedButton.styleFrom(
+              backgroundColor: AppColors.error,
+              foregroundColor: Colors.white,
+            ),
+            onPressed: () async {
+              final reason = reasonController.text.trim();
+              if (reason.isEmpty) {
+                ScaffoldMessenger.of(ctx).showSnackBar(
+                  const SnackBar(content: Text('Please enter a rejection reason.')),
+                );
+                return;
+              }
+              Navigator.pop(ctx);
+              final ok = await AdminProjectApprovalService().rejectPayment(
+                projectId: project.id,
+                rejectionReason: reason,
+              );
+              if (!mounted) return;
+              _showActionResult(
+                ok,
+                'Payment rejected. Company notified with chance to re-submit proof.',
+                successColor: AppColors.error,
+              );
+              _projectService.loadFromSupabase();
+            },
+            child: const Text('Confirm Rejection'),
+          ),
+        ],
+      ),
+    );
+  }
   void _promptRejectProject(AdminProjectModel project) {
     final reasonController = TextEditingController();
 
