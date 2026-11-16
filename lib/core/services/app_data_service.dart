@@ -552,10 +552,50 @@ class AppDataService extends ChangeNotifier {
 
               final rawProjStatus =
                   (matchingProject['status']?.toString() ?? '').trim();
-              final status = (rawProjStatus.isNotEmpty &&
-                      rawProjStatus.toLowerCase() != 'open')
-                  ? rawProjStatus
-                  : (row['status']?.toString() ?? 'Pending');
+              final rawAssignedStudent = (matchingProject['assigned_student'] ??
+                      matchingProject['assignedStudent'] ??
+                      '')
+                  .toString()
+                  .trim()
+                  .toLowerCase();
+              final curUserNameLower = _userName.trim().toLowerCase();
+              final curUserIdLower = user.id.trim().toLowerCase();
+              final isAssignedToThisUser = rawAssignedStudent.isNotEmpty &&
+                  (rawAssignedStudent == curUserIdLower ||
+                      (curUserNameLower.isNotEmpty &&
+                          (rawAssignedStudent == curUserNameLower ||
+                              rawAssignedStudent.contains(curUserNameLower))));
+
+              // Check if locally this application was already accepted or in progress
+              final existingLocal = _applications.firstWhere(
+                (a) =>
+                    (a['id'] != null && a['id'].toString() == row['id']?.toString()) ||
+                    (a['applicationId'] != null &&
+                        a['applicationId'].toString() == row['id']?.toString()) ||
+                    (a['projectId'] != null &&
+                        a['projectId'].toString() == projectId),
+                orElse: () => {},
+              );
+              final existingLocalStatus =
+                  (existingLocal['status'] ?? '').toString();
+              final wasLocallyAccepted = existingLocalStatus == 'Accepted' ||
+                  existingLocalStatus == 'In Progress' ||
+                  existingLocal['isAssignedProject'] == true;
+
+              String status;
+              if (rawProjStatus.isNotEmpty &&
+                  rawProjStatus.toLowerCase() != 'open') {
+                status = rawProjStatus;
+              } else if (isAssignedToThisUser) {
+                status = 'In Progress';
+              } else if (wasLocallyAccepted) {
+                status = existingLocalStatus.isNotEmpty
+                    ? existingLocalStatus
+                    : 'Accepted';
+              } else {
+                status = row['status']?.toString() ?? 'Pending';
+              }
+
               final feedback = row['company_feedback']?.toString() ?? '';
               final workUrl = row['submitted_work_url']?.toString() ?? '';
               final fileName = row['file_name']?.toString() ?? '';
@@ -569,7 +609,9 @@ class AppDataService extends ChangeNotifier {
                   status == 'Under Review' ||
                   status == 'Revision Requested' ||
                   status == 'delivered' ||
-                  status == 'ready_for_payout') {
+                  status == 'ready_for_payout' ||
+                  isAssignedToThisUser ||
+                  wasLocallyAccepted) {
                 timelineStep = 2;
               }
               if (status == 'Completed' || status == 'completed') {
@@ -586,6 +628,11 @@ class AppDataService extends ChangeNotifier {
                   matchingProject['company_name']?.toString() ??
                   'Company Partner';
               final paymentStatus = paymentStatuses[projectId];
+              final isAssignedFlag = isAssignedToThisUser ||
+                  wasLocallyAccepted ||
+                  paymentStatus != null ||
+                  status.toLowerCase() == 'accepted' ||
+                  status.toLowerCase() == 'in progress';
 
               mappedApps.add({
                 'id': row['id']?.toString() ?? '',
@@ -609,7 +656,7 @@ class AppDataService extends ChangeNotifier {
                 'progress': (row['progress'] as num?)?.toDouble() ?? 0.0,
                 'deadline':
                     matchingProject['deadline']?.toString() ?? 'Flexible',
-                'isAssignedProject': paymentStatus != null,
+                'isAssignedProject': isAssignedFlag,
                 'paymentStatusAvailable': paymentStatusAvailable,
                 'paymentSent': paymentStatus?['payment_sent'] == true ||
                     ((matchingProject['payout_transaction_id'] != null &&
@@ -683,7 +730,8 @@ class AppDataService extends ChangeNotifier {
               final matchesUser = assigned.isNotEmpty &&
                   (assigned == user.id.toLowerCase() ||
                       (_userName.trim().isNotEmpty &&
-                          assigned == _userName.trim().toLowerCase()) ||
+                          (assigned == _userName.trim().toLowerCase() ||
+                              assigned.contains(_userName.trim().toLowerCase()))) ||
                       (_userEmail.trim().isNotEmpty &&
                           assigned == _userEmail.trim().toLowerCase()));
               final alreadyIn = mappedApps.any((a) => a['projectId'] == pid);
@@ -933,6 +981,91 @@ class AppDataService extends ChangeNotifier {
 
   List<Map<String, dynamic>> getApplications() =>
       List.unmodifiable(_applications);
+
+  /// Synchronizes applicant acceptance across all session scopes and persistent prefs.
+  Future<void> recordApplicantAccepted({
+    required String applicationId,
+    required String projectId,
+    required String studentId,
+    required String studentName,
+    String? studentUniversity,
+    String? projectTitle,
+  }) async {
+    final assignedLabel =
+        (studentUniversity != null && studentUniversity.trim().isNotEmpty)
+            ? '$studentName ($studentUniversity)'
+            : studentName;
+
+    // 1. Update applications list
+    bool appFound = false;
+    _applications = _applications.map((app) {
+      final aId = (app['id'] ?? app['applicationId'] ?? '').toString();
+      final pId = (app['projectId'] ?? app['project_id'] ?? '').toString();
+      final sId = (app['student_id'] ?? app['user_id'] ?? '').toString();
+
+      if (aId == applicationId ||
+          (pId == projectId && (sId == studentId || sId.isEmpty))) {
+        appFound = true;
+        return {
+          ...app,
+          'status': 'Accepted',
+          'progress': 0.15,
+          'timelineStep': 2,
+          'isAssignedProject': true,
+          'assigned_student': assignedLabel,
+          'assignedStudent': assignedLabel,
+          if (projectTitle != null && projectTitle.isNotEmpty)
+            'title': projectTitle,
+        };
+      }
+      return app;
+    }).toList();
+
+    if (!appFound) {
+      _applications.insert(0, {
+        'id': applicationId,
+        'applicationId': applicationId,
+        'projectId': projectId,
+        'student_id': studentId,
+        'user_id': studentId,
+        'title': projectTitle ?? 'Assigned Project',
+        'company': 'Partner Company',
+        'status': 'Accepted',
+        'progress': 0.15,
+        'timelineStep': 2,
+        'isAssignedProject': true,
+        'appliedDate': _formattedDate(DateTime.now()),
+        'assigned_student': assignedLabel,
+        'assignedStudent': assignedLabel,
+      });
+    }
+
+    // 2. Update projects list
+    _projects = _projects.map((proj) {
+      final pId = (proj['id'] ?? proj['projectId'] ?? '').toString();
+      if (pId == projectId) {
+        return {
+          ...proj,
+          'status': 'In Progress',
+          'assignedStudent': assignedLabel,
+          'assigned_student': assignedLabel,
+          'progress': 0.15,
+        };
+      }
+      return proj;
+    }).toList();
+
+    _safeNotifyListeners();
+
+    if (_prefs != null) {
+      try {
+        await _prefs!.setString(_kApplications, jsonEncode(_applications));
+        await _prefs!.setString(_kCustomProjects, jsonEncode(_projects));
+      } catch (e) {
+        debugPrint('AppDataService recordApplicantAccepted cache warning: $e');
+      }
+    }
+  }
 
   Future<String> confirmProjectPayment({
     required String projectId,

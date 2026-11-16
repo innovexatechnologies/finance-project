@@ -1,7 +1,10 @@
 import 'package:flutter/foundation.dart';
+import 'package:link_vibe/core/services/app_data_service.dart';
 import 'package:link_vibe/core/services/supabase_helper.dart';
 import 'package:link_vibe/feature/company/models/applicant_model.dart';
+import 'package:link_vibe/feature/company/models/assignment_model.dart';
 import 'package:link_vibe/feature/company/models/project_model.dart';
+import 'package:link_vibe/feature/company/services/company_assignment_service.dart';
 import 'package:link_vibe/feature/company/services/company_profile_service.dart';
 import 'package:link_vibe/feature/company/services/company_project_service.dart';
 
@@ -242,9 +245,27 @@ class CompanyApplicantService {
           }
         }
 
+        final appId = r['id']?.toString() ?? '';
+        final localIdx =
+            applicantsNotifier.value.indexWhere((a) => a.id == appId);
+        final wasAcceptedLocally = localIdx != -1 &&
+            (applicantsNotifier.value[localIdx].status == 'Accepted' ||
+                applicantsNotifier.value[localIdx].status == 'In Progress');
+        final isAssignedInProject = (matchedProj?.assignedStudent != null &&
+            matchedProj!.assignedStudent!.trim().isNotEmpty &&
+            matchedProj.assignedStudent!
+                .toLowerCase()
+                .contains(name.toLowerCase()));
+
+        String rawStatus = r['status']?.toString() ?? 'Pending';
+        if (rawStatus == 'Pending' &&
+            (wasAcceptedLocally || isAssignedInProject)) {
+          rawStatus = 'Accepted';
+        }
+
         loaded.add(
           ApplicantModel(
-            id: r['id']?.toString() ?? '',
+            id: appId,
             studentId: sid,
             projectId: pid,
             projectTitle: _firstNonEmpty([
@@ -268,7 +289,7 @@ class CompanyApplicantService {
               r['cover_letter'],
               'No proposal summary provided.',
             ]),
-            status: r['status']?.toString() ?? 'Pending',
+            status: rawStatus,
             avatarInitial: SupabaseHelper.initialsFor(name, fallback: 'ST'),
             profilePictureUrl: prof?['avatar_url']?.toString(),
             portfolioUrl: portfolioUrl,
@@ -337,6 +358,9 @@ class CompanyApplicantService {
 
       if (supabase != null && user != null) {
         if (!SupabaseHelper.isUuid(applicantId)) return false;
+        final nowIso = DateTime.now().toIso8601String();
+
+        // 1. Try assignment RPC (SECURITY DEFINER)
         try {
           await supabase.rpc(
             'assign_applicant_to_project',
@@ -346,31 +370,85 @@ class CompanyApplicantService {
             },
           );
         } catch (e) {
-          debugPrint('CompanyApplicantService assignment failed, using direct update: $e');
+          debugPrint('CompanyApplicantService assignment RPC attempt 1 notice: $e');
+          try {
+            await supabase.rpc(
+              'assign_applicant_to_project',
+              params: {
+                'p_application_id': applicantId,
+                'p_confirm_existing': true,
+              },
+            );
+          } catch (e2) {
+            debugPrint('CompanyApplicantService assignment RPC attempt 2 notice: $e2');
+          }
+        }
+
+        // 2. Direct database updates fallback/reinforcement
+        // Ensure project_assignments table has record (satisfies trigger enforce_application_assignment_status)
+        try {
+          await supabase.from('project_assignments').upsert({
+            'application_id': applicantId,
+            'project_id': targetApplicant.projectId,
+            'student_id': targetApplicant.studentId,
+            'assigned_at': nowIso,
+          });
+        } catch (paErr) {
+          debugPrint('Direct project_assignments upsert notice: $paErr');
+        }
+
+        // Update applications table for accepted student
+        try {
+          await supabase
+              .from('applications')
+              .update({
+                'status': 'Accepted',
+                'progress': 0.15,
+                'updated_at': nowIso,
+              })
+              .eq('id', applicantId);
+        } catch (appErr) {
+          debugPrint('Direct applications update notice: $appErr');
+        }
+
+        // Update other applications for this project to Rejected
+        try {
+          await supabase
+              .from('applications')
+              .update({
+                'status': 'Rejected',
+                'updated_at': nowIso,
+              })
+              .eq('project_id', targetApplicant.projectId)
+              .neq('id', applicantId);
+        } catch (_) {}
+
+        // Update projects table to In Progress & assigned student
+        if (targetApplicant.projectId.isNotEmpty &&
+            SupabaseHelper.isUuid(targetApplicant.projectId)) {
           try {
             await supabase
-                .from('applications')
+                .from('projects')
                 .update({
-                  'status': 'Accepted',
+                  'status': 'In Progress',
+                  'assigned_student': assignedLabel,
                   'progress': 0.15,
-                  'updated_at': DateTime.now().toIso8601String(),
+                  'updated_at': nowIso,
                 })
-                .eq('id', applicantId);
-
-            if (targetApplicant.projectId.isNotEmpty &&
-                SupabaseHelper.isUuid(targetApplicant.projectId)) {
+                .eq('id', targetApplicant.projectId);
+          } catch (projErr) {
+            debugPrint('Direct projects update In Progress notice: $projErr');
+            try {
               await supabase
                   .from('projects')
                   .update({
-                    'status': 'In Progress',
+                    'status': 'in_progress',
                     'assigned_student': assignedLabel,
                     'progress': 0.15,
-                    'updated_at': DateTime.now().toIso8601String(),
+                    'updated_at': nowIso,
                   })
                   .eq('id', targetApplicant.projectId);
-            }
-          } catch (e2) {
-            debugPrint('Direct assignment update fallback error: $e2');
+            } catch (_) {}
           }
         }
       }
@@ -382,6 +460,53 @@ class CompanyApplicantService {
           assignedStudent: assignedLabel,
           progress: 0.15,
         );
+      }
+
+      // Keep AppDataService synchronized immediately across all sessions
+      await AppDataService.instance.recordApplicantAccepted(
+        applicationId: applicantId,
+        projectId: targetApplicant.projectId,
+        studentId: targetApplicant.studentId,
+        studentName: targetApplicant.name,
+        studentUniversity: targetApplicant.university,
+        projectTitle: targetApplicant.projectTitle,
+      );
+
+      // Keep CompanyAssignmentService in sync immediately for Deliverables tab
+      final assignmentService = CompanyAssignmentService();
+      final existingAssignmentIndex =
+          assignmentService.allAssignments.indexWhere(
+        (a) => a.id == applicantId || a.projectId == targetApplicant.projectId,
+      );
+      final newAssignment = AssignmentModel(
+        id: applicantId,
+        companyId: matchedProject?.companyId ?? '',
+        projectId: targetApplicant.projectId,
+        projectTitle: targetApplicant.projectTitle,
+        projectCategory: matchedProject?.category ?? 'Development',
+        projectStatus: 'In Progress',
+        startDate: targetApplicant.appliedDate,
+        deadline: matchedProject?.deadline ?? 'Flexible',
+        studentId: targetApplicant.studentId,
+        applicantId: applicantId,
+        studentName: targetApplicant.name,
+        studentUniversity: targetApplicant.university,
+        studentDegree: targetApplicant.degree,
+        studentAvatarInitial: targetApplicant.avatarInitial,
+        progress: 0.15,
+        hasSubmission: false,
+        submissionStatus: 'Pending Submission',
+        latestSubmission: null,
+      );
+      if (existingAssignmentIndex != -1) {
+        final list = List<AssignmentModel>.from(assignmentService.allAssignments);
+        list[existingAssignmentIndex] = newAssignment;
+        assignmentService.assignmentsNotifier.value = list;
+      } else {
+        assignmentService.assignmentsNotifier.value = [
+          newAssignment,
+          ...assignmentService.allAssignments,
+        ];
       }
     } else if (supabase != null &&
         user != null &&

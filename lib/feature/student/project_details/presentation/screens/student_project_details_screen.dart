@@ -217,9 +217,11 @@ class _StudentProjectDetailsScreenState
     final isAssignedDirectly = assignedStudentRaw.isNotEmpty &&
         (assignedStudentRaw.toLowerCase() == curUid ||
             (curName.isNotEmpty &&
-                assignedStudentRaw.toLowerCase() == curName) ||
+                (assignedStudentRaw.toLowerCase() == curName ||
+                    assignedStudentRaw.toLowerCase().contains(curName))) ||
             (curEmail.isNotEmpty &&
-                assignedStudentRaw.toLowerCase() == curEmail));
+                (assignedStudentRaw.toLowerCase() == curEmail ||
+                    assignedStudentRaw.toLowerCase().contains(curEmail))));
 
     final appStatus =
         (currentApplication?['status'] ?? '').toString().trim().toLowerCase();
@@ -274,7 +276,11 @@ class _StudentProjectDetailsScreenState
     final attachmentUrl = project['attachmentUrl']?.toString().trim() ?? '';
     final skills = SupabaseHelper.parseStringList(project['skills']);
     final isVerified = project['isVerified'] == true;
-    final status = project['status']?.toString().trim() ?? 'Open';
+    final rawStatus = project['status']?.toString().trim() ?? 'Open';
+    final status = (isAssignedProject &&
+            (rawStatus.toLowerCase() == 'open' || rawStatus.isEmpty))
+        ? 'In Progress'
+        : rawStatus;
     final rawBudget = project['budgetAmount'] ??
         project['budget'] ??
         project['escrow_amount'] ??
