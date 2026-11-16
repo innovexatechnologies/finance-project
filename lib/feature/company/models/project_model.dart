@@ -14,7 +14,6 @@ class ProjectModel {
   final String companyId;
   final String status; // 'pending_payment', 'pending_verification', 'Open', 'In Progress', 'delivered', 'ready_for_payout', 'completed', 'disputed', 'rejected', 'Closed', 'Cancelled'
   final String duration;
-  final String budget;
   final int applicantsCount;
   final String? assignedStudent;
   final double progress;
@@ -73,7 +72,6 @@ class ProjectModel {
     this.companyId = '',
     required this.status,
     this.duration = '3-4 weeks',
-    this.budget = '',
     this.applicantsCount = 0,
     this.assignedStudent,
     this.progress = 0.0,
@@ -172,8 +170,7 @@ class ProjectModel {
       ? 'PKR ${escrowAmount.toStringAsFixed(0)}'
       : 'Academic Credit / Verified Certificate';
 
-  int get remainingRevisions =>
-      (maxRevisions - revisionCount).clamp(0, maxRevisions);
+  int get remainingRevisions => (maxRevisions - revisionCount).clamp(0, maxRevisions);
   bool get canRequestRevision => revisionCount < maxRevisions;
 
   DateTime? get deliveredAtDateTime =>
@@ -181,8 +178,7 @@ class ProjectModel {
 
   bool get isAutoReleaseEligible {
     if (!isDelivered || deliveredAtDateTime == null) return false;
-    return DateTime.now().difference(deliveredAtDateTime!).inHours >=
-        120; // 5 days
+    return DateTime.now().difference(deliveredAtDateTime!).inHours >= 120; // 5 days
   }
 
   Duration get autoReleaseRemaining {
@@ -209,7 +205,6 @@ class ProjectModel {
     String? companyId,
     String? status,
     String? duration,
-    String? budget,
     int? applicantsCount,
     String? assignedStudent,
     double? progress,
@@ -261,7 +256,6 @@ class ProjectModel {
       companyId: companyId ?? this.companyId,
       status: status ?? this.status,
       duration: duration ?? this.duration,
-      budget: budget ?? this.budget,
       applicantsCount: applicantsCount ?? this.applicantsCount,
       assignedStudent: assignedStudent ?? this.assignedStudent,
       progress: progress ?? this.progress,
@@ -308,21 +302,21 @@ class ProjectModel {
       category: (json['category'] ?? 'Development').toString(),
       description: (json['description'] ?? '').toString(),
       requirements: (json['requirements'] ?? '').toString(),
-      skillsRequired:
-          (rawSkills as List<dynamic>?)?.map((e) => e.toString()).toList() ??
+      skillsRequired: (rawSkills as List<dynamic>?)
+              ?.map((e) => e.toString())
+              .toList() ??
           const [],
       deliverables: (json['deliverables'] ?? '').toString(),
       deadline: (json['deadline'] ?? 'Flexible').toString(),
-      projectType: (json['project_type'] ?? json['work_mode'] ?? 'Remote')
-          .toString(),
+      projectType:
+          (json['project_type'] ?? json['work_mode'] ?? 'Remote').toString(),
       openings: (json['openings'] as num?)?.toInt() ?? 1,
-      additionalInstructions: (json['additional_instructions'] ?? '')
-          .toString(),
+      additionalInstructions:
+          (json['additional_instructions'] ?? '').toString(),
       companyName: (json['company_name'] ?? '').toString(),
       companyId: (json['company_id'] ?? '').toString(),
       status: (json['status'] ?? 'pending_payment').toString(),
       duration: (json['duration'] ?? '3-4 weeks').toString(),
-      budget: (json['budget'] ?? '').toString(),
       applicantsCount: (json['applicants_count'] as num?)?.toInt() ?? 0,
       assignedStudent: json['assigned_student']?.toString(),
       progress: (json['progress'] as num?)?.toDouble() ?? 0.0,
@@ -344,10 +338,12 @@ class ProjectModel {
       disputeResolution: json['dispute_resolution']?.toString() ??
           json['disputeResolution']?.toString(),
       payoutType: json['payout_type']?.toString(),
-      studentPayoutAmount: (json['student_payout_amount'] as num?)?.toDouble(),
-      companyRefundAmount: (json['company_refund_amount'] as num?)?.toDouble(),
-      platformCommissionAmount: (json['platform_commission_amount'] as num?)
-          ?.toDouble(),
+      studentPayoutAmount:
+          (json['student_payout_amount'] as num?)?.toDouble(),
+      companyRefundAmount:
+          (json['company_refund_amount'] as num?)?.toDouble(),
+      platformCommissionAmount:
+          (json['platform_commission_amount'] as num?)?.toDouble(),
       payoutTransactionId: json['payout_transaction_id']?.toString(),
       payoutReceiptUrl: json['payout_receipt_url']?.toString(),
       refundTransactionId: json['refund_transaction_id']?.toString(),
@@ -388,7 +384,6 @@ class ProjectModel {
       'company_id': companyId,
       'status': status,
       'duration': duration,
-      'budget': budget,
       'applicants_count': applicantsCount,
       'assigned_student': assignedStudent,
       'progress': progress,

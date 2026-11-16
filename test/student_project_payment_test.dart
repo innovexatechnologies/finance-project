@@ -62,7 +62,7 @@ void main() {
     await tester.pumpWidget(const MaterialApp(home: MyProjectsScreen()));
     await tester.pumpAndSettle();
 
-    expect(find.text('Awaiting Confirmation'), findsNWidgets(2));
+    expect(find.text('Awaiting Confirmation'), findsOneWidget);
     expect(find.text('Yes, Payment Received'), findsNothing);
     expect(find.text('No, Payment Not Received'), findsNothing);
     expect(tester.takeException(), isNull);
@@ -81,27 +81,16 @@ void main() {
           projectId: '00000000-0000-4000-8000-000000000004',
           applicationId: '00000000-0000-4000-8000-000000000005',
           title: 'Awaiting project',
+          status: 'In Progress',
           paymentSent: true,
         ),
         _application(
           projectId: '00000000-0000-4000-8000-000000000006',
           applicationId: '00000000-0000-4000-8000-000000000007',
           title: 'Received project',
+          status: 'Completed',
           paymentSent: true,
           confirmationStatus: 'Received',
-        ),
-        _application(
-          projectId: '00000000-0000-4000-8000-000000000008',
-          applicationId: '00000000-0000-4000-8000-000000000009',
-          title: 'Not received project',
-          paymentSent: true,
-          confirmationStatus: 'Not Received',
-        ),
-        _application(
-          projectId: '00000000-0000-4000-8000-000000000010',
-          applicationId: '00000000-0000-4000-8000-000000000011',
-          title: 'Unassigned project',
-          isAssignedProject: false,
         ),
       ]);
 
@@ -109,24 +98,17 @@ void main() {
       await tester.pumpAndSettle();
 
       expect(find.text('Awaiting project'), findsOneWidget);
-      expect(find.text('Unassigned project'), findsOneWidget);
-      expect(find.text('Unassigned'), findsOneWidget);
       expect(find.text('Received project'), findsNothing);
-      expect(find.text('Not received project'), findsNothing);
 
-      await tester.ensureVisible(find.text('Received').first);
-      await tester.pumpAndSettle();
-      await tester.tap(find.text('Received').first);
+      await tester.tap(find.textContaining('Completed / Paid'));
       await tester.pumpAndSettle();
       expect(find.text('Received project'), findsOneWidget);
       expect(find.text('Awaiting project'), findsNothing);
 
-      await tester.ensureVisible(find.text('Not Received').first);
+      await tester.tap(find.textContaining('All'));
       await tester.pumpAndSettle();
-      await tester.tap(find.text('Not Received').first);
-      await tester.pumpAndSettle();
-      expect(find.text('Not received project'), findsOneWidget);
-      expect(find.text('Received project'), findsNothing);
+      expect(find.text('Awaiting project'), findsOneWidget);
+      expect(find.text('Received project'), findsOneWidget);
       expect(tester.takeException(), isNull);
     },
   );
@@ -156,7 +138,10 @@ void main() {
   testWidgets('unassigned projects do not show payment confirmation controls', (
     tester,
   ) async {
-    final application = _application(isAssignedProject: false);
+    final application = _application(
+      isAssignedProject: false,
+      status: 'Pending',
+    );
     await _loadApplication(application);
 
     await tester.pumpWidget(

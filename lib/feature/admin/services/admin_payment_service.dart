@@ -144,7 +144,6 @@ class AdminPaymentService {
                 ? method.id.trim()
                 : SupabaseHelper.generateUuid())
             : SupabaseHelper.generateUuid();
-        : SupabaseHelper.generateUuid();
 
     final nowIso = DateTime.now().toIso8601String();
     final newMethod = method.copyWith(

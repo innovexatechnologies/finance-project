@@ -423,14 +423,12 @@ class _PostProjectScreenState extends State<PostProjectScreen> {
           : (existing?.companyId ?? ''),
       status: status,
       applicantsCount: existing?.applicantsCount ?? 0,
-      budget: _escrowAmountController.text.trim().replaceAll(',', ''),
       assignedStudent: existing?.assignedStudent,
       progress: existing?.progress ?? 0.0,
       createdAt: existing?.createdAt ?? 'Just now',
       paymentSent: existing?.paymentSent ?? false,
       escrowAmount: double.tryParse(
               _escrowAmountController.text.trim().replaceAll(',', '')) ??
-          15000.0,
           15000.0,
     );
   }
@@ -1403,11 +1401,13 @@ class _PostProjectScreenState extends State<PostProjectScreen> {
                   Row(
                     mainAxisAlignment: MainAxisAlignment.spaceBetween,
                     children: [
-                      Text(
-                        'Student Project Reward:',
-                        style: GoogleFonts.inter(
-                          fontSize: 12,
-                          color: AppColors.deepNavy,
+                      Expanded(
+                        child: Text(
+                          'Student Project Reward:',
+                          style: GoogleFonts.inter(
+                            fontSize: 12,
+                            color: AppColors.deepNavy,
+                          ),
                         ),
                       ),
                       Text(
@@ -1424,35 +1424,38 @@ class _PostProjectScreenState extends State<PostProjectScreen> {
                   Row(
                     mainAxisAlignment: MainAxisAlignment.spaceBetween,
                     children: [
-                      Row(
-                        children: [
-                          Text(
-                            'Admin Commission (+10%):',
-                            style: GoogleFonts.inter(
-                              fontSize: 12,
-                              color: AppColors.primaryBlue,
-                              fontWeight: FontWeight.w600,
-                            ),
-                          ),
-                          const SizedBox(width: 4),
-                          Container(
-                            padding: const EdgeInsets.symmetric(
-                                horizontal: 4, vertical: 1),
-                            decoration: BoxDecoration(
-                              color:
-                                  AppColors.primaryBlue.withValues(alpha: 0.1),
-                              borderRadius: BorderRadius.circular(4),
-                            ),
-                            child: Text(
-                              'Required',
+                      Expanded(
+                        child: Wrap(
+                          crossAxisAlignment: WrapCrossAlignment.center,
+                          spacing: 4,
+                          children: [
+                            Text(
+                              'Admin Commission (+10%):',
                               style: GoogleFonts.inter(
-                                fontSize: 9.5,
-                                fontWeight: FontWeight.bold,
+                                fontSize: 12,
                                 color: AppColors.primaryBlue,
+                                fontWeight: FontWeight.w600,
                               ),
                             ),
-                          ),
-                        ],
+                            Container(
+                              padding: const EdgeInsets.symmetric(
+                                  horizontal: 4, vertical: 1),
+                              decoration: BoxDecoration(
+                                color:
+                                    AppColors.primaryBlue.withValues(alpha: 0.1),
+                                borderRadius: BorderRadius.circular(4),
+                              ),
+                              child: Text(
+                                'Required',
+                                style: GoogleFonts.inter(
+                                  fontSize: 9.5,
+                                  fontWeight: FontWeight.bold,
+                                  color: AppColors.primaryBlue,
+                                ),
+                              ),
+                            ),
+                          ],
+                        ),
                       ),
                       Text(
                         '+ PKR ${commission.toStringAsFixed(0)}',
@@ -1468,12 +1471,14 @@ class _PostProjectScreenState extends State<PostProjectScreen> {
                   Row(
                     mainAxisAlignment: MainAxisAlignment.spaceBetween,
                     children: [
-                      Text(
-                        'Total Deposit to Admin:',
-                        style: GoogleFonts.poppins(
-                          fontSize: 12.5,
-                          fontWeight: FontWeight.bold,
-                          color: AppColors.deepNavy,
+                      Expanded(
+                        child: Text(
+                          'Total Deposit to Admin:',
+                          style: GoogleFonts.poppins(
+                            fontSize: 12.5,
+                            fontWeight: FontWeight.bold,
+                            color: AppColors.deepNavy,
+                          ),
                         ),
                       ),
                       Text(
