@@ -2040,7 +2040,16 @@ class _AdminDisputeResolutionScreenState
   Widget _buildNotificationsTab() {
     return ValueListenableBuilder<List<AdminNotificationModel>>(
       valueListenable: _payoutService.notificationsNotifier,
-      builder: (context, notifs, _) {
+      builder: (context, allNotifs, _) {
+        final notifs = allNotifs.where((n) {
+          final type = n.notificationType.toLowerCase();
+          final title = n.title.toLowerCase();
+          if (type == 'dispute_raised' || title.contains('dispute raised')) {
+            return false;
+          }
+          return true;
+        }).toList();
+
         if (notifs.isEmpty) {
           return _buildUniqueNotificationsEmptyState();
         }
@@ -2475,7 +2484,16 @@ class _AdminDisputeResolutionScreenState
               const SizedBox(width: 6),
               ValueListenableBuilder<List<AdminNotificationModel>>(
                 valueListenable: _payoutService.notificationsNotifier,
-                builder: (context, notifs, _) {
+                builder: (context, allNotifs, _) {
+                  final notifs = allNotifs.where((n) {
+                    final type = n.notificationType.toLowerCase();
+                    final title = n.title.toLowerCase();
+                    if (type == 'dispute_raised' ||
+                        title.contains('dispute raised')) {
+                      return false;
+                    }
+                    return true;
+                  }).toList();
                   final unread = notifs.where((n) => !n.isRead).length;
                   final count = unread > 0 ? unread : notifs.length;
                   return Container(

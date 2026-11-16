@@ -336,7 +336,12 @@ class ProjectModel {
       disputeCaseId: json['dispute_case_id']?.toString(),
       disputeReason: json['dispute_reason']?.toString(),
       disputeResolution: json['dispute_resolution']?.toString() ??
-          json['disputeResolution']?.toString(),
+          json['disputeResolution']?.toString() ??
+          (json['payout_type'] == 'dispute_student_awarded'
+              ? 'paid_to_student'
+              : (json['payout_type'] == 'dispute_company_refunded'
+                  ? 'refunded_to_company'
+                  : null)),
       payoutType: json['payout_type']?.toString(),
       studentPayoutAmount:
           (json['student_payout_amount'] as num?)?.toDouble(),
@@ -346,8 +351,16 @@ class ProjectModel {
           (json['platform_commission_amount'] as num?)?.toDouble(),
       payoutTransactionId: json['payout_transaction_id']?.toString(),
       payoutReceiptUrl: json['payout_receipt_url']?.toString(),
-      refundTransactionId: json['refund_transaction_id']?.toString(),
-      refundReceiptUrl: json['refund_receipt_url']?.toString(),
+      refundTransactionId: json['refund_transaction_id']?.toString() ??
+          (json['payout_type'] == 'dispute_company_refunded' ||
+                  (json['status'] ?? '').toString().toLowerCase() == 'cancelled'
+              ? json['payout_transaction_id']?.toString()
+              : null),
+      refundReceiptUrl: json['refund_receipt_url']?.toString() ??
+          (json['payout_type'] == 'dispute_company_refunded' ||
+                  (json['status'] ?? '').toString().toLowerCase() == 'cancelled'
+              ? json['payout_receipt_url']?.toString()
+              : null),
       completedAt: json['completed_at']?.toString(),
       revisionCount: (json['revision_count'] as num?)?.toInt() ?? 0,
       maxRevisions: (json['max_revisions'] as num?)?.toInt() ?? 1,
