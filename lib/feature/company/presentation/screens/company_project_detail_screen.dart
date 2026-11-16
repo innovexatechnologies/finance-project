@@ -2110,6 +2110,8 @@ class _CompanyProjectDetailScreenState
 
   Widget _buildCancelledStatusBanner(ProjectModel project) {
     final tid = project.refundTransactionId ?? 'N/A';
+    final hasRejection = project.rejectionReason != null &&
+        project.rejectionReason!.trim().isNotEmpty;
     return Container(
       padding: const EdgeInsets.all(16),
       decoration: BoxDecoration(
@@ -2138,7 +2140,9 @@ class _CompanyProjectDetailScreenState
               crossAxisAlignment: CrossAxisAlignment.start,
               children: [
                 Text(
-                  'Project Cancelled (Refunded)',
+                  hasRejection
+                      ? 'Project Cancelled by Admin'
+                      : 'Project Cancelled (Refunded)',
                   style: GoogleFonts.poppins(
                     fontSize: 15,
                     fontWeight: FontWeight.w700,
@@ -2147,7 +2151,9 @@ class _CompanyProjectDetailScreenState
                 ),
                 const SizedBox(height: 3),
                 Text(
-                  'SkillBridge administration payment refund to company (TID: $tid). Project Cancelled.',
+                  hasRejection
+                      ? 'Payment verification rejected on final re-submission: "${project.rejectionReason}". This project has been cancelled.'
+                      : 'SkillBridge administration payment refund to company (TID: $tid). Project Cancelled.',
                   style: GoogleFonts.inter(
                     fontSize: 12.5,
                     color: const Color(0xFFB91C1C),

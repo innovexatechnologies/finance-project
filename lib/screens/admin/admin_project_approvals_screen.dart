@@ -270,31 +270,81 @@ class _AdminProjectApprovalsScreenState
   Future<void> _confirmReject(ProjectModel project) async {
     final reasonController = TextEditingController();
     final formKey = GlobalKey<FormState>();
+    final isSecondRejection =
+        project.isPaymentResubmitted || project.paymentRejectionCount >= 1;
 
     final confirmed = await showDialog<bool>(
       context: context,
       builder: (ctx) => AlertDialog(
         shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
-        title: const Text('Reject Payment Proof'),
+        title: Row(
+          children: [
+            Icon(
+              isSecondRejection
+                  ? Icons.cancel_rounded
+                  : Icons.error_outline_rounded,
+              color: AppColors.error,
+              size: 22,
+            ),
+            const SizedBox(width: 8),
+            Expanded(
+              child: Text(
+                isSecondRejection
+                    ? 'Reject & Cancel Project'
+                    : 'Reject Payment Proof',
+                style: GoogleFonts.poppins(
+                  fontSize: 16,
+                  fontWeight: FontWeight.bold,
+                  color: AppColors.darkNavy,
+                ),
+              ),
+            ),
+          ],
+        ),
         content: Form(
           key: formKey,
           child: Column(
             mainAxisSize: MainAxisSize.min,
             crossAxisAlignment: CrossAxisAlignment.start,
             children: [
-              Text(
-                'Please specify why this payment proof is invalid or rejected (e.g. TID mismatch, incorrect amount):',
-                style: GoogleFonts.inter(
-                  fontSize: 12.5,
-                  color: AppColors.textSecondary,
+              if (isSecondRejection) ...[
+                Container(
+                  padding: const EdgeInsets.all(10),
+                  margin: const EdgeInsets.only(bottom: 12),
+                  decoration: BoxDecoration(
+                    color: AppColors.errorBg,
+                    borderRadius: BorderRadius.circular(8),
+                    border: Border.all(
+                      color: AppColors.error.withValues(alpha: 0.3),
+                    ),
+                  ),
+                  child: Text(
+                    '⚠️ Final Decision: This project has already used its one-time re-submission chance. Rejecting this payment proof will permanently CANCEL this project for the company.',
+                    style: GoogleFonts.inter(
+                      fontSize: 12,
+                      fontWeight: FontWeight.w600,
+                      color: AppColors.error,
+                      height: 1.35,
+                    ),
+                  ),
                 ),
-              ),
-              const SizedBox(height: 12),
+              ] else ...[
+                Text(
+                  'Please specify why this payment proof is invalid or rejected (e.g. TID mismatch, incorrect amount). The company will receive this note and be given 1 last chance to re-submit payment details:',
+                  style: GoogleFonts.inter(
+                    fontSize: 12.5,
+                    color: AppColors.textSecondary,
+                  ),
+                ),
+                const SizedBox(height: 12),
+              ],
               TextFormField(
                 controller: reasonController,
                 maxLines: 2,
                 decoration: InputDecoration(
-                  hintText: 'Rejection reason...',
+                  hintText: isSecondRejection
+                      ? 'Final cancellation reason...'
+                      : 'Rejection reason...',
                   border: OutlineInputBorder(
                     borderRadius: BorderRadius.circular(8),
                   ),
@@ -315,13 +365,20 @@ class _AdminProjectApprovalsScreenState
             child: const Text('Cancel'),
           ),
           ElevatedButton(
-            style: ElevatedButton.styleFrom(backgroundColor: AppColors.error),
+            style: ElevatedButton.styleFrom(
+              backgroundColor: AppColors.error,
+              foregroundColor: Colors.white,
+            ),
             onPressed: () {
               if (formKey.currentState!.validate()) {
                 Navigator.pop(ctx, true);
               }
             },
-            child: const Text('Reject Payment'),
+            child: Text(
+              isSecondRejection
+                  ? 'Confirm & Cancel Project'
+                  : 'Reject Payment',
+            ),
           ),
         ],
       ),
@@ -331,9 +388,16 @@ class _AdminProjectApprovalsScreenState
       final ok = await _approvalService.rejectPayment(
         projectId: project.id,
         rejectionReason: reasonController.text.trim(),
+        isFinalCancellation: isSecondRejection,
       );
       if (ok) {
-        _showFeedback('Project payment marked rejected.');
+        _showFeedback(
+          isSecondRejection
+              ? 'Project permanently cancelled due to rejected payment.'
+              : 'Project payment marked rejected. Company notified to re-submit.',
+        );
+        await _approvalService.loadPendingApprovals(forceRefresh: true);
+        if (mounted) setState(() {});
       } else {
         _showFeedback(
           _approvalService.lastError ?? 'Failed to reject payment.',
@@ -512,6 +576,11 @@ class _AdminProjectApprovalsScreenState
     final commission10 = (baseAmount * 0.10).roundToDouble();
     final totalDeposit = baseAmount + commission10;
     final amountText = 'PKR ${totalDeposit.toStringAsFixed(0)}';
+    final isSecondRejection =
+        project.isPaymentResubmitted || project.paymentRejectionCount >= 1;
+    final rejectLabel = isSecondRejection ? 'Reject & Cancel' : 'Reject Payment';
+    final rejectIcon =
+        isSecondRejection ? Icons.cancel_outlined : Icons.close_rounded;
 
     return Container(
       margin: const EdgeInsets.only(bottom: 16),
@@ -589,6 +658,67 @@ class _AdminProjectApprovalsScreenState
               ),
             ],
           ),
+          if (isSecondRejection) ...[
+            const SizedBox(height: 10),
+            Container(
+              width: double.infinity,
+              padding: const EdgeInsets.all(10),
+              decoration: BoxDecoration(
+                color: const Color(0xFFFFFBEB),
+                borderRadius: BorderRadius.circular(10),
+                border: Border.all(
+                  color: const Color(0xFFF59E0B).withValues(alpha: 0.6),
+                  width: 1.2,
+                ),
+              ),
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  Row(
+                    children: [
+                      const Icon(
+                        Icons.warning_amber_rounded,
+                        color: Color(0xFFD97706),
+                        size: 18,
+                      ),
+                      const SizedBox(width: 8),
+                      Expanded(
+                        child: Text(
+                          'Re-submitted Payment Proof (Final Chance)',
+                          style: GoogleFonts.inter(
+                            fontSize: 12.5,
+                            fontWeight: FontWeight.bold,
+                            color: const Color(0xFFB45309),
+                          ),
+                        ),
+                      ),
+                    ],
+                  ),
+                  const SizedBox(height: 4),
+                  Text(
+                    'Company re-submitted deposit details after initial rejection. If this proof is rejected again, the project will be permanently cancelled.',
+                    style: GoogleFonts.inter(
+                      fontSize: 11.5,
+                      color: const Color(0xFF92400E),
+                      height: 1.35,
+                    ),
+                  ),
+                  if (project.rejectionReason != null &&
+                      project.rejectionReason!.trim().isNotEmpty) ...[
+                    const SizedBox(height: 4),
+                    Text(
+                      'Previous Rejection Note: "${project.rejectionReason}"',
+                      style: GoogleFonts.inter(
+                        fontSize: 11,
+                        fontStyle: FontStyle.italic,
+                        color: const Color(0xFF78350F),
+                      ),
+                    ),
+                  ],
+                ],
+              ),
+            ),
+          ],
           const SizedBox(height: 14),
           const Divider(color: AppColors.border, height: 1),
           const SizedBox(height: 12),
@@ -747,8 +877,8 @@ class _AdminProjectApprovalsScreenState
                           borderRadius: BorderRadius.circular(8),
                         ),
                       ),
-                      icon: const Icon(Icons.close_rounded, size: 16),
-                      label: const Text('Reject Payment'),
+                      icon: Icon(rejectIcon, size: 16),
+                      label: Text(rejectLabel),
                       onPressed: () => _confirmReject(project),
                     ),
                     const SizedBox(width: 12),
@@ -796,9 +926,9 @@ class _AdminProjectApprovalsScreenState
                           borderRadius: BorderRadius.circular(8),
                         ),
                       ),
-                      icon: const Icon(Icons.close_rounded, size: 15),
+                      icon: Icon(rejectIcon, size: 15),
                       label: Text(
-                        'Reject Payment',
+                        rejectLabel,
                         maxLines: 1,
                         overflow: TextOverflow.ellipsis,
                         style: GoogleFonts.inter(

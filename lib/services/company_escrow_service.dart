@@ -240,6 +240,25 @@ class CompanyEscrowService {
     final nowIso = DateTime.now().toIso8601String();
     final supabase = SupabaseHelper.clientOrNull;
 
+    // Detect if this is a re-submission (after an initial rejection)
+    final companyProjService = CompanyProjectService();
+    final list =
+        List<ProjectModel>.from(companyProjService.projectsNotifier.value);
+    final idx = list.indexWhere((p) => p.id == projectId);
+    final existing = idx != -1 ? list[idx] : null;
+    final isResubmission = existing != null &&
+        (existing.isPaymentRejected ||
+            existing.paymentRejectionCount > 0 ||
+            existing.isCancelled);
+    final prevReason = existing?.rejectionReason ?? '';
+    final newRejectionCount = isResubmission ? 1 : 0;
+    final modReason = isResubmission
+        ? '[Resubmitted - Final Chance] Prev: $prevReason'
+        : null;
+    final instructionNote = isResubmission
+        ? '[Resubmitted - Final Chance] Payment Method: ${paymentMethodUsed.trim()} | TID: ${transactionId.trim()}'
+        : 'Payment Method: ${paymentMethodUsed.trim()} | TID: ${transactionId.trim()}';
+
     if (supabase != null && SupabaseHelper.isUuid(projectId)) {
       bool updatedSuccessfully = false;
 
@@ -253,6 +272,8 @@ class CompanyEscrowService {
               'payment_method_used': paymentMethodUsed.trim(),
               'payment_receipt_url': receiptUrl.trim(),
               'rejection_reason': null,
+              'moderation_reason': ?modReason,
+              'additional_instructions': instructionNote,
               'updated_at': nowIso,
             })
             .eq('id', projectId);
@@ -273,6 +294,8 @@ class CompanyEscrowService {
                 'transaction_id': transactionId.trim(),
                 'payment_method_used': paymentMethodUsed.trim(),
                 'payment_receipt_url': receiptUrl.trim(),
+                'moderation_reason': ?modReason,
+                'additional_instructions': instructionNote,
                 'updated_at': nowIso,
               })
               .eq('id', projectId);
@@ -292,8 +315,7 @@ class CompanyEscrowService {
               .update({
                 'status': 'pending_verification',
                 'attachment_url': receiptUrl.trim(),
-                'additional_instructions':
-                    'Payment Method: ${paymentMethodUsed.trim()} | TID: ${transactionId.trim()}',
+                'additional_instructions': instructionNote,
                 'updated_at': nowIso,
               })
               .eq('id', projectId);
@@ -326,9 +348,12 @@ class CompanyEscrowService {
       try {
         await supabase.from('admin_notifications').insert({
           'project_id': projectId,
-          'title': 'New Escrow Payment Proof Submitted',
-          'message':
-              'Company deposited escrow via $paymentMethodUsed (TID: $transactionId). Please inspect receipt and verify.',
+          'title': isResubmission
+              ? 'Resubmitted Escrow Payment Proof (Final Chance)'
+              : 'New Escrow Payment Proof Submitted',
+          'message': isResubmission
+              ? 'Company resubmitted payment proof for project (Final Chance) via $paymentMethodUsed (TID: $transactionId).'
+              : 'Company deposited escrow via $paymentMethodUsed (TID: $transactionId). Please inspect receipt and verify.',
           'notification_type': 'payout_ready',
           'is_read': false,
           'created_at': nowIso,
@@ -337,10 +362,6 @@ class CompanyEscrowService {
     }
 
     // Update in-memory project model
-    final companyProjService = CompanyProjectService();
-    final list =
-        List<ProjectModel>.from(companyProjService.projectsNotifier.value);
-    final idx = list.indexWhere((p) => p.id == projectId);
     ProjectModel? updatedModel;
     if (idx != -1) {
       list[idx] = list[idx].copyWith(
@@ -349,6 +370,8 @@ class CompanyEscrowService {
         paymentMethodUsed: paymentMethodUsed.trim(),
         paymentReceiptUrl: receiptUrl.trim(),
         rejectionReason: null,
+        moderationReason: modReason,
+        paymentRejectionCount: newRejectionCount,
       );
       updatedModel = list[idx];
       companyProjService.projectsNotifier.value = list;
@@ -366,14 +389,17 @@ class CompanyEscrowService {
         paymentReceiptUrl: receiptUrl.trim(),
         companyName: 'Company Partner',
         escrowAmount: 25000.0,
+        moderationReason: modReason,
+        paymentRejectionCount: newRejectionCount,
       );
       list.insert(0, updatedModel);
       companyProjService.projectsNotifier.value = list;
     }
 
-    // Synchronize directly into AdminProjectApprovalService queue
+    // Synchronize directly into AdminProjectApprovalService queue and clear locally processed cache
     try {
       final approvalService = AdminProjectApprovalService();
+      approvalService.clearProcessedProject(projectId);
       final pending = List<ProjectModel>.from(
           approvalService.pendingApprovalsNotifier.value);
       final pIdx = pending.indexWhere((p) => p.id == projectId);

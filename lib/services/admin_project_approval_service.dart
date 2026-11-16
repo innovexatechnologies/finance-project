@@ -28,10 +28,17 @@ class AdminProjectApprovalService {
   List<ProjectModel> get pendingProjects => pendingApprovalsNotifier.value;
   int get pendingCount => pendingProjects.length;
 
+  void clearProcessedProject(String projectId) {
+    _locallyProcessedIds.remove(projectId);
+  }
+
   /// 1. Fetches all projects waiting for payment verification (status = 'pending_verification').
   Future<List<ProjectModel>> loadPendingApprovals({
     bool forceRefresh = false,
   }) async {
+    if (forceRefresh) {
+      _locallyProcessedIds.clear();
+    }
     isLoadingNotifier.value = true;
     _lastError = null;
 
@@ -232,10 +239,14 @@ class AdminProjectApprovalService {
   }
 
   /// 3. Rejects payment proof with an explanation.
+  /// If isFinalCancellation is true:
+  /// Sets: status = 'cancelled', is_escrow_verified = false, payment_sent = false.
+  /// If isFinalCancellation is false (Round 1):
   /// Sets: status = 'payment_rejected', is_escrow_verified = false, payment_sent = false.
   Future<bool> rejectPayment({
     required String projectId,
     required String rejectionReason,
+    bool isFinalCancellation = false,
   }) async {
     _lastError = null;
     final nowIso = DateTime.now().toIso8601String();
@@ -243,26 +254,36 @@ class AdminProjectApprovalService {
 
     _locallyProcessedIds.add(projectId);
 
+    final targetStatus = isFinalCancellation ? 'cancelled' : 'payment_rejected';
+    final modReason = isFinalCancellation
+        ? '[Cancelled - Final Rejection] ${rejectionReason.trim()}'
+        : '[Attempt 1 Rejected] ${rejectionReason.trim()}';
+    final instructionNote = isFinalCancellation
+        ? 'Payment Cancelled: ${rejectionReason.trim()}'
+        : 'Payment Rejected: ${rejectionReason.trim()}';
+
     if (supabase != null && SupabaseHelper.isUuid(projectId)) {
       bool rejectedSuccessfully = false;
 
-      // Strategy 1: Stored Procedure RPC (SECURITY DEFINER - bypasses RLS)
-      try {
-        final res = await supabase.rpc(
-          'admin_reject_project_payment',
-          params: {
-            'p_project_id': projectId,
-            'p_rejection_reason': rejectionReason.trim(),
-          },
-        );
-        if (res is Map && res['success'] == false) {
-          debugPrint('Admin reject RPC returned logic failure: ${res['error']}');
-        } else {
-          rejectedSuccessfully = true;
-          debugPrint('Admin reject RPC executed successfully.');
+      // Strategy 1: Stored Procedure RPC (SECURITY DEFINER - bypasses RLS) - only for initial rejection
+      if (!isFinalCancellation) {
+        try {
+          final res = await supabase.rpc(
+            'admin_reject_project_payment',
+            params: {
+              'p_project_id': projectId,
+              'p_rejection_reason': rejectionReason.trim(),
+            },
+          );
+          if (res is Map && res['success'] == false) {
+            debugPrint('Admin reject RPC returned logic failure: ${res['error']}');
+          } else {
+            rejectedSuccessfully = true;
+            debugPrint('Admin reject RPC executed successfully.');
+          }
+        } catch (rpcErr) {
+          debugPrint('Admin reject RPC bypass error: $rpcErr');
         }
-      } catch (rpcErr) {
-        debugPrint('Admin reject RPC bypass error: $rpcErr');
       }
 
       // Strategy 2: Direct Table Updates with progressive fallback
@@ -271,10 +292,12 @@ class AdminProjectApprovalService {
           await supabase
               .from('projects')
               .update({
-                'status': 'payment_rejected',
+                'status': targetStatus,
                 'is_escrow_verified': false,
                 'payment_sent': false,
                 'rejection_reason': rejectionReason.trim(),
+                'moderation_reason': modReason,
+                'additional_instructions': instructionNote,
                 'updated_at': nowIso,
               })
               .eq('id', projectId);
@@ -285,9 +308,11 @@ class AdminProjectApprovalService {
             await supabase
                 .from('projects')
                 .update({
-                  'status': 'payment_rejected',
-                  'additional_instructions':
-                      'Payment Rejected: ${rejectionReason.trim()}',
+                  'status': targetStatus,
+                  'is_escrow_verified': false,
+                  'payment_sent': false,
+                  'moderation_reason': modReason,
+                  'additional_instructions': instructionNote,
                   'updated_at': nowIso,
                 })
                 .eq('id', projectId);
@@ -296,12 +321,24 @@ class AdminProjectApprovalService {
             try {
               await supabase
                   .from('projects')
-                  .update({'status': 'payment_rejected'})
+                  .update({
+                    'status': targetStatus,
+                    'additional_instructions': instructionNote,
+                    'updated_at': nowIso,
+                  })
                   .eq('id', projectId);
               rejectedSuccessfully = true;
             } catch (e3) {
-              debugPrint('All reject updates failed: $e3');
-              _lastError = SupabaseHelper.friendlyError(e3);
+              try {
+                await supabase
+                    .from('projects')
+                    .update({'status': targetStatus})
+                    .eq('id', projectId);
+                rejectedSuccessfully = true;
+              } catch (e4) {
+                debugPrint('All reject updates failed: $e4');
+                _lastError = SupabaseHelper.friendlyError(e4);
+              }
             }
           }
         }
@@ -320,10 +357,12 @@ class AdminProjectApprovalService {
       final idx = cList.indexWhere((p) => p.id == projectId);
       if (idx != -1) {
         cList[idx] = cList[idx].copyWith(
-          status: 'payment_rejected',
+          status: targetStatus,
           isEscrowVerified: false,
           paymentSent: false,
           rejectionReason: rejectionReason.trim(),
+          moderationReason: modReason,
+          paymentRejectionCount: isFinalCancellation ? 2 : 1,
         );
         compProjService.projectsNotifier.value = cList;
       }
@@ -336,9 +375,13 @@ class AdminProjectApprovalService {
       final aIdx = aList.indexWhere((p) => p.id == projectId);
       if (aIdx != -1) {
         aList[aIdx] = aList[aIdx].copyWith(
-          status: AdminProjectStatus.rejected,
-          publicationStatus: AdminPublicationStatus.rejected,
-          rawDbStatus: 'payment_rejected',
+          status: isFinalCancellation
+              ? AdminProjectStatus.closed
+              : AdminProjectStatus.rejected,
+          publicationStatus: isFinalCancellation
+              ? AdminPublicationStatus.unpublished
+              : AdminPublicationStatus.rejected,
+          rawDbStatus: targetStatus,
           isEscrowVerified: false,
           paymentSent: false,
         );

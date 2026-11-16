@@ -28,6 +28,8 @@ class ProjectModel {
   final bool isEscrowVerified;
   final String? verifiedAt;
   final String? rejectionReason;
+  final String? moderationReason;
+  final int paymentRejectionCount;
 
   // Delivery, Auto-Release & Dispute Fields
   final String? deliveredAt;
@@ -84,6 +86,8 @@ class ProjectModel {
     this.isEscrowVerified = false,
     this.verifiedAt,
     this.rejectionReason,
+    this.moderationReason,
+    this.paymentRejectionCount = 0,
     this.deliveredAt,
     this.disputeCaseId,
     this.disputeReason,
@@ -113,6 +117,13 @@ class ProjectModel {
   bool get isPaymentRejected =>
       status.toLowerCase() == 'payment_rejected' ||
       status.toLowerCase() == 'rejected';
+  bool get isPaymentResubmitted =>
+      isPendingVerification &&
+      (paymentRejectionCount > 0 ||
+          (moderationReason?.contains('Resubmitted') ?? false) ||
+          additionalInstructions.contains('Resubmitted'));
+  bool get canResubmitPayment =>
+      isPaymentRejected && paymentRejectionCount <= 1;
   bool get isLiveVerified =>
       (status.toLowerCase() == 'open') && isEscrowVerified;
   bool get isInProgress =>
@@ -217,6 +228,8 @@ class ProjectModel {
     bool? isEscrowVerified,
     String? verifiedAt,
     String? rejectionReason,
+    String? moderationReason,
+    int? paymentRejectionCount,
     String? deliveredAt,
     String? disputeCaseId,
     String? disputeReason,
@@ -268,6 +281,9 @@ class ProjectModel {
       isEscrowVerified: isEscrowVerified ?? this.isEscrowVerified,
       verifiedAt: verifiedAt ?? this.verifiedAt,
       rejectionReason: rejectionReason ?? this.rejectionReason,
+      moderationReason: moderationReason ?? this.moderationReason,
+      paymentRejectionCount:
+          paymentRejectionCount ?? this.paymentRejectionCount,
       deliveredAt: deliveredAt ?? this.deliveredAt,
       disputeCaseId: disputeCaseId ?? this.disputeCaseId,
       disputeReason: disputeReason ?? this.disputeReason,
@@ -296,6 +312,36 @@ class ProjectModel {
 
   factory ProjectModel.fromJson(Map<String, dynamic> json) {
     final rawSkills = json['skills_required'] ?? json['skills'];
+    final rawInstructions = (json['additional_instructions'] ?? '').toString();
+    final rawModReason = json['moderation_reason']?.toString();
+    final rawRejectionReason = json['rejection_reason']?.toString();
+
+    // Resilient Rejection Reason resolution with fallbacks
+    String? resolvedRejection = rawRejectionReason;
+    if (resolvedRejection == null || resolvedRejection.trim().isEmpty) {
+      if (rawModReason != null && rawModReason.trim().isNotEmpty) {
+        resolvedRejection = _cleanRejectionTag(rawModReason);
+      } else {
+        resolvedRejection = _extractRejectionReason(rawInstructions);
+      }
+    }
+
+    // Determine payment rejection count
+    int rejectionCount =
+        (json['payment_rejection_count'] as num?)?.toInt() ?? 0;
+    if (rejectionCount == 0) {
+      if ((rawModReason?.contains('Attempt 1') ?? false) ||
+          (rawModReason?.contains('Resubmitted') ?? false) ||
+          rawInstructions.contains('Resubmitted') ||
+          rawInstructions.contains('Payment Rejected:')) {
+        rejectionCount = 1;
+      }
+      if ((rawModReason?.contains('Cancelled - Final Rejection') ?? false) ||
+          rawInstructions.contains('Payment Cancelled:')) {
+        rejectionCount = 2;
+      }
+    }
+
     return ProjectModel(
       id: (json['id'] ?? '').toString(),
       title: (json['title'] ?? '').toString(),
@@ -311,8 +357,7 @@ class ProjectModel {
       projectType:
           (json['project_type'] ?? json['work_mode'] ?? 'Remote').toString(),
       openings: (json['openings'] as num?)?.toInt() ?? 1,
-      additionalInstructions:
-          (json['additional_instructions'] ?? '').toString(),
+      additionalInstructions: rawInstructions,
       companyName: (json['company_name'] ?? '').toString(),
       companyId: (json['company_id'] ?? '').toString(),
       status: (json['status'] ?? 'pending_payment').toString(),
@@ -324,14 +369,16 @@ class ProjectModel {
       paymentSent: json['payment_sent'] == true,
       escrowAmount: _parseEscrowAmount(json),
       paymentMethodUsed: json['payment_method_used']?.toString() ??
-          _extractPaymentMethod(json['additional_instructions']?.toString()),
+          _extractPaymentMethod(rawInstructions),
       transactionId: json['transaction_id']?.toString() ??
-          _extractTransactionId(json['additional_instructions']?.toString()),
+          _extractTransactionId(rawInstructions),
       paymentReceiptUrl: json['payment_receipt_url']?.toString() ??
           json['attachment_url']?.toString(),
       isEscrowVerified: json['is_escrow_verified'] == true,
       verifiedAt: json['verified_at']?.toString(),
-      rejectionReason: json['rejection_reason']?.toString(),
+      rejectionReason: resolvedRejection,
+      moderationReason: rawModReason,
+      paymentRejectionCount: rejectionCount,
       deliveredAt: json['delivered_at']?.toString(),
       disputeCaseId: json['dispute_case_id']?.toString(),
       disputeReason: json['dispute_reason']?.toString(),
@@ -395,6 +442,9 @@ class ProjectModel {
       'payment_receipt_url': paymentReceiptUrl,
       'is_escrow_verified': isEscrowVerified,
       'verified_at': verifiedAt,
+      if (rejectionReason != null) 'rejection_reason': rejectionReason,
+      if (moderationReason != null) 'moderation_reason': moderationReason,
+      'payment_rejection_count': paymentRejectionCount,
       if (deliveredAt != null) 'delivered_at': deliveredAt,
       if (disputeCaseId != null) 'dispute_case_id': disputeCaseId,
       if (disputeReason != null) 'dispute_reason': disputeReason,
@@ -423,6 +473,33 @@ class ProjectModel {
       'has_help_request': hasHelpRequest,
       'payment_status': paymentStatus,
     };
+  }
+
+  static String? _extractRejectionReason(String? instructions) {
+    if (instructions == null || instructions.trim().isEmpty) return null;
+    if (instructions.contains('Payment Cancelled:')) {
+      final parts = instructions.split('Payment Cancelled:');
+      if (parts.length > 1) return parts[1].trim();
+    }
+    if (instructions.contains('Payment Rejected:')) {
+      final parts = instructions.split('Payment Rejected:');
+      if (parts.length > 1) return parts[1].trim();
+    }
+    if (instructions.contains('Reason:')) {
+      final match = RegExp(r'Reason:\s*([^|\n]+)').firstMatch(instructions);
+      if (match != null) return match.group(1)?.trim();
+    }
+    return null;
+  }
+
+  static String _cleanRejectionTag(String text) {
+    var cleaned = text.trim();
+    cleaned = cleaned.replaceAll(RegExp(r'^\[Attempt 1 Rejected\]\s*'), '');
+    cleaned =
+        cleaned.replaceAll(RegExp(r'^\[Cancelled - Final Rejection\]\s*'), '');
+    cleaned = cleaned.replaceAll(
+        RegExp(r'^\[Resubmitted - Final Chance\]\s*Prev:\s*'), '');
+    return cleaned.trim();
   }
 
   static String? _extractTransactionId(String? instructions) {

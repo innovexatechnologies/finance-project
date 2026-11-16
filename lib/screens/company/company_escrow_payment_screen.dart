@@ -291,6 +291,68 @@ class _CompanyEscrowPaymentScreenState
                 commission10: commission10,
                 totalDeposit: totalDeposit,
               ),
+              if (widget.project.isPaymentRejected ||
+                  widget.project.paymentRejectionCount > 0) ...[
+                const SizedBox(height: 16),
+                Container(
+                  padding: const EdgeInsets.all(14),
+                  decoration: BoxDecoration(
+                    color: const Color(0xFFFEF2F2),
+                    borderRadius: BorderRadius.circular(12),
+                    border: Border.all(
+                      color: AppColors.error.withValues(alpha: 0.5),
+                      width: 1.2,
+                    ),
+                  ),
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      Row(
+                        children: [
+                          const Icon(
+                            Icons.warning_amber_rounded,
+                            color: AppColors.error,
+                            size: 20,
+                          ),
+                          const SizedBox(width: 8),
+                          Expanded(
+                            child: Text(
+                              'Re-submission Notice (Final Chance)',
+                              style: GoogleFonts.inter(
+                                fontSize: 13,
+                                fontWeight: FontWeight.bold,
+                                color: AppColors.error,
+                              ),
+                            ),
+                          ),
+                        ],
+                      ),
+                      const SizedBox(height: 6),
+                      Text(
+                        'Your previous payment proof was rejected. You have this 1 final chance to enter valid payment details and upload a clear transfer receipt. If this re-submission is rejected, the project will be permanently cancelled.',
+                        style: GoogleFonts.inter(
+                          fontSize: 12,
+                          color: const Color(0xFF7F1D1D),
+                          height: 1.4,
+                        ),
+                      ),
+                      if (widget.project.rejectionReason != null &&
+                          widget.project.rejectionReason!.trim().isNotEmpty) ...[
+                        const SizedBox(height: 8),
+                        Text(
+                          'Admin Rejection Reason: "${widget.project.rejectionReason}"',
+                          style: GoogleFonts.inter(
+                            fontSize: 12,
+                            fontWeight: FontWeight.w600,
+                            fontStyle: FontStyle.italic,
+                            color: const Color(0xFF991B1B),
+                          ),
+                        ),
+                      ],
+                    ],
+                  ),
+                ),
+              ],
               const SizedBox(height: 24),
 
               // Step 1: Select Admin Account

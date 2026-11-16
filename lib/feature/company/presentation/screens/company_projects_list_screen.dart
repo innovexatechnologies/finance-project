@@ -1128,7 +1128,58 @@ class _CompanyProjectsListScreenState extends State<CompanyProjectsListScreen> {
                           ],
                         ],
                       ),
-                      if (project.isPaymentRejected) ...[
+                      if (project.isCancelled) ...[
+                        const SizedBox(height: 12),
+                        Container(
+                          width: double.infinity,
+                          padding: const EdgeInsets.all(12),
+                          decoration: BoxDecoration(
+                            color: const Color(0xFFFEF2F2),
+                            borderRadius: BorderRadius.circular(10),
+                            border: Border.all(
+                              color: AppColors.error.withValues(alpha: 0.4),
+                              width: 1.2,
+                            ),
+                          ),
+                          child: Column(
+                            crossAxisAlignment: CrossAxisAlignment.start,
+                            children: [
+                              Row(
+                                children: [
+                                  const Icon(
+                                    Icons.cancel_rounded,
+                                    color: AppColors.error,
+                                    size: 18,
+                                  ),
+                                  const SizedBox(width: 8),
+                                  Expanded(
+                                    child: Text(
+                                      'Project Cancelled by Admin',
+                                      style: GoogleFonts.inter(
+                                        color: AppColors.error,
+                                        fontWeight: FontWeight.w700,
+                                        fontSize: 12.5,
+                                      ),
+                                    ),
+                                  ),
+                                ],
+                              ),
+                              const SizedBox(height: 6),
+                              Text(
+                                (project.rejectionReason != null &&
+                                        project.rejectionReason!.trim().isNotEmpty)
+                                    ? 'Final Rejection Reason: "${project.rejectionReason}"'
+                                    : 'Payment proof verification failed on final attempt. Project has been permanently cancelled.',
+                                style: GoogleFonts.inter(
+                                  color: const Color(0xFF991B1B),
+                                  fontSize: 12,
+                                  fontStyle: FontStyle.italic,
+                                ),
+                              ),
+                            ],
+                          ),
+                        ),
+                      ] else if (project.isPaymentRejected) ...[
                         const SizedBox(height: 12),
                         Container(
                           width: double.infinity,
@@ -1524,6 +1575,36 @@ class _CompanyProjectsListScreenState extends State<CompanyProjectsListScreen> {
   }
 
   Widget _buildPaymentStatusChip(ProjectModel project) {
+    if (project.isCancelled) {
+      return Container(
+        padding: const EdgeInsets.symmetric(horizontal: 9, vertical: 5),
+        decoration: BoxDecoration(
+          color: AppColors.errorBg,
+          borderRadius: BorderRadius.circular(9),
+          border: Border.all(color: AppColors.error.withValues(alpha: 0.3)),
+        ),
+        child: Row(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            const Icon(
+              Icons.cancel_outlined,
+              size: 13.5,
+              color: AppColors.error,
+            ),
+            const SizedBox(width: 5),
+            Text(
+              'Cancelled',
+              style: GoogleFonts.inter(
+                fontSize: 11.5,
+                fontWeight: FontWeight.w700,
+                color: AppColors.error,
+              ),
+            ),
+          ],
+        ),
+      );
+    }
+
     if (project.isPaymentRejected) {
       return Container(
         padding: const EdgeInsets.symmetric(horizontal: 9, vertical: 5),
