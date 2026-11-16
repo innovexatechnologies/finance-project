@@ -1372,12 +1372,23 @@ class AppDataService extends ChangeNotifier {
   /// Keeps project in student's Active tab until Admin formally disburses payment with TID.
   Future<void> recordCompanyApprovedReadyForPayout({
     required String projectId,
+    String? projectTitle,
     String? companyFeedback,
   }) async {
+    final titleLower = projectTitle?.trim().toLowerCase();
+
     for (int i = 0; i < _applications.length; i++) {
       final app = _applications[i];
       final pId = app['projectId']?.toString() ?? app['id']?.toString() ?? '';
-      if (pId == projectId || app['id']?.toString() == projectId) {
+      final appTitle = (app['title'] ?? app['projectTitle'] ?? '')
+          .toString()
+          .trim()
+          .toLowerCase();
+      if (pId == projectId ||
+          app['id']?.toString() == projectId ||
+          (titleLower != null &&
+              titleLower.isNotEmpty &&
+              appTitle == titleLower)) {
         _applications[i]['status'] = 'ready_for_payout';
         _applications[i]['timelineStep'] = 2;
         _applications[i]['isApprovedByCompany'] = true;
@@ -1391,7 +1402,11 @@ class AppDataService extends ChangeNotifier {
     for (int i = 0; i < _projects.length; i++) {
       final proj = _projects[i];
       final pId = proj['id']?.toString() ?? '';
-      if (pId == projectId) {
+      final projTitle = (proj['title'] ?? '').toString().trim().toLowerCase();
+      if (pId == projectId ||
+          (titleLower != null &&
+              titleLower.isNotEmpty &&
+              projTitle == titleLower)) {
         _projects[i]['status'] = 'ready_for_payout';
         _projects[i]['isApprovedByCompany'] = true;
         _projects[i]['payment_status'] = 'escrow_held';
@@ -1415,34 +1430,59 @@ class AppDataService extends ChangeNotifier {
     required String projectId,
     required String transactionId,
     String? receiptUrl,
+    String? projectTitle,
   }) async {
     final nowIso = DateTime.now().toIso8601String();
+    final titleLower = projectTitle?.trim().toLowerCase();
 
-    final appIndex = _applications.indexWhere(
-      (a) => a['projectId']?.toString() == projectId,
-    );
-    if (appIndex >= 0) {
-      _applications[appIndex]['status'] = 'Completed';
-      _applications[appIndex]['timelineStep'] = 3;
-      _applications[appIndex]['payout_transaction_id'] = transactionId;
-      if (receiptUrl != null && receiptUrl.isNotEmpty) {
-        _applications[appIndex]['payout_receipt_url'] = receiptUrl;
+    for (int i = 0; i < _applications.length; i++) {
+      final app = _applications[i];
+      final pId = app['projectId']?.toString() ?? app['id']?.toString() ?? '';
+      final appTitle = (app['title'] ?? app['projectTitle'] ?? '')
+          .toString()
+          .trim()
+          .toLowerCase();
+      if (pId == projectId ||
+          app['id']?.toString() == projectId ||
+          (titleLower != null &&
+              titleLower.isNotEmpty &&
+              appTitle == titleLower)) {
+        _applications[i]['status'] = 'Completed';
+        _applications[i]['paymentStatus'] = 'paid';
+        _applications[i]['payment_status'] = 'paid';
+        _applications[i]['isPaid'] = true;
+        _applications[i]['is_paid'] = true;
+        _applications[i]['isPaidByAdmin'] = true;
+        _applications[i]['paymentSent'] = true;
+        _applications[i]['timelineStep'] = 3;
+        _applications[i]['payout_transaction_id'] = transactionId;
+        if (receiptUrl != null && receiptUrl.isNotEmpty) {
+          _applications[i]['payout_receipt_url'] = receiptUrl;
+        }
       }
-      _applications[appIndex]['isPaidByAdmin'] = true;
-      _applications[appIndex]['paymentSent'] = true;
     }
 
-    final projIndex = _projects.indexWhere(
-      (p) => p['id']?.toString() == projectId,
-    );
-    if (projIndex >= 0) {
-      _projects[projIndex]['status'] = 'completed';
-      _projects[projIndex]['payout_transaction_id'] = transactionId;
-      if (receiptUrl != null && receiptUrl.isNotEmpty) {
-        _projects[projIndex]['payout_receipt_url'] = receiptUrl;
+    for (int i = 0; i < _projects.length; i++) {
+      final proj = _projects[i];
+      final pId = proj['id']?.toString() ?? '';
+      final projTitle = (proj['title'] ?? '').toString().trim().toLowerCase();
+      if (pId == projectId ||
+          (titleLower != null &&
+              titleLower.isNotEmpty &&
+              projTitle == titleLower)) {
+        _projects[i]['status'] = 'completed';
+        _projects[i]['paymentStatus'] = 'paid';
+        _projects[i]['payment_status'] = 'paid';
+        _projects[i]['isPaid'] = true;
+        _projects[i]['is_paid'] = true;
+        _projects[i]['isPaidByAdmin'] = true;
+        _projects[i]['paymentSent'] = true;
+        _projects[i]['payout_transaction_id'] = transactionId;
+        if (receiptUrl != null && receiptUrl.isNotEmpty) {
+          _projects[i]['payout_receipt_url'] = receiptUrl;
+        }
+        _projects[i]['completed_at'] = nowIso;
       }
-      _projects[projIndex]['completed_at'] = nowIso;
-      _projects[projIndex]['paymentSent'] = true;
     }
 
     _safeNotifyListeners();

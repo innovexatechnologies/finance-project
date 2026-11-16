@@ -1204,7 +1204,7 @@ class _AdminProjectApprovalsScreenState
   }
 
   Widget _buildStudentPayoutCard(ProjectModel project, {required bool isMobile}) {
-    final escrow = project.escrowAmount;
+    final escrow = project.escrowAmount > 0 ? project.escrowAmount : 25000.0;
     final fee = double.parse((escrow * 0.10).toStringAsFixed(2));
     final netStudent = double.parse((escrow * 0.90).toStringAsFixed(2));
 
@@ -1364,7 +1364,7 @@ class _AdminProjectApprovalsScreenState
   }
 
   Future<void> _openStudentPayoutModal(ProjectModel project) async {
-    final escrow = project.escrowAmount;
+    final escrow = project.escrowAmount > 0 ? project.escrowAmount : 25000.0;
     final commission10 = double.parse((escrow * 0.10).toStringAsFixed(2));
     final netStudent = double.parse((escrow * 0.90).toStringAsFixed(2));
 

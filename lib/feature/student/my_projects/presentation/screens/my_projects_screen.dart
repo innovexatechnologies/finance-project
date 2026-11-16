@@ -399,7 +399,7 @@ class _MyProjectsScreenState extends State<MyProjectsScreen>
                       : (isDisputed
                       ? 'Rejected'
                       : (isReadyForPayout
-                          ? 'In Review'
+                          ? 'Approved'
                           : (isDisbursed ? 'Paid' : status))),
                 ),
               ],

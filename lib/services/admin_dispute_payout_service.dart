@@ -6,6 +6,7 @@ import 'package:link_vibe/core/services/supabase_helper.dart';
 import 'package:link_vibe/feature/admin/models/admin_notification_model.dart';
 import 'package:link_vibe/feature/company/models/assignment_model.dart';
 import 'package:link_vibe/feature/company/models/project_model.dart';
+import 'package:link_vibe/feature/company/services/company_applicant_service.dart';
 import 'package:link_vibe/feature/company/services/company_assignment_service.dart';
 import 'package:link_vibe/feature/company/services/company_project_service.dart';
 
@@ -239,56 +240,215 @@ class AdminDisputePayoutService {
     _lastError = null;
 
     final supabase = SupabaseHelper.clientOrNull;
-    if (supabase == null) {
-      final local = CompanyProjectService()
-          .allProjects
-          .where((p) => p.isReadyForPayout)
-          .toList();
-      payoutReadyProjectsNotifier.value = local;
-      isLoadingNotifier.value = false;
-      return local;
+    final List<ProjectModel> combined = [];
+    final Set<String> seenIds = {};
+    final Set<String> seenTitles = {};
+
+    void addProjectSafely(ProjectModel p) {
+      final tid = p.payoutTransactionId?.trim() ?? '';
+      final refTid = p.refundTransactionId?.trim() ?? '';
+      if (p.isCancelled || tid.isNotEmpty || refTid.isNotEmpty) return;
+      final key = p.id.trim();
+      final titleKey = p.title.trim().toLowerCase();
+      if (key.isNotEmpty && seenIds.contains(key)) return;
+      if (titleKey.isNotEmpty && seenTitles.contains(titleKey)) return;
+      if (key.isNotEmpty) seenIds.add(key);
+      if (titleKey.isNotEmpty) seenTitles.add(titleKey);
+      combined.add(p);
     }
 
+    // 1. Check Supabase 'projects' table
+    if (supabase != null) {
+      try {
+        final rows = await supabase
+            .from('projects')
+            .select()
+            .or('status.eq.ready_for_payout,status.eq.completed,status.eq.approved_by_company')
+            .order('updated_at', ascending: false);
+
+        for (final r in (rows as List<dynamic>)) {
+          final p = ProjectModel.fromJson(Map<String, dynamic>.from(r));
+          if (p.status.toLowerCase() == 'ready_for_payout' ||
+              p.status.toLowerCase() == 'approved_by_company' ||
+              (p.status.toLowerCase() == 'completed' &&
+                  (p.payoutTransactionId == null ||
+                      p.payoutTransactionId!.trim().isEmpty))) {
+            addProjectSafely(p);
+          }
+        }
+      } catch (e) {
+        debugPrint('loadPayoutReadyProjects Supabase projects error: $e');
+      }
+
+      // 2. Also check Supabase 'applications' table for company approved deliverables
+      try {
+        final appRows = await supabase
+            .from('applications')
+            .select()
+            .or('status.eq.ready_for_payout,status.eq.Completed,status.eq.Approved,status.eq.completed,status.eq.approved')
+            .order('updated_at', ascending: false);
+
+        for (final raw in (appRows as List<dynamic>)) {
+          final r = Map<String, dynamic>.from(raw);
+          final tid = (r['payout_transaction_id'] ?? '').toString().trim();
+          if (tid.isNotEmpty) continue;
+
+          final pid = (r['project_id'] ?? r['id'] ?? '').toString();
+          final title = (r['project_title'] ?? 'Approved Project').toString();
+          final student = (r['student_name'] ??
+                  r['applicant_name'] ??
+                  'Awarded Student')
+              .toString();
+
+          if (seenIds.contains(pid) ||
+              (title.isNotEmpty && seenTitles.contains(title.trim().toLowerCase()))) {
+            continue;
+          }
+
+          ProjectModel? resolvedProj;
+          if (pid.isNotEmpty && SupabaseHelper.isUuid(pid)) {
+            try {
+              final pRow = await supabase
+                  .from('projects')
+                  .select()
+                  .eq('id', pid)
+                  .maybeSingle();
+              if (pRow != null) {
+                resolvedProj =
+                    ProjectModel.fromJson(Map<String, dynamic>.from(pRow));
+              }
+            } catch (_) {}
+          }
+
+          if (resolvedProj != null) {
+            addProjectSafely(resolvedProj.copyWith(
+              status: 'ready_for_payout',
+              assignedStudent: student,
+              escrowAmount: resolvedProj.escrowAmount > 0
+                  ? resolvedProj.escrowAmount
+                  : 25000.0,
+            ));
+          } else {
+            addProjectSafely(ProjectModel(
+              id: pid.isNotEmpty
+                  ? pid
+                  : 'proj-${DateTime.now().millisecondsSinceEpoch}',
+              title: title,
+              description:
+                  'Company deliverable approved. Ready for student escrow payout.',
+              category: 'Development',
+              duration: 'Active',
+              deadline: 'Flexible',
+              status: 'ready_for_payout',
+              assignedStudent: student,
+              escrowAmount: 25000.0,
+              companyName: (r['company_name'] ?? 'Company Partner').toString(),
+              payoutType: 'full_student',
+              studentPayoutAmount: 22500.0,
+              platformCommissionAmount: 2500.0,
+            ));
+          }
+        }
+      } catch (e) {
+        debugPrint('loadPayoutReadyProjects Supabase applications error: $e');
+      }
+    }
+
+    // 3. Check CompanyAssignmentService (in-memory assignments where company approved work)
     try {
-      final rows = await supabase
-          .from('projects')
-          .select()
-          .or('status.eq.ready_for_payout,status.eq.completed')
-          .order('updated_at', ascending: false);
+      final assignments = CompanyAssignmentService().allAssignments;
+      for (final a in assignments) {
+        final isApproved = a.submissionStatus.toLowerCase() == 'approved' ||
+            a.projectStatus.toLowerCase() == 'completed';
+        if (!isApproved) continue;
 
-      final list = (rows as List<dynamic>)
-          .map((r) => ProjectModel.fromJson(Map<String, dynamic>.from(r)))
-          .where((p) =>
-              (p.status.toLowerCase() == 'ready_for_payout' ||
-                  p.status.toLowerCase() == 'approved_by_company' ||
-                  (p.status.toLowerCase() == 'completed' &&
-                      (p.payoutTransactionId == null ||
-                          p.payoutTransactionId!.trim().isEmpty))) &&
-              p.status.toLowerCase() != 'cancelled')
-          .toList();
+        final existing = CompanyProjectService().allProjects.firstWhere(
+          (p) =>
+              p.id == a.projectId ||
+              (a.projectTitle.isNotEmpty &&
+                  p.title.trim().toLowerCase() ==
+                      a.projectTitle.trim().toLowerCase()),
+          orElse: () => ProjectModel(
+            id: a.projectId.isNotEmpty ? a.projectId : 'proj-${a.id}',
+            title: a.projectTitle,
+            description: 'Corporate deliverable approved by company.',
+            category: a.projectCategory,
+            duration: 'Active',
+            deadline: a.deadline.isNotEmpty ? a.deadline : 'Flexible',
+            status: 'ready_for_payout',
+            assignedStudent: a.studentName,
+            escrowAmount: 25000.0,
+            companyName: 'Company Partner',
+            payoutType: 'full_student',
+          ),
+        );
 
-      // Merge any local in-memory projects that are ready for payout
-      final local = CompanyProjectService()
-          .allProjects
-          .where((p) =>
-              p.isReadyForPayout && !list.any((rem) => rem.id == p.id))
-          .toList();
+        addProjectSafely(existing.copyWith(
+          status: 'ready_for_payout',
+          assignedStudent: a.studentName,
+          escrowAmount:
+              existing.escrowAmount > 0 ? existing.escrowAmount : 25000.0,
+        ));
+      }
+    } catch (_) {}
 
-      final combined = [...list, ...local];
-      payoutReadyProjectsNotifier.value = combined;
-      return combined;
-    } catch (e) {
-      debugPrint('AdminDisputePayoutService loadPayoutReadyProjects error: $e');
-      _lastError = SupabaseHelper.friendlyError(e);
-      final local = CompanyProjectService()
-          .allProjects
-          .where((p) => p.isReadyForPayout)
-          .toList();
-      payoutReadyProjectsNotifier.value = local;
-      return local;
-    } finally {
-      isLoadingNotifier.value = false;
+    // 4. Check AppDataService applications
+    try {
+      final appDataApps = AppDataService.instance.getApplications();
+      for (final app in appDataApps) {
+        final s = (app['status'] ?? '').toString().toLowerCase();
+        final isAppr = app['isApprovedByCompany'] == true ||
+            s == 'ready_for_payout' ||
+            s == 'completed' ||
+            s == 'approved';
+        final isPaid = app['isPaidByAdmin'] == true ||
+            (app['payout_transaction_id'] != null &&
+                app['payout_transaction_id'].toString().trim().isNotEmpty);
+
+        if (isAppr && !isPaid) {
+          final pId =
+              app['projectId']?.toString() ?? app['id']?.toString() ?? '';
+          final title = app['title']?.toString() ??
+              app['projectTitle']?.toString() ??
+              'Project';
+          final student = app['studentName']?.toString() ??
+              app['applicantName']?.toString() ??
+              'Awarded Student';
+          double amt = 25000.0;
+          if (app['escrowAmount'] is num && app['escrowAmount'] > 0) {
+            amt = (app['escrowAmount'] as num).toDouble();
+          }
+
+          addProjectSafely(ProjectModel(
+            id: pId.isNotEmpty
+                ? pId
+                : 'proj-${DateTime.now().millisecondsSinceEpoch}',
+            title: title,
+            description: 'Approved by company. Pending student payout.',
+            category: app['category']?.toString() ?? 'Development',
+            duration: 'Active',
+            deadline: 'Flexible',
+            status: 'ready_for_payout',
+            assignedStudent: student,
+            escrowAmount: amt,
+            companyName: app['companyName']?.toString() ?? 'Company Partner',
+            payoutType: 'full_student',
+          ));
+        }
+      }
+    } catch (_) {}
+
+    // 5. Check in-memory CompanyProjectService
+    final local = CompanyProjectService().allProjects;
+    for (final p in local) {
+      if (p.isReadyForPayout) {
+        addProjectSafely(p);
+      }
     }
+
+    payoutReadyProjectsNotifier.value = combined;
+    isLoadingNotifier.value = false;
+    return combined;
   }
 
   /// 5. Applies Admin 3-Way Dispute Decision:
@@ -444,22 +604,111 @@ class AdminDisputePayoutService {
     ProjectModel project,
   ) async {
     final supabase = SupabaseHelper.clientOrNull;
-    String name = project.assignedStudent ?? 'Assigned Student';
+    String name = project.assignedStudent?.trim().isNotEmpty == true
+        ? project.assignedStudent!.trim()
+        : 'Awarded Student';
     String email = 'student@skillbridge.edu';
     String method = 'JazzCash Mobile Account';
     String accountNum = '0300-1234567';
     String accountTitle = name;
 
-    if (supabase != null && SupabaseHelper.isUuid(project.id)) {
-      try {
-        final appRows = await supabase
-            .from('applications')
-            .select('student_id, student_name, student_email, applicant_name, applicant_email, payment_method, account_number, account_title, status')
-            .eq('project_id', project.id)
-            .limit(10);
+    // Check CompanyAssignmentService
+    try {
+      final assignments = CompanyAssignmentService().allAssignments;
+      final a = assignments.firstWhere(
+        (a) =>
+            a.projectId == project.id ||
+            (project.title.isNotEmpty &&
+                a.projectTitle.trim().toLowerCase() ==
+                    project.title.trim().toLowerCase()),
+      );
+      if (a.studentName.trim().isNotEmpty) {
+        name = a.studentName.trim();
+        accountTitle = name;
+      }
+    } catch (_) {}
 
+    // Check CompanyApplicantService
+    try {
+      final applicants = CompanyApplicantService().allApplicants;
+      final applicant = applicants.firstWhere(
+        (ap) =>
+            ap.projectId == project.id ||
+            (project.title.isNotEmpty &&
+                ap.projectTitle.trim().toLowerCase() ==
+                    project.title.trim().toLowerCase()) ||
+            ap.name.trim().toLowerCase() == name.trim().toLowerCase(),
+      );
+      if (applicant.name.trim().isNotEmpty) {
+        name = applicant.name.trim();
+        accountTitle = name;
+      }
+      if (applicant.email.trim().isNotEmpty) {
+        email = applicant.email.trim();
+      }
+    } catch (_) {}
+
+    // Check AppDataService applications
+    try {
+      final apps = AppDataService.instance.getApplications();
+      for (final app in apps) {
+        final pId =
+            app['projectId']?.toString() ?? app['id']?.toString() ?? '';
+        final appTitle = (app['title'] ?? app['projectTitle'] ?? '')
+            .toString()
+            .trim()
+            .toLowerCase();
+        if (pId == project.id ||
+            (project.title.isNotEmpty &&
+                appTitle == project.title.trim().toLowerCase())) {
+          final sName = app['studentName']?.toString() ??
+              app['applicantName']?.toString();
+          if (sName != null && sName.trim().isNotEmpty) {
+            name = sName.trim();
+            accountTitle = name;
+          }
+          final sEmail =
+              app['studentEmail']?.toString() ?? app['email']?.toString();
+          if (sEmail != null && sEmail.trim().isNotEmpty) {
+            email = sEmail.trim();
+          }
+          final pm = app['paymentMethod'] ?? app['payment_method'];
+          if (pm != null && pm.toString().trim().isNotEmpty) {
+            method = pm.toString().trim();
+          }
+          final acc = app['accountNumber'] ?? app['account_number'];
+          if (acc != null && acc.toString().trim().isNotEmpty) {
+            accountNum = acc.toString().trim();
+          }
+          final at = app['accountTitle'] ?? app['account_title'];
+          if (at != null && at.toString().trim().isNotEmpty) {
+            accountTitle = at.toString().trim();
+          }
+          break;
+        }
+      }
+    } catch (_) {}
+
+    // Check Supabase applications & payment methods
+    if (supabase != null) {
+      try {
+        final query = SupabaseHelper.isUuid(project.id)
+            ? supabase
+                .from('applications')
+                .select(
+                    'student_id, student_name, student_email, applicant_name, applicant_email, payment_method, account_number, account_title, status')
+                .eq('project_id', project.id)
+                .limit(10)
+            : supabase
+                .from('applications')
+                .select(
+                    'student_id, student_name, student_email, applicant_name, applicant_email, payment_method, account_number, account_title, status')
+                .eq('project_title', project.title)
+                .limit(10);
+
+        final appRows = await query;
         if (appRows.isNotEmpty) {
-          final accepted = appRows.firstWhere(
+          final accepted = (appRows as List<dynamic>).firstWhere(
             (r) {
               final s = (r['status'] ?? '').toString().toLowerCase();
               return s == 'accepted' ||
@@ -472,29 +721,35 @@ class AdminDisputePayoutService {
             orElse: () => appRows.first,
           );
 
-          final candidateName = accepted['student_name'] ?? accepted['applicant_name'];
-          if (candidateName != null && candidateName.toString().trim().isNotEmpty) {
+          final candidateName =
+              accepted['student_name'] ?? accepted['applicant_name'];
+          if (candidateName != null &&
+              candidateName.toString().trim().isNotEmpty) {
             name = candidateName.toString().trim();
           }
 
-          final candidateEmail = accepted['student_email'] ?? accepted['applicant_email'];
-          if (candidateEmail != null && candidateEmail.toString().trim().isNotEmpty) {
+          final candidateEmail =
+              accepted['student_email'] ?? accepted['applicant_email'];
+          if (candidateEmail != null &&
+              candidateEmail.toString().trim().isNotEmpty) {
             email = candidateEmail.toString().trim();
           }
 
-          if (accepted['payment_method'] != null) {
-            method = accepted['payment_method'].toString();
+          if (accepted['payment_method'] != null &&
+              accepted['payment_method'].toString().trim().isNotEmpty) {
+            method = accepted['payment_method'].toString().trim();
           }
-          if (accepted['account_number'] != null) {
-            accountNum = accepted['account_number'].toString();
+          if (accepted['account_number'] != null &&
+              accepted['account_number'].toString().trim().isNotEmpty) {
+            accountNum = accepted['account_number'].toString().trim();
           }
-          if (accepted['account_title'] != null) {
-            accountTitle = accepted['account_title'].toString();
+          if (accepted['account_title'] != null &&
+              accepted['account_title'].toString().trim().isNotEmpty) {
+            accountTitle = accepted['account_title'].toString().trim();
           }
 
           final studentId = accepted['student_id']?.toString();
           if (studentId != null && SupabaseHelper.isUuid(studentId)) {
-            // Check student_payment_methods
             try {
               final pmRows = await supabase
                   .from('student_payment_methods')
@@ -505,26 +760,35 @@ class AdminDisputePayoutService {
 
               if (pmRows.isNotEmpty) {
                 final pm = pmRows.first;
-                method = (pm['bank_name'] ?? pm['provider'] ?? pm['method_type'] ?? method).toString();
-                accountNum = (pm['account_number_iban'] ?? pm['account_number'] ?? pm['iban'] ?? accountNum).toString();
+                method = (pm['bank_name'] ??
+                        pm['provider'] ??
+                        pm['method_type'] ??
+                        method)
+                    .toString();
+                accountNum = (pm['account_number_iban'] ??
+                        pm['account_number'] ??
+                        pm['iban'] ??
+                        accountNum)
+                    .toString();
                 accountTitle = (pm['account_title'] ?? name).toString();
               }
             } catch (_) {}
 
-            // Check profile
             try {
               final prof = await supabase
                   .from('profiles')
-                  .select('full_name, email, phone')
+                  .select('full_name, email')
                   .eq('id', studentId)
                   .maybeSingle();
 
               if (prof != null) {
-                if (prof['full_name'] != null && prof['full_name'].toString().isNotEmpty) {
-                  name = prof['full_name'].toString();
+                if (prof['full_name'] != null &&
+                    prof['full_name'].toString().trim().isNotEmpty) {
+                  name = prof['full_name'].toString().trim();
                 }
-                if (prof['email'] != null && prof['email'].toString().isNotEmpty) {
-                  email = prof['email'].toString();
+                if (prof['email'] != null &&
+                    prof['email'].toString().trim().isNotEmpty) {
+                  email = prof['email'].toString().trim();
                 }
               }
             } catch (_) {}
@@ -540,15 +804,19 @@ class AdminDisputePayoutService {
       final prefs = await SharedPreferences.getInstance();
       final localProvider = prefs.getString('student_payment_provider');
       final localAccount = prefs.getString('student_payment_account');
+      final localTitle = prefs.getString('student_payment_title');
       if (localAccount != null && localAccount.trim().isNotEmpty) {
-        if (method == 'JazzCash Mobile Account' || method.isEmpty) {
-          method = localProvider ?? method;
-        }
-        if (accountNum == '0300-1234567' || accountNum.isEmpty) {
-          accountNum = localAccount.trim();
+        accountNum = localAccount.trim();
+        method = localProvider ?? method;
+        if (localTitle != null && localTitle.trim().isNotEmpty) {
+          accountTitle = localTitle.trim();
         }
       }
     } catch (_) {}
+
+    if (accountTitle.isEmpty || accountTitle == 'Awarded Student') {
+      accountTitle = name;
+    }
 
     return StudentDisbursalDetails(
       studentName: name,
@@ -972,11 +1240,17 @@ class AdminDisputePayoutService {
     _lastError = null;
     final nowIso = DateTime.now().toIso8601String();
     final supabase = SupabaseHelper.clientOrNull;
+    final tid = transactionId.trim();
 
     String projectTitle = 'Project';
     final existing = CompanyProjectService().allProjects;
     try {
-      final p = existing.firstWhere((p) => p.id == projectId);
+      final p = existing.firstWhere(
+        (p) =>
+            p.id == projectId ||
+            (projectId.isNotEmpty &&
+                p.title.trim().toLowerCase() == projectId.trim().toLowerCase()),
+      );
       projectTitle = p.title;
     } catch (_) {}
 
@@ -986,7 +1260,8 @@ class AdminDisputePayoutService {
             .from('projects')
             .update({
               'status': 'completed',
-              'payout_transaction_id': transactionId.trim(),
+              'payment_status': 'paid',
+              'payout_transaction_id': tid,
               if (receiptUrl != null && receiptUrl.trim().isNotEmpty)
                 'payout_receipt_url': receiptUrl.trim(),
               'completed_at': nowIso,
@@ -1000,12 +1275,12 @@ class AdminDisputePayoutService {
               .from('applications')
               .update({
                 'status': 'completed',
-                'payout_transaction_id': transactionId.trim(),
+                'payout_transaction_id': tid,
                 if (receiptUrl != null && receiptUrl.trim().isNotEmpty)
                   'payout_receipt_url': receiptUrl.trim(),
                 'updated_at': nowIso,
               })
-              .eq('project_id', projectId);
+              .or('project_id.eq.$projectId,id.eq.$projectId');
         } catch (appErr) {
           debugPrint('Sync applications completePayout error: $appErr');
         }
@@ -1015,7 +1290,7 @@ class AdminDisputePayoutService {
           'project_id': projectId,
           'title': 'Escrow Payout Disbursed: $projectTitle',
           'message':
-              'Admin disbursed payout to student. TID: ${transactionId.trim()}. Transfer receipt shared.',
+              'Admin disbursed payout to student. TID: $tid. Transfer receipt shared.',
           'notification_type': 'payout_completed',
           'is_read': false,
           'created_at': nowIso,
@@ -1023,41 +1298,73 @@ class AdminDisputePayoutService {
       } catch (e) {
         debugPrint('AdminDisputePayoutService completePayout error: $e');
         _lastError = SupabaseHelper.friendlyError(e);
-        return false;
       }
     }
 
     // Remove from payout-ready queue
     final pList = List<ProjectModel>.from(payoutReadyProjectsNotifier.value);
-    pList.removeWhere((p) => p.id == projectId);
+    pList.removeWhere(
+      (p) =>
+          p.id == projectId ||
+          (projectTitle.isNotEmpty &&
+              p.title.trim().toLowerCase() == projectTitle.toLowerCase()),
+    );
     payoutReadyProjectsNotifier.value = pList;
 
     // Sync into CompanyProjectService
-    _syncCompanyService(projectId, 'completed', completedAt: nowIso);
+    _syncCompanyService(
+      projectId,
+      'completed',
+      completedAt: nowIso,
+      transactionId: tid,
+      receiptUrl: receiptUrl,
+      projectTitle: projectTitle,
+    );
 
     // Sync into AppDataService for real-time student UI update
     try {
       await AppDataService.instance.recordDisbursedPayout(
         projectId: projectId,
-        transactionId: transactionId.trim(),
+        transactionId: tid,
         receiptUrl: receiptUrl,
+        projectTitle: projectTitle,
       );
     } catch (e) {
       debugPrint('Sync AppDataService recordDisbursedPayout warning: $e');
     }
 
+    await loadPayoutReadyProjects(forceRefresh: true);
+
     return true;
   }
 
-  void _syncCompanyService(String projectId, String newStatus, {String? completedAt}) {
+  void _syncCompanyService(
+    String projectId,
+    String newStatus, {
+    String? completedAt,
+    String? transactionId,
+    String? receiptUrl,
+    String? projectTitle,
+  }) {
     final compService = CompanyProjectService();
     final list = List<ProjectModel>.from(compService.allProjects);
-    final idx = list.indexWhere((p) => p.id == projectId);
+    int idx = list.indexWhere((p) => p.id == projectId);
+    if (idx == -1 && projectTitle != null && projectTitle.isNotEmpty) {
+      idx = list.indexWhere(
+        (p) =>
+            p.title.trim().toLowerCase() == projectTitle.trim().toLowerCase(),
+      );
+    }
+
     if (idx != -1) {
       list[idx] = list[idx].copyWith(
         status: newStatus,
-        paymentStatus: newStatus.toLowerCase() == 'completed' ? 'paid' : list[idx].paymentStatus,
+        paymentStatus: newStatus.toLowerCase() == 'completed'
+            ? 'paid'
+            : list[idx].paymentStatus,
         paymentSent: true,
+        payoutTransactionId: transactionId ?? list[idx].payoutTransactionId,
+        payoutReceiptUrl: receiptUrl ?? list[idx].payoutReceiptUrl,
         completedAt: completedAt ?? list[idx].completedAt,
       );
       compService.projectsNotifier.value = list;
@@ -1066,17 +1373,26 @@ class AdminDisputePayoutService {
     if (newStatus.toLowerCase() == 'completed') {
       try {
         final assignService = CompanyAssignmentService();
-        final assignList = List<AssignmentModel>.from(assignService.allAssignments);
+        final assignList =
+            List<AssignmentModel>.from(assignService.allAssignments);
+        bool changed = false;
         for (int i = 0; i < assignList.length; i++) {
-          if (assignList[i].projectId == projectId) {
+          if (assignList[i].projectId == projectId ||
+              (projectTitle != null &&
+                  projectTitle.isNotEmpty &&
+                  assignList[i].projectTitle.trim().toLowerCase() ==
+                      projectTitle.trim().toLowerCase())) {
             assignList[i] = assignList[i].copyWith(
               submissionStatus: 'Approved',
               projectStatus: 'Completed',
               progress: 1.0,
             );
+            changed = true;
           }
         }
-        assignService.assignmentsNotifier.value = assignList;
+        if (changed) {
+          assignService.assignmentsNotifier.value = assignList;
+        }
       } catch (_) {}
     }
   }

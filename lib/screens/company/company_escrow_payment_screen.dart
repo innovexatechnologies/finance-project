@@ -1,4 +1,5 @@
 // ignore_for_file: deprecated_member_use
+import 'dart:convert';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:google_fonts/google_fonts.dart';
@@ -127,17 +128,24 @@ class _CompanyEscrowPaymentScreenState
     setState(() => _isSubmitting = true);
 
     try {
-      // 1. Upload receipt to Supabase Storage via Service
-      final receiptUrl = await _escrowService.uploadReceiptImage(
-        projectId: widget.project.id,
-        imageBytes: _receiptBytes!,
-        fileName: _receiptImage!.name,
-      );
-
-      if (receiptUrl == null) {
-        throw Exception(
-          _escrowService.lastError ?? 'Failed to upload receipt screenshot.',
+      // 1. Upload receipt to Supabase Storage via Service with resilient Base64 fallback
+      String? receiptUrl;
+      try {
+        receiptUrl = await _escrowService.uploadReceiptImage(
+          projectId: widget.project.id,
+          imageBytes: _receiptBytes!,
+          fileName: _receiptImage!.name,
         );
+      } catch (uploadErr) {
+        debugPrint('uploadReceiptImage caught: $uploadErr');
+      }
+
+      if (receiptUrl == null || receiptUrl.isEmpty) {
+        final ext = _receiptImage!.name.contains('.')
+            ? _receiptImage!.name.split('.').last.toLowerCase()
+            : 'jpg';
+        final base64String = base64Encode(_receiptBytes!);
+        receiptUrl = 'data:image/$ext;base64,$base64String';
       }
 
       // 2. Submit payment proof via Service

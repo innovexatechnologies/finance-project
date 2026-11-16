@@ -525,7 +525,7 @@ class _StudentProjectDetailsScreenState
                                         : (isPaid
                                             ? 'Paid'
                                             : (isReadyForPayout
-                                                ? 'In Review'
+                                                ? 'Approved'
                                                 : status))),
                               ),
                             ],

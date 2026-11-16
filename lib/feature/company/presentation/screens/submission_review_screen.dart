@@ -436,12 +436,15 @@ class _SubmissionReviewScreenState extends State<SubmissionReviewScreen> {
       certificateTitle: selectedCertTitle,
     );
 
-    if (assignment.projectId.isNotEmpty) {
-      await EscrowLifecycleService().approveAndReleasePayment(
-        projectId: assignment.projectId,
-        companyFeedback: _feedbackController.text.trim(),
-      );
-    }
+    await EscrowLifecycleService().approveAndReleasePayment(
+      projectId: assignment.projectId.isNotEmpty
+          ? assignment.projectId
+          : assignment.id,
+      projectTitle: assignment.projectTitle,
+      studentName: assignment.studentName,
+      studentId: assignment.studentId,
+      companyFeedback: _feedbackController.text.trim(),
+    );
 
     if (mounted) setState(() => _isSubmitting = false);
 
